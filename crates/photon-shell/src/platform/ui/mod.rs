@@ -31,6 +31,7 @@ mod native_panel;
 mod omnibox;
 mod pages;
 mod settings;
+pub(super) use settings::TemporaryProfileRoot;
 mod shortcuts_dialog;
 mod sidebar;
 mod space_editor;

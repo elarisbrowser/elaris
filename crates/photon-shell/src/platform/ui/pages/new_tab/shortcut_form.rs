@@ -59,7 +59,11 @@ impl NewTabPage {
             cx.notify();
             return;
         };
-        let already_pinned = Settings::get(cx).new_tab.is_pinned(&url);
+        let space_id = self.context.space;
+        let already_pinned = Settings::get(cx)
+            .spaces
+            .get(space_id)
+            .is_some_and(|space| space.new_tab.is_pinned(&url));
         let title = if name.is_empty() {
             site_name(&url)
         } else {
@@ -67,7 +71,9 @@ impl NewTabPage {
         };
         let mut pinned = false;
         Settings::update(cx, |settings| {
-            pinned = settings.new_tab.pin(Shortcut { title, url });
+            if let Some(space) = settings.spaces.get_mut(space_id) {
+                pinned = space.new_tab.pin(Shortcut { title, url });
+            }
         });
         if !pinned {
             super::super::super::show_alert(cx, "Shortcuts are full");

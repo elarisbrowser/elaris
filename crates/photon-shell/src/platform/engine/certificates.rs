@@ -2,6 +2,7 @@
 //! host's certificate error.
 
 use std::ffi::{CString, c_void};
+use std::path::Path;
 
 use super::EngineRuntime;
 use super::callbacks::engine_string;
@@ -67,15 +68,31 @@ unsafe extern "C" fn on_engine_certificate(
 impl EngineRuntime {
     /// Lets pages from `host` load although its certificate cannot be
     /// verified, until Photon quits.
-    pub(in crate::platform) fn allow_certificate_errors_for_host(&self, host: &str) {
+    pub(in crate::platform) fn allow_certificate_errors_for_host(
+        &self,
+        profile_path: Option<&Path>,
+        is_private: bool,
+        host: &str,
+    ) {
         if !self.is_available() {
             return;
         }
-        let Ok(host) = CString::new(host) else {
+        let Some(profile_path) = profile_path else {
+            return;
+        };
+        let (Ok(profile_path), Ok(host)) = (
+            CString::new(profile_path.to_string_lossy().into_owned()),
+            CString::new(host),
+        ) else {
             return;
         };
         unsafe {
-            embedder::photon_runtime_allow_certificate_errors_for_host(self.runtime, host.as_ptr());
+            embedder::photon_runtime_allow_certificate_errors_for_host(
+                self.runtime,
+                profile_path.as_ptr(),
+                is_private,
+                host.as_ptr(),
+            );
         }
     }
 
@@ -84,10 +101,19 @@ impl EngineRuntime {
     /// not update GPUI entities synchronously.
     pub(in crate::platform) fn peer_certificate(
         &self,
+        profile_path: Option<&Path>,
+        is_private: bool,
         host: &str,
         done: impl FnOnce(Option<Certificate>) + 'static,
     ) {
-        let Ok(host) = CString::new(host) else {
+        let Some(profile_path) = profile_path else {
+            done(None);
+            return;
+        };
+        let (Ok(profile_path), Ok(host)) = (
+            CString::new(profile_path.to_string_lossy().into_owned()),
+            CString::new(host),
+        ) else {
             done(None);
             return;
         };
@@ -99,6 +125,8 @@ impl EngineRuntime {
         unsafe {
             embedder::photon_runtime_peer_certificate(
                 self.runtime,
+                profile_path.as_ptr(),
+                is_private,
                 host.as_ptr(),
                 Box::into_raw(done).cast(),
                 Some(on_engine_certificate),

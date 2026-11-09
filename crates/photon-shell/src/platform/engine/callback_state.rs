@@ -3,12 +3,13 @@
 
 use crate::platform::app_update::update_app;
 use gpui::Context;
-use photon_core::{BrowserState, DialogRequest, EngineEvent};
+use photon_core::{BrowserState, DialogRequest, EngineEvent, SpaceId};
 use photon_performance::{
     EnginePerformanceStats, PerformanceMonitor, PerformanceTask, PresentationMode,
 };
 use std::{
     ffi::c_void,
+    path::PathBuf,
     sync::{
         Arc, Mutex, Weak,
         atomic::{AtomicBool, AtomicPtr, Ordering},
@@ -35,6 +36,8 @@ pub(super) struct PageDetails {
 pub(super) struct CallbackState {
     /// Whether the page is in the private session, as pages it opens are.
     pub(super) private: bool,
+    pub(super) space: SpaceId,
+    pub(super) profile_path: Option<PathBuf>,
     /// Lets a frame's GPU-completion wakeup reach this state.
     pub(super) self_ref: Weak<CallbackState>,
     pub(super) task_id: u64,

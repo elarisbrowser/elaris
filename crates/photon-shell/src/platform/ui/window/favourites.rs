@@ -48,7 +48,7 @@ impl BrowserWindow {
                 let favicon = self
                     .favourite_tab(&favourite.url, active_space)
                     .and_then(|tab| tab_favicon(&self.tabs[tab], cx))
-                    .or_else(|| BrowsingHistory::favicon(&favourite.url, cx));
+                    .or_else(|| BrowsingHistory::favicon(active_space, &favourite.url, cx));
                 let icon = match favicon {
                     Some(favicon) => img(ImageSource::Render(favicon.image))
                         .size(px(icon_size))
@@ -168,7 +168,7 @@ impl BrowserWindow {
         // Kept under the favourite's own address, so the tile keeps its icon
         // after the tab closes or moves on to another page.
         if let Some(favicon) = tab_favicon(&self.tabs[index], cx) {
-            BrowsingHistory::set_favicon(&url, &favicon, cx);
+            BrowsingHistory::set_favicon(space_id, &url, &favicon, cx);
         }
         self.added_favourite = Some(url.clone());
         // Marked first, as unpinning moves the tab.

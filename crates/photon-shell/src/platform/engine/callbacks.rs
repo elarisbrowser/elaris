@@ -17,7 +17,7 @@ use super::super::presentation::MachPortGuard;
 #[cfg(target_os = "macos")]
 pub(super) use super::callback_state::deliver_pending_releases;
 pub(super) use super::callback_state::{CallbackState, RuntimeCallbacks};
-use super::{EngineSession, RequestedWebView};
+use super::{BrowsingContext, EngineSession, RequestedWebView};
 use crate::platform::engine_ffi::embedder;
 use crate::platform::permission_coordinator::PermissionRequest;
 use crate::platform::trace;
@@ -429,7 +429,11 @@ pub(super) unsafe extern "C" fn on_engine_new_web_view(
         viewport_width,
         viewport_height,
         1.0,
-        callbacks.private,
+        BrowsingContext {
+            private: callbacks.private,
+            space: callbacks.space,
+            profile_path: callbacks.profile_path.clone(),
+        },
     ) {
         Ok(session) => session,
         Err(error) => {
@@ -444,6 +448,7 @@ pub(super) unsafe extern "C" fn on_engine_new_web_view(
         activate: request.activate,
         width,
         height,
+        space: callbacks.space,
     };
     wake.app
         .spawn(async move |cx| {

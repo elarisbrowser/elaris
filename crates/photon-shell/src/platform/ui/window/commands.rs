@@ -116,8 +116,7 @@ impl BrowserWindow {
     pub(super) fn command_availability(&self, cx: &App) -> CommandAvailability {
         let layout = self.layout(cx);
         let settings = Settings::get(cx);
-        let shows_spaces =
-            layout.shows_spaces() && settings.features.is_enabled(photon_core::Feature::Spaces);
+        let shows_spaces = self.shows_spaces(cx);
         let spaces = &settings.spaces;
         let active_webview = self.active_webview();
         let page_state = active_webview
@@ -127,7 +126,10 @@ impl BrowserWindow {
             has_page: active_webview.is_some(),
             has_tab: self.active_tab.is_some(),
             has_multiple_tabs: self.listed_tabs(cx).len() > 1,
-            has_closed_tabs: !self.closed_tabs.is_empty(),
+            has_closed_tabs: self
+                .closed_tabs
+                .iter()
+                .any(|tab| tab.space == self.current_space(cx)),
             can_go_back: page_state.is_some_and(|state| state.can_go_back),
             can_go_forward: page_state.is_some_and(|state| state.can_go_forward),
             is_loading: page_state.is_some_and(|state| state.loading),

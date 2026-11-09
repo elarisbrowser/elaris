@@ -213,6 +213,7 @@ impl WorkspaceLayout {
             .map(u32::from)
     }
 
+    #[cfg(test)]
     pub(super) fn shows_spaces(&self) -> bool {
         self.components(DockRegion::Leading)
             .chain(self.components(DockRegion::Trailing))

@@ -167,7 +167,7 @@ impl BrowserWindow {
                 let index = self.pinned_count();
                 match find_page(&pin.url) {
                     Some(page) => {
-                        let content = self.new_page(page, cx);
+                        let content = self.new_page_in_space(page, space, cx);
                         self.insert_tab_at(index, content, Some(pin), false, window, cx);
                     }
                     None => {
@@ -183,6 +183,7 @@ impl BrowserWindow {
                                     ..BrowserState::default()
                                 },
                                 favicon: None,
+                                space,
                             }),
                             Some(pin),
                             false,
@@ -191,7 +192,7 @@ impl BrowserWindow {
                         );
                     }
                 }
-                self.tabs[index].space = space;
+                debug_assert_eq!(self.tabs[index].space, space);
             }
         }
     }

@@ -21,7 +21,7 @@ use std::time::Instant;
 use super::super::super::app_update::update_app;
 use super::super::super::engine::EngineRuntime;
 use super::super::history::load_browsing_history;
-use super::super::settings::{Settings, load_settings};
+use super::super::settings::{Settings, load_settings_with_space_profiles};
 #[cfg(unix)]
 use super::automation::AutomationLaunch;
 use super::menu::RunMenuCommand;
@@ -34,14 +34,15 @@ use super::session::reopen_session;
 #[cfg(not(feature = "ui-only"))]
 use super::session::restore_session;
 use super::{BrowserWindow, BrowserWindowRegistry, open_browser_window};
-use photon_storage::Profile;
+use photon_storage::{Profile, SpaceProfile};
 
 struct LoadedProfileState {
     profile: Option<Profile>,
     settings: BrowserSettings,
     settings_revision: Option<u64>,
-    history: History,
-    session: Session,
+    histories: Vec<(photon_core::SpaceId, SpaceProfile, History)>,
+    sessions: Vec<(photon_core::SpaceId, SpaceProfile, Session)>,
+    space_profiles: Vec<(photon_core::SpaceId, SpaceProfile)>,
 }
 
 /// Opens a new window, private or not, from the active browser window when
@@ -151,24 +152,40 @@ pub fn run() {
                     profile,
                     settings,
                     settings_revision,
-                    history,
-                    session,
+                    histories,
+                    sessions,
+                    space_profiles,
                 } = loaded;
-                load_settings(profile.clone(), settings, settings_revision, cx);
-                load_browsing_history(profile.clone(), history, cx);
+                load_settings_with_space_profiles(
+                    profile.clone(),
+                    settings,
+                    settings_revision,
+                    space_profiles,
+                    cx,
+                );
+                load_browsing_history(histories, cx);
                 #[cfg(feature = "ui-only")]
-                let _ = load_session(None, session, cx);
+                let _ = load_session(None, sessions, cx);
                 #[cfg(not(feature = "ui-only"))]
-                let saved_session = load_session(profile.clone(), session, cx);
+                let saved_session = load_session(profile.clone(), sessions, cx);
 
                 #[cfg(feature = "ui-only")]
                 let runtime = Rc::new(EngineRuntime::without_engine());
+                #[cfg(not(feature = "ui-only"))]
+                let default_browsing_profile =
+                    Settings::space_engine_dir(Settings::active_space_id(cx), cx).unwrap_or_else(
+                        |error| panic!("could not open active space profile: {error}"),
+                    );
+                #[cfg(not(feature = "ui-only"))]
+                let temporary_profile = Settings::temporary_profile(cx);
                 #[cfg(not(feature = "ui-only"))]
                 let runtime = EngineRuntime::create(
                     profile
                         .as_ref()
                         .map(|profile| profile.engine_dir())
                         .as_deref(),
+                    default_browsing_profile.as_deref(),
+                    temporary_profile,
                 )
                 .unwrap_or_else(|error| panic!("could not start Photon Engine: {error:#}"));
                 #[cfg(all(target_os = "linux", not(feature = "ui-only")))]
@@ -343,31 +360,45 @@ fn keep_engine_warm_briefly(cx: &mut App) {
 
 fn load_profile_state() -> LoadedProfileState {
     let profile = open_profile();
-    let (settings, settings_revision) = profile
+    let (mut settings, settings_revision) = profile
         .as_ref()
         .map(Profile::load_settings_with_revision)
         .unwrap_or_default();
-    let history = profile
-        .as_ref()
-        .map(Profile::load_history)
-        .unwrap_or_default();
-    #[cfg(not(feature = "ui-only"))]
-    let session = if settings.restore_session {
-        profile
-            .as_ref()
-            .map(Profile::load_session)
-            .unwrap_or_default()
-    } else {
-        Session::default()
-    };
-    #[cfg(feature = "ui-only")]
-    let session = Session::default();
+    let mut histories = Vec::new();
+    let mut sessions = Vec::new();
+    let mut space_profiles = Vec::new();
+    if let Some(profile) = &profile {
+        let space_ids: Vec<_> = settings.spaces.all().iter().map(|space| space.id).collect();
+        for space_id in space_ids {
+            match profile.space(space_id) {
+                Ok(space_profile) => {
+                    let history = space_profile.load_history();
+                    if let Some(space) = settings.spaces.get_mut(space_id) {
+                        space.set_data(space_profile.load_space_data());
+                    }
+                    let session = if settings.restore_session {
+                        space_profile.load_session()
+                    } else {
+                        Session::default()
+                    };
+                    histories.push((space_id, space_profile.clone(), history));
+                    sessions.push((space_id, space_profile.clone(), session));
+                    space_profiles.push((space_id, space_profile));
+                }
+                Err(error) => crate::platform::trace(format_args!(
+                    "could not open space {} profile: {error}",
+                    space_id
+                )),
+            }
+        }
+    }
     LoadedProfileState {
         profile,
         settings,
         settings_revision,
-        history,
-        session,
+        histories,
+        sessions,
+        space_profiles,
     }
 }
 

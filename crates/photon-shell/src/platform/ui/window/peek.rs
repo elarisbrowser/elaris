@@ -51,7 +51,9 @@ pub(super) struct PeekState {
 impl BrowserWindow {
     /// Shows `url` in the preview, replacing a page already shown there.
     pub(super) fn open_peek(&mut self, url: &str, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(webview) = create_webview(cx, self.runtime.clone(), url, self.private) else {
+        let space = self.current_space(cx);
+        let Some(webview) = create_webview(cx, self.runtime.clone(), url, self.private, space)
+        else {
             return;
         };
         // A preview still shrinking away gives way to the new one.
@@ -66,7 +68,14 @@ impl BrowserWindow {
                     this.open_tab_beside(webview, url, *activate, window, cx);
                 }
                 WebViewEvent::OpenInNewWindow { url, private } => {
-                    super::open_link_in_new_window(&this.runtime, url, *private, cx);
+                    let space = webview.read(cx).session.space;
+                    super::open_link_in_new_window_in_space(
+                        &this.runtime,
+                        url,
+                        *private,
+                        space,
+                        cx,
+                    );
                 }
                 // The preview shows none of its page's state but its dialogs,
                 // and its page reports state many times while loading: each

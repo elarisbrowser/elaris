@@ -548,14 +548,21 @@ impl BrowserWindow {
     }
 }
 
-/// Opens a link in a new window, private or not, as a page's context menu asks.
-fn open_link_in_new_window(runtime: &Rc<EngineRuntime>, url: &str, private: bool, cx: &mut App) {
-    if let Err(error) = open_browser_window(
+/// Opens a page in a new window in the same browsing space as its source.
+fn open_link_in_new_window_in_space(
+    runtime: &Rc<EngineRuntime>,
+    url: &str,
+    private: bool,
+    space: photon_core::SpaceId,
+    cx: &mut App,
+) {
+    if let Err(error) = open_browser_window_in_space(
         runtime.clone(),
         Some(url.to_owned()),
         false,
         false,
         private,
+        space,
         cx,
     ) {
         trace(format_args!("opening link in new window: {error:#}"));
@@ -572,12 +579,33 @@ fn open_browser_window(
     private: bool,
     cx: &mut App,
 ) -> anyhow::Result<WindowHandle<BrowserWindow>> {
+    let space = Settings::active_space_id(cx);
+    open_browser_window_in_space(
+        runtime,
+        startup_address,
+        restore_pinned_tabs,
+        restoring_session,
+        private,
+        space,
+        cx,
+    )
+}
+
+fn open_browser_window_in_space(
+    runtime: Rc<EngineRuntime>,
+    startup_address: Option<String>,
+    restore_pinned_tabs: bool,
+    restoring_session: bool,
+    private: bool,
+    initial_space: photon_core::SpaceId,
+    cx: &mut App,
+) -> anyhow::Result<WindowHandle<BrowserWindow>> {
     // A page's address opens that page; any other address a web page.
     let startup_page = startup_address.as_deref().and_then(find_page);
     let initial_webview = startup_address
         .as_deref()
         .filter(|_| startup_page.is_none())
-        .and_then(|address| create_webview(cx, runtime.clone(), address, private));
+        .and_then(|address| create_webview(cx, runtime.clone(), address, private, initial_space));
     let animations = Settings::get(cx).animations;
     let options = window_settings::options(cx);
     let handle = cx.open_window(options, move |window, cx| {
@@ -713,7 +741,7 @@ fn open_browser_window(
                 chrome,
                 overlays,
                 sidebar: SidebarState::new(registry_window_id, cx),
-                spaces: SpacesState::new(Settings::get(cx).spaces.active().id),
+                spaces: SpacesState::new(initial_space),
                 theme_picker_space: None,
                 theme_picker_anchor: None,
                 theme_picker_presence: Presence::default(),

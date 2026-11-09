@@ -108,7 +108,7 @@ impl HistoryPage {
                 this.importing = None;
                 let message = match pages {
                     Ok(pages) => {
-                        let added = BrowsingHistory::import_pages(pages, cx);
+                        let added = BrowsingHistory::import_pages(this.context.space, pages, cx);
                         format!("Imported {added} pages from {}", source.name)
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
@@ -212,7 +212,7 @@ impl HistoryPage {
                     return;
                 }
                 let current_query = this.search.read(cx).as_str().to_lowercase();
-                let current_history = BrowsingHistory::pages(cx);
+                let current_history = BrowsingHistory::pages(this.context.space, cx);
                 if current_query != query || !Arc::ptr_eq(&current_history, &history) {
                     this.pending = None;
                     cx.notify();
@@ -280,9 +280,14 @@ fn display_address(url: &str) -> String {
     rest.strip_suffix('/').unwrap_or(rest).to_owned()
 }
 
-fn page_icon(url: &str, palette: ThemeColors, cx: &mut App) -> gpui::AnyElement {
+fn page_icon(
+    space: photon_core::SpaceId,
+    url: &str,
+    palette: ThemeColors,
+    cx: &mut App,
+) -> gpui::AnyElement {
     let size = metrics::LIST_ROW_ICON_SIZE;
-    match BrowsingHistory::favicon(url, cx) {
+    match BrowsingHistory::favicon(space, url, cx) {
         Some(favicon) => img(ImageSource::Render(favicon.image))
             .size(px(size))
             .object_fit(ObjectFit::Contain)
@@ -307,6 +312,7 @@ impl HistoryPage {
         });
         let open_url = entry.url.to_string();
         let context = context.clone();
+        let space = context.space;
         let remove_url = entry.url.clone();
         let group_name: gpui::SharedString = format!("history-row-{index}").into();
         h_stack()
@@ -323,7 +329,7 @@ impl HistoryPage {
             .cursor_pointer()
             .hover_style(|style| style.bg(rgba(palette.hover_surface)))
             .on_click(move |_, _, cx| context.open(open_url.clone(), cx))
-            .child(page_icon(&entry.url, palette, cx))
+            .child(page_icon(space, &entry.url, palette, cx))
             .child(
                 v_stack()
                     .flex_1()
@@ -370,7 +376,7 @@ impl HistoryPage {
                     .hover_style(|style| style.bg(rgba(palette.hover_surface)))
                     .on_click(move |_, _, cx| {
                         cx.stop_propagation();
-                        BrowsingHistory::remove_page(&remove_url, cx);
+                        BrowsingHistory::remove_page(space, &remove_url, cx);
                     })
                     .child(close_icon(
                         palette.text_secondary,
@@ -427,7 +433,7 @@ fn history_skeleton(palette: ThemeColors) -> impl IntoElement {
 impl Render for HistoryPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = palette(window, cx);
-        let history = BrowsingHistory::pages(cx);
+        let history = BrowsingHistory::pages(self.context.space, cx);
         let query = self.search.read(cx).as_str().to_lowercase();
         let searching = !query.trim().is_empty();
         self.load_listing(history.clone(), query.clone(), cx);

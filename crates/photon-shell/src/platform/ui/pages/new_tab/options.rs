@@ -1,7 +1,7 @@
 //! Shortcut count and restore controls for the new tab page.
 
 use gpui::App;
-use photon_core::{NewTabSettings, SHORTCUT_COUNTS};
+use photon_core::{SHORTCUT_COUNTS, SpaceId};
 
 use super::super::super::ClickHandler;
 use super::super::super::controls::Choice;
@@ -15,22 +15,30 @@ pub(in super::super) struct LayoutOptions {
 }
 
 impl LayoutOptions {
-    pub(in super::super) fn read(cx: &App) -> Self {
+    pub(in super::super) fn read(space: SpaceId, cx: &App) -> Self {
         let settings = Settings::get(cx);
-        let layout = &settings.new_tab;
         Self {
             show_shortcuts: settings.is_feature_enabled(photon_core::Feature::NewTabShortcuts),
-            has_removed: layout.has_removed(),
+            has_removed: settings
+                .spaces
+                .get(space)
+                .is_some_and(|space| space.new_tab.has_removed()),
         }
     }
 
-    pub(in super::super) fn restore_removed(&self) -> ClickHandler {
-        Box::new(|_, _, cx| {
-            if !Settings::get(cx).new_tab.has_removed() {
+    pub(in super::super) fn restore_removed(&self, space: SpaceId) -> ClickHandler {
+        Box::new(move |_, _, cx| {
+            if !Settings::get(cx)
+                .spaces
+                .get(space)
+                .is_some_and(|space| space.new_tab.has_removed())
+            {
                 return;
             }
             Settings::update(cx, |settings| {
-                NewTabSettings::restore_removed(&mut settings.new_tab)
+                if let Some(space) = settings.spaces.get_mut(space) {
+                    space.new_tab.restore_removed();
+                }
             });
             super::super::super::show_alert(cx, "Removed shortcuts restored");
         })

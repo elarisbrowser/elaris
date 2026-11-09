@@ -17,6 +17,7 @@ use super::SettingsPage;
 
 /// What clearing will delete, and how it is going.
 pub(super) struct ClearForm {
+    space: photon_core::SpaceId,
     range: ClearRange,
     request: ClearBrowsingData,
     state: ClearState,
@@ -105,8 +106,9 @@ const KINDS: [DataKind; 4] = [
 ];
 
 impl ClearForm {
-    pub(super) fn new(cx: &mut Context<SettingsPage>) -> Self {
+    pub(super) fn new(space: photon_core::SpaceId, cx: &mut Context<SettingsPage>) -> Self {
         let mut form = Self {
+            space,
             range: ClearRange::LastHour,
             request: ClearBrowsingData {
                 history: true,
@@ -123,7 +125,7 @@ impl ClearForm {
     }
 
     fn measure(&mut self, cx: &mut Context<SettingsPage>) {
-        let measuring = BrowsingHistory::measure_data_usage(cx);
+        let measuring = BrowsingHistory::measure_data_usage(self.space, cx);
         self._measuring = Some(cx.spawn(async move |page, cx| {
             let usage = measuring.await;
             page.update(cx, |page, cx| {
@@ -154,6 +156,7 @@ impl SettingsPage {
         self.clearing.state = ClearState::Clearing;
         let page = cx.entity().downgrade();
         BrowsingHistory::clear(
+            self.context.space,
             request,
             &self.context.runtime,
             move |cx| {

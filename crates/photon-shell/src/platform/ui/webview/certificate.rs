@@ -58,7 +58,6 @@ impl PhotonWebView {
             return;
         };
         self.session
-            .runtime()
             .allow_certificate_errors_for_host(&warning.host);
         if let Err(error) = self.execute(BrowserCommand::Navigate(warning.url), cx) {
             trace(format_args!(

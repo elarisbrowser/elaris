@@ -7,6 +7,7 @@ use photon_core::{Feature, Shortcut, SpaceId};
 
 use crate::platform::app_update::update_app;
 
+use super::super::settings::Settings;
 use super::BrowserWindow;
 
 /// Something a context menu does to the tab, favourite or space it was
@@ -105,15 +106,23 @@ impl BrowserWindow {
 
     fn clear_site_data(&self, host: &str, cx: &mut App) {
         let app = cx.to_async();
-        self.runtime.clear_site_data(host, move || {
-            app.spawn(async move |cx| {
-                update_app(cx, |cx| {
-                    super::super::show_alert(cx, "Cookies and site data cleared")
+        let profile_path = match Settings::space_engine_dir(self.current_space(cx), cx) {
+            Ok(profile_path) => profile_path,
+            Err(error) => {
+                crate::platform::trace(format_args!("could not open space profile: {error}"));
+                return;
+            }
+        };
+        self.runtime
+            .clear_site_data(host, profile_path.as_deref(), move || {
+                app.spawn(async move |cx| {
+                    update_app(cx, |cx| {
+                        super::super::show_alert(cx, "Cookies and site data cleared")
+                    })
+                    .await
                 })
-                .await
-            })
-            .detach();
-        });
+                .detach();
+            });
     }
 
     pub(super) fn toggle_performance_overlay(&mut self, cx: &mut Context<Self>) {

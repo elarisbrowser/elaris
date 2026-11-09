@@ -440,11 +440,11 @@ impl Omnibox {
         let (Some(host), Some(webview)) = (self.certificate_host(cx), self.webview.as_ref()) else {
             return;
         };
-        let runtime = webview.read(cx).session.runtime().clone();
+        let view = webview.read(cx);
         let this = cx.entity().downgrade();
         let app = cx.to_async();
         let asked = host.clone();
-        runtime.peer_certificate(&host, move |certificate| {
+        view.session.peer_certificate(&host, move |certificate| {
             let Some(certificate) = certificate else {
                 return;
             };
@@ -528,7 +528,7 @@ impl Omnibox {
     /// The highlighted suggestion's icon while suggesting, otherwise a search icon.
     fn field_icon(&self, palette: ThemeColors, cx: &mut Context<Self>) -> AnyElement {
         match self.suggestions.get(self.selected) {
-            Some(suggestion) => suggestion_icon(suggestion, palette, cx),
+            Some(suggestion) => suggestion_icon(self.space, suggestion, palette, cx),
             None => icon_slot(search_icon_sized(
                 palette.text_primary,
                 metrics::OMNIBOX_ICON_SIZE,
@@ -548,6 +548,7 @@ impl Omnibox {
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let rows = suggestion_rows(
+            self.space,
             &self.suggestions,
             self.selected,
             self.hovered,

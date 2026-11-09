@@ -6,7 +6,7 @@ use photon_core::{BrowserCommand, BrowserState, Shortcut, SpaceId};
 use std::rc::Rc;
 use std::time::Instant;
 
-use super::super::super::engine::{EngineRuntime, EngineSession, UiWake};
+use super::super::super::engine::{BrowsingContext, EngineRuntime, EngineSession, UiWake};
 use super::super::super::trace;
 use super::super::Favicon;
 use super::super::pages::{InternalPage, NEW_TAB, PageDefinition, PageEvent, find_page};
@@ -32,9 +32,18 @@ pub(super) enum TabContent {
 pub(super) struct SleepingTab {
     pub(super) state: BrowserState,
     pub(super) favicon: Option<Favicon>,
+    pub(super) space: photon_core::SpaceId,
 }
 
 impl TabContent {
+    pub(super) fn space(&self, cx: &App) -> Option<photon_core::SpaceId> {
+        match self {
+            Self::Page(page) => Some(page.space),
+            Self::Web(webview) => Some(webview.read(cx).session.space),
+            Self::Sleeping(tab) => Some(tab.space),
+        }
+    }
+
     pub(super) fn webview(&self) -> Option<Entity<PhotonWebView>> {
         match self {
             Self::Page(_) => None,
@@ -144,6 +153,15 @@ impl BrowserWindow {
     }
 
     pub(super) fn new_page(&self, page: &'static PageDefinition, cx: &mut App) -> TabContent {
+        self.new_page_in_space(page, self.current_space(cx), cx)
+    }
+
+    pub(super) fn new_page_in_space(
+        &self,
+        page: &'static PageDefinition,
+        space: photon_core::SpaceId,
+        cx: &mut App,
+    ) -> TabContent {
         // A private window cannot change how Photon is set up, however settings
         // are asked for, so it shows a New Tab page instead.
         let page = if self.private && page.is(super::super::pages::SETTINGS) {
@@ -151,7 +169,13 @@ impl BrowserWindow {
         } else {
             page
         };
-        TabContent::Page(InternalPage::open(page, &self.runtime, self.private, cx))
+        TabContent::Page(InternalPage::open(
+            page,
+            &self.runtime,
+            self.private,
+            space,
+            cx,
+        ))
     }
 
     pub(super) fn show_empty_new_tab_page(
@@ -201,7 +225,12 @@ impl BrowserWindow {
             cx.notify();
             return;
         }
-        let Some(webview) = create_webview(cx, self.runtime.clone(), url, self.private) else {
+        let space = self
+            .active_tab
+            .and_then(|index| self.tabs.get(index))
+            .map_or_else(|| self.current_space(cx), |tab| tab.space);
+        let Some(webview) = create_webview(cx, self.runtime.clone(), url, self.private, space)
+        else {
             return;
         };
         self.replace_active_content(TabContent::Web(webview), window, cx);
@@ -223,7 +252,9 @@ impl BrowserWindow {
                 Some(self.insert_content(index, content, activate, window, cx))
             }
             None => {
-                let webview = create_webview(cx, self.runtime.clone(), address, self.private)?;
+                let space = self.current_space(cx);
+                let webview =
+                    create_webview(cx, self.runtime.clone(), address, self.private, space)?;
                 Some(self.insert_webview(index, webview, None, activate, window, cx))
             }
         }
@@ -280,7 +311,9 @@ impl BrowserWindow {
         };
         let state = sleeping.state.clone();
         let favicon = sleeping.favicon.clone();
-        let Some(webview) = create_webview(cx, self.runtime.clone(), &state.url, self.private)
+        let space = tab.space;
+        let Some(webview) =
+            create_webview(cx, self.runtime.clone(), &state.url, self.private, space)
         else {
             return false;
         };
@@ -354,7 +387,14 @@ impl BrowserWindow {
                     this.open_tab_beside(webview, url, *activate, window, cx);
                 }
                 WebViewEvent::OpenInNewWindow { url, private } => {
-                    super::open_link_in_new_window(&this.runtime, url, *private, cx);
+                    let space = webview.read(cx).session.space;
+                    super::open_link_in_new_window_in_space(
+                        &this.runtime,
+                        url,
+                        *private,
+                        space,
+                        cx,
+                    );
                 }
                 WebViewEvent::Peek(url) => this.open_peek(url, window, cx),
                 WebViewEvent::FullscreenChanged(fullscreen) => {
@@ -388,15 +428,35 @@ pub(super) fn create_webview(
     runtime: Rc<EngineRuntime>,
     address: &str,
     private: bool,
+    space: photon_core::SpaceId,
 ) -> Option<Entity<PhotonWebView>> {
-    let session =
-        match EngineSession::create(runtime.clone(), 1200, 760, 1.0, Some(address), private) {
-            Ok(session) => session,
-            Err(error) => {
-                trace(format_args!("could not open {address}: {error:#}"));
-                return None;
-            }
-        };
+    let profile_path = match Settings::space_engine_dir(space, cx) {
+        Ok(profile_path) => profile_path,
+        Err(error) => {
+            trace(format_args!(
+                "could not open space profile {space}: {error}"
+            ));
+            return None;
+        }
+    };
+    let session = match EngineSession::create(
+        runtime.clone(),
+        1200,
+        760,
+        1.0,
+        Some(address),
+        BrowsingContext {
+            private,
+            space,
+            profile_path,
+        },
+    ) {
+        Ok(session) => session,
+        Err(error) => {
+            trace(format_args!("could not open {address}: {error:#}"));
+            return None;
+        }
+    };
     let webview = create_webview_from_session(cx, runtime, session);
     webview.update(cx, |view, _| {
         view.requested = Some(photon_core::Shortcut {

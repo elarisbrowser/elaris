@@ -110,15 +110,16 @@ impl BrowserWindow {
     fn set_current_space(&mut self, id: SpaceId, cx: &mut Context<Self>) {
         self.spaces.current = id;
         set_window_space(self.window_id, id, cx);
+        if let Ok(Some(profile_path)) = Settings::space_engine_dir(id, cx) {
+            self.runtime.ensure_profile_session(Some(&profile_path));
+        }
     }
 
-    /// Whether the window shows one space at a time: in the sidebar. The tab
-    /// strip shows every tab.
+    /// Whether this window keeps each space's tabs in a separate workspace.
     pub(super) fn shows_spaces(&self, cx: &gpui::App) -> bool {
-        self.layout(cx).shows_spaces()
-            && Settings::get(cx)
-                .features
-                .is_enabled(photon_core::Feature::Spaces)
+        Settings::get(cx)
+            .features
+            .is_enabled(photon_core::Feature::Spaces)
     }
 
     pub(super) fn switch_space(&mut self, id: SpaceId, cx: &mut Context<Self>) {

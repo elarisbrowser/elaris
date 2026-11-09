@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::new_tab::Shortcut;
+use super::new_tab::{NewTabSpaceSettings, Shortcut};
 use super::settings::WindowColor;
 use super::workspace::WorkspaceLayout;
 
@@ -115,16 +115,36 @@ pub struct Space {
     /// Whether that colour fades into a neighbouring one.
     pub gradient: bool,
     /// Tabs pinned in this space, at the addresses they were pinned at,
-    /// opened again at launch.
+    /// opened again at launch. The shell saves these in `SpaceData.json`.
+    #[serde(skip_serializing)]
     pub pinned_tabs: Vec<Shortcut>,
+    /// New tab shortcuts and dismissed sites owned by this space.
+    #[serde(skip_serializing)]
+    pub new_tab: NewTabSpaceSettings,
     /// Sites kept at the top of this space's sidebar.
+    #[serde(skip_serializing)]
     pub favourites: Vec<Shortcut>,
     /// Whether the empty favourites drop hint was dismissed in this space.
+    #[serde(skip_serializing)]
     pub favourites_hint_dismissed: bool,
     /// Legacy copied layout data saved before spaces selected named presets.
     pub layout_override: Option<WorkspaceLayout>,
     /// A named profile preset selected for this space.
     pub preset_override_id: Option<String>,
+}
+
+/// User-saved browsing content owned by a space rather than shared settings.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default)]
+pub struct SpaceData {
+    /// Tabs pinned in this space, reopened at launch.
+    pub pinned_tabs: Vec<Shortcut>,
+    /// New tab page pins and dismissed sites.
+    pub new_tab: NewTabSpaceSettings,
+    /// Sites kept at the top of this space's sidebar.
+    pub favourites: Vec<Shortcut>,
+    /// Whether this space's empty favourites hint was dismissed.
+    pub favourites_hint_dismissed: bool,
 }
 
 impl Default for Space {
@@ -137,6 +157,7 @@ impl Default for Space {
             colors: None,
             gradient: false,
             pinned_tabs: Vec::new(),
+            new_tab: NewTabSpaceSettings::default(),
             favourites: Vec::new(),
             favourites_hint_dismissed: false,
             layout_override: None,
@@ -146,6 +167,27 @@ impl Default for Space {
 }
 
 impl Space {
+    pub fn data(&self) -> SpaceData {
+        SpaceData {
+            pinned_tabs: self.pinned_tabs.clone(),
+            new_tab: self.new_tab.clone(),
+            favourites: self.favourites.clone(),
+            favourites_hint_dismissed: self.favourites_hint_dismissed,
+        }
+    }
+
+    pub fn set_data(&mut self, data: SpaceData) {
+        self.pinned_tabs = data.pinned_tabs;
+        self.new_tab = data.new_tab;
+        self.favourites = data.favourites;
+        self.favourites_hint_dismissed = data.favourites_hint_dismissed;
+    }
+
+    /// Removes user-saved browsing content from the shared settings document.
+    pub fn clear_data(&mut self) {
+        self.set_data(SpaceData::default());
+    }
+
     /// Set the authoritative palette while retaining legacy tint metadata.
     pub fn set_colors(&mut self, colors: SpaceColors) {
         self.tint = colors.primary();
@@ -280,6 +322,7 @@ impl Spaces {
             colors: None,
             gradient,
             pinned_tabs: Vec::new(),
+            new_tab: NewTabSpaceSettings::default(),
             favourites: Vec::new(),
             favourites_hint_dismissed: false,
             layout_override: None,

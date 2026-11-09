@@ -85,6 +85,7 @@ pub(super) mod embedder {
     #[repr(C)]
     pub(crate) struct PhotonDownload {
         pub id: u64,
+        pub profile_identity: *const c_char,
         pub url: *const c_char,
         pub path: *const c_char,
         pub status: i32,
@@ -251,17 +252,22 @@ pub(super) mod embedder {
         pub fn photon_runtime_create(
             helper_directory: *const c_char,
             profile_path: *const c_char,
+            default_browsing_profile_path: *const c_char,
             error: *mut c_char,
             capacity: usize,
         ) -> *mut c_void;
         pub fn photon_runtime_peer_certificate(
             runtime: *mut c_void,
+            profile_path: *const c_char,
+            is_private: bool,
             host: *const c_char,
             callback_data: *mut c_void,
             callback: Option<unsafe extern "C" fn(*mut c_void, *const PhotonCertificate)>,
         );
         pub fn photon_runtime_allow_certificate_errors_for_host(
             runtime: *mut c_void,
+            profile_path: *const c_char,
+            is_private: bool,
             host: *const c_char,
         );
         pub fn photon_runtime_clear_browsing_data(
@@ -269,12 +275,14 @@ pub(super) mod embedder {
             since_unix_seconds: i64,
             cache: bool,
             site_data: bool,
+            profile_path: *const c_char,
             callback_data: *mut c_void,
             callback: Option<unsafe extern "C" fn(*mut c_void)>,
         );
         pub fn photon_runtime_clear_site_data(
             runtime: *mut c_void,
             host: *const c_char,
+            profile_path: *const c_char,
             callback_data: *mut c_void,
             callback: Option<unsafe extern "C" fn(*mut c_void)>,
         );
@@ -324,6 +332,7 @@ pub(super) mod embedder {
             height: i32,
             dpr: f64,
             callbacks: *const ViewCallbacks,
+            profile_path: *const c_char,
             is_private: bool,
         ) -> *mut c_void;
         pub fn photon_view_create_for_traversable(
@@ -419,7 +428,15 @@ pub(super) mod embedder {
         #[cfg(not(feature = "ui-only"))]
         pub fn photon_runtime_download_action(runtime: *mut c_void, id: u64, action: i32);
         #[cfg(not(feature = "ui-only"))]
-        pub fn photon_runtime_clear_inactive_downloads(runtime: *mut c_void);
+        pub fn photon_runtime_clear_inactive_downloads(
+            runtime: *mut c_void,
+            profile_path: *const c_char,
+        );
+        #[cfg(not(feature = "ui-only"))]
+        pub fn photon_runtime_ensure_profile_session(
+            runtime: *mut c_void,
+            profile_path: *const c_char,
+        );
         #[cfg(not(feature = "ui-only"))]
         pub fn photon_runtime_set_service_callback(
             runtime: *mut c_void,

@@ -1,4 +1,4 @@
-//! The profile's downloads, shared by every window. Engine reports them; the
+//! Each space's downloads, reported by Engine and shared by windows in that space. The
 //! sidebar's downloads button and popover, the window's notices and the
 //! downloads page observe this global to follow changes.
 
@@ -6,7 +6,7 @@ use gpui::{App, BorrowAppContext, Global};
 use photon_performance::{format_bytes, format_rate};
 use std::{
     cell::{Cell, RefCell},
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     rc::Rc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -27,12 +27,9 @@ pub(super) enum DownloadEvent {
 #[derive(Default)]
 pub(super) struct Downloads {
     downloads: Vec<Download>,
-    /// For other windows, then private ones: the latest start, finish or
-    /// failure, and when it happened.
-    latest_event: [Option<(DownloadEvent, Instant)>; 2],
-    /// For other windows, then private ones: whether a download arrived since
-    /// the downloads popover was last open.
-    unseen: [bool; 2],
+    /// The latest event and unseen state are scoped to a space and privacy mode.
+    latest_event: HashMap<(u64, bool), (DownloadEvent, Instant)>,
+    unseen: HashSet<(u64, bool)>,
 }
 
 /// How far along the downloads in progress are, together.
@@ -45,42 +42,49 @@ pub(super) struct DownloadProgress {
 impl Global for Downloads {}
 
 impl Downloads {
-    /// The downloads a private window, or another window, lists.
-    pub(super) fn list(private: bool, cx: &App) -> impl Iterator<Item = &Download> {
+    /// The downloads a window lists from its own space and privacy mode.
+    pub(super) fn list(space: u64, private: bool, cx: &App) -> impl Iterator<Item = &Download> {
         cx.try_global::<Self>()
             .into_iter()
             .flat_map(|downloads| downloads.downloads.iter())
-            .filter(move |download| download.private == private)
+            .filter(move |download| download.space == space && download.private == private)
     }
 
-    pub(super) fn get(id: u64, cx: &App) -> Option<&Download> {
+    pub(super) fn get(space: u64, id: u64, cx: &App) -> Option<&Download> {
         cx.try_global::<Self>()?
             .downloads
             .iter()
-            .find(|download| download.id == id)
+            .find(|download| download.id == id && download.space == space)
     }
 
-    pub(super) fn latest_event(private: bool, cx: &App) -> Option<(DownloadEvent, Instant)> {
-        cx.try_global::<Self>()?.latest_event[usize::from(private)]
+    pub(super) fn latest_event(
+        space: u64,
+        private: bool,
+        cx: &App,
+    ) -> Option<(DownloadEvent, Instant)> {
+        cx.try_global::<Self>()?
+            .latest_event
+            .get(&(space, private))
+            .copied()
     }
 
-    pub(super) fn has_unseen(private: bool, cx: &App) -> bool {
+    pub(super) fn has_unseen(space: u64, private: bool, cx: &App) -> bool {
         cx.try_global::<Self>()
-            .is_some_and(|downloads| downloads.unseen[usize::from(private)])
+            .is_some_and(|downloads| downloads.unseen.contains(&(space, private)))
     }
 
     /// The downloads popover was opened, so nothing in it is new any more.
-    pub(super) fn mark_seen(private: bool, cx: &mut App) {
-        if Self::has_unseen(private, cx) {
+    pub(super) fn mark_seen(space: u64, private: bool, cx: &mut App) {
+        if Self::has_unseen(space, private, cx) {
             cx.update_global::<Self, _>(|downloads, _| {
-                downloads.unseen[usize::from(private)] = false;
+                downloads.unseen.remove(&(space, private));
             });
         }
     }
 
     /// The progress of the downloads in progress, or `None` when there are none.
-    pub(super) fn progress(private: bool, cx: &App) -> Option<DownloadProgress> {
-        let active: Vec<_> = Self::list(private, cx)
+    pub(super) fn progress(space: u64, private: bool, cx: &App) -> Option<DownloadProgress> {
+        let active: Vec<_> = Self::list(space, private, cx)
             .filter(|download| download.status.is_active())
             .collect();
         if active.is_empty() {
@@ -117,16 +121,16 @@ impl Downloads {
                         .iter()
                         .find(|d| d.id == download.id)
                         .map(|existing| existing.status);
-                    let kind = usize::from(download.private);
+                    let key = (download.space, download.private);
                     if let Some(event) = event_for(previous, &download) {
-                        self.latest_event[kind] = Some((event, Instant::now()));
+                        self.latest_event.insert(key, (event, Instant::now()));
                     }
                     if let Some(existing) = self.downloads.iter_mut().find(|d| d.id == download.id)
                     {
                         *existing = download;
                     } else {
                         self.downloads.push(download);
-                        self.unseen[kind] = true;
+                        self.unseen.insert(key);
                         added = true;
                     }
                 }
@@ -316,6 +320,7 @@ mod tests {
     fn download(status: DownloadStatus, created_time_ms: i64) -> Download {
         Download {
             id: 1,
+            space: 1,
             url: "https://example.com/report.csv".into(),
             path: PathBuf::from("/tmp/report.csv"),
             status,
@@ -333,14 +338,15 @@ mod tests {
         let mut downloads = Downloads::default();
         let private = Download {
             id: 2,
+            space: 1,
             private: true,
             ..download(DownloadStatus::InProgress, now_ms())
         };
         downloads.apply([DownloadChange::Changed(private)]);
-        assert!(downloads.unseen[1]);
-        assert!(!downloads.unseen[0]);
-        assert!(downloads.latest_event[1].is_some());
-        assert!(downloads.latest_event[0].is_none());
+        assert!(downloads.unseen.contains(&(1, true)));
+        assert!(!downloads.unseen.contains(&(1, false)));
+        assert!(downloads.latest_event.contains_key(&(1, true)));
+        assert!(!downloads.latest_event.contains_key(&(1, false)));
     }
 
     #[test]

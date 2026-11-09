@@ -24,7 +24,7 @@ use gpui::{
     AnyElement, AnyView, App, AppContext, Entity, EventEmitter, StyleRefinement, prelude::*, px,
     rgba,
 };
-use photon_core::{BrowserSettings, internal_page_url};
+use photon_core::{BrowserSettings, SpaceId, internal_page_url};
 use std::rc::Rc;
 
 use super::super::engine::EngineRuntime;
@@ -56,6 +56,7 @@ pub(super) struct PageContext {
     pub(super) runtime: Rc<EngineRuntime>,
     /// Whether the page is in a private window.
     pub(super) private: bool,
+    pub(super) space: SpaceId,
 }
 
 impl PageContext {
@@ -76,6 +77,7 @@ impl PageContext {
 #[derive(Clone)]
 pub(super) struct InternalPage {
     pub(super) definition: &'static PageDefinition,
+    pub(super) space: SpaceId,
     view: Entity<PageFrame>,
     events: Entity<PageEvents>,
 }
@@ -85,6 +87,7 @@ impl InternalPage {
         definition: &'static PageDefinition,
         runtime: &Rc<EngineRuntime>,
         private: bool,
+        space: SpaceId,
         cx: &mut App,
     ) -> Self {
         let events = cx.new(|_| PageEvents);
@@ -92,9 +95,11 @@ impl InternalPage {
             events: events.clone(),
             runtime: runtime.clone(),
             private,
+            space,
         };
         Self {
             definition,
+            space,
             view: {
                 let frame_context = context.clone();
                 cx.new(|cx| PageFrame::new(definition, frame_context, cx))

@@ -19,7 +19,7 @@ use gpui_elements::editable_text::{
     EditableTextState, StringStorage, TextChanged,
     actions::{Enter, Escape},
 };
-use photon_core::{History, Suggestion};
+use photon_core::{History, SpaceId, Suggestion};
 use photon_core::{OmniboxTarget, display_address, display_domain, resolve_with};
 
 use super::history::BrowsingHistory;
@@ -71,6 +71,7 @@ pub(super) struct Omnibox {
     webview: Option<Entity<PhotonWebView>>,
     /// In a private window, searches typed here are not remembered.
     pub(super) private: bool,
+    space: SpaceId,
     /// The address of the active tab's Photon page, if it shows one.
     page_address: Option<String>,
     /// The address the field shows for the page: short while idle, full
@@ -204,6 +205,7 @@ impl Omnibox {
             input,
             webview: None,
             private: false,
+            space: Settings::active_space_id(cx),
             page_address: None,
             current_url: String::new(),
             invalid: false,
@@ -252,7 +254,7 @@ impl Omnibox {
             _keystroke_subscription: keystroke_subscription,
             _page_subscriptions: Vec::new(),
         };
-        omnibox.set_content(None, None, window, cx);
+        omnibox.set_content(None, None, Settings::active_space_id(cx), window, cx);
         omnibox
     }
 
@@ -322,11 +324,13 @@ impl Omnibox {
         &mut self,
         webview: Option<Entity<PhotonWebView>>,
         page_address: Option<String>,
+        space: SpaceId,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         self.webview = webview;
         self.page_address = page_address;
+        self.space = space;
         self.close_suggestions(cx);
         self.site_info_open = false;
         self.invalid = false;
@@ -420,7 +424,7 @@ impl Omnibox {
                 if let OmniboxTarget::Search { query, .. } = &target
                     && !self.private
                 {
-                    BrowsingHistory::record_search(query, cx);
+                    BrowsingHistory::record_search(self.space, query, cx);
                 }
                 self.close_suggestions(cx);
                 cx.emit(OmniboxEvent::Navigate(target.url().to_owned()));

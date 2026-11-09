@@ -453,8 +453,8 @@ impl BrowserWindow {
                     },
                 )),
                 downloads_state: DownloadsButton {
-                    progress: Downloads::progress(self.private, cx),
-                    unseen: Downloads::has_unseen(self.private, cx),
+                    progress: Downloads::progress(self.current_space(cx), self.private, cx),
+                    unseen: Downloads::has_unseen(self.current_space(cx), self.private, cx),
                     animate: Settings::motion(cx).enabled,
                 },
                 downloads_enabled: Settings::get(cx)

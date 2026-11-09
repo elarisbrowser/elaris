@@ -2,10 +2,11 @@
 //! and shutdown.
 
 use anyhow::Context as _;
-use photon_core::{BrowserCommand, DialogReply};
+use photon_core::{BrowserCommand, DialogReply, SpaceId};
 use photon_performance::PerformanceMonitor;
 use std::{
     ffi::{CStr, CString, c_char, c_void},
+    path::PathBuf,
     rc::Rc,
     sync::{
         Arc, Mutex,
@@ -48,6 +49,8 @@ pub(in crate::platform) struct EngineSession {
     finished: bool,
     /// Whether the page is in the private session, which keeps nothing.
     private: bool,
+    pub(in crate::platform) space: SpaceId,
+    profile_path: Option<PathBuf>,
 }
 
 pub(in crate::platform) struct RequestedWebView {
@@ -56,15 +59,36 @@ pub(in crate::platform) struct RequestedWebView {
     pub(in crate::platform) activate: bool,
     pub(in crate::platform) width: Option<i32>,
     pub(in crate::platform) height: Option<i32>,
+    pub(in crate::platform) space: SpaceId,
+}
+
+#[derive(Clone)]
+pub(in crate::platform) struct BrowsingContext {
+    pub(in crate::platform) private: bool,
+    pub(in crate::platform) space: SpaceId,
+    pub(in crate::platform) profile_path: Option<PathBuf>,
 }
 
 impl EngineSession {
-    pub(in crate::platform) fn runtime(&self) -> &Rc<EngineRuntime> {
-        &self.runtime
-    }
-
     pub(in crate::platform) fn is_private(&self) -> bool {
         self.private
+    }
+
+    pub(in crate::platform) fn allow_certificate_errors_for_host(&self, host: &str) {
+        self.runtime.allow_certificate_errors_for_host(
+            self.profile_path.as_deref(),
+            self.private,
+            host,
+        );
+    }
+
+    pub(in crate::platform) fn peer_certificate(
+        &self,
+        host: &str,
+        done: impl FnOnce(Option<super::certificates::Certificate>) + 'static,
+    ) {
+        self.runtime
+            .peer_certificate(self.profile_path.as_deref(), self.private, host, done);
     }
 
     pub(in crate::platform) fn release_hidden_memory(&self) {
@@ -238,13 +262,29 @@ impl EngineSession {
         height: i32,
         dpr: f64,
         startup_address: Option<&str>,
-        private: bool,
+        context: BrowsingContext,
     ) -> anyhow::Result<Self> {
         let startup_url = startup_address
             .map(|address| resolve_address(address).context("invalid startup URL"))
             .transpose()?;
-        Self::create_with_native_view(runtime, startup_url, private, |runtime, callbacks| unsafe {
-            embedder::photon_view_create(runtime, width, height, dpr, callbacks, private)
+        let profile_path = context
+            .profile_path
+            .as_deref()
+            .map(|path| path_to_cstring(path).context("space profile path contains a NUL byte"))
+            .transpose()?;
+        let is_private = context.private;
+        Self::create_with_native_view(runtime, startup_url, context, |runtime, callbacks| unsafe {
+            embedder::photon_view_create(
+                runtime,
+                width,
+                height,
+                dpr,
+                callbacks,
+                profile_path
+                    .as_ref()
+                    .map_or(std::ptr::null(), |path| path.as_ptr()),
+                is_private,
+            )
         })
     }
 
@@ -255,10 +295,10 @@ impl EngineSession {
         width: i32,
         height: i32,
         dpr: f64,
-        private: bool,
+        context: BrowsingContext,
     ) -> anyhow::Result<Self> {
         // Engine keeps a page its opener's session; this records it for the shell.
-        Self::create_with_native_view(runtime, None, private, move |runtime, callbacks| unsafe {
+        Self::create_with_native_view(runtime, None, context, move |runtime, callbacks| unsafe {
             embedder::photon_view_create_for_traversable(
                 runtime,
                 parent_view,
@@ -274,9 +314,14 @@ impl EngineSession {
     fn create_with_native_view(
         runtime: Rc<EngineRuntime>,
         startup_url: Option<CString>,
-        private: bool,
+        context: BrowsingContext,
         create_native_view: impl FnOnce(*mut c_void, *const embedder::ViewCallbacks) -> *mut c_void,
     ) -> anyhow::Result<Self> {
+        let BrowsingContext {
+            private,
+            space,
+            profile_path,
+        } = context;
         anyhow::ensure!(
             runtime.is_available(),
             "web pages are unavailable in the UI-only build"
@@ -310,6 +355,8 @@ impl EngineSession {
         // self-reference lets a frame's GPU-completion wakeup outlive no view.
         let callbacks = Arc::new_cyclic(|self_ref| CallbackState {
             private,
+            space,
+            profile_path: profile_path.clone(),
             self_ref: self_ref.clone(),
             task_id: NEXT_PERFORMANCE_TASK_ID.fetch_add(1, Ordering::Relaxed),
             presentation: presentation.clone(),
@@ -399,6 +446,8 @@ impl EngineSession {
             shutdown_started: false,
             finished: false,
             private,
+            space,
+            profile_path,
         };
         if let Err(error) = presentation.activate() {
             drop(session);

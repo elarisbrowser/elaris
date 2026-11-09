@@ -84,7 +84,7 @@ impl NewTabPage {
         palette: ThemeColors,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        let options = LayoutOptions::read(cx);
+        let options = LayoutOptions::read(self.context.space, cx);
         let mut content = v_stack().w_full();
         if options.show_shortcuts {
             content = content
@@ -102,7 +102,7 @@ impl NewTabPage {
                 "new-tab-restore-shortcuts",
                 "Restore removed shortcuts",
                 0,
-                options.restore_removed(),
+                options.restore_removed(self.context.space),
                 palette,
             ));
         }

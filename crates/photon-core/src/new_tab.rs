@@ -30,10 +30,11 @@ pub struct NewTabSettings {
     pub show_shortcuts: bool,
     /// How many shortcuts to show, one of [`SHORTCUT_COUNTS`].
     pub shortcut_count: usize,
-    /// Sites pinned to the page, shown first and in this order.
+    /// Legacy profile-wide pins, migrated into the active space when loaded.
+    #[serde(skip_serializing)]
     pub pinned: Vec<Shortcut>,
-    /// Sites removed from the page, never suggested again as shortcuts. Older
-    /// profiles saved addresses here; each counts as its site.
+    /// Legacy profile-wide hidden sites, migrated into the active space when loaded.
+    #[serde(skip_serializing)]
     pub hidden: Vec<String>,
 }
 
@@ -70,18 +71,28 @@ impl NewTabSettings {
     /// were not removed, one per site, up to [`Self::shortcut_limit`]. A
     /// site's most visited page stands for it.
     pub fn shortcuts(&self, most_visited: &[HistoryEntry]) -> Vec<Shortcut> {
+        self.shortcuts_for(&self.pinned, &self.hidden, most_visited)
+    }
+
+    /// The shortcuts to show with a space's saved pins and hidden sites.
+    pub fn shortcuts_for(
+        &self,
+        pinned: &[Shortcut],
+        hidden: &[String],
+        most_visited: &[HistoryEntry],
+    ) -> Vec<Shortcut> {
         if !self.show_shortcuts {
             return Vec::new();
         }
         let limit = self.shortcut_limit();
-        let mut shortcuts: Vec<Shortcut> = self.pinned.iter().take(limit).cloned().collect();
+        let mut shortcuts: Vec<Shortcut> = pinned.iter().take(limit).cloned().collect();
         let mut sites: Vec<String> = shortcuts.iter().map(|pin| site_name(&pin.url)).collect();
         for entry in most_visited {
             if shortcuts.len() == limit {
                 break;
             }
             let site = site_name(&entry.url);
-            if self.is_hidden(&site) || sites.contains(&site) {
+            if hidden.iter().any(|hidden| site_name(hidden) == site) || sites.contains(&site) {
                 continue;
             }
             sites.push(site);
@@ -96,7 +107,12 @@ impl NewTabSettings {
     /// How much of the history the page needs to fill its shortcuts after
     /// skipping removed sites and repeated pages of one site.
     pub fn history_needed(&self) -> usize {
-        self.shortcut_limit() * 4 + self.hidden.len()
+        self.history_needed_for(&self.hidden)
+    }
+
+    /// How much history is needed when a space owns the hidden-site list.
+    pub fn history_needed_for(&self, hidden: &[String]) -> usize {
+        self.shortcut_limit() * 4 + hidden.len()
     }
 
     fn is_hidden(&self, site: &str) -> bool {
@@ -142,6 +158,66 @@ impl NewTabSettings {
     }
 
     /// Brings back every removed site.
+    pub fn restore_removed(&mut self) {
+        self.hidden.clear();
+    }
+}
+
+/// New tab shortcuts owned by one space. The number and appearance of
+/// shortcuts remain shared preferences in [`NewTabSettings`].
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default)]
+pub struct NewTabSpaceSettings {
+    /// Sites pinned to this space's new tab page, in display order.
+    pub pinned: Vec<Shortcut>,
+    /// Sites this space should stop suggesting.
+    pub hidden: Vec<String>,
+}
+
+impl NewTabSpaceSettings {
+    pub fn shortcuts(
+        &self,
+        settings: &NewTabSettings,
+        most_visited: &[HistoryEntry],
+    ) -> Vec<Shortcut> {
+        settings.shortcuts_for(&self.pinned, &self.hidden, most_visited)
+    }
+
+    pub fn history_needed(&self, settings: &NewTabSettings) -> usize {
+        settings.history_needed_for(&self.hidden)
+    }
+
+    pub fn is_pinned(&self, url: &str) -> bool {
+        self.pinned.iter().any(|pin| pin.url == url)
+    }
+
+    /// Pins a site, unless this space has reached the shared pin limit.
+    pub fn pin(&mut self, shortcut: Shortcut) -> bool {
+        if self.is_pinned(&shortcut.url) {
+            return true;
+        }
+        if self.pinned.len() >= MAX_NEW_TAB_PINS {
+            return false;
+        }
+        let site = site_name(&shortcut.url);
+        self.hidden.retain(|hidden| site_name(hidden) != site);
+        self.pinned.push(shortcut);
+        true
+    }
+
+    /// Removes a pin and stops suggesting any page from its site.
+    pub fn remove(&mut self, url: &str) {
+        self.pinned.retain(|pin| pin.url != url);
+        let site = site_name(url);
+        if !self.hidden.iter().any(|hidden| site_name(hidden) == site) {
+            self.hidden.push(site);
+        }
+    }
+
+    pub fn has_removed(&self) -> bool {
+        !self.hidden.is_empty()
+    }
+
     pub fn restore_removed(&mut self) {
         self.hidden.clear();
     }
@@ -289,5 +365,32 @@ mod tests {
                 .shortcuts(&[visited("https://github.com/", "GitHub")])
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn spaces_keep_new_tab_pins_and_hidden_sites_apart() {
+        let settings = NewTabSettings::default();
+        let mut personal = NewTabSpaceSettings::default();
+        let work = NewTabSpaceSettings::default();
+        personal.pin(Shortcut {
+            title: "Personal mail".to_owned(),
+            url: "https://mail.example/personal".to_owned(),
+        });
+        personal.remove("https://private.example/");
+        let history = [
+            visited("https://mail.example/work", "Work mail"),
+            visited("https://private.example/", "Private"),
+        ];
+
+        assert_eq!(
+            urls(&personal.shortcuts(&settings, &history)),
+            ["https://mail.example/personal"]
+        );
+        assert_eq!(
+            urls(&work.shortcuts(&settings, &history)),
+            ["https://mail.example/work", "https://private.example/"]
+        );
+        assert!(personal.is_pinned("https://mail.example/personal"));
+        assert!(!work.is_pinned("https://mail.example/personal"));
     }
 }

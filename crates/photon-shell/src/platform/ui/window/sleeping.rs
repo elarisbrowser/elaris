@@ -484,6 +484,7 @@ impl BrowserWindow {
             Some(SleepingTab {
                 state: view.state.clone(),
                 favicon: view.favicon.clone(),
+                space: self.tabs[index].space,
             })
         });
         let Some(snapshot) = snapshot else {

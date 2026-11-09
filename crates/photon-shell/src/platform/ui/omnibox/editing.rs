@@ -37,7 +37,7 @@ impl Omnibox {
     /// Suggests again when the history itself changes while suggesting, as
     /// when a row is forgotten, but not when it only loads a page icon.
     pub(super) fn history_changed(&mut self, cx: &mut Context<Self>) {
-        let history = BrowsingHistory::suggestion_history(cx);
+        let history = BrowsingHistory::suggestion_history(self.space, cx);
         let unchanged = self
             .suggested_from
             .as_ref()
@@ -62,7 +62,7 @@ impl Omnibox {
         let typed = self.typed.clone();
         let query_text = typed.clone();
         let engines = Settings::search_engines(cx);
-        let history = BrowsingHistory::suggestion_history(cx);
+        let history = BrowsingHistory::suggestion_history(self.space, cx);
         self.suggested_from = Some(Arc::downgrade(&history));
         self.suggestion_task = Some(cx.spawn(async move |this, cx| {
             let suggestions = cx
@@ -207,7 +207,7 @@ impl Omnibox {
                 SuggestionKind::Search { .. } | SuggestionKind::PastSearch
             )
         {
-            BrowsingHistory::record_search(&suggestion.text, cx);
+            BrowsingHistory::record_search(self.space, &suggestion.text, cx);
         }
         self.close_suggestions(cx);
         self.open(&suggestion.url, window, cx);
@@ -220,8 +220,12 @@ impl Omnibox {
             return;
         };
         match suggestion.kind {
-            SuggestionKind::Page { .. } => BrowsingHistory::remove_page(&suggestion.url, cx),
-            SuggestionKind::PastSearch => BrowsingHistory::remove_search(&suggestion.text, cx),
+            SuggestionKind::Page { .. } => {
+                BrowsingHistory::remove_page(self.space, &suggestion.url, cx)
+            }
+            SuggestionKind::PastSearch => {
+                BrowsingHistory::remove_search(self.space, &suggestion.text, cx)
+            }
             SuggestionKind::Address | SuggestionKind::Search { .. } => return,
         }
         // The field may show the removed row; return to the typed text.

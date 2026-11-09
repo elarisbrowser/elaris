@@ -1424,7 +1424,7 @@ impl BrowserWindow {
                     let inserted = browser.tabs[plan.target_index].id;
                     if let Some(inserted_index) = browser.tab_index_by_id(inserted) {
                         browser.tabs[inserted_index].id = plan.target_id;
-                        browser.tabs[inserted_index].space = source_tab.space;
+                        debug_assert_eq!(browser.tabs[inserted_index].space, source_tab.space);
                         browser.tabs[inserted_index].favourite = source_tab.favourite.clone();
                     }
                     if browser.incoming_tab_drag.as_ref().is_some_and(|incoming| {
@@ -1581,7 +1581,7 @@ impl BrowserWindow {
             self.active_tab = None;
             self.close_find_bar(false, window, cx);
             self.omnibox.update(cx, |omnibox, cx| {
-                omnibox.set_content(None, None, window, cx)
+                omnibox.set_content(None, None, self.current_space(cx), window, cx)
             });
             if self.tab_axis(cx) == TabDragAxis::Horizontal
                 && !Self::closes_with_last_tab(window, cx)

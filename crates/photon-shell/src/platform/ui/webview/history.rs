@@ -32,14 +32,14 @@ impl PhotonWebView {
             return;
         }
         if current.url != self.recorded.url {
-            BrowsingHistory::record_visit(&current.url, &current.title, cx);
+            BrowsingHistory::record_visit(self.session.space, &current.url, &current.title, cx);
         } else if current.title != self.recorded.title && !current.title.is_empty() {
-            BrowsingHistory::set_title(&current.url, &current.title, cx);
+            BrowsingHistory::set_title(self.session.space, &current.url, &current.title, cx);
         }
         if current.favicon != self.recorded.favicon
             && let Some(favicon) = &self.favicon
         {
-            BrowsingHistory::set_favicon(&current.url, favicon, cx);
+            BrowsingHistory::set_favicon(self.session.space, &current.url, favicon, cx);
         }
         self.recorded = current;
     }

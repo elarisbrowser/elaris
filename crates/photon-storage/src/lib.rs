@@ -16,7 +16,7 @@ mod session_file;
 
 pub use favicons::FaviconPixels;
 pub use import::{ImportSource, import_sources, read_history};
-pub use profile::{DataUsage, Profile, ProfileWriteTicket};
+pub use profile::{DataUsage, Profile, ProfileWriteTicket, SpaceProfile};
 
 /// What Photon could recover from a saved profile file.
 #[derive(Clone, Debug, Eq, PartialEq)]

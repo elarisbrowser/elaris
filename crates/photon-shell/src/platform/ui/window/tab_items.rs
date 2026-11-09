@@ -15,22 +15,20 @@ use super::content::TabContent;
 use std::time::Instant;
 
 impl BrowserWindow {
-    /// The tabs open in the space shown, in order: its own tabs and
-    /// favourites' tabs, which join whichever space shows them; every tab
-    /// while the layout shows no spaces.
+    /// The tabs open in the space shown. Spaces never show another space's
+    /// page title in the tab strip or tab switcher.
     pub(super) fn space_tabs(&self, cx: &App) -> Vec<usize> {
-        let space = self.shows_spaces(cx).then(|| self.current_space(cx));
+        let space = self.current_space(cx);
         (0..self.tabs.len())
             .filter(|&index| {
                 let tab = &self.tabs[index];
-                space.is_none_or(|space| tab.space == space || tab.favourite.is_some())
+                tab.space == space
             })
             .collect()
     }
 
     /// The tabs the layout lists, in order: in the sidebar, the space's own
-    /// tabs but not favourites' tabs, which show as tiles; in the strip,
-    /// every tab.
+    /// tabs but not favourites' tabs, which show as tiles.
     pub(super) fn listed_tabs(&self, cx: &App) -> Vec<usize> {
         let mut tabs = self.space_tabs(cx);
         if self.layout(cx).has_sidebar() {
@@ -60,7 +58,7 @@ impl BrowserWindow {
     }
 
     pub(super) fn tab_items(&self, cx: &mut Context<Self>) -> Vec<TabItem> {
-        self.tab_items_for_indices(0..self.tabs.len(), false, cx)
+        self.tab_items_for_indices(self.listed_tabs(cx), false, cx)
     }
 
     pub(super) fn tab_items_for_indices(
@@ -110,7 +108,7 @@ impl BrowserWindow {
                                 .clone()
                                 .or_else(|| webview.read(cx).requested.clone()) =>
                     {
-                        let icon = match BrowsingHistory::favicon(&saved.url, cx) {
+                        let icon = match BrowsingHistory::favicon(tab.space, &saved.url, cx) {
                             Some(favicon) => TabIcon::Favicon(favicon),
                             None => TabIcon::Page,
                         };

@@ -26,6 +26,7 @@ mod drag;
 pub(super) struct ClosedTab {
     index: usize,
     url: String,
+    pub(super) space: photon_core::SpaceId,
 }
 
 /// How many closed tabs a window remembers.
@@ -131,12 +132,9 @@ impl BrowserWindow {
             self.tab_page_transition = page_transition;
         }
         self.tabs[index].last_active = Instant::now();
-        // A tab of another space brings its space; a favourite's tab
-        // belongs to whichever space it is opened in.
+        // A tab of another space brings its space, including a favourite tab.
         let current = self.current_space(cx);
-        if self.tabs[index].favourite.is_some() {
-            self.tabs[index].space = current;
-        } else if self.shows_spaces(cx) && self.tabs[index].space != current {
+        if self.shows_spaces(cx) && self.tabs[index].space != current {
             self.switch_space(self.tabs[index].space, cx);
         }
         let focus_internal_page = focus_contents
@@ -158,7 +156,13 @@ impl BrowserWindow {
             });
         }
         self.omnibox.update(cx, |omnibox, cx| {
-            omnibox.set_content(webview, self.tabs[index].content.page_address(), window, cx);
+            omnibox.set_content(
+                webview,
+                self.tabs[index].content.page_address(),
+                self.tabs[index].space,
+                window,
+                cx,
+            );
             if focus_contents
                 && matches!(
                     &self.tabs[index].content,
@@ -333,7 +337,10 @@ impl BrowserWindow {
         cx: &mut Context<Self>,
     ) {
         if let Some(address) = address {
-            if let Some(webview) = create_webview(cx, self.runtime.clone(), address, self.private) {
+            let space = self.current_space(cx);
+            if let Some(webview) =
+                create_webview(cx, self.runtime.clone(), address, self.private, space)
+            {
                 self.insert_webview(index, webview, None, true, window, cx);
             }
         } else {
@@ -418,7 +425,14 @@ impl BrowserWindow {
             .iter()
             .position(|tab| tab.content.webview().as_ref() == Some(opener))
             .map_or(self.tabs.len(), |index| index + 1);
-        if let Some(webview) = create_webview(cx, self.runtime.clone(), address, self.private) {
+        let space = self
+            .tabs
+            .iter()
+            .find(|tab| tab.content.webview().as_ref() == Some(opener))
+            .map_or_else(|| self.current_space(cx), |tab| tab.space);
+        if let Some(webview) =
+            create_webview(cx, self.runtime.clone(), address, self.private, space)
+        {
             webview.update(cx, |view, _| view.opened_by_page = true);
             self.insert_webview(index, webview, None, activate, window, cx);
         }
@@ -436,6 +450,7 @@ impl BrowserWindow {
             self.active_tab,
             request.activate
         ));
+        let space = request.space;
         let webview = create_webview_from_session(cx, self.runtime.clone(), request.session);
         webview.update(cx, |view, _| view.opened_by_page = true);
         self.insert_webview(
@@ -446,6 +461,9 @@ impl BrowserWindow {
             window,
             cx,
         );
+        if request.activate && self.shows_spaces(cx) {
+            self.switch_space(space, cx);
+        }
     }
 
     /// Inserts a tab showing `webview`, pinned at `pin` or one of today's
@@ -640,7 +658,7 @@ impl BrowserWindow {
         } else if options.animate_appearance {
             self.tab_entry_animations.borrow_mut().insert(id);
         }
-        let space = self.current_space(cx);
+        let space = content.space(cx).unwrap_or_else(|| self.current_space(cx));
         self.tabs
             .insert(index, BrowserTab::new(id, content.clone(), pin, space));
         self.tab_subscriptions.insert(index, subscription);
@@ -676,10 +694,26 @@ impl BrowserWindow {
     }
 
     pub(super) fn reopen_closed_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if let Some(closed) = self.closed_tabs.pop() {
+        let space = self.current_space(cx);
+        if let Some(position) = self
+            .closed_tabs
+            .iter()
+            .rposition(|closed| closed.space == space)
+        {
+            let closed = self.closed_tabs.remove(position);
             // Reopened unpinned, so never among the pinned tabs.
             let index = closed.index.clamp(self.pinned_count(), self.tabs.len());
-            self.insert_tab(index, Some(&closed.url), window, cx);
+            let Some(webview) = create_webview(
+                cx,
+                self.runtime.clone(),
+                &closed.url,
+                self.private,
+                closed.space,
+            ) else {
+                self.closed_tabs.push(closed);
+                return;
+            };
+            self.insert_webview(index, webview, None, true, window, cx);
         }
     }
 
@@ -789,7 +823,7 @@ impl BrowserWindow {
             self.active_tab = None;
             self.close_find_bar(false, window, cx);
             self.omnibox.update(cx, |omnibox, cx| {
-                omnibox.set_content(None, None, window, cx)
+                omnibox.set_content(None, None, self.current_space(cx), window, cx)
             });
             if self.tab_axis(cx) == TabDragAxis::Horizontal
                 && !Self::closes_with_last_tab(window, cx)
@@ -853,7 +887,11 @@ impl BrowserWindow {
         if self.closed_tabs.len() == CLOSED_TAB_LIMIT {
             self.closed_tabs.remove(0);
         }
-        self.closed_tabs.push(ClosedTab { index, url });
+        self.closed_tabs.push(ClosedTab {
+            index,
+            url,
+            space: self.tabs[index].space,
+        });
     }
 
     /// Whether a loading tab or a notice shows a spinner.

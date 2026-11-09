@@ -24,24 +24,23 @@ use std::cell::RefCell;
 use std::ffi::CStr;
 use std::{
     cell::Cell,
-    ffi::c_void,
+    ffi::{CString, c_void},
+    path::Path,
     rc::Rc,
     sync::{
         Mutex,
         atomic::{AtomicU8, Ordering},
     },
 };
-#[cfg(not(feature = "ui-only"))]
-use std::{ffi::CString, path::Path};
 
 use crate::platform::engine_ffi::embedder;
-use crate::platform::ui::PhotonWebView;
+use crate::platform::ui::{PhotonWebView, TemporaryProfileRoot};
 use callbacks::*;
 pub(crate) use certificates::Certificate;
 pub(in crate::platform) use downloads::{Download, DownloadChange, DownloadStatus};
 #[cfg(not(feature = "ui-only"))]
 use photon_core::EngineService;
-pub(in crate::platform) use session::{EngineSession, RequestedWebView};
+pub(in crate::platform) use session::{BrowsingContext, EngineSession, RequestedWebView};
 
 #[cfg(unix)]
 #[derive(Clone, Debug)]
@@ -78,6 +77,8 @@ pub(in crate::platform) struct UiWake {
 
 pub(in crate::platform) struct EngineRuntime {
     runtime: *mut c_void,
+    /// Keeps temporary per-space Engine directories alive for every session.
+    _temporary_profile: Option<TemporaryProfileRoot>,
     #[cfg(all(target_os = "linux", not(feature = "ui-only")))]
     system_clipboard: Option<Box<linux_clipboard::SystemClipboard>>,
     #[cfg(target_os = "macos")]
@@ -94,11 +95,18 @@ impl EngineRuntime {
     /// Starts the Engine, keeping website data in `profile_dir`, or in a
     /// temporary profile when there is none.
     #[cfg(not(feature = "ui-only"))]
-    pub(in crate::platform) fn create(profile_dir: Option<&Path>) -> anyhow::Result<Self> {
+    pub(in crate::platform) fn create(
+        profile_dir: Option<&Path>,
+        default_browsing_profile_dir: Option<&Path>,
+        temporary_profile: Option<TemporaryProfileRoot>,
+    ) -> anyhow::Result<Self> {
         let helper = std::env::var("PHOTON_HELPER_DIRECTORY")
             .context("PHOTON_HELPER_DIRECTORY is not set")?;
         let helper = CString::new(helper)?;
         let profile = profile_dir
+            .map(|dir| CString::new(dir.to_string_lossy().into_owned()))
+            .transpose()?;
+        let default_browsing_profile = default_browsing_profile_dir
             .map(|dir| CString::new(dir.to_string_lossy().into_owned()))
             .transpose()?;
         let mut error = [0_i8; 1024];
@@ -106,6 +114,9 @@ impl EngineRuntime {
             embedder::photon_runtime_create(
                 helper.as_ptr(),
                 profile
+                    .as_ref()
+                    .map_or(std::ptr::null(), |profile| profile.as_ptr()),
+                default_browsing_profile
                     .as_ref()
                     .map_or(std::ptr::null(), |profile| profile.as_ptr()),
                 error.as_mut_ptr(),
@@ -150,6 +161,7 @@ impl EngineRuntime {
         }
         Ok(Self {
             runtime,
+            _temporary_profile: temporary_profile,
             #[cfg(all(target_os = "linux", not(feature = "ui-only")))]
             system_clipboard: None,
             #[cfg(target_os = "macos")]
@@ -168,6 +180,7 @@ impl EngineRuntime {
     pub(in crate::platform) fn without_engine() -> Self {
         Self {
             runtime: std::ptr::null_mut(),
+            _temporary_profile: None,
             #[cfg(all(target_os = "linux", not(feature = "ui-only")))]
             system_clipboard: None,
             #[cfg(target_os = "macos")]
@@ -484,12 +497,23 @@ impl EngineRuntime {
     pub(in crate::platform) fn clear_browsing_data(
         &self,
         request: &ClearBrowsingData,
+        profile_path: Option<&Path>,
         done: impl FnOnce() + 'static,
     ) {
         if !self.is_available() || !request.touches_engine() {
             done();
             return;
         }
+        let profile_path = match profile_path
+            .map(|path| CString::new(path.to_string_lossy().into_owned()))
+            .transpose()
+        {
+            Ok(path) => path,
+            Err(_) => {
+                done();
+                return;
+            }
+        };
         let done: Box<BrowsingDataCleared> = Box::new(Box::new(done));
         unsafe {
             embedder::photon_runtime_clear_browsing_data(
@@ -497,6 +521,9 @@ impl EngineRuntime {
                 i64::try_from(request.since).unwrap_or(i64::MAX),
                 request.cache,
                 request.site_data,
+                profile_path
+                    .as_ref()
+                    .map_or(std::ptr::null(), |path| path.as_ptr()),
                 Box::into_raw(done).cast(),
                 Some(on_engine_browsing_data_cleared),
             );
@@ -505,8 +532,18 @@ impl EngineRuntime {
 
     /// Deletes the cookies and web storage of one site and its subdomains, then calls `done`
     /// on the main thread. `done` must not update GPUI entities synchronously.
-    pub(in crate::platform) fn clear_site_data(&self, host: &str, done: impl FnOnce() + 'static) {
-        let Ok(host) = std::ffi::CString::new(host) else {
+    pub(in crate::platform) fn clear_site_data(
+        &self,
+        host: &str,
+        profile_path: Option<&Path>,
+        done: impl FnOnce() + 'static,
+    ) {
+        let (Ok(host), Ok(profile_path)) = (
+            std::ffi::CString::new(host),
+            profile_path
+                .map(|path| CString::new(path.to_string_lossy().into_owned()))
+                .transpose(),
+        ) else {
             done();
             return;
         };
@@ -519,6 +556,9 @@ impl EngineRuntime {
             embedder::photon_runtime_clear_site_data(
                 self.runtime,
                 host.as_ptr(),
+                profile_path
+                    .as_ref()
+                    .map_or(std::ptr::null(), |path| path.as_ptr()),
                 Box::into_raw(done).cast(),
                 Some(on_engine_browsing_data_cleared),
             );

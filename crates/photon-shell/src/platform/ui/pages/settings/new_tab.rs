@@ -8,9 +8,10 @@ use super::super::super::layout::{h_stack, v_stack};
 use super::super::super::{metrics, theme::ThemeColors};
 use super::super::layout::{group, label};
 use super::super::new_tab::LayoutOptions;
+use photon_core::SpaceId;
 
-pub(super) fn settings(palette: ThemeColors, cx: &App) -> impl IntoElement {
-    let options = LayoutOptions::read(cx);
+pub(super) fn settings(space: SpaceId, palette: ThemeColors, cx: &App) -> impl IntoElement {
+    let options = LayoutOptions::read(space, cx);
     let mut section = v_stack().gap(px(metrics::INTERNAL_PAGE_GROUP_GAP));
     if options.has_removed {
         section = section.child(
@@ -25,7 +26,7 @@ pub(super) fn settings(palette: ThemeColors, cx: &App) -> impl IntoElement {
                         true,
                         ButtonSize::Small,
                         palette,
-                        options.restore_removed(),
+                        options.restore_removed(space),
                     )),
             ),
         );

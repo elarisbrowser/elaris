@@ -101,7 +101,12 @@ impl NewTabPage {
             return;
         }
         self.hovered = None;
-        Settings::update(cx, |settings| settings.new_tab.remove(url));
+        let space = self.context.space;
+        Settings::update(cx, |settings| {
+            if let Some(space) = settings.spaces.get_mut(space) {
+                space.new_tab.remove(url);
+            }
+        });
         super::super::show_alert(cx, "Shortcut removed");
     }
 }
@@ -111,13 +116,25 @@ impl Render for NewTabPage {
         let palette = palette(window, cx);
         let settings = Settings::get(cx);
         let layout = settings.new_tab.clone();
+        let space_shortcuts = settings
+            .spaces
+            .get(self.context.space)
+            .map(|space| space.new_tab.clone())
+            .unwrap_or_default();
         let elastic_scroll = crate::platform::ui::elastic_scroll_enabled(cx);
         let show_logo = settings.is_feature_enabled(photon_core::Feature::NewTabLogo);
         let show_shortcuts = settings.is_feature_enabled(photon_core::Feature::NewTabShortcuts);
         let customization_enabled =
             settings.is_feature_enabled(photon_core::Feature::NewTabCustomization);
         let shortcuts = if show_shortcuts {
-            layout.shortcuts(&BrowsingHistory::most_visited(layout.history_needed(), cx))
+            space_shortcuts.shortcuts(
+                &layout,
+                &BrowsingHistory::most_visited(
+                    self.context.space,
+                    space_shortcuts.history_needed(&layout),
+                    cx,
+                ),
+            )
         } else {
             Vec::new()
         };

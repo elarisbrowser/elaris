@@ -12,14 +12,14 @@ use gpui::{App, BorrowAppContext, Context, Global, Task};
 #[cfg(not(feature = "ui-only"))]
 use photon_core::BrowserState;
 use photon_core::{Session, SessionSplit, SessionTab, WindowSession};
-use photon_storage::{Profile, ProfileWriteTicket};
+use photon_storage::{Profile, ProfileWriteTicket, SpaceProfile};
+use std::collections::HashMap;
 #[cfg(not(feature = "ui-only"))]
 use std::rc::Rc;
 use std::time::Duration;
 
 #[cfg(not(feature = "ui-only"))]
 use super::super::super::engine::EngineRuntime;
-#[cfg(not(feature = "ui-only"))]
 use super::super::super::trace;
 #[cfg(not(feature = "ui-only"))]
 use super::super::pages::find_page;
@@ -38,6 +38,8 @@ const SAVE_DELAY: Duration = Duration::from_secs(1);
 struct BrowsingSession {
     /// Where the session is saved; `None` keeps it in memory only.
     profile: Option<Profile>,
+    /// The session file and data directory for each space.
+    space_profiles: HashMap<photon_core::SpaceId, SpaceProfile>,
     /// Each open window's tabs, by window, in the order they opened.
     windows: Vec<(u64, WindowSession)>,
     save: Option<Task<()>>,
@@ -56,10 +58,35 @@ impl BrowsingSession {
         }
     }
 
-    fn snapshot(&self) -> Option<(Profile, Session, ProfileWriteTicket)> {
-        let profile = self.profile.clone()?;
-        let ticket = profile.begin_session_write();
-        Some((profile, self.session(), ticket))
+    fn snapshot(&self) -> Option<Vec<(SpaceProfile, Session, ProfileWriteTicket)>> {
+        self.profile.as_ref()?;
+        Some(
+            self.space_profiles
+                .iter()
+                .map(|(space, profile)| {
+                    (
+                        profile.clone(),
+                        session_for_space(&self.windows, *space),
+                        profile.begin_session_write(),
+                    )
+                })
+                .collect(),
+        )
+    }
+
+    fn ensure_space_profile(&mut self, space: photon_core::SpaceId) {
+        if self.space_profiles.contains_key(&space) {
+            return;
+        }
+        let Some(profile) = self.profile.as_ref() else {
+            return;
+        };
+        match profile.space(space) {
+            Ok(space_profile) => {
+                self.space_profiles.insert(space, space_profile);
+            }
+            Err(error) => trace(format_args!("opening space {space} session: {error}")),
+        }
     }
 
     /// Saves the session a moment from now, unless a save is waiting.
@@ -79,25 +106,83 @@ impl BrowsingSession {
             .flatten();
             // Clearing `save` above dropped this task's handle, which
             // cancels it at its next await, so the write runs detached.
-            if let Some((profile, session, ticket)) = save {
-                cx.background_executor()
-                    .spawn(async move { write_session(&profile, &session, ticket) })
-                    .detach();
+            if let Some(saves) = save {
+                for (profile, session, ticket) in saves {
+                    cx.background_executor()
+                        .spawn(async move { write_session(&profile, &session, ticket) })
+                        .detach();
+                }
             }
         }));
     }
 }
 
-fn write_session(profile: &Profile, session: &Session, ticket: ProfileWriteTicket) {
+fn session_for_space(windows: &[(u64, WindowSession)], space: photon_core::SpaceId) -> Session {
+    let windows = windows
+        .iter()
+        .filter_map(|(_, window)| {
+            let selected: Vec<_> = window
+                .tabs
+                .iter()
+                .enumerate()
+                .filter(|(_, tab)| tab.space == space)
+                .collect();
+            if selected.is_empty() {
+                return None;
+            }
+            let remapped: HashMap<_, _> = selected
+                .iter()
+                .enumerate()
+                .map(|(new_index, (old_index, _))| (*old_index, new_index))
+                .collect();
+            let tabs = selected.iter().map(|(_, tab)| (*tab).clone()).collect();
+            let active = window
+                .active
+                .and_then(|index| remapped.get(&index).copied());
+            let split = window.split.and_then(|split| {
+                Some(SessionSplit::new(
+                    *remapped.get(&split.leading)?,
+                    *remapped.get(&split.trailing)?,
+                    split.share(),
+                ))
+            });
+            Some(WindowSession {
+                tabs,
+                active,
+                space: Some(space),
+                split,
+            })
+        })
+        .collect();
+    Session { windows }
+}
+
+fn write_session(profile: &SpaceProfile, session: &Session, ticket: ProfileWriteTicket) {
     if let Err(error) = profile.save_session_if_current(ticket, session) {
         eprintln!("failed to save session: {error}");
     }
 }
 
 /// Installs the session already loaded off the application thread.
-pub(super) fn load_session(profile: Option<Profile>, saved: Session, cx: &mut App) -> Session {
+pub(super) fn load_session(
+    profile: Option<Profile>,
+    saved: Vec<(photon_core::SpaceId, SpaceProfile, Session)>,
+    cx: &mut App,
+) -> Session {
+    let mut space_profiles = HashMap::new();
+    let mut windows = Vec::new();
+    for (space, profile, session) in saved {
+        space_profiles.insert(space, profile);
+        windows.extend(session.windows);
+    }
     cx.set_global(BrowsingSession {
         profile,
+        space_profiles,
+        windows: windows
+            .iter()
+            .enumerate()
+            .map(|(index, window)| (index as u64, window.clone()))
+            .collect(),
         ..BrowsingSession::default()
     });
     cx.on_app_quit(|cx| {
@@ -106,13 +191,15 @@ pub(super) fn load_session(profile: Option<Profile>, saved: Session, cx: &mut Ap
             session.snapshot()
         });
         async move {
-            if let Some((profile, session, ticket)) = save {
-                write_session(&profile, &session, ticket);
+            if let Some(saves) = save {
+                for (profile, session, ticket) in saves {
+                    write_session(&profile, &session, ticket);
+                }
             }
         }
     })
     .detach();
-    saved
+    Session { windows }
 }
 
 /// Reopens the windows of a saved session, the first with the pinned tabs
@@ -186,6 +273,13 @@ impl BrowserWindow {
         }
         let key = cx.entity_id().as_u64();
         cx.update_global::<BrowsingSession, _>(|session, cx| {
+            for space in state
+                .space
+                .into_iter()
+                .chain(state.tabs.iter().map(|tab| tab.space))
+            {
+                session.ensure_space_profile(space);
+            }
             match session
                 .windows
                 .iter_mut()
@@ -271,9 +365,18 @@ impl BrowserWindow {
         let mut restored = Vec::with_capacity(saved.tabs.len());
         for (position, tab) in saved.tabs.iter().enumerate() {
             let index = self.tabs.len();
+            let space = if super::super::settings::Settings::get(cx)
+                .spaces
+                .get(tab.space)
+                .is_some()
+            {
+                tab.space
+            } else {
+                current
+            };
             match find_page(&tab.url) {
                 Some(page) => {
-                    let content = self.new_page(page, cx);
+                    let content = self.new_page_in_space(page, space, cx);
                     self.insert_tab_at_immediately(index, content, None, false, window, cx);
                 }
                 None if position != active_position => {
@@ -291,6 +394,7 @@ impl BrowserWindow {
                                 ..BrowserState::default()
                             },
                             favicon: None,
+                            space,
                         }),
                         None,
                         false,
@@ -300,7 +404,7 @@ impl BrowserWindow {
                 }
                 None => {
                     let Some(webview) =
-                        create_webview(cx, self.runtime.clone(), &tab.url, self.private)
+                        create_webview(cx, self.runtime.clone(), &tab.url, self.private, space)
                     else {
                         continue;
                     };
@@ -315,15 +419,7 @@ impl BrowserWindow {
             }
             // Tabs whose space was deleted since join the window's own,
             // rather than hiding in a space no longer shown.
-            self.tabs[index].space = if super::super::settings::Settings::get(cx)
-                .spaces
-                .get(tab.space)
-                .is_some()
-            {
-                tab.space
-            } else {
-                current
-            };
+            self.tabs[index].space = space;
             if position == active_position {
                 active = Some(index);
             }

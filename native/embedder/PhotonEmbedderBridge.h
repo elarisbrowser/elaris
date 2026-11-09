@@ -142,6 +142,7 @@ using PhotonServiceCallback = void (*)(void*, int, bool);
 // 3 cancelled, 4 failed. Strings are valid only during the callback.
 struct PhotonDownload {
     uint64_t id;
+    char const* profile_identity;
     char const* url;
     char const* path;
     int status;
@@ -217,7 +218,8 @@ struct PhotonViewCallbacks {
 
 // A null or empty `profile_path` uses a temporary profile.
 void* photon_runtime_create(char const* helper_directory,
-    char const* profile_path, char* error, size_t error_capacity);
+    char const* profile_path, char const* default_browsing_profile_path,
+    char* error, size_t error_capacity);
 // Called once website data has been deleted.
 using PhotonBrowsingDataClearedCallback = void (*)(void*);
 struct PhotonCertificate {
@@ -237,18 +239,22 @@ struct PhotonCertificate {
 };
 // Called with the certificate, or null when Engine has not connected to the host.
 using PhotonCertificateCallback = void (*)(void*, PhotonCertificate const*);
-void photon_runtime_peer_certificate(void* runtime, char const* host, void* callback_data,
+void photon_runtime_peer_certificate(void* runtime, char const* profile_path, bool is_private,
+    char const* host, void* callback_data,
     PhotonCertificateCallback callback);
-// Lets pages from `host` load although its certificate cannot be verified, until the browser quits.
-void photon_runtime_allow_certificate_errors_for_host(void* runtime, char const* host);
+// Lets pages in this browsing profile load `host` despite certificate errors until the browser quits.
+void photon_runtime_allow_certificate_errors_for_host(void* runtime, char const* profile_path,
+    bool is_private, char const* host);
 // Deletes the cache and/or site data last used since `since_unix_seconds`.
 void photon_runtime_clear_browsing_data(void* runtime,
-    int64_t since_unix_seconds, bool cache, bool site_data, void* callback_data,
+    int64_t since_unix_seconds, bool cache, bool site_data,
+    char const* profile_path, void* callback_data,
     PhotonBrowsingDataClearedCallback callback);
 // Deletes the cookies and web storage of `host` and its subdomains in the
 // default profile.
 void photon_runtime_clear_site_data(void* runtime, char const* host,
-    void* callback_data, PhotonBrowsingDataClearedCallback callback);
+    char const* profile_path, void* callback_data,
+    PhotonBrowsingDataClearedCallback callback);
 #if defined(__linux__)
 struct PhotonClipboardEntry {
     char const* mime_type;
@@ -288,7 +294,7 @@ void photon_runtime_set_external_apps(void* runtime, void* callback_data,
     PhotonExternalAppNameCallback app_name, PhotonExternalAppOpenCallback open_url);
 // A private view keeps nothing once it and the other private views close.
 void* photon_view_create(void* runtime, int width, int height, double dpr,
-    PhotonViewCallbacks const* callbacks, bool is_private);
+    PhotonViewCallbacks const* callbacks, char const* profile_path, bool is_private);
 void* photon_view_create_for_traversable(void* runtime, void* parent_view,
     void* traversable, int width, int height, double dpr,
     PhotonViewCallbacks const* callbacks);
@@ -373,7 +379,8 @@ void photon_runtime_set_download_callbacks(void* runtime, void* callback_data,
     PhotonDownloadChangedCallback changed, PhotonDownloadRemovedCallback removed);
 // Action: 0 pause, 1 resume, 2 cancel.
 void photon_runtime_download_action(void* runtime, uint64_t id, int action);
-void photon_runtime_clear_inactive_downloads(void* runtime);
+void photon_runtime_clear_inactive_downloads(void* runtime, char const* profile_path);
+void photon_runtime_ensure_profile_session(void* runtime, char const* profile_path);
 void photon_runtime_list_registered_processes(void* runtime, void* callback_data,
     PhotonRegisteredProcessCallback callback);
 void photon_runtime_list_process_snapshots(void* runtime, void* callback_data,

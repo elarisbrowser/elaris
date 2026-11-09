@@ -372,16 +372,14 @@ impl BrowserSettings {
     }
 
     /// Returns every preference to its default, keeping what people made
-    /// themselves: each space with its favourites and pinned tabs, and the
-    /// new tab page's shortcuts. Space colours and dismissed hints reset.
+    /// themselves: each space with its favourites, pinned tabs and shortcuts.
+    /// Space colours and dismissed hints reset.
     pub fn reset_preferences(&mut self) {
-        let shortcuts = std::mem::take(&mut self.new_tab.pinned);
         let mut spaces = std::mem::take(&mut self.spaces);
         spaces.reset_colors();
         spaces.reset_layout_overrides();
         spaces.reset_favourites_hint_dismissals();
         *self = Self::default();
-        self.new_tab.pinned = shortcuts;
         self.spaces = spaces;
     }
 
@@ -397,6 +395,34 @@ impl BrowserSettings {
         if let Some(space) = self.spaces.get_mut(active_space) {
             for favourite in favourites {
                 space.add_favourite(favourite);
+            }
+        }
+        true
+    }
+
+    /// Moves the shared new tab pins and hidden-site list from older profiles
+    /// into their active space. Returns whether the profile needs saving.
+    pub fn migrate_legacy_new_tab_shortcuts(&mut self) -> bool {
+        let pinned = std::mem::take(&mut self.new_tab.pinned);
+        let hidden = std::mem::take(&mut self.new_tab.hidden);
+        if pinned.is_empty() && hidden.is_empty() {
+            return false;
+        }
+        let active_space = self.spaces.active().id;
+        if let Some(space) = self.spaces.get_mut(active_space) {
+            for shortcut in pinned {
+                space.new_tab.pin(shortcut);
+            }
+            for site in hidden {
+                let normalized = crate::site_name(&site);
+                if !space
+                    .new_tab
+                    .hidden
+                    .iter()
+                    .any(|hidden| crate::site_name(hidden) == normalized)
+                {
+                    space.new_tab.hidden.push(site);
+                }
             }
         }
         true
@@ -504,8 +530,19 @@ mod tests {
             .unwrap()
             .favourites
             .push(site.clone());
-        settings.new_tab.pinned.push(site.clone());
-        settings.new_tab.hidden.push("example.org".to_owned());
+        settings
+            .spaces
+            .get_mut(active_space)
+            .unwrap()
+            .new_tab
+            .pin(site.clone());
+        settings
+            .spaces
+            .get_mut(active_space)
+            .unwrap()
+            .new_tab
+            .hidden
+            .push("example.org".to_owned());
         let space = settings.spaces.get_mut(work).unwrap();
         space.pinned_tabs.push(site.clone());
         space.layout_override = Some(crate::WorkspaceLayout::vertical());
@@ -520,7 +557,19 @@ mod tests {
             .unwrap()
             .favourites
             .push(site.clone());
-        expected.new_tab.pinned.push(site.clone());
+        expected
+            .spaces
+            .get_mut(active_space)
+            .unwrap()
+            .new_tab
+            .pin(site.clone());
+        expected
+            .spaces
+            .get_mut(active_space)
+            .unwrap()
+            .new_tab
+            .hidden
+            .push("example.org".to_owned());
         let work = expected
             .spaces
             .add(Some("Work".to_owned()), WindowColor::System, false);
@@ -531,6 +580,39 @@ mod tests {
             .pinned_tabs
             .push(site);
         assert_eq!(settings, expected);
+    }
+
+    #[test]
+    fn migrates_legacy_new_tab_shortcuts_into_only_the_active_space() {
+        let shortcut = Shortcut {
+            title: "Work mail".to_owned(),
+            url: "https://mail.example/".to_owned(),
+        };
+        let mut settings = BrowserSettings::default();
+        let work = settings
+            .spaces
+            .add(Some("Work".to_owned()), WindowColor::Blue, false);
+        settings.spaces.activate(work);
+        settings.new_tab.pinned.push(shortcut.clone());
+        settings
+            .new_tab
+            .hidden
+            .push("https://private.example/".to_owned());
+
+        assert!(settings.migrate_legacy_new_tab_shortcuts());
+        assert_eq!(
+            settings.spaces.get(work).unwrap().new_tab.pinned,
+            [shortcut]
+        );
+        assert_eq!(
+            settings.spaces.get(work).unwrap().new_tab.hidden,
+            ["https://private.example/"]
+        );
+        assert!(settings.spaces.get(1).unwrap().new_tab.pinned.is_empty());
+        assert!(settings.spaces.get(1).unwrap().new_tab.hidden.is_empty());
+        assert!(settings.new_tab.pinned.is_empty());
+        assert!(settings.new_tab.hidden.is_empty());
+        assert!(!settings.migrate_legacy_new_tab_shortcuts());
     }
 
     #[test]

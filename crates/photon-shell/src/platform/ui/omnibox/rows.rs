@@ -34,6 +34,7 @@ pub(super) type HoverHandler = Rc<dyn Fn(usize, bool, &mut Window, &mut App)>;
 /// The rows, with `selected` highlighted as what Enter opens. The selected
 /// or hovered row offers to forget what it remembers.
 pub(super) fn suggestion_rows(
+    space: photon_core::SpaceId,
     suggestions: &[Suggestion],
     selected: usize,
     hovered: Option<usize>,
@@ -47,7 +48,7 @@ pub(super) fn suggestion_rows(
         .map(|(index, suggestion)| {
             let choose = actions.choose.clone();
             let hover = actions.hover.clone();
-            let mut row = suggestion_row(suggestion, index, index == selected, palette, cx)
+            let mut row = suggestion_row(space, suggestion, index, index == selected, palette, cx)
                 .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                     cx.stop_propagation();
                     choose(index, window, cx);
@@ -84,6 +85,7 @@ pub(super) fn suggestion_rows(
 
 /// The icon a suggestion shows: the page's icon when known.
 pub(in super::super) fn suggestion_icon(
+    space: photon_core::SpaceId,
     suggestion: &Suggestion,
     palette: ThemeColors,
     cx: &mut App,
@@ -94,7 +96,7 @@ pub(in super::super) fn suggestion_icon(
         SuggestionKind::Search { .. } => search_icon_sized(color, size).into_any_element(),
         SuggestionKind::PastSearch => history_icon(color, size).into_any_element(),
         SuggestionKind::Page { .. } | SuggestionKind::Address => {
-            match BrowsingHistory::favicon(&suggestion.url, cx) {
+            match BrowsingHistory::favicon(space, &suggestion.url, cx) {
                 Some(favicon) => img(ImageSource::Render(favicon.image))
                     .size(px(metrics::OMNIBOX_SUGGESTION_ICON_SIZE))
                     .object_fit(ObjectFit::Contain)
@@ -119,6 +121,7 @@ pub(in super::super) fn icon_slot(icon: impl IntoElement) -> AnyElement {
 }
 
 fn suggestion_row(
+    space: photon_core::SpaceId,
     suggestion: &Suggestion,
     index: usize,
     selected: bool,
@@ -140,7 +143,7 @@ fn suggestion_row(
         ))
         .rounded(px(metrics::menu_item_radius()))
         .hover_style(|style| style.bg(gpui::rgba(palette.hover_surface)))
-        .child(suggestion_icon(suggestion, palette, cx))
+        .child(suggestion_icon(space, suggestion, palette, cx))
         .child(
             div()
                 .flex_1()

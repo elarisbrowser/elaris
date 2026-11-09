@@ -11,6 +11,7 @@ use super::super::button::{ButtonKind, ButtonSize, button};
 use super::super::downloads::{Downloads, file_name, progress_fraction, status_text};
 use super::super::icons::download_icon;
 use super::super::layout::{h_stack, v_stack};
+use super::super::settings::Settings;
 use super::super::{metrics, theme::ThemeColors, theme::page_palette as palette};
 use super::layout::{group, heading, secondary_text};
 use super::{PageContext, PageDefinition, PageIcon};
@@ -26,6 +27,7 @@ pub(super) const PAGE: PageDefinition = PageDefinition {
 
 pub(in super::super) struct DownloadsPage {
     runtime: Rc<EngineRuntime>,
+    space: photon_core::SpaceId,
     /// Whether the page is in a private window, which lists only private downloads.
     private: bool,
     _downloads: Subscription,
@@ -33,8 +35,13 @@ pub(in super::super) struct DownloadsPage {
 
 impl DownloadsPage {
     fn new(context: PageContext, cx: &mut Context<Self>) -> Self {
+        let profile_path = Settings::space_engine_dir(context.space, cx).ok().flatten();
+        context
+            .runtime
+            .ensure_profile_session(profile_path.as_deref());
         Self {
             runtime: context.runtime,
+            space: context.space,
             private: context.private,
             _downloads: cx.observe_global::<Downloads>(|_, cx| cx.notify()),
         }
@@ -149,11 +156,14 @@ impl DownloadsPage {
 impl Render for DownloadsPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let palette = palette(window, cx);
-        let downloads: Vec<_> = Downloads::list(self.private, cx).collect();
+        let downloads: Vec<_> = Downloads::list(self.space, self.private, cx).collect();
         let has_inactive = downloads
             .iter()
             .any(|download| !download.status.is_active());
         let runtime = self.runtime.clone();
+        let profile_path = super::super::settings::Settings::space_engine_dir(self.space, cx)
+            .ok()
+            .flatten();
         let header = h_stack()
             .w_full()
             .items_end()
@@ -172,7 +182,7 @@ impl Render for DownloadsPage {
                 has_inactive,
                 ButtonSize::Small,
                 palette,
-                Box::new(move |_, _, _| runtime.clear_inactive_downloads()),
+                Box::new(move |_, _, _| runtime.clear_inactive_downloads(profile_path.as_deref())),
             ));
         let list: gpui::AnyElement = if downloads.is_empty() {
             group(palette)
@@ -182,6 +192,7 @@ impl Render for DownloadsPage {
         } else {
             let runtime = self.runtime.clone();
             let private = self.private;
+            let space = self.space;
             group(palette)
                 .p(px(0.))
                 .h_full()
@@ -192,7 +203,8 @@ impl Render for DownloadsPage {
                         move |range, _window, app| {
                             range
                                 .map(|index| {
-                                    let Some(download) = Downloads::list(private, app).nth(index)
+                                    let Some(download) =
+                                        Downloads::list(space, private, app).nth(index)
                                     else {
                                         return div().into_any_element();
                                     };

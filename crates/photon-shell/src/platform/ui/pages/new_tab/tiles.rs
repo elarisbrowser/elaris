@@ -66,7 +66,7 @@ impl NewTabPage {
         palette: ThemeColors,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let icon = match BrowsingHistory::favicon(&shortcut.url, cx) {
+        let icon = match BrowsingHistory::favicon(self.context.space, &shortcut.url, cx) {
             Some(favicon) => img(ImageSource::Render(favicon.image))
                 .size(px(metrics::SHORTCUT_ICON_SIZE))
                 .object_fit(ObjectFit::Contain)
@@ -77,7 +77,10 @@ impl NewTabPage {
         };
         // Your own shortcuts keep the name you gave; visited sites go by their
         // address, as page titles are often long.
-        let pinned = Settings::get(cx).new_tab.is_pinned(&shortcut.url);
+        let pinned = Settings::get(cx)
+            .spaces
+            .get(self.context.space)
+            .is_some_and(|space| space.new_tab.is_pinned(&shortcut.url));
         let name = if pinned && !shortcut.title.trim().is_empty() {
             shortcut.title.clone()
         } else {

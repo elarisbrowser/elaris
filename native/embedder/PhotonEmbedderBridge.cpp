@@ -327,12 +327,14 @@ Photon::ViewCallbacks make_view_callbacks(
 } // namespace
 
 extern "C" void* photon_runtime_create(char const* helper_directory,
-    char const* profile_path, char* error, size_t error_capacity)
+    char const* profile_path, char const* default_browsing_profile_path,
+    char* error, size_t error_capacity)
 {
     std::string message;
     auto runtime = Photon::Runtime::create(
         helper_directory ? helper_directory : "",
-        profile_path ? profile_path : "", message);
+        profile_path ? profile_path : "",
+        default_browsing_profile_path ? default_browsing_profile_path : "", message);
     if (!runtime) {
         copy_error(error, error_capacity, message);
         return nullptr;
@@ -369,13 +371,15 @@ extern "C" void photon_runtime_pump(void* runtime)
 }
 
 extern "C" void* photon_view_create(void* runtime, int width, int height,
-    double dpr, PhotonViewCallbacks const* callbacks, bool is_private)
+    double dpr, PhotonViewCallbacks const* callbacks, char const* profile_path,
+    bool is_private)
 {
     if (!runtime || !callbacks)
         return nullptr;
     auto handle = std::make_unique<ViewHandle>();
     auto view = static_cast<RuntimeHandle*>(runtime)->runtime->create_view(
-        width, height, dpr, make_view_callbacks(*callbacks, runtime, handle.get()), is_private);
+        width, height, dpr, make_view_callbacks(*callbacks, runtime, handle.get()),
+        profile_path ? profile_path : "", is_private);
     if (!view)
         return nullptr;
     handle->view = std::move(view);
@@ -752,12 +756,13 @@ extern "C" void photon_runtime_set_elastic_scroll_enabled(void* runtime,
         static_cast<RuntimeHandle*>(runtime)->runtime->set_elastic_scroll_enabled(enabled);
 }
 
-extern "C" void photon_runtime_peer_certificate(void* runtime, char const* host, void* callback_data,
+extern "C" void photon_runtime_peer_certificate(void* runtime, char const* profile_path,
+    bool is_private, char const* host, void* callback_data,
     PhotonCertificateCallback callback)
 {
-    if (!runtime || !host || !callback)
+    if (!runtime || !profile_path || !host || !callback)
         return;
-    static_cast<RuntimeHandle*>(runtime)->runtime->peer_certificate(host,
+    static_cast<RuntimeHandle*>(runtime)->runtime->peer_certificate(profile_path, is_private, host,
         [=](std::optional<Photon::CertificateInfo> const& info) {
             if (!info) {
                 callback(callback_data, nullptr);
@@ -784,31 +789,34 @@ extern "C" void photon_runtime_peer_certificate(void* runtime, char const* host,
         });
 }
 
-extern "C" void photon_runtime_allow_certificate_errors_for_host(void* runtime, char const* host)
+extern "C" void photon_runtime_allow_certificate_errors_for_host(void* runtime,
+    char const* profile_path, bool is_private, char const* host)
 {
-    if (runtime && host)
-        static_cast<RuntimeHandle*>(runtime)->runtime->allow_certificate_errors_for_host(host);
+    if (runtime && profile_path && host)
+        static_cast<RuntimeHandle*>(runtime)->runtime->allow_certificate_errors_for_host(profile_path, is_private, host);
 }
 
 extern "C" void photon_runtime_clear_browsing_data(void* runtime,
-    int64_t since_unix_seconds, bool cache, bool site_data, void* callback_data,
+    int64_t since_unix_seconds, bool cache, bool site_data,
+    char const* profile_path, void* callback_data,
     PhotonBrowsingDataClearedCallback callback)
 {
     if (!runtime)
         return;
     static_cast<RuntimeHandle*>(runtime)->runtime->clear_browsing_data(
-        { since_unix_seconds, cache, site_data }, [=] {
+        { since_unix_seconds, cache, site_data }, profile_path ? profile_path : "", [=] {
             if (callback)
                 callback(callback_data);
         });
 }
 
 extern "C" void photon_runtime_clear_site_data(void* runtime, char const* host,
-    void* callback_data, PhotonBrowsingDataClearedCallback callback)
+    char const* profile_path, void* callback_data,
+    PhotonBrowsingDataClearedCallback callback)
 {
     if (!runtime || !host)
         return;
-    static_cast<RuntimeHandle*>(runtime)->runtime->clear_site_data(host, [=] {
+    static_cast<RuntimeHandle*>(runtime)->runtime->clear_site_data(host, profile_path ? profile_path : "", [=] {
         if (callback)
             callback(callback_data);
     });
@@ -907,6 +915,7 @@ extern "C" void photon_runtime_set_download_callbacks(void* runtime,
         [=](Photon::Download const& download) {
             PhotonDownload state {
                 download.id,
+                download.profile_identity.c_str(),
                 download.url.c_str(),
                 download.path.c_str(),
                 static_cast<int>(download.status),
@@ -938,10 +947,16 @@ extern "C" void photon_runtime_download_action(void* runtime, uint64_t id,
         engine.cancel_download(id);
 }
 
-extern "C" void photon_runtime_clear_inactive_downloads(void* runtime)
+extern "C" void photon_runtime_clear_inactive_downloads(void* runtime, char const* profile_path)
 {
     if (runtime)
-        static_cast<RuntimeHandle*>(runtime)->runtime->clear_inactive_downloads();
+        static_cast<RuntimeHandle*>(runtime)->runtime->clear_inactive_downloads(profile_path ? profile_path : "");
+}
+
+extern "C" void photon_runtime_ensure_profile_session(void* runtime, char const* profile_path)
+{
+    if (runtime)
+        static_cast<RuntimeHandle*>(runtime)->runtime->ensure_profile_session(profile_path ? profile_path : "");
 }
 
 extern "C" void photon_runtime_list_registered_processes(void* runtime,

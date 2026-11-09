@@ -33,7 +33,9 @@ pub use features::{
 pub use history::{HISTORY_MAX_PAGES, HISTORY_MAX_SEARCHES, History, HistoryEntry, SearchEntry};
 pub use history_days::{day_heading, local_day, time_of_day};
 pub use internal_pages::{internal_page_name, internal_page_url};
-pub use new_tab::{MAX_NEW_TAB_PINS, NewTabSettings, SHORTCUT_COUNTS, Shortcut, site_name};
+pub use new_tab::{
+    MAX_NEW_TAB_PINS, NewTabSettings, NewTabSpaceSettings, SHORTCUT_COUNTS, Shortcut, site_name,
+};
 pub use omnibox::resolve as resolve_omnibox_input;
 pub use omnibox::*;
 pub use session::{Session, SessionSplit, SessionTab, WindowSession};
@@ -46,7 +48,7 @@ pub use sidebar::{
     SidebarSettings,
 };
 pub use spaces::{
-    MAX_FAVOURITES, MAX_SPACE_COLORS, Space, SpaceColors, SpaceId, SpaceTint, Spaces,
+    MAX_FAVOURITES, MAX_SPACE_COLORS, Space, SpaceColors, SpaceData, SpaceId, SpaceTint, Spaces,
 };
 pub use state::{BrowserCommand, BrowserState, EngineEvent, normalize_url, url_host};
 pub use tab_sleep::{

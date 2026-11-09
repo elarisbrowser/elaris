@@ -1,7 +1,9 @@
 //! The profile's downloads, reported by Engine and controlled from the shell.
 
+#[cfg(not(feature = "ui-only"))]
+use std::ffi::CString;
 use std::ffi::{CStr, c_char, c_void};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::EngineRuntime;
 use crate::platform::engine_ffi::embedder;
@@ -24,6 +26,7 @@ impl DownloadStatus {
 #[derive(Clone, Debug, PartialEq)]
 pub(in crate::platform) struct Download {
     pub(in crate::platform) id: u64,
+    pub(in crate::platform) space: u64,
     pub(in crate::platform) url: String,
     pub(in crate::platform) path: PathBuf,
     pub(in crate::platform) status: DownloadStatus,
@@ -61,6 +64,7 @@ pub(super) unsafe extern "C" fn on_engine_download_changed(
         return;
     }
     let download = unsafe { &*download };
+    let profile_identity = string(download.profile_identity);
     let status = match download.status {
         0 => DownloadStatus::InProgress,
         1 => DownloadStatus::Paused,
@@ -71,6 +75,7 @@ pub(super) unsafe extern "C" fn on_engine_download_changed(
     let error = string(download.error);
     let change = DownloadChange::Changed(Download {
         id: download.id,
+        space: space_id_from_profile_identity(&profile_identity).unwrap_or_default(),
         url: string(download.url),
         path: PathBuf::from(string(download.path)),
         status,
@@ -87,6 +92,18 @@ pub(super) unsafe extern "C" fn on_engine_download_changed(
     callback(change);
 }
 
+fn space_id_from_profile_identity(profile_identity: &str) -> Option<u64> {
+    let components: Vec<_> = Path::new(profile_identity)
+        .components()
+        .map(|component| component.as_os_str().to_string_lossy().into_owned())
+        .collect();
+    components.windows(3).find_map(|components| {
+        (components[0] == "Spaces" && components[2] == "Engine")
+            .then(|| components[1].parse().ok())
+            .flatten()
+    })
+}
+
 pub(super) unsafe extern "C" fn on_engine_download_removed(context: *mut c_void, id: u64) {
     if !context.is_null() {
         let callback = unsafe { &*context.cast::<DownloadCallback>() };
@@ -95,6 +112,28 @@ pub(super) unsafe extern "C" fn on_engine_download_removed(context: *mut c_void,
 }
 
 impl EngineRuntime {
+    pub(in crate::platform) fn ensure_profile_session(&self, profile_path: Option<&Path>) {
+        #[cfg(not(feature = "ui-only"))]
+        if self.is_available() {
+            let Ok(profile_path) = profile_path
+                .map(|path| CString::new(path.to_string_lossy().into_owned()))
+                .transpose()
+            else {
+                return;
+            };
+            unsafe {
+                embedder::photon_runtime_ensure_profile_session(
+                    self.runtime,
+                    profile_path
+                        .as_ref()
+                        .map_or(std::ptr::null(), |path| path.as_ptr()),
+                )
+            }
+        }
+        #[cfg(feature = "ui-only")]
+        let _ = profile_path;
+    }
+
     /// Calls `on_change` with every download now, then as they change. It
     /// runs while Engine is pumped, so it must not update GPUI entities
     /// synchronously.
@@ -149,10 +188,25 @@ impl EngineRuntime {
     }
 
     /// Removes finished, cancelled and failed downloads from the list.
-    pub(in crate::platform) fn clear_inactive_downloads(&self) {
+    pub(in crate::platform) fn clear_inactive_downloads(&self, profile_path: Option<&Path>) {
         #[cfg(not(feature = "ui-only"))]
         if self.is_available() {
-            unsafe { embedder::photon_runtime_clear_inactive_downloads(self.runtime) }
+            let Ok(profile_path) = profile_path
+                .map(|path| CString::new(path.to_string_lossy().into_owned()))
+                .transpose()
+            else {
+                return;
+            };
+            unsafe {
+                embedder::photon_runtime_clear_inactive_downloads(
+                    self.runtime,
+                    profile_path
+                        .as_ref()
+                        .map_or(std::ptr::null(), |path| path.as_ptr()),
+                )
+            }
         }
+        #[cfg(feature = "ui-only")]
+        let _ = profile_path;
     }
 }

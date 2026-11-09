@@ -177,11 +177,12 @@ impl SettingsPage {
 
     fn new(context: PageContext, cx: &mut Context<Self>) -> Self {
         general::refresh_default_browser(cx);
+        let space = context.space;
         Self {
             context,
             section: Section::General,
             section_picked_at: None,
-            clearing: ClearForm::new(cx),
+            clearing: ClearForm::new(space, cx),
             confirming_reset: false,
             reset_presence: Presence::default(),
             reset_focus: cx.focus_handle(),
@@ -242,7 +243,9 @@ impl Render for SettingsPage {
             )
             .into_any_element(),
             Section::Search => search::settings(palette, cx).into_any_element(),
-            Section::NewTab => new_tab::settings(palette, cx).into_any_element(),
+            Section::NewTab => {
+                new_tab::settings(self.context.space, palette, cx).into_any_element()
+            }
             Section::Tabs => tabs::settings(palette, cx).into_any_element(),
             Section::Sites => sites::settings(palette, cx).into_any_element(),
             Section::Privacy => self.privacy_settings(palette, cx).into_any_element(),

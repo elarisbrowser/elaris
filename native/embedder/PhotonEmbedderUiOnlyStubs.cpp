@@ -4,18 +4,18 @@
 // calls inert so the browser chrome can be built and previewed on its own.
 extern "C" {
 
-void* photon_runtime_create(char const*, char const*, char*, size_t)
+void* photon_runtime_create(char const*, char const*, char const*, char*, size_t)
 {
     return nullptr;
 }
 
-void photon_runtime_peer_certificate(void*, char const*, void*, PhotonCertificateCallback) { }
-void photon_runtime_allow_certificate_errors_for_host(void*, char const*) { }
-void photon_runtime_clear_browsing_data(void*, int64_t, bool, bool, void*,
+void photon_runtime_peer_certificate(void*, char const*, bool, char const*, void*, PhotonCertificateCallback) { }
+void photon_runtime_allow_certificate_errors_for_host(void*, char const*, bool, char const*) { }
+void photon_runtime_clear_browsing_data(void*, int64_t, bool, bool, char const*, void*,
     PhotonBrowsingDataClearedCallback)
 {
 }
-void photon_runtime_clear_site_data(void*, char const*, void*, PhotonBrowsingDataClearedCallback) { }
+void photon_runtime_clear_site_data(void*, char const*, char const*, void*, PhotonBrowsingDataClearedCallback) { }
 
 #if defined(__linux__)
 void photon_runtime_set_system_clipboard_callbacks(void*, void*, PhotonClipboardReadCallback,
@@ -44,7 +44,7 @@ void photon_runtime_set_external_apps(void*, void*, PhotonExternalAppNameCallbac
 {
 }
 
-void* photon_view_create(void*, int, int, double, PhotonViewCallbacks const*, bool)
+void* photon_view_create(void*, int, int, double, PhotonViewCallbacks const*, char const*, bool)
 {
     return nullptr;
 }
@@ -121,7 +121,8 @@ void photon_runtime_set_download_callbacks(void*, void*, PhotonDownloadChangedCa
 {
 }
 void photon_runtime_download_action(void*, uint64_t, int) { }
-void photon_runtime_clear_inactive_downloads(void*) { }
+void photon_runtime_clear_inactive_downloads(void*, char const*) { }
+void photon_runtime_ensure_profile_session(void*, char const*) { }
 void photon_runtime_list_registered_processes(void*, void*, PhotonRegisteredProcessCallback) { }
 void photon_runtime_list_process_snapshots(void*, void*, PhotonEngineProcessCallback) { }
 void photon_view_pointer(void*, int, double, double, int, uint8_t, bool, bool, bool, bool,

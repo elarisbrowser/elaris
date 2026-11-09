@@ -28,6 +28,7 @@ struct PopoverActions {
     show_all: Rc<dyn Fn(&mut App)>,
     /// Whether the window is private, which lists only private downloads.
     private: bool,
+    space: photon_core::SpaceId,
 }
 
 impl BrowserWindow {
@@ -41,7 +42,10 @@ impl BrowserWindow {
             self.dismiss_downloads_popover(cx);
             return;
         }
-        Downloads::mark_seen(self.private, cx);
+        if let Ok(Some(profile_path)) = Settings::space_engine_dir(self.current_space(cx), cx) {
+            self.runtime.ensure_profile_session(Some(&profile_path));
+        }
+        Downloads::mark_seen(self.current_space(cx), self.private, cx);
         // Below its button where the sidebar shows it, else where it was asked for.
         let anchor = self.downloads_button_bounds.unwrap_or_else(|| {
             gpui::Bounds::new(window.mouse_position(), gpui::size(px(0.0), px(0.0)))
@@ -78,6 +82,7 @@ impl BrowserWindow {
             close,
             show_all,
             private: self.private,
+            space: self.current_space(cx),
         }
     }
 
@@ -96,7 +101,7 @@ impl BrowserWindow {
         let actions = self.downloads_popover_actions(window, cx);
         let viewport = window.viewport_size();
         let width = metrics::DOWNLOADS_POPOVER_WIDTH;
-        let height = popover_height(Downloads::list(self.private, cx).count());
+        let height = popover_height(Downloads::list(actions.space, actions.private, cx).count());
         let inset = metrics::PAGE_INSET;
         let left = (f32::from(anchor.center().x) - width / 2.0).clamp(
             inset,
@@ -159,7 +164,7 @@ fn popover_content(
     palette: ThemeColors,
     cx: &App,
 ) -> AnyElement {
-    let downloads: Vec<_> = Downloads::list(actions.private, cx)
+    let downloads: Vec<_> = Downloads::list(actions.space, actions.private, cx)
         .take(metrics::DOWNLOADS_POPOVER_MAX_ROWS)
         .collect();
     let close = actions.close.clone();

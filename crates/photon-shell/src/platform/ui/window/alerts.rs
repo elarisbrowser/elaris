@@ -393,13 +393,14 @@ impl BrowserWindow {
         if self.downloads_popover.is_some() {
             return None;
         }
-        let (event, at) = Downloads::latest_event(self.private, cx)?;
+        let space = self.current_space(cx);
+        let (event, at) = Downloads::latest_event(space, self.private, cx)?;
         let id = match event {
             DownloadEvent::Started(id)
             | DownloadEvent::Finished(id)
             | DownloadEvent::Failed(id) => id,
         };
-        let download = Downloads::get(id, cx)?;
+        let download = Downloads::get(space, id, cx)?;
         let name = file_name(download);
         Some(match download.status {
             DownloadStatus::InProgress | DownloadStatus::Paused => {
