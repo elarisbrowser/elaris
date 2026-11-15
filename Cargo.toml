@@ -1,17 +1,17 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/photon-cli",
-    "crates/photon-core",
-    "crates/photon-app",
-    "crates/photon-brand",
-    "crates/photon-shell",
-    "crates/photon-performance",
-    "crates/photon-performance-ui",
-    "crates/photon-presentation-broker",
-    "crates/photon-presentation-ipc",
-    "crates/photon-storage",
-    "crates/photon-sound",
+    "crates/elaris-cli",
+    "crates/elaris-core",
+    "crates/elaris-app",
+    "crates/elaris-brand",
+    "crates/elaris-shell",
+    "crates/elaris-performance",
+    "crates/elaris-performance-ui",
+    "crates/elaris-presentation-broker",
+    "crates/elaris-presentation-ipc",
+    "crates/elaris-storage",
+    "crates/elaris-sound",
 ]
 exclude = [
     "Engine/Libraries/LibJS/Flap",

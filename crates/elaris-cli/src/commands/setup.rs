@@ -1,0 +1,528 @@
+use std::collections::HashSet;
+use std::env;
+use std::path::{Component, Path, PathBuf};
+
+use serde::Deserialize;
+
+use crate::support::{
+    CLANG_FORMAT_VERSION, clang_format, command, compiler_version, output, require_tool,
+    require_tool_version, run_tool,
+};
+
+pub(crate) fn setup(
+    root: &Path,
+    verbose: bool,
+    install_system_deps: bool,
+    ui_only: bool,
+) -> Result<(), String> {
+    if ui_only && install_system_deps {
+        return Err("`--install-system-deps` cannot be combined with `--ui-only`".into());
+    }
+    let config = SetupConfig::load(root)?;
+    for tool in ["git", "cargo", "rustc", "rustup"] {
+        require_tool(tool)?;
+    }
+    if install_system_deps {
+        crate::commands::system_deps::install(root, verbose)?;
+    }
+    if !ui_only {
+        require_tool("python3")?;
+        run_tool("python3", &["-m", "pip", "--version"], root).map_err(|_| {
+            "Python pip is missing; install pip for Python 3 before setup".to_owned()
+        })?;
+        if compiler_version(root).is_none() {
+            return Err(
+                "a C++ compiler is missing; install Clang or your platform's C++ build tools"
+                    .into(),
+            );
+        }
+        for (tool, minimum) in [("cmake", (3, 30)), ("ninja", (1, 10))] {
+            require_tool_version(tool, minimum, root)?;
+        }
+    }
+    require_tool_version("rustc", (1, 85), root)?;
+    for component in ["fmt", "clippy"] {
+        run_tool("cargo", &[component, "--version"], root).map_err(|_| {
+            format!(
+                "Cargo {component} is missing; install it with `rustup component add {}`",
+                match component {
+                    "fmt" => "rustfmt",
+                    _ => "clippy",
+                }
+            )
+        })?;
+    }
+
+    for submodule in config
+        .submodules
+        .iter()
+        .filter(|submodule| !ui_only || submodule.path != "Engine")
+    {
+        let path = submodule.path.as_str();
+        let mut sync_args = vec!["submodule", "sync"];
+        if submodule.recursive {
+            sync_args.push("--recursive");
+        }
+        sync_args.extend(["--", path]);
+        command("git", &sync_args, root, verbose)?;
+
+        // Updating an initialized submodule checks out the root gitlink and can
+        // detach a development branch. Sync URLs, but initialize only missing
+        // worktrees so existing branches and commits remain in place.
+        if root.join(path).join(".git").exists() {
+            continue;
+        }
+        let mut args = vec!["submodule", "update", "--init"];
+        if submodule.recursive {
+            args.push("--recursive");
+        }
+        args.extend(["--", path]);
+        command("git", &args, root, verbose)?;
+    }
+    if !ui_only && !root.join("Engine/CMakeLists.txt").is_file() {
+        return Err(
+            "Engine submodule is missing; run git submodule update --init --recursive".into(),
+        );
+    }
+    for repository in config
+        .repositories
+        .iter()
+        .filter(|repository| !ui_only || repository.path != "Engine")
+    {
+        let path = root.join(&repository.path);
+        if !path.join(".git").exists() {
+            if repository.path == "." {
+                return Err("Photon root repository is unavailable".into());
+            }
+            command(
+                "git",
+                &[
+                    "submodule",
+                    "update",
+                    "--init",
+                    "--recursive",
+                    "--",
+                    &repository.path,
+                ],
+                root,
+                verbose,
+            )?;
+            if !path.join(".git").exists() {
+                return Err(format!(
+                    "repository {} from photon.toml is missing or not initialized",
+                    repository.path
+                ));
+            }
+        }
+        for remote in &repository.remotes {
+            ensure_remote(&path, &remote.name, &remote.url)?;
+            if !remote.fetch_branches.is_empty() {
+                let mut args = vec!["remote", "set-branches", remote.name.as_str()];
+                args.extend(remote.fetch_branches.iter().map(String::as_str));
+                command("git", &args, &path, verbose)?;
+                if remote.name == "origin" {
+                    for branch in &remote.fetch_branches {
+                        let local_ref = format!("refs/heads/{branch}");
+                        let tracking_ref = format!("refs/remotes/origin/{branch}");
+                        if output(
+                            "git",
+                            &["show-ref", "--verify", "--quiet", &local_ref],
+                            &path,
+                        )
+                        .is_err()
+                            && output(
+                                "git",
+                                &["show-ref", "--verify", "--quiet", &tracking_ref],
+                                &path,
+                            )
+                            .is_err()
+                        {
+                            command(
+                                "git",
+                                &["fetch", "--no-tags", "origin", branch],
+                                &path,
+                                verbose,
+                            )?;
+                        }
+                    }
+                }
+            }
+        }
+        for branch in &repository.untrack_branches {
+            unset_branch_upstream(&path, branch, verbose)?;
+        }
+    }
+    if !ui_only {
+        crate::commands::engine::edit(root, verbose)?;
+    }
+    crate::commands::gpui::edit(root, verbose)?;
+    if !ui_only {
+        for path in ["build/engine-debug", "build/app-debug", "build/bin"] {
+            std::fs::create_dir_all(root.join(path)).map_err(|e| e.to_string())?;
+        }
+    }
+    crate::commands::ide::setup(root, verbose)?;
+    if !ui_only {
+        clang_format(root, CLANG_FORMAT_VERSION)?;
+    }
+    crate::commands::install::install(root, verbose)?;
+    #[cfg(target_os = "linux")]
+    if !ui_only {
+        crate::commands::linux_desktop::install(root)?;
+    }
+    if ui_only {
+        println!("UI-only setup ready. Existing dependency worktrees were preserved.");
+        println!("Run `elaris run --ui` to build and launch the GPUI shell.");
+        println!("Photon Engine was not initialized; web pages require the full setup.");
+        #[cfg(target_os = "linux")]
+        println!("Linux desktop integration was left unchanged.");
+    } else {
+        println!("Setup ready. Existing dependency worktrees were preserved.");
+        println!("Rust formatting, Clippy, and native formatting tools are ready.");
+        if install_system_deps {
+            println!("macOS build packages are ready.");
+        } else {
+            println!("Install OS packages separately; see CONTRIBUTOR_SETUP.md.");
+        }
+        let clang_format_major = CLANG_FORMAT_VERSION
+            .split('.')
+            .next()
+            .unwrap_or(CLANG_FORMAT_VERSION);
+        println!("clang-format {clang_format_major} is ready for format and lint commands.");
+        println!("The first engine build prepares Ladybird's pinned dependencies under build/.");
+    }
+    Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SetupConfig {
+    submodules: Vec<SubmoduleConfig>,
+    repositories: Vec<RepositoryConfig>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SubmoduleConfig {
+    path: String,
+    #[serde(default)]
+    recursive: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RepositoryConfig {
+    path: String,
+    remotes: Vec<RemoteConfig>,
+    #[serde(default)]
+    untrack_branches: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RemoteConfig {
+    name: String,
+    url: String,
+    #[serde(default)]
+    fetch_branches: Vec<String>,
+}
+
+impl SetupConfig {
+    fn load(root: &Path) -> Result<Self, String> {
+        let config_path = root.join("photon.toml");
+        let source = std::fs::read_to_string(&config_path)
+            .map_err(|error| format!("cannot read {}: {error}", config_path.display()))?;
+        let config: Self =
+            toml::from_str(&source).map_err(|error| format!("invalid photon.toml: {error}"))?;
+        config.validate()?;
+        Ok(config)
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        let mut submodule_paths = HashSet::new();
+        for submodule in &self.submodules {
+            validate_relative_path(&submodule.path, false)?;
+            if !submodule_paths.insert(&submodule.path) {
+                return Err(format!(
+                    "photon.toml lists submodule {} more than once",
+                    submodule.path
+                ));
+            }
+        }
+
+        let mut repository_paths = HashSet::new();
+        for repository in &self.repositories {
+            validate_relative_path(&repository.path, true)?;
+            if !repository_paths.insert(&repository.path) {
+                return Err(format!(
+                    "photon.toml configures repository {} more than once",
+                    repository.path
+                ));
+            }
+            let mut remote_names = HashSet::new();
+            for remote in &repository.remotes {
+                if remote.name.is_empty() || remote.name.starts_with('-') || remote.url.is_empty() {
+                    return Err(format!(
+                        "photon.toml has an empty remote name or URL for {}",
+                        repository.path
+                    ));
+                }
+                if !remote_names.insert(&remote.name) {
+                    return Err(format!(
+                        "photon.toml configures remote {} more than once for {}",
+                        remote.name, repository.path
+                    ));
+                }
+                for branch in &remote.fetch_branches {
+                    validate_branch_name(branch)?;
+                }
+            }
+            for branch in &repository.untrack_branches {
+                validate_branch_name(branch)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+fn validate_branch_name(branch: &str) -> Result<(), String> {
+    if branch.is_empty() || branch.starts_with('-') || branch.chars().any(char::is_whitespace) {
+        return Err(format!(
+            "photon.toml has an invalid Git branch name: {branch:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_relative_path(path: &str, allow_repository_root: bool) -> Result<(), String> {
+    let path_buf = PathBuf::from(path);
+    if path.is_empty()
+        || path.contains('\\')
+        || path_buf.is_absolute()
+        || path_buf.components().any(|component| {
+            !matches!(component, Component::Normal(_))
+                && !(allow_repository_root && path == "." && matches!(component, Component::CurDir))
+        })
+    {
+        return Err(format!(
+            "photon.toml path must be a safe, repository-relative path: {path:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_remote(repository: &Path, name: &str, url: &str) -> Result<(), String> {
+    let existing = output("git", &["remote", "get-url", name], repository);
+    if existing.as_deref().unwrap_or_default().trim_end() == url {
+        return Ok(());
+    }
+
+    let action = if existing.is_ok() { "set-url" } else { "add" };
+    command("git", &["remote", action, name, url], repository, true)
+}
+
+fn unset_branch_upstream(repository: &Path, branch: &str, verbose: bool) -> Result<(), String> {
+    if output(
+        "git",
+        &[
+            "show-ref",
+            "--verify",
+            "--quiet",
+            &format!("refs/heads/{branch}"),
+        ],
+        repository,
+    )
+    .is_err()
+    {
+        return Ok(());
+    }
+
+    let upstream_key = format!("branch.{branch}.remote");
+    if output("git", &["config", "--get", &upstream_key], repository).is_err() {
+        return Ok(());
+    }
+
+    command(
+        "git",
+        &["branch", "--unset-upstream", branch],
+        repository,
+        verbose,
+    )
+}
+
+pub(crate) fn doctor(root: &Path) -> Result<(), String> {
+    println!("Photon environment");
+    println!("  OS         {}/{}", env::consts::OS, env::consts::ARCH);
+    for (name, args) in [
+        ("Rust", vec!["rustc", "--version"]),
+        ("Cargo", vec!["cargo", "--version"]),
+        ("Rustfmt", vec!["cargo", "fmt", "--version"]),
+        ("Clippy", vec!["cargo", "clippy", "--version"]),
+        ("Python pip", vec!["python3", "-m", "pip", "--version"]),
+        ("CMake (3.30+)", vec!["cmake", "--version"]),
+        ("Ninja (1.10+)", vec!["ninja", "--version"]),
+    ] {
+        let line = run_tool(args[0], &args[1..], root).unwrap_or_else(|_| "not found".into());
+        println!("  {name:10} {}", line.lines().next().unwrap_or("unknown"));
+    }
+    println!(
+        "  Compiler   {}",
+        compiler_version(root).unwrap_or_else(|| "not found".into())
+    );
+    println!(
+        "  Engine     {}",
+        output(
+            "git",
+            &["rev-parse", "--short", "HEAD"],
+            &root.join("Engine")
+        )
+        .unwrap_or_else(|_| "missing".into())
+        .trim()
+    );
+    println!(
+        "  branch     {}",
+        output("git", &["branch", "--show-current"], &root.join("Engine"))
+            .unwrap_or_else(|_| "unavailable".into())
+            .trim()
+    );
+    println!(
+        "  submodule  {}",
+        output("git", &["submodule", "status", "Engine"], root)
+            .unwrap_or_else(|_| "unavailable".into())
+            .trim()
+    );
+    for (name, args) in [
+        ("origin", vec!["remote", "get-url", "origin"]),
+        ("upstream", vec!["remote", "get-url", "upstream"]),
+    ] {
+        println!(
+            "  {name:10} {}",
+            output("git", &args, &root.join("Engine"))
+                .unwrap_or_else(|_| "missing".into())
+                .trim()
+        );
+    }
+    println!(
+        "  working tree {}",
+        if output("git", &["status", "--porcelain"], &root.join("Engine"))
+            .unwrap_or_default()
+            .trim()
+            .is_empty()
+        {
+            "clean"
+        } else {
+            "dirty"
+        }
+    );
+    println!(
+        "  build dir  {}",
+        if root.join("build").exists() {
+            "present"
+        } else {
+            "absent"
+        }
+    );
+    for path in ["engine-debug", "app-debug", "vcpkg-debug"] {
+        println!(
+            "  {path:10} {}",
+            if root.join("build").join(path).exists() {
+                "present"
+            } else {
+                "not configured"
+            }
+        );
+    }
+    println!(
+        "  GPUI-CE    {}",
+        output(
+            "git",
+            &["rev-parse", "--short", "HEAD"],
+            &root.join("vendor/gpui-ce")
+        )
+        .unwrap_or_else(|_| "missing".into())
+        .trim()
+    );
+    println!(
+        "  System package instructions: {}",
+        root.join("Engine/Documentation/BuildInstructionsLadybird.md")
+            .display()
+    );
+    crate::commands::ide::doctor(root);
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn checkout_setup_config_loads_https_remotes() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let root = root.ancestors().nth(2).unwrap();
+        let config = SetupConfig::load(root).unwrap();
+
+        assert_eq!(config.submodules.len(), 2);
+        assert!(
+            config
+                .repositories
+                .iter()
+                .flat_map(|repo| &repo.remotes)
+                .all(|remote| remote.url.starts_with("https://"))
+        );
+        let submodule_urls = output(
+            "git",
+            &[
+                "config",
+                "--file",
+                ".gitmodules",
+                "--get-regexp",
+                r"^submodule\..*\.url$",
+            ],
+            root,
+        )
+        .unwrap();
+        assert_eq!(submodule_urls.lines().count(), 2);
+        assert!(submodule_urls.lines().all(|line| {
+            line.split_whitespace()
+                .last()
+                .unwrap()
+                .starts_with("https://")
+        }));
+    }
+
+    #[test]
+    fn setup_config_accepts_multiple_remotes_and_recursive_submodules() {
+        let config: SetupConfig = toml::from_str(
+            r#"
+                [[submodules]]
+                path = "vendor/gpui-ce"
+                recursive = true
+
+                [[repositories]]
+                path = "vendor/gpui-ce"
+                [[repositories.remotes]]
+                name = "origin"
+                url = "https://example.com/fork.git"
+                [[repositories.remotes]]
+                name = "upstream"
+                url = "https://example.com/upstream.git"
+                fetch_branches = ["main"]
+            "#,
+        )
+        .unwrap();
+
+        config.validate().unwrap();
+        assert!(config.submodules[0].recursive);
+        assert_eq!(config.repositories[0].remotes.len(), 2);
+        assert_eq!(config.repositories[0].remotes[1].fetch_branches, ["main"]);
+    }
+
+    #[test]
+    fn setup_config_rejects_paths_that_escape_the_repository() {
+        assert!(validate_relative_path("../outside", true).is_err());
+        assert!(validate_relative_path("/outside", true).is_err());
+        assert!(validate_relative_path("vendor/gpui-ce", false).is_ok());
+        assert!(validate_relative_path(".", true).is_ok());
+        assert!(validate_relative_path(".", false).is_err());
+    }
+}

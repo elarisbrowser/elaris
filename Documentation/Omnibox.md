@@ -2,7 +2,7 @@
 
 The address field in the titlebar is an omnibox: it takes text and decides what
 it means. The framework-free rules live in
-[`photon-core/src/omnibox/`](../crates/photon-core/src/omnibox/mod.rs), and
+[`elaris-core/src/omnibox/`](../crates/elaris-core/src/omnibox/mod.rs), and
 nothing else in Photon re-implements them.
 
 ## Rules
@@ -14,7 +14,7 @@ nothing else in Photon re-implements them.
 | `localhost:3000` | `http://localhost:3000/` | `Url { kind: Local }` |
 | `192.168.1.10` | `http://192.168.1.10/` | `Url { kind: Local }` |
 | `mailto:person@example.com` | opened as written | `Url { kind: Other }` |
-| `photon://settings` | one of the browser's own pages | `Url { kind: Other }` |
+| `elaris://settings` | one of the browser's own pages | `Url { kind: Other }` |
 | `how to bake bread` | a Google search | `Search` |
 | `note: buy milk` | a Google search | `Search` |
 | `1.2.3.4.5` | a Google search | `Search` |
@@ -23,7 +23,8 @@ nothing else in Photon re-implements them.
 A bare host is only a host when it has a dot, no whitespace, valid labels, and a
 last label that is either a real IPv4 address or an alphabetic top level domain.
 That is why `hello.world` opens and `3.14` searches. A `word:` prefix is a scheme
-only when the scheme is known, which keeps `note: buy milk` a search.
+only when the scheme is known, which keeps `note: buy milk` a search. The former
+`photon://` internal page scheme remains accepted for saved links and tabs.
 
 Queries are whitespace-collapsed and percent-encoded by the engine, so a space is
 `%20` and `&` cannot break out of the parameter.
@@ -46,14 +47,14 @@ Registration validates the template, so a malformed endpoint is rejected when it
 is registered rather than producing an unopenable address when someone presses
 Enter.
 
-The browser's own page scheme comes from `photon-brand`; see
+The browser's own page scheme comes from `elaris-brand`; see
 [the browser's own pages](Pages.md).
 
 ## Suggestions
 
 While you type, the field opens into a panel over the page with the field as
 its first row and suggestions under it. `suggest` in
-[`suggest.rs`](../crates/photon-core/src/omnibox/suggest.rs) decides them from the
+[`suggest.rs`](../crates/elaris-core/src/omnibox/suggest.rs) decides them from the
 [history](Profile.md#history):
 
 - Visited pages match when every typed word starts a word in their title or
@@ -81,10 +82,10 @@ window, so actions such as Back, Stop Loading, and Reopen Closed Tab appear
 when they can run. Keyboard shortcuts appear beside commands that have one.
 
 The command registry lives in
-[`photon-core/src/commands.rs`](../crates/photon-core/src/commands.rs); the
+[`elaris-core/src/commands.rs`](../crates/elaris-core/src/commands.rs); the
 palette view and window integration live in
-[`ui/command_palette.rs`](../crates/photon-shell/src/platform/ui/command_palette.rs)
-and [`ui/window/command_palette.rs`](../crates/photon-shell/src/platform/ui/window/command_palette.rs).
+[`ui/command_palette.rs`](../crates/elaris-shell/src/platform/ui/command_palette.rs)
+and [`ui/window/command_palette.rs`](../crates/elaris-shell/src/platform/ui/window/command_palette.rs).
 ⌘T and “New Tab” controls continue to open a regular new tab.
 
 ## Site information
@@ -96,12 +97,12 @@ connection's own page, which explains what the connection means for what the
 person sends the site.
 
 On macOS the popover is a native `NSPopover`
-([`macos/site_info_popover.rs`](../crates/photon-shell/src/platform/macos/site_info_popover.rs)),
+([`macos/site_info_popover.rs`](../crates/elaris-shell/src/platform/macos/site_info_popover.rs)),
 which is Liquid Glass on macOS 26 and later. Other platforms draw the same
 popover in GPUI
-([`ui/omnibox/site_info.rs`](../crates/photon-shell/src/platform/ui/omnibox/site_info.rs)).
+([`ui/omnibox/site_info.rs`](../crates/elaris-shell/src/platform/ui/omnibox/site_info.rs)).
 Both read one model,
-[`platform/site_info.rs`](../crates/photon-shell/src/platform/site_info.rs),
+[`platform/site_info.rs`](../crates/elaris-shell/src/platform/site_info.rs),
 for their controls, states and wording, and both change the site through the
 omnibox's `toggle_site_control`, so a change to one belongs in the other.
 
@@ -134,12 +135,12 @@ These show dimmed until the Engine can do them:
 
 ## Who calls it
 
-- `crates/photon-shell`'s omnibox
-  ([`ui/omnibox/`](../crates/photon-shell/src/platform/ui/omnibox/mod.rs))
+- `crates/elaris-shell`'s omnibox
+  ([`ui/omnibox/`](../crates/elaris-shell/src/platform/ui/omnibox/mod.rs))
   resolves submitted text with the chosen search engine and asks its window
   to open the result, which loads a web page or one of the browser's own
   pages in the active tab. Startup addresses use the same rule.
-- `photon-core` exposes the shared resolution rules and `normalize_url`.
+- `elaris-core` exposes the shared resolution rules and `normalize_url`.
 
 The native shell owns the address entry and keeps typed text when a navigation
 is rejected, so it can be corrected. There is no second UI-side copy of the

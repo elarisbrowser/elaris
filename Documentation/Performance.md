@@ -1,6 +1,6 @@
 # Performance
 
-The live task page at `photon://performance` shows Photon shell and tab-owned
+The live task page at `elaris://performance` shows the Elaris shell and tab-owned
 Engine resource use while it is open. Its process totals exclude shared Engine
 services and GPU allocations; UI loop delay measurements are separate from
 per-tab frame gap diagnostics.

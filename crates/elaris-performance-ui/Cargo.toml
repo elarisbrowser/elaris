@@ -1,0 +1,9 @@
+[package]
+name = "elaris-performance-ui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+elaris-performance = { path = "../elaris-performance" }
+gpui = { package = "gpui-ce", path = "../../vendor/gpui-ce/crates/gpui", default-features = false }

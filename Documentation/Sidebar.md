@@ -71,7 +71,7 @@ mode belongs to its window and is not saved.
 
 The window draws the sidebar as a layer over itself and keeps room for it
 beside the page, each following a `Tween` from
-[`motion/`](../crates/photon-shell/src/platform/ui/motion/). Each frame
+[`motion/`](../crates/elaris-shell/src/platform/ui/motion/). Each frame
 samples every sidebar `Tween` at one moment, taken when the window starts
 drawing, so the sidebar, the page beside it and the native window controls
 move in step. Those frames redraw only the window and its chrome: they are not
@@ -79,7 +79,7 @@ changes to the window's state, so the menus and dialogs over the window, the
 menu bar and the saved session are left alone. The sidebar moves on springs,
 so turning it back midway keeps its momentum: see "Motion" in
 [Theme.md](Theme.md).
-[`window/side_dock/`](../crates/photon-shell/src/platform/ui/window/side_dock/)
+[`window/side_dock/`](../crates/elaris-shell/src/platform/ui/window/side_dock/)
 keeps where the sidebar is, handles its edges, draws it, and places the
 macOS native window controls through GPUI-CE's `set_traffic_light_axis` and
 `set_traffic_lights_visible`. Linux keeps its custom controls in the shared
@@ -93,7 +93,7 @@ snaps to whichever is nearer, the default width or the icons, and dragging
 almost to the edge hides it; dragging back out while still holding shows it
 again. The width is saved in the profile once the drag rests and applies to
 every window. The limits and the snaps are in `SidebarResize` in
-[`photon-core/src/sidebar.rs`](../crates/photon-core/src/sidebar.rs).
+[`elaris-core/src/sidebar.rs`](../crates/elaris-core/src/sidebar.rs).
 
 ## Pinned tabs
 
@@ -111,9 +111,9 @@ Dragging a tab among the pinned tabs pins it, and among today's tabs, onto the
 divider or onto "+ New Tab" unpins it. Settings → Tabs can close today's tabs
 left unused for twelve hours; pinned tabs and the tab in use stay, and closed
 tabs can be reopened with ⌘⇧T. The rules are in
-[`photon-core/src/tabs.rs`](../crates/photon-core/src/tabs.rs), and the
+[`elaris-core/src/tabs.rs`](../crates/elaris-core/src/tabs.rs), and the
 window's side in
-[`window/pinned.rs`](../crates/photon-shell/src/platform/ui/window/pinned.rs).
+[`window/pinned.rs`](../crates/elaris-shell/src/platform/ui/window/pinned.rs).
 
 ## Spaces
 
@@ -133,11 +133,11 @@ shown, and new tabs join it.
 
 The space shown is shared by every window, as the window colour follows it.
 The tab strip of the horizontal layout shows every space's tabs. The model is
-in [`photon-core/src/spaces.rs`](../crates/photon-core/src/spaces.rs), the
+in [`elaris-core/src/spaces.rs`](../crates/elaris-core/src/spaces.rs), the
 window's side in
-[`window/spaces.rs`](../crates/photon-shell/src/platform/ui/window/spaces.rs),
+[`window/spaces.rs`](../crates/elaris-shell/src/platform/ui/window/spaces.rs),
 and the dialog in
-[`space_editor.rs`](../crates/photon-shell/src/platform/ui/space_editor.rs).
+[`space_editor.rs`](../crates/elaris-shell/src/platform/ui/space_editor.rs).
 
 ## Closing the last tab
 
@@ -148,23 +148,23 @@ open creates a replacement tab so the tab strip never stays empty.
 
 ## Where it lives
 
-- [`ui/tabs/`](../crates/photon-shell/src/platform/ui/tabs/mod.rs): what both
+- [`ui/tabs/`](../crates/elaris-shell/src/platform/ui/tabs/mod.rs): what both
   layouts share (a tab's icon, title, close and audio buttons, dragging) in
   `mod.rs`, the horizontal strip in `strip.rs` and the sidebar's list in
   `list.rs`.
-- [`ui/toolbar.rs`](../crates/photon-shell/src/platform/ui/toolbar.rs): the
+- [`ui/toolbar.rs`](../crates/elaris-shell/src/platform/ui/toolbar.rs): the
   horizontal layout's toolbar.
-- [`ui/sidebar/`](../crates/photon-shell/src/platform/ui/sidebar/mod.rs): the
+- [`ui/sidebar/`](../crates/elaris-shell/src/platform/ui/sidebar/mod.rs): the
   sidebar's views: `navigation.rs`, `favourites.rs`, `footer.rs`, and the
   layout in `mod.rs`.
-- [`ui/window/chrome.rs`](../crates/photon-shell/src/platform/ui/window/chrome.rs):
+- [`ui/window/chrome.rs`](../crates/elaris-shell/src/platform/ui/window/chrome.rs):
   builds the chosen chrome components from the window's tabs and settings.
-- [`ui/window/workspace.rs`](../crates/photon-shell/src/platform/ui/window/workspace.rs):
+- [`ui/window/workspace.rs`](../crates/elaris-shell/src/platform/ui/window/workspace.rs):
   composes the cached chrome, active page, and window overlays. Engine frames
   repaint only the page.
-- [`ui/workspace_layout/`](../crates/photon-shell/src/platform/ui/workspace_layout/mod.rs):
+- [`ui/workspace_layout/`](../crates/elaris-shell/src/platform/ui/workspace_layout/mod.rs):
   resolves the saved horizontal or vertical layout to the shell's built-in
   composition and component catalog.
-- [`photon-core`](../crates/photon-core/src/settings.rs): `TabLayout`, the
-  pinned tabs and the ([`sidebar.rs`](../crates/photon-core/src/sidebar.rs)), saved
+- [`elaris-core`](../crates/elaris-core/src/settings.rs): `TabLayout`, the
+  pinned tabs and the ([`sidebar.rs`](../crates/elaris-core/src/sidebar.rs)), saved
   with the settings.

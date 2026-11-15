@@ -1,6 +1,6 @@
 # Native AppKit elements in GPUI
 
-`photon-shell` exposes a small macOS bridge for placing real AppKit views in a
+`elaris-shell` exposes a small macOS bridge for placing real AppKit views in a
 GPUI layout. AppKit owns the view's drawing, input, and accessibility. GPUI
 reserves its size, updates its frame after layout, and attaches or detaches it
 with the element's lifetime.

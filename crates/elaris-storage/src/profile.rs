@@ -1,0 +1,2789 @@
+//! A profile folder and what is kept in it.
+
+use elaris_core::{
+    BrowserSettings, ClearBrowsingData, History, MAX_FAVOURITES, MAX_NEW_TAB_PINS, Session,
+    SessionSplit, SessionTab, Shortcut, Space, SpaceData, SpaceId, WindowSession,
+    WorkspaceSettings,
+};
+use std::collections::HashSet;
+use std::collections::hash_map::DefaultHasher;
+use std::fs;
+use std::hash::{Hash, Hasher};
+use std::io::{self, Read};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+
+use super::favicons::{self, FaviconPixels};
+use super::{ProfileLoadOutcome, atomic, history_file, session_file};
+
+const HISTORY_FILE: &str = "History.json";
+const SETTINGS_FILE: &str = "config.toml";
+const SESSION_FILE: &str = "Session.json";
+const SPACE_DATA_FILE: &str = "SpaceData.json";
+const FAVICONS_DIR: &str = "Favicons";
+const ENGINE_DIR: &str = "Engine";
+const SPACES_DIR: &str = "Spaces";
+const SPACE_DATA_VERSION_FILE: &str = "profile-data-version";
+const SPACE_DATA_VERSION: &[u8] = b"1\n";
+/// Where in its folder the Engine keeps its network cache.
+const ENGINE_CACHE_DIR: &str = "cache";
+/// Profile files are capped before their contents are parsed.
+const MAX_SETTINGS_FILE_BYTES: usize = 1024 * 1024;
+const MAX_SETTINGS_DEPTH: usize = 32;
+const MAX_SETTINGS_COLLECTION_ITEMS: usize = 4_096;
+const MAX_SETTINGS_STRING_BYTES: usize = 8 * 1024;
+const MAX_SETTINGS_KEY_BYTES: usize = 256;
+const MAX_WORKSPACE_PRESETS: usize = 32;
+const MAX_LAYOUT_COMPONENTS: usize = 64;
+const MAX_SPACES: usize = 128;
+const MAX_SPACE_PINS: usize = 256;
+const MAX_NEW_TAB_HIDDEN: usize = 2_048;
+const MAX_SPACE_DATA_FILE_BYTES: usize = 2 * 1024 * 1024;
+const MAX_LEGACY_FAVOURITES: usize = 256;
+static NEXT_DAMAGED_BACKUP: AtomicU64 = AtomicU64::new(0);
+
+/// How much disk a profile's data takes, in bytes.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct DataUsage {
+    pub history: u64,
+    pub favicons: u64,
+    /// The Engine's network cache.
+    pub cache: u64,
+    /// The Engine's cookies and site storage.
+    pub site_data: u64,
+}
+
+impl DataUsage {
+    pub fn total(&self) -> u64 {
+        self.history + self.favicons + self.cache + self.site_data
+    }
+}
+
+/// One profile folder.
+#[derive(Clone, Debug)]
+pub struct Profile {
+    root: PathBuf,
+    settings_path: PathBuf,
+    writes: Arc<ProfileWrites>,
+}
+
+/// One space's browsing data, stored apart from the app-wide settings.
+#[derive(Clone, Debug)]
+pub struct SpaceProfile {
+    profile: Profile,
+}
+
+impl SpaceProfile {
+    /// The directory containing this space's browsing data.
+    pub fn root(&self) -> &Path {
+        self.profile.root()
+    }
+
+    /// The Engine's cookies, web storage, permissions, and cache directory.
+    pub fn engine_dir(&self) -> PathBuf {
+        self.profile.engine_dir()
+    }
+
+    pub fn load_history(&self) -> History {
+        self.profile.load_history()
+    }
+
+    pub fn load_history_outcome(&self) -> ProfileLoadOutcome<History> {
+        self.profile.load_history_outcome()
+    }
+
+    pub fn save_history(&self, history: &History) -> io::Result<()> {
+        self.profile.save_history(history)
+    }
+
+    pub fn begin_history_write(&self) -> ProfileWriteTicket {
+        self.profile.begin_history_write()
+    }
+
+    pub fn save_history_if_current(
+        &self,
+        ticket: ProfileWriteTicket,
+        history: &History,
+    ) -> io::Result<bool> {
+        self.profile.save_history_if_current(ticket, history)
+    }
+
+    pub fn load_session(&self) -> Session {
+        self.profile.load_session()
+    }
+
+    pub fn save_session(&self, session: &Session) -> io::Result<()> {
+        self.profile.save_session(session)
+    }
+
+    pub fn begin_session_write(&self) -> ProfileWriteTicket {
+        self.profile.begin_session_write()
+    }
+
+    pub fn save_session_if_current(
+        &self,
+        ticket: ProfileWriteTicket,
+        session: &Session,
+    ) -> io::Result<bool> {
+        self.profile.save_session_if_current(ticket, session)
+    }
+
+    pub fn load_space_data(&self) -> SpaceData {
+        self.profile.load_space_data()
+    }
+
+    pub fn save_space_data(&self, data: &SpaceData) -> io::Result<()> {
+        self.profile.save_space_data(data)
+    }
+
+    pub fn begin_space_data_write(&self) -> ProfileWriteTicket {
+        self.profile.begin_space_data_write()
+    }
+
+    pub fn save_space_data_if_current(
+        &self,
+        ticket: ProfileWriteTicket,
+        data: &SpaceData,
+    ) -> io::Result<bool> {
+        self.profile.save_space_data_if_current(ticket, data)
+    }
+
+    pub fn load_favicon(&self, url: &str) -> Option<FaviconPixels> {
+        self.profile.load_favicon(url)
+    }
+
+    pub fn save_favicon(&self, url: &str, favicon: &FaviconPixels) -> io::Result<()> {
+        self.profile.save_favicon(url, favicon)
+    }
+
+    pub fn prune_favicons(&self, history: &History) -> io::Result<()> {
+        self.profile.prune_favicons(history)
+    }
+
+    pub fn clear(&self, request: &ClearBrowsingData, history: &mut History) -> io::Result<()> {
+        self.profile.clear(request, history)
+    }
+
+    pub fn data_usage(&self) -> DataUsage {
+        self.profile.data_usage()
+    }
+}
+
+/// Identifies a replaceable profile snapshot when it is scheduled for saving.
+/// A newer ticket makes an older queued snapshot safe to skip. A caller can
+/// retry the same ticket after an I/O error because saves atomically replace a
+/// complete snapshot instead of appending records.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProfileWriteTicket {
+    kind: SnapshotKind,
+    generation: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SnapshotKind {
+    Settings,
+    History,
+    Session,
+    SpaceData,
+}
+
+#[derive(Debug, Default)]
+struct ProfileWrites {
+    settings_generation: AtomicU64,
+    history_generation: AtomicU64,
+    session_generation: AtomicU64,
+    space_data_generation: AtomicU64,
+    history_source_checked: AtomicBool,
+    session_source_checked: AtomicBool,
+    space_data_source_checked: AtomicBool,
+    history_write_blocked: AtomicBool,
+    session_write_blocked: AtomicBool,
+    space_data_write_blocked: AtomicBool,
+    serial: Mutex<()>,
+}
+
+impl ProfileWrites {
+    fn reserve(&self, kind: SnapshotKind) -> ProfileWriteTicket {
+        let _serial = self
+            .serial
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        self.reserve_locked(kind)
+    }
+
+    /// Reserves a generation while the profile's serialization lock is held.
+    fn reserve_locked(&self, kind: SnapshotKind) -> ProfileWriteTicket {
+        let generation = self
+            .generation(kind)
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                current.checked_add(1)
+            })
+            .expect("profile snapshot generation exhausted")
+            + 1;
+        ProfileWriteTicket { kind, generation }
+    }
+
+    fn generation(&self, kind: SnapshotKind) -> &AtomicU64 {
+        match kind {
+            SnapshotKind::Settings => &self.settings_generation,
+            SnapshotKind::History => &self.history_generation,
+            SnapshotKind::Session => &self.session_generation,
+            SnapshotKind::SpaceData => &self.space_data_generation,
+        }
+    }
+
+    fn write_blocked(&self, kind: SnapshotKind) -> Option<&AtomicBool> {
+        match kind {
+            SnapshotKind::History => Some(&self.history_write_blocked),
+            SnapshotKind::Session => Some(&self.session_write_blocked),
+            SnapshotKind::SpaceData => Some(&self.space_data_write_blocked),
+            SnapshotKind::Settings => None,
+        }
+    }
+
+    fn source_checked(&self, kind: SnapshotKind) -> Option<&AtomicBool> {
+        match kind {
+            SnapshotKind::History => Some(&self.history_source_checked),
+            SnapshotKind::Session => Some(&self.session_source_checked),
+            SnapshotKind::SpaceData => Some(&self.space_data_source_checked),
+            SnapshotKind::Settings => None,
+        }
+    }
+}
+
+impl Profile {
+    /// Opens the profile at `root`, applying migrations before returning it.
+    pub fn open(root: impl Into<PathBuf>) -> io::Result<Self> {
+        Self::open_with_settings_path(root, None)
+    }
+
+    fn open_with_settings_path(
+        root: impl Into<PathBuf>,
+        settings_path: Option<PathBuf>,
+    ) -> io::Result<Self> {
+        let mut profile = Self::create(root)?;
+        if let Some(settings_path) = settings_path {
+            profile.settings_path = settings_path;
+        }
+        if let Some(parent) = profile.settings_path.parent() {
+            atomic::ensure_private_dir(parent)?;
+        }
+        super::migrations::run(&profile)?;
+        profile.ensure_settings()?;
+        profile.migrate_legacy_browsing_data()?;
+        profile.migrate_legacy_space_content()?;
+        profile.migrate_legacy_session()?;
+        Ok(profile)
+    }
+
+    fn migrate_legacy_browsing_data(&self) -> io::Result<()> {
+        let marker = self.root.join(SPACES_DIR).join(SPACE_DATA_VERSION_FILE);
+        if marker.exists() {
+            return Ok(());
+        }
+
+        let active_space = self.load_settings().spaces.active().id;
+        let destination = self.root.join(SPACES_DIR).join(active_space.to_string());
+        atomic::ensure_private_dir(&destination)?;
+
+        move_legacy_path(
+            &self.root.join(FAVICONS_DIR),
+            &destination.join(FAVICONS_DIR),
+        )?;
+        move_legacy_path(
+            &self.root.join(HISTORY_FILE),
+            &destination.join(HISTORY_FILE),
+        )?;
+        let legacy_engine = self.root.join(ENGINE_DIR);
+        let space_engine = destination.join(ENGINE_DIR);
+        for directory in ["data", "cache", "runtime"] {
+            move_legacy_path(
+                &legacy_engine.join(directory),
+                &space_engine.join(directory),
+            )?;
+        }
+        move_legacy_path(
+            &legacy_engine.join("config/Permissions.json"),
+            &space_engine.join("config/Permissions.json"),
+        )?;
+        move_legacy_path(
+            &legacy_engine.join("config/Bookmarks.json"),
+            &space_engine.join("config/Bookmarks.json"),
+        )?;
+
+        atomic::write(&marker, SPACE_DATA_VERSION)?;
+        atomic::ensure_private_dir(&self.root.join(FAVICONS_DIR))?;
+        atomic::ensure_private_dir(&self.root.join(ENGINE_DIR))
+    }
+
+    /// Moves space-owned content out of the shared settings document.
+    fn migrate_legacy_space_content(&self) -> io::Result<()> {
+        let mut settings = self.load_settings();
+        let migrated_favourites = settings.migrate_legacy_favourites();
+        let migrated_shortcuts = settings.migrate_legacy_new_tab_shortcuts();
+        let mut changed = migrated_favourites || migrated_shortcuts;
+        let space_ids: Vec<_> = settings.spaces.all().iter().map(|space| space.id).collect();
+
+        for space_id in space_ids {
+            let Some(space) = settings.spaces.get_mut(space_id) else {
+                continue;
+            };
+            let data = space.data();
+            let space_profile = self.space(space_id)?;
+            let data_path = space_profile.root().join(SPACE_DATA_FILE);
+            if !data_path.exists() && data != SpaceData::default() {
+                space_profile.save_space_data(&data)?;
+                changed = true;
+            }
+            if data != SpaceData::default() {
+                space.clear_data();
+                changed = true;
+            }
+        }
+
+        if changed {
+            self.save_settings(&settings)?;
+        }
+        Ok(())
+    }
+
+    /// Moves the old profile-wide session snapshot into per-space files.
+    fn migrate_legacy_session(&self) -> io::Result<()> {
+        let source = self.root.join(SESSION_FILE);
+        if !source.exists() {
+            return Ok(());
+        }
+
+        let session = self.load_session();
+        let settings = self.load_settings();
+        let active_space = settings.spaces.active().id;
+        let known_spaces: HashSet<_> = settings.spaces.all().iter().map(|space| space.id).collect();
+        let mut by_space: std::collections::HashMap<SpaceId, Session> =
+            std::collections::HashMap::new();
+
+        for window in session.windows {
+            let fallback_space = window
+                .space
+                .filter(|space| known_spaces.contains(space))
+                .unwrap_or(active_space);
+            let mut tabs_by_space: std::collections::HashMap<SpaceId, Vec<(usize, SessionTab)>> =
+                std::collections::HashMap::new();
+            for (index, mut tab) in window.tabs.into_iter().enumerate() {
+                if !known_spaces.contains(&tab.space) {
+                    tab.space = fallback_space;
+                }
+                tabs_by_space
+                    .entry(tab.space)
+                    .or_default()
+                    .push((index, tab));
+            }
+
+            for (space, indexed_tabs) in tabs_by_space {
+                let mut remapped_indices = std::collections::HashMap::new();
+                let tabs = indexed_tabs
+                    .into_iter()
+                    .enumerate()
+                    .map(|(new_index, (old_index, tab))| {
+                        remapped_indices.insert(old_index, new_index);
+                        tab
+                    })
+                    .collect::<Vec<_>>();
+                let active = window
+                    .active
+                    .and_then(|index| remapped_indices.get(&index).copied());
+                let split = window.split.and_then(|split| {
+                    Some(SessionSplit::new(
+                        *remapped_indices.get(&split.leading)?,
+                        *remapped_indices.get(&split.trailing)?,
+                        split.share(),
+                    ))
+                });
+                by_space
+                    .entry(space)
+                    .or_default()
+                    .windows
+                    .push(WindowSession {
+                        tabs,
+                        active,
+                        space: Some(space),
+                        split,
+                    });
+            }
+        }
+
+        for (space, session) in by_space {
+            let destination = self.space(space)?;
+            if destination.root().join(SESSION_FILE).exists() {
+                continue;
+            }
+            destination.save_session(&session)?;
+        }
+        remove_if_present(&source)
+    }
+
+    fn create(root: impl Into<PathBuf>) -> io::Result<Self> {
+        let root = root.into();
+        let profile = Self {
+            settings_path: root.join(SETTINGS_FILE),
+            root,
+            writes: Arc::new(ProfileWrites::default()),
+        };
+        atomic::ensure_private_dir(&profile.root)?;
+        atomic::ensure_private_dir(&profile.favicons_dir())?;
+        atomic::ensure_private_dir(&profile.engine_dir())?;
+        Ok(profile)
+    }
+
+    /// Opens the default profile: `PHOTON_PROFILE_DIR` when set, otherwise
+    /// the platform's application data folder.
+    pub fn open_default() -> io::Result<Self> {
+        let isolated_profile =
+            std::env::var_os("PHOTON_PROFILE_DIR").is_some_and(|root| !root.is_empty());
+        let root = Self::default_root()?;
+        // Managed automation sessions must not read or write the user's
+        // global Photon settings file.
+        let settings_path = (!isolated_profile)
+            .then(Self::default_settings_path)
+            .transpose()?;
+        Self::open_with_settings_path(root, settings_path)
+    }
+
+    fn ensure_settings(&self) -> io::Result<()> {
+        if self.settings_path.exists() {
+            return Ok(());
+        }
+        self.save_settings(&BrowserSettings::default())
+    }
+
+    fn default_settings_path() -> io::Result<PathBuf> {
+        if cfg!(target_os = "macos") {
+            let home = std::env::var_os("HOME")
+                .filter(|home| !home.is_empty())
+                .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "HOME is not set"))?;
+            let application_support = PathBuf::from(home).join("Library/Application Support");
+            migrate_legacy_settings(&application_support)?;
+            Ok(application_support
+                .join(elaris_brand::DATA_FOLDER)
+                .join(SETTINGS_FILE))
+        } else {
+            let config = std::env::var_os("XDG_CONFIG_HOME")
+                .filter(|path| !path.is_empty())
+                .map(PathBuf::from)
+                .or_else(|| {
+                    std::env::var_os("HOME")
+                        .filter(|home| !home.is_empty())
+                        .map(|home| PathBuf::from(home).join(".config"))
+                })
+                .ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::NotFound,
+                        "XDG_CONFIG_HOME and HOME are not set",
+                    )
+                })?;
+            migrate_legacy_settings(&config)?;
+            Ok(config.join(elaris_brand::DATA_FOLDER).join(SETTINGS_FILE))
+        }
+    }
+
+    /// The user-editable browser settings file.
+    pub fn settings_path(&self) -> &Path {
+        &self.settings_path
+    }
+
+    /// Where the default profile lives.
+    pub fn default_root() -> io::Result<PathBuf> {
+        if let Some(root) = std::env::var_os("PHOTON_PROFILE_DIR").filter(|root| !root.is_empty()) {
+            return Ok(PathBuf::from(root));
+        }
+        let home = std::env::var_os("HOME")
+            .filter(|home| !home.is_empty())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "HOME is not set"))?;
+        let data = if cfg!(target_os = "macos") {
+            PathBuf::from(home).join("Library/Application Support")
+        } else {
+            std::env::var_os("XDG_DATA_HOME")
+                .filter(|data| !data.is_empty())
+                .map_or_else(|| PathBuf::from(home).join(".local/share"), PathBuf::from)
+        };
+        migrate_legacy_profile(&data)?;
+        Ok(data.join(elaris_brand::DATA_FOLDER).join("Default"))
+    }
+
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
+    /// The folder the Engine keeps cookies, site storage and its cache in.
+    pub fn engine_dir(&self) -> PathBuf {
+        self.root.join(ENGINE_DIR)
+    }
+
+    /// Opens the browsing-data partition for `space`, creating it when needed.
+    pub fn space(&self, space: SpaceId) -> io::Result<SpaceProfile> {
+        let root = self.root.join(SPACES_DIR).join(space.to_string());
+        Ok(SpaceProfile {
+            profile: Self::create(root)?,
+        })
+    }
+
+    fn favicons_dir(&self) -> PathBuf {
+        self.root.join(FAVICONS_DIR)
+    }
+
+    /// The saved history, or an empty one when there is none or it cannot be
+    /// read. Use [`Self::load_history_outcome`] to distinguish these cases.
+    pub fn load_history(&self) -> History {
+        self.load_history_outcome().into_value()
+    }
+
+    /// Loads history while reporting missing, partially recovered, unsupported
+    /// and corrupt files separately.
+    pub fn load_history_outcome(&self) -> ProfileLoadOutcome<History> {
+        self.load_profile_data(
+            SnapshotKind::History,
+            HISTORY_FILE,
+            history_file::MAX_HISTORY_FILE_BYTES,
+            history_file::decode,
+        )
+    }
+
+    pub fn save_history(&self, history: &History) -> io::Result<()> {
+        let ticket = self.begin_history_write();
+        self.save_history_if_current(ticket, history).map(|_| ())
+    }
+
+    /// Reserves an ordered position for a history snapshot before dispatching
+    /// its disk write to background work.
+    pub fn begin_history_write(&self) -> ProfileWriteTicket {
+        self.writes.reserve(SnapshotKind::History)
+    }
+
+    /// Saves `history` only when no newer history snapshot has been scheduled.
+    /// Returns `false` when a newer snapshot superseded this one.
+    pub fn save_history_if_current(
+        &self,
+        ticket: ProfileWriteTicket,
+        history: &History,
+    ) -> io::Result<bool> {
+        self.write_snapshot(ticket, SnapshotKind::History, || {
+            atomic::write(
+                &self.root.join(HISTORY_FILE),
+                &history_file::encode(history)?,
+            )
+        })
+    }
+
+    /// The saved preferences, or defaults when there are none or they cannot
+    /// be read. Unknown fields are ignored so older builds can open newer
+    /// profiles safely.
+    pub fn load_settings(&self) -> BrowserSettings {
+        self.load_settings_with_revision().0
+    }
+
+    /// Loads settings and a fingerprint of the exact file contents read.
+    /// Damaged settings keep the startup behavior of falling back to defaults
+    /// and preserving the source beside the profile.
+    pub fn load_settings_with_revision(&self) -> (BrowserSettings, Option<u64>) {
+        let bytes = match read_limited(&self.settings_path, MAX_SETTINGS_FILE_BYTES) {
+            Ok(Some(bytes)) => bytes,
+            Ok(None) | Err(_) => return (BrowserSettings::default(), None),
+        };
+        let revision = Some(settings_revision(&bytes));
+        let (settings, partially_unreadable) = match decode_settings(&bytes) {
+            Ok(settings) => settings,
+            Err(_) => {
+                self.keep_unreadable_settings(&bytes);
+                return (BrowserSettings::default(), revision);
+            }
+        };
+        if partially_unreadable {
+            self.keep_unreadable_settings(&bytes);
+        }
+        (settings, revision)
+    }
+
+    /// Fingerprints the current settings file without decoding it.
+    pub fn settings_revision(&self) -> io::Result<u64> {
+        let bytes =
+            read_limited(&self.settings_path, MAX_SETTINGS_FILE_BYTES)?.ok_or_else(|| {
+                io::Error::new(io::ErrorKind::NotFound, "settings file does not exist")
+            })?;
+        Ok(settings_revision(&bytes))
+    }
+
+    /// Loads a manually edited settings file. This reserves a newer write
+    /// ticket first so an older delayed save cannot overwrite the edit.
+    pub fn reload_settings(&self) -> io::Result<(BrowserSettings, u64)> {
+        let _serial = self
+            .writes
+            .serial
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        self.writes.reserve_locked(SnapshotKind::Settings);
+        let bytes =
+            read_limited(&self.settings_path, MAX_SETTINGS_FILE_BYTES)?.ok_or_else(|| {
+                io::Error::new(io::ErrorKind::NotFound, "settings file does not exist")
+            })?;
+        let (settings, partially_unreadable) = decode_settings(&bytes)?;
+        if partially_unreadable {
+            eprintln!("Photon config.toml contains settings this build could not read");
+        }
+        Ok((settings, settings_revision(&bytes)))
+    }
+
+    /// Keeps a settings file that could not be read in full beside the
+    /// profile, as the next save replaces it with what could be read.
+    pub(super) fn keep_unreadable_settings(&self, bytes: &[u8]) {
+        let seconds = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_secs());
+        let backup = self.root.join(format!("config.unreadable-{seconds}.bak"));
+        let _ = atomic::write(&backup, bytes);
+    }
+
+    pub fn save_settings(&self, settings: &BrowserSettings) -> io::Result<()> {
+        let ticket = self.begin_settings_write();
+        self.save_settings_if_current(ticket, settings).map(|_| ())
+    }
+
+    /// Reserves an ordered position for a settings snapshot before dispatching
+    /// its disk write to background work.
+    pub fn begin_settings_write(&self) -> ProfileWriteTicket {
+        self.writes.reserve(SnapshotKind::Settings)
+    }
+
+    /// Saves `settings` only when no newer settings snapshot has been scheduled.
+    /// Returns `false` when a newer snapshot superseded this one.
+    pub fn save_settings_if_current(
+        &self,
+        ticket: ProfileWriteTicket,
+        settings: &BrowserSettings,
+    ) -> io::Result<bool> {
+        self.write_snapshot(ticket, SnapshotKind::Settings, || {
+            let contents = toml::to_string_pretty(settings)
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+            let document = toml::from_str::<toml::Value>(&contents)
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+            if contents.len() > MAX_SETTINGS_FILE_BYTES
+                || !valid_settings_state(settings)
+                || !valid_settings_document(&document)
+            {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "settings exceed a profile data limit",
+                ));
+            }
+            atomic::write(&self.settings_path, contents.as_bytes())
+        })
+    }
+
+    /// The windows and tabs open when the browser last saved them, or none
+    /// when there is no session or it cannot be read. Use
+    /// [`Self::load_session_outcome`] to distinguish these cases.
+    pub fn load_session(&self) -> Session {
+        self.load_session_outcome().into_value()
+    }
+
+    /// Loads a session while reporting missing, partially recovered,
+    /// unsupported and corrupt files separately.
+    pub fn load_session_outcome(&self) -> ProfileLoadOutcome<Session> {
+        self.load_profile_data(
+            SnapshotKind::Session,
+            SESSION_FILE,
+            session_file::MAX_SESSION_FILE_BYTES,
+            session_file::decode,
+        )
+    }
+
+    pub fn save_session(&self, session: &Session) -> io::Result<()> {
+        let ticket = self.begin_session_write();
+        self.save_session_if_current(ticket, session).map(|_| ())
+    }
+
+    /// Reserves an ordered position for a session snapshot before dispatching
+    /// its disk write to background work.
+    pub fn begin_session_write(&self) -> ProfileWriteTicket {
+        self.writes.reserve(SnapshotKind::Session)
+    }
+
+    /// Saves `session` only when no newer session snapshot has been scheduled.
+    /// Returns `false` when a newer snapshot superseded this one.
+    pub fn save_session_if_current(
+        &self,
+        ticket: ProfileWriteTicket,
+        session: &Session,
+    ) -> io::Result<bool> {
+        self.write_snapshot(ticket, SnapshotKind::Session, || {
+            let bytes = session_file::encode(session)?;
+            atomic::write(&self.root.join(SESSION_FILE), &bytes)
+        })
+    }
+
+    pub fn load_space_data(&self) -> SpaceData {
+        self.load_profile_data(
+            SnapshotKind::SpaceData,
+            SPACE_DATA_FILE,
+            MAX_SPACE_DATA_FILE_BYTES,
+            decode_space_data,
+        )
+        .into_value()
+    }
+
+    pub fn save_space_data(&self, data: &SpaceData) -> io::Result<()> {
+        let ticket = self.begin_space_data_write();
+        self.save_space_data_if_current(ticket, data).map(|_| ())
+    }
+
+    pub fn begin_space_data_write(&self) -> ProfileWriteTicket {
+        self.writes.reserve(SnapshotKind::SpaceData)
+    }
+
+    pub fn save_space_data_if_current(
+        &self,
+        ticket: ProfileWriteTicket,
+        data: &SpaceData,
+    ) -> io::Result<bool> {
+        self.write_snapshot(ticket, SnapshotKind::SpaceData, || {
+            let bytes = encode_space_data(data)?;
+            atomic::write(&self.root.join(SPACE_DATA_FILE), &bytes)
+        })
+    }
+
+    fn write_snapshot(
+        &self,
+        ticket: ProfileWriteTicket,
+        kind: SnapshotKind,
+        write: impl FnOnce() -> io::Result<()>,
+    ) -> io::Result<bool> {
+        if ticket.kind != kind {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "profile write ticket has the wrong kind",
+            ));
+        }
+        let _serial = self
+            .writes
+            .serial
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if self.writes.generation(kind).load(Ordering::Acquire) != ticket.generation {
+            return Ok(false);
+        }
+        if self
+            .writes
+            .source_checked(kind)
+            .is_some_and(|checked| !checked.load(Ordering::Acquire))
+        {
+            self.preserve_existing_data_before_write(kind);
+        }
+        if self
+            .writes
+            .write_blocked(kind)
+            .is_some_and(|blocked| blocked.load(Ordering::Acquire))
+        {
+            let name = match kind {
+                SnapshotKind::History => "history",
+                SnapshotKind::Session => "session",
+                SnapshotKind::SpaceData => "space data",
+                SnapshotKind::Settings => unreachable!(),
+            };
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!(
+                    "damaged profile {name} data could not be preserved; refusing to replace it"
+                ),
+            ));
+        }
+        write()?;
+        Ok(true)
+    }
+
+    fn load_profile_data<T>(
+        &self,
+        kind: SnapshotKind,
+        filename: &str,
+        limit: usize,
+        decode: impl FnOnce(&[u8]) -> ProfileLoadOutcome<T>,
+    ) -> ProfileLoadOutcome<T> {
+        let _serial = self
+            .writes
+            .serial
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        self.load_profile_data_unlocked(kind, filename, limit, decode)
+    }
+
+    fn load_profile_data_unlocked<T>(
+        &self,
+        kind: SnapshotKind,
+        filename: &str,
+        limit: usize,
+        decode: impl FnOnce(&[u8]) -> ProfileLoadOutcome<T>,
+    ) -> ProfileLoadOutcome<T> {
+        let path = self.root.join(filename);
+        let read = read_limited(&path, limit);
+        let (outcome, read_error) = match read {
+            Ok(Some(bytes)) => (decode(&bytes), None),
+            Ok(None) => {
+                self.mark_source_checked(kind);
+                return ProfileLoadOutcome::Missing;
+            }
+            Err(error) => (ProfileLoadOutcome::Corrupt, Some(error)),
+        };
+        let Some(status) = damaged_outcome_name(&outcome) else {
+            if let Some(blocked) = self.writes.write_blocked(kind) {
+                blocked.store(false, Ordering::Release);
+            }
+            self.mark_source_checked(kind);
+            return outcome;
+        };
+
+        let data_name = match kind {
+            SnapshotKind::History => "history",
+            SnapshotKind::Session => "session",
+            SnapshotKind::SpaceData => "space data",
+            SnapshotKind::Settings => unreachable!(),
+        };
+        if let Some(blocked) = self.writes.write_blocked(kind) {
+            blocked.store(true, Ordering::Release);
+        }
+        match archive_damaged_file(&path) {
+            Ok(backup) => {
+                if let Some(blocked) = self.writes.write_blocked(kind) {
+                    blocked.store(false, Ordering::Release);
+                }
+                let backup_name = backup.file_name().unwrap_or_default().to_string_lossy();
+                let read_detail = read_error
+                    .as_ref()
+                    .map(|error| format!(" (read failed: {error})"))
+                    .unwrap_or_default();
+                eprintln!(
+                    "Photon profile {data_name} data is {status}{read_detail}; preserved it as {backup_name}"
+                );
+            }
+            Err(error) => {
+                let backup_error = error.to_string();
+                let detail = read_error
+                    .as_ref()
+                    .map(|read_error| {
+                        format!("reading failed: {read_error}; backup failed: {backup_error}")
+                    })
+                    .unwrap_or_else(|| format!("backup failed: {backup_error}"));
+                eprintln!(
+                    "Photon profile {data_name} data is {status}; could not preserve it before replacement ({detail})"
+                );
+            }
+        }
+        self.mark_source_checked(kind);
+        outcome
+    }
+
+    fn mark_source_checked(&self, kind: SnapshotKind) {
+        if let Some(checked) = self.writes.source_checked(kind) {
+            checked.store(true, Ordering::Release);
+        }
+    }
+
+    fn preserve_existing_data_before_write(&self, kind: SnapshotKind) {
+        match kind {
+            SnapshotKind::History => {
+                let _ = self.load_profile_data_unlocked(
+                    kind,
+                    HISTORY_FILE,
+                    history_file::MAX_HISTORY_FILE_BYTES,
+                    history_file::decode,
+                );
+            }
+            SnapshotKind::Session => {
+                let _ = self.load_profile_data_unlocked(
+                    kind,
+                    SESSION_FILE,
+                    session_file::MAX_SESSION_FILE_BYTES,
+                    session_file::decode,
+                );
+            }
+            SnapshotKind::SpaceData => {
+                let _ = self.load_profile_data_unlocked(
+                    kind,
+                    SPACE_DATA_FILE,
+                    MAX_SPACE_DATA_FILE_BYTES,
+                    decode_space_data,
+                );
+            }
+            SnapshotKind::Settings => {}
+        }
+    }
+
+    pub fn load_favicon(&self, url: &str) -> Option<FaviconPixels> {
+        let bytes = fs::read(favicons::path(&self.favicons_dir(), url)).ok()?;
+        FaviconPixels::decode(&bytes)
+    }
+
+    /// Saves `url`'s icon. Icons too large to be page icons are skipped.
+    pub fn save_favicon(&self, url: &str, favicon: &FaviconPixels) -> io::Result<()> {
+        if !favicon.is_storable() {
+            return Ok(());
+        }
+        let _serial = self
+            .writes
+            .serial
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        atomic::write(
+            &favicons::path(&self.favicons_dir(), url),
+            &favicon.encode(),
+        )
+    }
+
+    /// Removes the icons of pages no longer in `history`.
+    pub fn prune_favicons(&self, history: &History) -> io::Result<()> {
+        let _serial = self
+            .writes
+            .serial
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        self.prune_favicons_unlocked(history)
+    }
+
+    fn prune_favicons_unlocked(&self, history: &History) -> io::Result<()> {
+        let directory = self.favicons_dir();
+        let kept: HashSet<PathBuf> = history
+            .pages()
+            .iter()
+            .map(|entry| favicons::path(&directory, &entry.url))
+            .collect();
+        for entry in fs::read_dir(&directory)? {
+            let path = entry?.path();
+            if !kept.contains(&path) {
+                remove_if_present(&path)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Deletes Photon's own data that `request` asks for from `history` and
+    /// disk. Website data is the Engine's to delete.
+    pub fn clear(&self, request: &ClearBrowsingData, history: &mut History) -> io::Result<()> {
+        history.clear(request);
+        self.save_history(history)?;
+        self.prune_favicons(history)
+    }
+
+    /// How much disk the profile's data takes.
+    pub fn data_usage(&self) -> DataUsage {
+        DataUsage {
+            history: file_size(&self.root.join(HISTORY_FILE)),
+            favicons: folder_size(&self.favicons_dir()),
+            cache: folder_size(&self.engine_dir().join(ENGINE_CACHE_DIR)),
+            site_data: folder_size(&self.engine_dir())
+                .saturating_sub(folder_size(&self.engine_dir().join(ENGINE_CACHE_DIR))),
+        }
+    }
+}
+
+fn migrate_legacy_profile(data_directory: &Path) -> io::Result<()> {
+    let legacy_profile = data_directory
+        .join(elaris_brand::LEGACY_DATA_FOLDER)
+        .join("Default");
+    let profile = data_directory
+        .join(elaris_brand::DATA_FOLDER)
+        .join("Default");
+    if legacy_profile.is_dir() && !profile.exists() {
+        if let Some(parent) = profile.parent() {
+            atomic::ensure_private_dir(parent)?;
+        }
+        fs::rename(&legacy_profile, &profile)?;
+        remove_if_empty(
+            legacy_profile
+                .parent()
+                .expect("legacy profile has a parent"),
+        )?;
+    }
+    Ok(())
+}
+
+fn migrate_legacy_settings(config_directory: &Path) -> io::Result<()> {
+    let legacy_directory = config_directory.join(elaris_brand::LEGACY_DATA_FOLDER);
+    let legacy_settings = legacy_directory.join(SETTINGS_FILE);
+    let settings_directory = config_directory.join(elaris_brand::DATA_FOLDER);
+    let settings = settings_directory.join(SETTINGS_FILE);
+    if legacy_settings.is_file() && !settings.exists() {
+        atomic::ensure_private_dir(&settings_directory)?;
+        fs::rename(&legacy_settings, &settings)?;
+        remove_if_empty(&legacy_directory)?;
+    }
+    Ok(())
+}
+
+fn remove_if_empty(directory: &Path) -> io::Result<()> {
+    match fs::remove_dir(directory) {
+        Ok(()) => Ok(()),
+        Err(error)
+            if matches!(
+                error.kind(),
+                io::ErrorKind::NotFound | io::ErrorKind::DirectoryNotEmpty
+            ) =>
+        {
+            Ok(())
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn read_limited(path: &Path, limit: usize) -> io::Result<Option<Vec<u8>>> {
+    let file = match fs::File::open(path) {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    let mut bytes = Vec::with_capacity(limit.min(64 * 1024));
+    file.take(limit as u64 + 1).read_to_end(&mut bytes)?;
+    if bytes.len() > limit {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "profile file exceeds its size limit",
+        ));
+    }
+    Ok(Some(bytes))
+}
+
+fn decode_settings(bytes: &[u8]) -> io::Result<(BrowserSettings, bool)> {
+    let source = std::str::from_utf8(bytes)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    let document = toml::from_str::<toml::Value>(source)
+        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    if !valid_settings_document(&document) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "settings exceed a profile data limit",
+        ));
+    }
+
+    let (mut settings, partially_unreadable) = decode_toml_settings(document);
+    settings.sidebar.width = settings.sidebar.width();
+    settings.new_tab.shortcut_count = settings.new_tab.shortcut_limit();
+    if !valid_settings_state(&settings) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "settings contain an invalid value",
+        ));
+    }
+    Ok((settings, partially_unreadable))
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct VersionedSpaceData {
+    version: u8,
+    data: SpaceData,
+}
+
+fn decode_space_data(bytes: &[u8]) -> ProfileLoadOutcome<SpaceData> {
+    if bytes.len() > MAX_SPACE_DATA_FILE_BYTES {
+        return ProfileLoadOutcome::Corrupt;
+    }
+    let Ok(file) = serde_json::from_slice::<VersionedSpaceData>(bytes) else {
+        return ProfileLoadOutcome::Corrupt;
+    };
+    if file.version != 1 {
+        return ProfileLoadOutcome::Unsupported;
+    }
+    if !valid_space_data(&file.data) {
+        return ProfileLoadOutcome::Corrupt;
+    }
+    ProfileLoadOutcome::Loaded(file.data)
+}
+
+fn encode_space_data(data: &SpaceData) -> io::Result<Vec<u8>> {
+    if !valid_space_data(data) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "space data exceeds a profile data limit",
+        ));
+    }
+    let bytes = serde_json::to_vec(&VersionedSpaceData {
+        version: 1,
+        data: data.clone(),
+    })
+    .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    if bytes.len() > MAX_SPACE_DATA_FILE_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "space data exceeds its profile file limit",
+        ));
+    }
+    Ok(bytes)
+}
+
+fn valid_space_data(data: &SpaceData) -> bool {
+    data.pinned_tabs.len() <= MAX_SPACE_PINS
+        && data.favourites.len() <= MAX_FAVOURITES
+        && data.new_tab.pinned.len() <= MAX_NEW_TAB_PINS
+        && data.new_tab.hidden.len() <= MAX_NEW_TAB_HIDDEN
+        && data
+            .pinned_tabs
+            .iter()
+            .chain(&data.favourites)
+            .chain(&data.new_tab.pinned)
+            .all(|shortcut| shortcut.title.len() <= 1_024 && shortcut.url.len() <= 8 * 1024)
+        && data
+            .new_tab
+            .hidden
+            .iter()
+            .all(|site| site.len() <= 8 * 1024)
+}
+
+fn settings_revision(bytes: &[u8]) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    bytes.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn valid_settings_document(document: &toml::Value) -> bool {
+    if !matches!(document, toml::Value::Table(_)) || !valid_toml_value(document, 0) {
+        return false;
+    }
+
+    let spaces = document.get("spaces");
+    if !array_within(spaces.and_then(|spaces| spaces.get("spaces")), MAX_SPACES) {
+        return false;
+    }
+    if let Some(toml::Value::Array(spaces)) = spaces.and_then(|spaces| spaces.get("spaces")) {
+        for space in spaces {
+            if !array_within(space.get("pinned_tabs"), MAX_SPACE_PINS)
+                || !array_within(space.get("favourites"), MAX_FAVOURITES)
+                || !array_within(
+                    space
+                        .get("new_tab")
+                        .and_then(|new_tab| new_tab.get("pinned")),
+                    MAX_NEW_TAB_PINS,
+                )
+                || !array_within(
+                    space
+                        .get("new_tab")
+                        .and_then(|new_tab| new_tab.get("hidden")),
+                    MAX_NEW_TAB_HIDDEN,
+                )
+                || !layout_components_within(space.get("layout_override"))
+            {
+                return false;
+            }
+        }
+    }
+
+    let new_tab = document.get("new_tab");
+    if !array_within(
+        new_tab.and_then(|new_tab| new_tab.get("pinned")),
+        MAX_NEW_TAB_PINS,
+    ) || !array_within(
+        new_tab.and_then(|new_tab| new_tab.get("hidden")),
+        MAX_NEW_TAB_HIDDEN,
+    ) || !array_within(
+        document
+            .get("sidebar")
+            .and_then(|sidebar| sidebar.get("favourites")),
+        MAX_LEGACY_FAVOURITES,
+    ) {
+        return false;
+    }
+
+    if let Some(workspace) = document.get("workspace") {
+        if !array_within(workspace.get("presets"), MAX_WORKSPACE_PRESETS) {
+            return false;
+        }
+        if let Some(toml::Value::Array(presets)) = workspace.get("presets")
+            && presets
+                .iter()
+                .any(|preset| !layout_components_within(preset.get("layout")))
+        {
+            return false;
+        }
+    }
+    true
+}
+
+fn valid_toml_value(value: &toml::Value, depth: usize) -> bool {
+    if depth > MAX_SETTINGS_DEPTH {
+        return false;
+    }
+    match value {
+        toml::Value::String(string) => string.len() <= MAX_SETTINGS_STRING_BYTES,
+        toml::Value::Array(items) => {
+            items.len() <= MAX_SETTINGS_COLLECTION_ITEMS
+                && items.iter().all(|item| valid_toml_value(item, depth + 1))
+        }
+        toml::Value::Table(fields) => {
+            fields.len() <= MAX_SETTINGS_COLLECTION_ITEMS
+                && fields.iter().all(|(key, value)| {
+                    key.len() <= MAX_SETTINGS_KEY_BYTES && valid_toml_value(value, depth + 1)
+                })
+        }
+        _ => true,
+    }
+}
+
+fn array_within(value: Option<&toml::Value>, limit: usize) -> bool {
+    value.is_none_or(|value| match value {
+        toml::Value::Array(items) => items.len() <= limit,
+        _ => true,
+    })
+}
+
+fn layout_components_within(value: Option<&toml::Value>) -> bool {
+    array_within(
+        value.and_then(|layout| layout.get("components")),
+        MAX_LAYOUT_COMPONENTS,
+    )
+}
+
+fn valid_settings_state(settings: &BrowserSettings) -> bool {
+    if !settings.workspace.is_valid()
+        || settings.spaces.all().len() > MAX_SPACES
+        || settings.new_tab.pinned.len() > MAX_NEW_TAB_PINS
+        || settings.new_tab.hidden.len() > MAX_NEW_TAB_HIDDEN
+        || settings.sidebar.favourites.len() > MAX_LEGACY_FAVOURITES
+        || settings.default_search_engine.len() > 1_024
+    {
+        return false;
+    }
+    settings.spaces.all().iter().all(|space| {
+        space.name.len() <= 256
+            && space.pinned_tabs.len() <= MAX_SPACE_PINS
+            && space.favourites.len() <= MAX_FAVOURITES
+            && space.new_tab.pinned.len() <= MAX_NEW_TAB_PINS
+            && space.new_tab.hidden.len() <= MAX_NEW_TAB_HIDDEN
+            && space
+                .pinned_tabs
+                .iter()
+                .chain(&space.favourites)
+                .chain(&space.new_tab.pinned)
+                .all(|shortcut| shortcut.title.len() <= 1_024 && shortcut.url.len() <= 8 * 1024)
+            && space.new_tab.hidden.iter().all(|url| url.len() <= 8 * 1024)
+    }) && settings
+        .new_tab
+        .pinned
+        .iter()
+        .all(|shortcut| shortcut.title.len() <= 1_024 && shortcut.url.len() <= 8 * 1024)
+        && settings
+            .new_tab
+            .hidden
+            .iter()
+            .all(|url| url.len() <= 8 * 1024)
+        && settings
+            .sidebar
+            .favourites
+            .iter()
+            .all(|shortcut| shortcut.title.len() <= 1_024 && shortcut.url.len() <= 8 * 1024)
+}
+
+fn remove_if_present(path: &Path) -> io::Result<()> {
+    match fs::remove_file(path) {
+        Err(error) if error.kind() != io::ErrorKind::NotFound => Err(error),
+        _ => Ok(()),
+    }
+}
+
+fn move_legacy_path(source: &Path, destination: &Path) -> io::Result<()> {
+    if !source.exists() {
+        return Ok(());
+    }
+    if destination.exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            format!("both legacy and space profile data exist at {destination:?}"),
+        ));
+    }
+    if let Some(parent) = destination.parent() {
+        atomic::ensure_private_dir(parent)?;
+    }
+    fs::rename(source, destination)
+}
+
+fn damaged_outcome_name<T>(outcome: &ProfileLoadOutcome<T>) -> Option<&'static str> {
+    match outcome {
+        ProfileLoadOutcome::PartiallyRecovered(_) => Some("partially recovered"),
+        ProfileLoadOutcome::Unsupported => Some("unsupported"),
+        ProfileLoadOutcome::Corrupt => Some("corrupt or unreadable"),
+        ProfileLoadOutcome::Missing | ProfileLoadOutcome::Loaded(_) => None,
+    }
+}
+
+fn archive_damaged_file(path: &Path) -> io::Result<PathBuf> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let filename = path
+        .file_name()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "profile file has no name"))?
+        .to_string_lossy();
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_nanos());
+    for _ in 0..100 {
+        let sequence = NEXT_DAMAGED_BACKUP.fetch_add(1, Ordering::Relaxed);
+        let backup = parent.join(format!(
+            "{filename}.damaged-{timestamp}-{}-{sequence}.bak",
+            std::process::id()
+        ));
+        match fs::rename(path, &backup) {
+            Ok(()) => return Ok(backup),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error),
+        }
+    }
+    Err(io::Error::new(
+        io::ErrorKind::AlreadyExists,
+        "could not find a unique damaged profile backup name",
+    ))
+}
+
+fn file_size(path: &Path) -> u64 {
+    fs::metadata(path).map_or(0, |metadata| metadata.len())
+}
+
+fn folder_size(path: &Path) -> u64 {
+    let Ok(entries) = fs::read_dir(path) else {
+        return 0;
+    };
+    entries
+        .filter_map(Result::ok)
+        .map(|entry| match entry.file_type() {
+            Ok(kind) if kind.is_dir() => folder_size(&entry.path()),
+            Ok(_) => entry.metadata().map_or(0, |metadata| metadata.len()),
+            Err(_) => 0,
+        })
+        .sum()
+}
+
+fn decode_toml_settings(mut document: toml::Value) -> (BrowserSettings, bool) {
+    let saved_workspace = document
+        .as_table_mut()
+        .and_then(|settings| settings.remove("workspace"))
+        .filter(|workspace| {
+            workspace.as_table().is_some_and(|workspace| {
+                workspace.contains_key("default_preset_id") && workspace.contains_key("presets")
+            })
+        });
+    let parsed = document.clone().try_into::<BrowserSettings>();
+    let mut partially_unreadable = parsed.is_err();
+    let mut settings = parsed.unwrap_or_else(|_| readable_toml_settings(document));
+    partially_unreadable |= settings.spaces.repair_duplicate_ids();
+    settings.workspace = saved_workspace
+        .and_then(|workspace| workspace.try_into::<WorkspaceSettings>().ok())
+        .filter(WorkspaceSettings::is_valid)
+        .unwrap_or_else(|| WorkspaceSettings::for_tab_layout(settings.tab_layout));
+    settings.spaces.validate_layout_overrides();
+    (settings, partially_unreadable)
+}
+
+/// Keeps readable settings and defaults only invalid fields when a newer
+/// build writes a value this build does not understand.
+fn readable_toml_settings(document: toml::Value) -> BrowserSettings {
+    let toml::Value::Table(mut fields) = document else {
+        return BrowserSettings::default();
+    };
+    if let Some(spaces) = fields.get_mut("spaces") {
+        keep_readable_spaces(spaces);
+    }
+    let readable = fields
+        .into_iter()
+        .filter(|(key, value)| {
+            let single =
+                toml::Value::Table(toml::map::Map::from_iter([(key.clone(), value.clone())]));
+            single.try_into::<BrowserSettings>().is_ok()
+        })
+        .collect();
+    toml::Value::Table(readable)
+        .try_into::<BrowserSettings>()
+        .unwrap_or_default()
+}
+
+/// Narrows unreadable data inside the spaces to the smallest part, so one
+/// bad shortcut or space does not cost every space, pinned tab and favourite.
+fn keep_readable_spaces(spaces: &mut toml::Value) {
+    let Some(fields) = spaces.as_table_mut() else {
+        return;
+    };
+    for key in ["active", "next_id"] {
+        if fields
+            .get(key)
+            .is_some_and(|value| value.clone().try_into::<SpaceId>().is_err())
+        {
+            fields.remove(key);
+        }
+    }
+    let Some(toml::Value::Array(list)) = fields.get_mut("spaces") else {
+        return;
+    };
+    for space in list.iter_mut() {
+        let Some(space) = space.as_table_mut() else {
+            continue;
+        };
+        for key in ["pinned_tabs", "favourites"] {
+            if let Some(toml::Value::Array(shortcuts)) = space.get_mut(key) {
+                shortcuts.retain_mut(readable_shortcut);
+            }
+        }
+        if let Some(toml::Value::Table(new_tab)) = space.get_mut("new_tab")
+            && let Some(toml::Value::Array(shortcuts)) = new_tab.get_mut("pinned")
+        {
+            shortcuts.retain_mut(readable_shortcut);
+        }
+    }
+    list.retain(|space| space.clone().try_into::<Space>().is_ok());
+}
+
+/// Whether `shortcut` reads, titling one saved without a title by its address.
+fn readable_shortcut(shortcut: &mut toml::Value) -> bool {
+    if let Some(fields) = shortcut.as_table_mut()
+        && !fields.contains_key("title")
+        && let Some(url) = fields.get("url").cloned()
+    {
+        fields.insert("title".to_owned(), url);
+    }
+    shortcut.clone().try_into::<Shortcut>().is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A profile in a fresh temporary folder, removed when dropped.
+    struct TemporaryProfile(Profile);
+
+    impl TemporaryProfile {
+        fn new(name: &str) -> Self {
+            let root = Self::root(name);
+            Self(Profile::open(root).expect("profile opens"))
+        }
+
+        fn unmigrated(name: &str) -> Self {
+            let root = Self::root(name);
+            Self(Profile::create(root).expect("profile creates"))
+        }
+
+        fn root(name: &str) -> PathBuf {
+            let root = std::env::temp_dir()
+                .join(format!("elaris-storage-test-{name}-{}", std::process::id()));
+            let _ = fs::remove_dir_all(&root);
+            root
+        }
+    }
+
+    impl Drop for TemporaryProfile {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(self.0.root());
+        }
+    }
+
+    fn icon() -> FaviconPixels {
+        FaviconPixels {
+            width: 2,
+            height: 1,
+            pixels: vec![1, 2, 3, 4, 5, 6, 7, 8],
+        }
+    }
+
+    #[test]
+    fn migrates_legacy_profile_into_existing_elaris_data_directory() {
+        let directory = std::env::temp_dir().join(format!(
+            "elaris-storage-profile-migration-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&directory);
+        let legacy_profile = directory
+            .join(elaris_brand::LEGACY_DATA_FOLDER)
+            .join("Default");
+        let elaris_data = directory.join(elaris_brand::DATA_FOLDER);
+        fs::create_dir_all(&legacy_profile).expect("creates legacy profile");
+        fs::create_dir_all(elaris_data.join("Development")).expect("creates app bundle folder");
+        fs::write(legacy_profile.join(HISTORY_FILE), b"history").expect("writes legacy history");
+
+        migrate_legacy_profile(&directory).expect("migrates legacy profile");
+
+        assert_eq!(
+            fs::read(elaris_data.join("Default").join(HISTORY_FILE)).expect("reads history"),
+            b"history"
+        );
+        assert!(elaris_data.join("Development").is_dir());
+        assert!(!directory.join(elaris_brand::LEGACY_DATA_FOLDER).exists());
+        fs::remove_dir_all(directory).expect("removes test directory");
+    }
+
+    #[test]
+    fn migrates_legacy_settings_into_existing_elaris_data_directory() {
+        let directory = std::env::temp_dir().join(format!(
+            "elaris-storage-settings-migration-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&directory);
+        let legacy_directory = directory.join(elaris_brand::LEGACY_DATA_FOLDER);
+        let elaris_directory = directory.join(elaris_brand::DATA_FOLDER);
+        fs::create_dir_all(&legacy_directory).expect("creates legacy settings directory");
+        fs::create_dir_all(elaris_directory.join("Development"))
+            .expect("creates app bundle folder");
+        fs::write(legacy_directory.join(SETTINGS_FILE), b"settings")
+            .expect("writes legacy settings");
+
+        migrate_legacy_settings(&directory).expect("migrates legacy settings");
+
+        assert_eq!(
+            fs::read(elaris_directory.join(SETTINGS_FILE)).expect("reads settings"),
+            b"settings"
+        );
+        assert!(elaris_directory.join("Development").is_dir());
+        assert!(!legacy_directory.exists());
+        fs::remove_dir_all(directory).expect("removes test directory");
+    }
+
+    fn table<K: Into<String>>(fields: impl IntoIterator<Item = (K, toml::Value)>) -> toml::Value {
+        toml::Value::Table(
+            fields
+                .into_iter()
+                .map(|(key, value)| (key.into(), value))
+                .collect(),
+        )
+    }
+
+    fn array(count: usize) -> toml::Value {
+        toml::Value::Array(vec![toml::Value::Boolean(true); count])
+    }
+
+    #[test]
+    fn profile_file_reads_stop_at_the_limit_and_keep_the_source_unchanged() {
+        let profile = TemporaryProfile::new("bounded-file-read");
+        let path = profile.0.root().join("bounded.bin");
+        fs::write(&path, b"12345678").expect("writes boundary-sized file");
+        assert_eq!(
+            read_limited(&path, 8).expect("reads at limit"),
+            Some(b"12345678".to_vec())
+        );
+
+        fs::write(&path, b"123456789").expect("writes oversized file");
+        assert!(read_limited(&path, 8).is_err());
+        assert_eq!(fs::read(&path).expect("source stays intact"), b"123456789");
+    }
+
+    #[test]
+    fn settings_input_checks_string_depth_and_collection_boundaries() {
+        let at_string_limit = table([(
+            "unknown",
+            toml::Value::String("x".repeat(MAX_SETTINGS_STRING_BYTES)),
+        )]);
+        let over_string_limit = table([(
+            "unknown",
+            toml::Value::String("x".repeat(MAX_SETTINGS_STRING_BYTES + 1)),
+        )]);
+        assert!(valid_settings_document(&at_string_limit));
+        assert!(!valid_settings_document(&over_string_limit));
+
+        let at_collection_limit = table([("unknown", array(MAX_SETTINGS_COLLECTION_ITEMS))]);
+        let over_collection_limit = table([("unknown", array(MAX_SETTINGS_COLLECTION_ITEMS + 1))]);
+        assert!(valid_settings_document(&at_collection_limit));
+        assert!(!valid_settings_document(&over_collection_limit));
+
+        let at_depth_limit = (0..MAX_SETTINGS_DEPTH - 1)
+            .fold(toml::Value::Boolean(true), |value, _| {
+                toml::Value::Array(vec![value])
+            });
+        let at_depth_limit = table([("unknown", at_depth_limit)]);
+        let over_depth_limit = (0..MAX_SETTINGS_DEPTH)
+            .fold(toml::Value::Boolean(true), |value, _| {
+                toml::Value::Array(vec![value])
+            });
+        let over_depth_limit = table([("unknown", over_depth_limit)]);
+        assert!(valid_settings_document(&at_depth_limit));
+        assert!(!valid_settings_document(&over_depth_limit));
+
+        let at_space_limit = table([("spaces", table([("spaces", array(MAX_SPACES))]))]);
+        let over_space_limit = table([("spaces", table([("spaces", array(MAX_SPACES + 1))]))]);
+        assert!(valid_settings_document(&at_space_limit));
+        assert!(!valid_settings_document(&over_space_limit));
+
+        let at_pin_limit = table([("new_tab", table([("pinned", array(MAX_NEW_TAB_PINS))]))]);
+        let over_pin_limit = table([("new_tab", table([("pinned", array(MAX_NEW_TAB_PINS + 1))]))]);
+        assert!(valid_settings_document(&at_pin_limit));
+        assert!(!valid_settings_document(&over_pin_limit));
+
+        let layout = |count| table([("components", array(count))]);
+        let preset_doc = |count, components| {
+            table([(
+                "workspace",
+                table([(
+                    "presets",
+                    toml::Value::Array(vec![table([("layout", layout(components))]); count]),
+                )]),
+            )])
+        };
+        assert!(valid_settings_document(&preset_doc(
+            MAX_WORKSPACE_PRESETS,
+            0
+        )));
+        assert!(!valid_settings_document(&preset_doc(
+            MAX_WORKSPACE_PRESETS + 1,
+            0
+        )));
+        assert!(valid_settings_document(&preset_doc(
+            1,
+            MAX_LAYOUT_COMPONENTS
+        )));
+        assert!(!valid_settings_document(&preset_doc(
+            1,
+            MAX_LAYOUT_COMPONENTS + 1
+        )));
+
+        let space_doc = |count| {
+            table([(
+                "spaces",
+                table([(
+                    "spaces",
+                    toml::Value::Array(vec![table([("pinned_tabs", array(count))])]),
+                )]),
+            )])
+        };
+        assert!(valid_settings_document(&space_doc(MAX_SPACE_PINS)));
+        assert!(!valid_settings_document(&space_doc(MAX_SPACE_PINS + 1)));
+
+        let key_at_limit = table([(
+            "k".repeat(MAX_SETTINGS_KEY_BYTES),
+            toml::Value::Boolean(true),
+        )]);
+        let key_over_limit = table([(
+            "k".repeat(MAX_SETTINGS_KEY_BYTES + 1),
+            toml::Value::Boolean(true),
+        )]);
+        assert!(valid_settings_document(&key_at_limit));
+        assert!(!valid_settings_document(&key_over_limit));
+    }
+
+    fn migrate_legacy_json(profile: &TemporaryProfile, contents: &[u8]) {
+        let legacy_path = profile.0.root().join("config.json");
+        fs::write(&legacy_path, contents).expect("writes legacy settings");
+        crate::migrations::run(&profile.0).expect("migrates legacy settings");
+        assert!(!legacy_path.exists());
+        assert!(profile.0.settings_path().exists());
+        let backup_prefix = "config.json.migrated-";
+        assert!(
+            fs::read_dir(profile.0.root())
+                .unwrap()
+                .filter_map(Result::ok)
+                .any(|entry| entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(backup_prefix))
+        );
+    }
+
+    #[test]
+    fn saves_and_loads_history() {
+        let profile = TemporaryProfile::new("history");
+        assert_eq!(profile.0.load_history(), History::default());
+        let mut history = History::default();
+        history.record_visit("https://example.com/", "Example", 5);
+        history.record_search("photon browser", 6);
+        profile.0.save_history(&history).expect("saves");
+        assert_eq!(profile.0.load_history(), history);
+        assert_eq!(
+            profile.0.load_history_outcome(),
+            ProfileLoadOutcome::Loaded(history)
+        );
+    }
+
+    #[test]
+    fn space_profiles_keep_history_favicons_and_engine_data_apart() {
+        let profile = TemporaryProfile::new("space-profiles");
+        let personal = profile.0.space(41).expect("opens personal space");
+        let work = profile.0.space(42).expect("opens work space");
+        let mut personal_history = History::default();
+        personal_history.record_visit("https://personal.example/", "Personal", 5);
+        personal
+            .save_history(&personal_history)
+            .expect("saves personal history");
+        personal
+            .save_favicon("https://personal.example/", &icon())
+            .expect("saves personal favicon");
+        let personal_session = Session {
+            windows: vec![WindowSession {
+                tabs: vec![SessionTab {
+                    url: "https://personal.example/".to_owned(),
+                    title: "Personal".to_owned(),
+                    space: 41,
+                }],
+                active: Some(0),
+                space: Some(41),
+                split: None,
+            }],
+        };
+        personal
+            .save_session(&personal_session)
+            .expect("saves personal session");
+
+        assert_eq!(personal.load_history(), personal_history);
+        assert_eq!(work.load_history(), History::default());
+        assert!(personal.load_favicon("https://personal.example/").is_some());
+        assert!(work.load_favicon("https://personal.example/").is_none());
+        assert_eq!(personal.load_session(), personal_session);
+        assert_eq!(work.load_session(), Session::default());
+        assert!(!profile.0.root().join(SESSION_FILE).exists());
+        assert_ne!(personal.engine_dir(), work.engine_dir());
+    }
+
+    #[test]
+    fn space_content_is_moved_out_of_shared_settings() {
+        let mut profile = TemporaryProfile::unmigrated("space-content-migration");
+        let root = profile.0.root().to_owned();
+        let mut settings = profile.0.load_settings();
+        let personal_id = settings.spaces.active().id;
+        let work_id = settings.spaces.add(
+            Some("Work".to_owned()),
+            elaris_core::WindowColor::Blue,
+            false,
+        );
+        let personal = settings
+            .spaces
+            .get_mut(personal_id)
+            .expect("gets personal space");
+        personal.pinned_tabs.push(Shortcut {
+            title: "Personal pinned tab".to_owned(),
+            url: "https://personal-pin.example/".to_owned(),
+        });
+        personal.new_tab.pinned.push(Shortcut {
+            title: "Personal shortcut".to_owned(),
+            url: "https://personal-shortcut.example/".to_owned(),
+        });
+        personal
+            .new_tab
+            .hidden
+            .push("https://personal-hidden.example/".to_owned());
+        personal.favourites.push(Shortcut {
+            title: "Personal favourite".to_owned(),
+            url: "https://personal-favourite.example/".to_owned(),
+        });
+        personal.favourites_hint_dismissed = true;
+        settings.sidebar.favourites.push(Shortcut {
+            title: "Legacy favourite".to_owned(),
+            url: "https://legacy-favourite.example/".to_owned(),
+        });
+        settings.new_tab.pinned.push(Shortcut {
+            title: "Legacy shortcut".to_owned(),
+            url: "https://legacy-shortcut.example/".to_owned(),
+        });
+        settings
+            .new_tab
+            .hidden
+            .push("https://legacy-hidden.example/".to_owned());
+        let personal_data = settings.spaces.get(personal_id).unwrap().data();
+        profile
+            .0
+            .save_settings(&settings)
+            .expect("saves old settings");
+        // This legacy field is intentionally no longer serialized by the
+        // current build, so add it back to the fixture as an older profile
+        // would have stored it.
+        let settings_path = profile.0.settings_path().to_owned();
+        let mut document = toml::from_str::<toml::Value>(
+            &fs::read_to_string(&settings_path).expect("reads old settings"),
+        )
+        .expect("parses old settings");
+        let legacy_space_data =
+            toml::Value::try_from(personal_data).expect("serializes legacy personal data");
+        let legacy_space_fields = legacy_space_data
+            .as_table()
+            .expect("space data serializes as a table")
+            .clone();
+        let personal_space = document
+            .get_mut("spaces")
+            .and_then(|spaces| spaces.get_mut("spaces"))
+            .and_then(toml::Value::as_array_mut)
+            .and_then(|spaces| spaces.first_mut())
+            .and_then(toml::Value::as_table_mut)
+            .expect("gets legacy personal space");
+        personal_space.extend(legacy_space_fields);
+        let legacy_favourite = toml::Value::try_from(Shortcut {
+            title: "Legacy favourite".to_owned(),
+            url: "https://legacy-favourite.example/".to_owned(),
+        })
+        .expect("serializes legacy favourite");
+        document
+            .get_mut("sidebar")
+            .and_then(toml::Value::as_table_mut)
+            .expect("gets sidebar settings")
+            .insert(
+                "favourites".to_owned(),
+                toml::Value::Array(vec![legacy_favourite]),
+            );
+        let new_tab = document
+            .get_mut("new_tab")
+            .and_then(toml::Value::as_table_mut)
+            .expect("gets new tab settings");
+        new_tab.insert(
+            "pinned".to_owned(),
+            toml::Value::Array(vec![
+                toml::Value::try_from(Shortcut {
+                    title: "Legacy shortcut".to_owned(),
+                    url: "https://legacy-shortcut.example/".to_owned(),
+                })
+                .expect("serializes legacy shortcut"),
+            ]),
+        );
+        new_tab.insert(
+            "hidden".to_owned(),
+            toml::Value::Array(vec![toml::Value::String(
+                "https://legacy-hidden.example/".to_owned(),
+            )]),
+        );
+        fs::write(
+            settings_path,
+            toml::to_string(&document).expect("serializes old settings"),
+        )
+        .expect("writes legacy favourite");
+
+        profile.0 = Profile::open(root.clone()).expect("migrates space content");
+
+        let shared = profile.0.load_settings();
+        assert!(shared.sidebar.favourites.is_empty());
+        assert!(shared.new_tab.pinned.is_empty());
+        assert!(shared.new_tab.hidden.is_empty());
+        assert!(
+            shared
+                .spaces
+                .all()
+                .iter()
+                .all(|space| space.data() == SpaceData::default())
+        );
+        let personal_data = profile
+            .0
+            .space(personal_id)
+            .expect("opens personal data")
+            .load_space_data();
+        assert_eq!(personal_data.pinned_tabs.len(), 1);
+        assert_eq!(personal_data.new_tab.pinned.len(), 2);
+        assert_eq!(personal_data.new_tab.hidden.len(), 2);
+        assert_eq!(personal_data.favourites.len(), 2, "{personal_data:?}");
+        assert!(personal_data.favourites_hint_dismissed);
+        assert_eq!(
+            profile
+                .0
+                .space(work_id)
+                .expect("opens work data")
+                .load_space_data(),
+            SpaceData::default()
+        );
+        let shared_file = fs::read_to_string(profile.0.settings_path()).expect("reads settings");
+        for address in [
+            "https://personal-pin.example/",
+            "https://personal-shortcut.example/",
+            "https://personal-hidden.example/",
+            "https://personal-favourite.example/",
+            "https://legacy-favourite.example/",
+            "https://legacy-shortcut.example/",
+            "https://legacy-hidden.example/",
+        ] {
+            assert!(
+                !shared_file.contains(address),
+                "shared settings contain {address}"
+            );
+        }
+        assert!(!shared_file.contains("pinned_tabs"));
+    }
+
+    #[test]
+    fn legacy_session_is_split_into_its_spaces() {
+        let mut profile = TemporaryProfile::unmigrated("space-session-migration");
+        let root = profile.0.root().to_owned();
+        let mut settings = profile.0.load_settings();
+        let work_id = settings.spaces.add(
+            Some("Work".to_owned()),
+            elaris_core::WindowColor::Blue,
+            false,
+        );
+        profile
+            .0
+            .save_settings(&settings)
+            .expect("saves spaces for migration");
+        let legacy = Session {
+            windows: vec![WindowSession {
+                tabs: vec![
+                    SessionTab {
+                        url: "https://personal.example/".to_owned(),
+                        title: "Personal".to_owned(),
+                        space: 1,
+                    },
+                    SessionTab {
+                        url: "https://work.example/".to_owned(),
+                        title: "Work".to_owned(),
+                        space: work_id,
+                    },
+                ],
+                active: Some(1),
+                space: Some(work_id),
+                split: Some(SessionSplit::new(0, 1, 0.4)),
+            }],
+        };
+        profile
+            .0
+            .save_session(&legacy)
+            .expect("writes old shared session");
+
+        profile.0 = Profile::open(root).expect("migrates shared session");
+        let personal = profile.0.space(1).expect("opens personal space");
+        let work = profile.0.space(work_id).expect("opens work space");
+        let personal_session = personal.load_session();
+        let work_session = work.load_session();
+        assert_eq!(personal_session.windows[0].tabs.len(), 1);
+        assert_eq!(
+            personal_session.windows[0].tabs[0].url,
+            "https://personal.example/"
+        );
+        assert_eq!(personal_session.windows[0].space, Some(1));
+        assert_eq!(work_session.windows[0].tabs.len(), 1);
+        assert_eq!(work_session.windows[0].tabs[0].url, "https://work.example/");
+        assert_eq!(work_session.windows[0].space, Some(work_id));
+        assert_eq!(work_session.windows[0].active, Some(0));
+        assert_eq!(work_session.windows[0].split, None);
+        assert!(!profile.0.root().join(SESSION_FILE).exists());
+    }
+
+    #[test]
+    fn legacy_browsing_data_migrates_into_the_active_space_once() {
+        let mut profile = TemporaryProfile::unmigrated("space-profile-migration");
+        let root = profile.0.root().to_owned();
+        let mut history = History::default();
+        history.record_visit("https://legacy.example/", "Legacy", 5);
+        profile
+            .0
+            .save_history(&history)
+            .expect("writes old history");
+        profile
+            .0
+            .save_favicon("https://legacy.example/", &icon())
+            .expect("writes old favicon");
+        let legacy_cookie_store = profile.0.engine_dir().join("data/Cookies.sqlite");
+        atomic::write(&legacy_cookie_store, b"legacy cookie store").expect("writes old data");
+        let legacy_bookmarks = profile.0.engine_dir().join("config/Bookmarks.json");
+        atomic::write(&legacy_bookmarks, b"legacy bookmarks").expect("writes old bookmarks");
+        profile
+            .0
+            .save_settings(&BrowserSettings::default())
+            .expect("writes shared settings");
+        let active_space = profile.0.load_settings().spaces.active().id;
+
+        profile.0 = Profile::open(root.clone()).expect("migrates profile");
+        let active = profile.0.space(active_space).expect("opens active space");
+        assert_eq!(active.load_history(), history);
+        assert!(active.load_favicon("https://legacy.example/").is_some());
+        assert_eq!(
+            fs::read(active.engine_dir().join("data/Cookies.sqlite")).expect("reads migrated data"),
+            b"legacy cookie store"
+        );
+        assert_eq!(
+            fs::read(active.engine_dir().join("config/Bookmarks.json"))
+                .expect("reads migrated bookmarks"),
+            b"legacy bookmarks"
+        );
+        assert!(!root.join(HISTORY_FILE).exists());
+        assert!(!legacy_cookie_store.exists());
+        assert!(!legacy_bookmarks.exists());
+
+        let other = profile
+            .0
+            .space(active_space + 1)
+            .expect("opens other space");
+        assert_eq!(other.load_history(), History::default());
+        assert!(other.load_favicon("https://legacy.example/").is_none());
+    }
+
+    #[test]
+    fn keeps_readable_settings_and_backs_up_the_file_when_one_is_not() {
+        let profile = TemporaryProfile::new("lenient");
+        let path = profile.0.settings_path().to_owned();
+        let contents = "show_full_address = true\ntheme = \"from-a-newer-build\"\n";
+        std::fs::write(&path, contents).unwrap();
+        let settings = profile.0.load_settings();
+        assert!(settings.show_full_address);
+        assert_eq!(settings.theme, BrowserSettings::default().theme);
+        assert_eq!(fs::read_to_string(path).unwrap(), contents);
+        let backups = std::fs::read_dir(profile.0.root())
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("config.unreadable-")
+            })
+            .count();
+        assert_eq!(backups, 1);
+    }
+
+    #[test]
+    fn saves_and_loads_the_session() {
+        let profile = TemporaryProfile::new("session");
+        assert_eq!(profile.0.load_session(), Session::default());
+        let session = Session {
+            windows: vec![elaris_core::WindowSession {
+                tabs: vec![elaris_core::SessionTab {
+                    url: "https://example.com/".to_owned(),
+                    title: "Example".to_owned(),
+                    space: 1,
+                }],
+                active: Some(0),
+                space: None,
+                split: None,
+            }],
+        };
+        profile.0.save_session(&session).expect("saves");
+        assert_eq!(profile.0.load_session(), session);
+        assert_eq!(
+            profile.0.load_session_outcome(),
+            ProfileLoadOutcome::Loaded(session)
+        );
+    }
+
+    #[test]
+    fn rejects_oversized_settings_without_changing_the_source_file() {
+        let profile = TemporaryProfile::new("oversized-settings");
+        let contents = vec![b'#'; MAX_SETTINGS_FILE_BYTES + 1];
+        fs::write(profile.0.settings_path(), &contents).expect("writes oversized settings");
+
+        assert_eq!(profile.0.load_settings(), BrowserSettings::default());
+        assert_eq!(fs::read(profile.0.settings_path()).unwrap(), contents);
+    }
+
+    #[test]
+    fn preserves_invalid_session_before_a_later_save_replaces_it() {
+        let profile = TemporaryProfile::new("invalid-session");
+        let contents = serde_json::to_vec(&serde_json::json!({
+            "windows": [{"tabs": [], "active": 0}]
+        }))
+        .unwrap();
+        let path = profile.0.root().join(SESSION_FILE);
+        fs::write(&path, &contents).expect("writes invalid session");
+
+        let ProfileLoadOutcome::PartiallyRecovered(session) = profile.0.load_session_outcome()
+        else {
+            panic!("recovers the session structure");
+        };
+        assert!(session.windows[0].tabs.is_empty());
+        assert_eq!(session.windows[0].active, None);
+        assert!(!path.exists());
+        let backup = fs::read_dir(profile.0.root())
+            .unwrap()
+            .filter_map(Result::ok)
+            .find(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("Session.json.damaged-")
+            })
+            .expect("preserves the invalid session");
+        assert_eq!(fs::read(backup.path()).unwrap(), contents);
+
+        let session = Session::default();
+        profile
+            .0
+            .save_session(&session)
+            .expect("saves recovered session");
+        assert!(path.exists());
+        assert_eq!(fs::read(backup.path()).unwrap(), contents);
+    }
+
+    #[test]
+    fn direct_save_preserves_damaged_session_before_replacing_it() {
+        let profile = TemporaryProfile::new("direct-damaged-session-save");
+        let path = profile.0.root().join(SESSION_FILE);
+        let contents = b"not session JSON";
+        fs::write(&path, contents).expect("writes damaged session");
+
+        profile
+            .0
+            .save_session(&Session::default())
+            .expect("saves a new session");
+
+        let backup = fs::read_dir(profile.0.root())
+            .unwrap()
+            .filter_map(Result::ok)
+            .find(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("Session.json.damaged-")
+            })
+            .expect("preserves the file before saving");
+        assert_eq!(fs::read(backup.path()).unwrap(), contents);
+        assert_eq!(
+            profile.0.load_session_outcome(),
+            ProfileLoadOutcome::Loaded(Session::default())
+        );
+    }
+
+    #[test]
+    fn distinguishes_missing_and_unsupported_history_files() {
+        let profile = TemporaryProfile::new("history-load-outcomes");
+        let path = profile.0.root().join(HISTORY_FILE);
+        assert_eq!(
+            profile.0.load_history_outcome(),
+            ProfileLoadOutcome::Missing
+        );
+
+        let unsupported = br#"{"version":99,"pages":[],"searches":[]}"#;
+        fs::write(&path, unsupported).expect("writes an unsupported format");
+        assert_eq!(
+            profile.0.load_history_outcome(),
+            ProfileLoadOutcome::Unsupported
+        );
+        assert!(!path.exists());
+        let backup = fs::read_dir(profile.0.root())
+            .unwrap()
+            .filter_map(Result::ok)
+            .find(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("History.json.damaged-")
+            })
+            .expect("preserves the unsupported history file");
+        assert_eq!(fs::read(backup.path()).unwrap(), unsupported);
+    }
+
+    #[test]
+    fn preserves_source_data_when_history_is_partially_recovered() {
+        let profile = TemporaryProfile::new("partial-history");
+        let contents = br#"{"version":1,"pages":[{"url":"https://ok.example/","title":"OK","visit_count":1,"last_visit":1},{"url":7}],"searches":[]}"#;
+        let path = profile.0.root().join(HISTORY_FILE);
+        fs::write(&path, contents).expect("writes partially damaged history");
+
+        let ProfileLoadOutcome::PartiallyRecovered(history) = profile.0.load_history_outcome()
+        else {
+            panic!("recovers the valid history row");
+        };
+        assert_eq!(history.pages().len(), 1);
+        assert!(!path.exists());
+        let backup = fs::read_dir(profile.0.root())
+            .unwrap()
+            .filter_map(Result::ok)
+            .find(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("History.json.damaged-")
+            })
+            .expect("preserves the original history file");
+        assert_eq!(fs::read(backup.path()).unwrap(), contents);
+    }
+
+    #[test]
+    fn refuses_to_replace_damaged_data_when_backup_cannot_be_made() {
+        let profile = TemporaryProfile::new("blocked-damaged-session");
+        let path = profile.0.root().join(SESSION_FILE);
+        let contents = b"damaged session";
+        fs::write(&path, contents).expect("writes invalid session");
+        profile
+            .0
+            .writes
+            .session_write_blocked
+            .store(true, Ordering::Release);
+        profile
+            .0
+            .writes
+            .session_source_checked
+            .store(true, Ordering::Release);
+
+        assert!(profile.0.save_session(&Session::default()).is_err());
+        assert_eq!(fs::read(path).unwrap(), contents);
+    }
+
+    #[test]
+    fn saves_and_loads_settings() {
+        let profile = TemporaryProfile::new("settings");
+        assert_eq!(profile.0.load_settings(), BrowserSettings::default());
+        let mut settings = BrowserSettings {
+            theme: elaris_core::ThemeMode::Dark,
+            ..BrowserSettings::default()
+        };
+        settings.new_tab.remove("https://example.com/");
+        let layout = settings.workspace.default_preset().unwrap().layout.clone();
+        settings
+            .workspace
+            .presets
+            .push(elaris_core::WorkspacePreset {
+                id: "research".to_owned(),
+                name: "Research".to_owned(),
+                layout,
+            });
+        let space_id = settings.spaces.add(
+            Some("Work".to_owned()),
+            elaris_core::WindowColor::Blue,
+            false,
+        );
+        assert!(
+            settings
+                .spaces
+                .set_layout_override(space_id, &elaris_core::WorkspaceLayout::vertical())
+        );
+        profile.0.save_settings(&settings).expect("saves");
+        assert_eq!(profile.0.settings_path().extension().unwrap(), "toml");
+        assert!(
+            fs::read_to_string(profile.0.settings_path())
+                .unwrap()
+                .contains("theme = \"dark\"")
+        );
+        let shared_settings = fs::read_to_string(profile.0.settings_path()).unwrap();
+        assert!(!shared_settings.contains("example.com"));
+        let mut expected = settings;
+        expected.new_tab.pinned.clear();
+        expected.new_tab.hidden.clear();
+        assert_eq!(profile.0.load_settings(), expected);
+    }
+
+    #[test]
+    fn reloads_edited_settings_and_supersedes_pending_saves() {
+        let profile = TemporaryProfile::new("reload-settings");
+        let stale_ticket = profile.0.begin_settings_write();
+        let stale_settings = BrowserSettings {
+            theme: elaris_core::ThemeMode::Light,
+            ..BrowserSettings::default()
+        };
+        fs::write(profile.0.settings_path(), "theme = \"dark\"\n")
+            .expect("writes an external settings edit");
+
+        let (settings, revision) = profile.0.reload_settings().expect("reloads settings");
+        assert_eq!(settings.theme, elaris_core::ThemeMode::Dark);
+        assert_eq!(Some(revision), profile.0.settings_revision().ok());
+        assert!(
+            !profile
+                .0
+                .save_settings_if_current(stale_ticket, &stale_settings)
+                .expect("skips the save queued before the reload")
+        );
+        assert_eq!(profile.0.load_settings(), settings);
+    }
+
+    #[test]
+    fn invalid_live_settings_edits_are_left_for_the_next_reload() {
+        let profile = TemporaryProfile::new("invalid-live-settings");
+        let contents = "theme = [\n";
+        fs::write(profile.0.settings_path(), contents).expect("writes malformed settings");
+
+        assert!(profile.0.reload_settings().is_err());
+        assert_eq!(
+            fs::read_to_string(profile.0.settings_path()).unwrap(),
+            contents
+        );
+        assert_eq!(profile.0.load_settings(), BrowserSettings::default());
+    }
+
+    #[test]
+    fn opening_a_profile_migrates_older_settings_automatically() {
+        let root = TemporaryProfile::root("automatic-legacy-migration");
+        fs::create_dir_all(&root).expect("creates profile folder");
+        fs::write(root.join("Settings.json"), br#"{"theme":"dark"}"#).expect("writes old settings");
+
+        let profile = Profile::open(&root).expect("opens and migrates profile");
+
+        assert_eq!(profile.load_settings().theme, elaris_core::ThemeMode::Dark);
+        assert!(profile.settings_path().exists());
+        assert!(!root.join("Settings.json").exists());
+        assert!(
+            fs::read_dir(&root)
+                .unwrap()
+                .filter_map(Result::ok)
+                .any(|entry| entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("Settings.json.migrated-"))
+        );
+        let reopened = Profile::open(&root).expect("reopens migrated profile");
+        assert_eq!(reopened.load_settings().theme, elaris_core::ThemeMode::Dark);
+        let backup_count = fs::read_dir(&root)
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("Settings.json.migrated-")
+            })
+            .count();
+        assert_eq!(backup_count, 1);
+        fs::remove_dir_all(root).expect("removes test profile");
+    }
+
+    #[test]
+    fn opening_a_profile_migrates_settings_next_to_its_profile() {
+        let base = TemporaryProfile::root("external-settings-migration");
+        let root = base.join("Default");
+        let settings_path = base.join("config.toml");
+        let legacy_path = base.join("config.json");
+        fs::create_dir_all(&base).expect("creates settings folder");
+        fs::write(&legacy_path, br#"{"theme":"dark"}"#).expect("writes old settings");
+
+        let profile = Profile::open_with_settings_path(&root, Some(settings_path.clone()))
+            .expect("opens and migrates profile");
+
+        assert_eq!(profile.load_settings().theme, elaris_core::ThemeMode::Dark);
+        assert!(settings_path.exists());
+        assert!(!legacy_path.exists());
+        assert!(
+            fs::read_dir(&base)
+                .unwrap()
+                .filter_map(Result::ok)
+                .any(|entry| entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("config.json.migrated-"))
+        );
+        fs::remove_dir_all(base).expect("removes test profile");
+    }
+
+    #[test]
+    fn older_profile_snapshots_cannot_overwrite_newer_saves() {
+        let temporary = TemporaryProfile::new("latest-snapshots");
+        let profile = temporary.0.clone();
+        let clone = profile.clone();
+
+        let older_settings_ticket = profile.begin_settings_write();
+        let newer_settings_ticket = clone.begin_settings_write();
+        let older_settings = BrowserSettings {
+            theme: elaris_core::ThemeMode::Light,
+            ..BrowserSettings::default()
+        };
+        let newer_settings = BrowserSettings {
+            theme: elaris_core::ThemeMode::Dark,
+            ..BrowserSettings::default()
+        };
+        assert!(
+            clone
+                .save_settings_if_current(newer_settings_ticket, &newer_settings)
+                .expect("saves current settings")
+        );
+        assert!(
+            !profile
+                .save_settings_if_current(older_settings_ticket, &older_settings)
+                .expect("skips stale settings")
+        );
+        assert_eq!(profile.load_settings(), newer_settings);
+
+        let mut older_history = History::default();
+        older_history.record_visit("https://old.example/", "Old", 1);
+        let mut newer_history = History::default();
+        newer_history.record_visit("https://new.example/", "New", 2);
+        let older_history_ticket = profile.begin_history_write();
+        let newer_history_ticket = clone.begin_history_write();
+        assert!(
+            clone
+                .save_history_if_current(newer_history_ticket, &newer_history)
+                .expect("saves current history")
+        );
+        assert!(
+            !profile
+                .save_history_if_current(older_history_ticket, &older_history)
+                .expect("skips stale history")
+        );
+        assert_eq!(profile.load_history(), newer_history);
+
+        let older_session = Session {
+            windows: vec![elaris_core::WindowSession {
+                tabs: vec![elaris_core::SessionTab {
+                    url: "https://old.example/".to_owned(),
+                    title: "Old".to_owned(),
+                    space: 1,
+                }],
+                active: Some(0),
+                space: None,
+                split: None,
+            }],
+        };
+        let newer_session = Session {
+            windows: vec![elaris_core::WindowSession {
+                tabs: vec![elaris_core::SessionTab {
+                    url: "https://new.example/".to_owned(),
+                    title: "New".to_owned(),
+                    space: 1,
+                }],
+                active: Some(0),
+                space: None,
+                split: None,
+            }],
+        };
+        let older_session_ticket = profile.begin_session_write();
+        let newer_session_ticket = clone.begin_session_write();
+        assert!(
+            clone
+                .save_session_if_current(newer_session_ticket, &newer_session)
+                .expect("saves current session")
+        );
+        assert!(
+            !profile
+                .save_session_if_current(older_session_ticket, &older_session)
+                .expect("skips stale session")
+        );
+        assert_eq!(profile.load_session(), newer_session);
+    }
+
+    #[test]
+    fn new_reservations_wait_for_an_in_progress_snapshot_write() {
+        let temporary = TemporaryProfile::new("serialized-snapshot-reservation");
+        let profile = temporary.0.clone();
+        let ticket = profile.begin_settings_write();
+        let writer_profile = profile.clone();
+        let (write_started, wait_for_release) = std::sync::mpsc::channel();
+        let (release_write, write_released) = std::sync::mpsc::channel();
+        let writer = std::thread::spawn(move || {
+            writer_profile.write_snapshot(ticket, SnapshotKind::Settings, || {
+                write_started
+                    .send(())
+                    .expect("notifies that the write started");
+                write_released.recv().expect("waits for the test");
+                Ok(())
+            })
+        });
+        wait_for_release
+            .recv()
+            .expect("snapshot write reaches its atomic section");
+
+        let reserving_profile = profile.clone();
+        let (reservation_attempted, wait_for_attempt) = std::sync::mpsc::channel();
+        let (reservation_ready, wait_for_reservation) = std::sync::mpsc::channel();
+        let reserver = std::thread::spawn(move || {
+            reservation_attempted
+                .send(())
+                .expect("notifies before trying to reserve");
+            let ticket = reserving_profile.begin_settings_write();
+            reservation_ready
+                .send(ticket)
+                .expect("returns the new ticket");
+        });
+        wait_for_attempt.recv().expect("reservation thread starts");
+        assert!(wait_for_reservation.try_recv().is_err());
+
+        release_write.send(()).expect("releases the active write");
+        assert!(
+            writer
+                .join()
+                .expect("snapshot write thread completes")
+                .expect("snapshot write succeeds")
+        );
+        let newer_ticket = wait_for_reservation
+            .recv()
+            .expect("reservation follows the active write");
+        reserver.join().expect("reservation thread completes");
+        assert!(
+            !profile
+                .save_settings_if_current(ticket, &BrowserSettings::default())
+                .expect("old ticket is superseded")
+        );
+        assert!(
+            profile
+                .save_settings_if_current(newer_ticket, &BrowserSettings::default())
+                .expect("current ticket remains usable")
+        );
+    }
+
+    #[test]
+    fn overlapping_history_saves_leave_the_newest_reserved_snapshot() {
+        let temporary = TemporaryProfile::new("overlapping-history-saves");
+        let profile = temporary.0.clone();
+        let older_profile = profile.clone();
+        let newer_profile = profile.clone();
+        let older_ticket = older_profile.begin_history_write();
+        let newer_ticket = newer_profile.begin_history_write();
+        let mut older_history = History::default();
+        older_history.record_visit("https://old.example/", "Old", 1);
+        let mut newer_history = History::default();
+        newer_history.record_visit("https://new.example/", "New", 2);
+        let expected_history = newer_history.clone();
+        let start = Arc::new(std::sync::Barrier::new(3));
+
+        let old_start = start.clone();
+        let old_save = std::thread::spawn(move || {
+            old_start.wait();
+            older_profile.save_history_if_current(older_ticket, &older_history)
+        });
+        let new_start = start.clone();
+        let new_save = std::thread::spawn(move || {
+            new_start.wait();
+            newer_profile.save_history_if_current(newer_ticket, &newer_history)
+        });
+
+        start.wait();
+        old_save
+            .join()
+            .expect("older save thread completes")
+            .expect("older save succeeds or is superseded");
+        new_save
+            .join()
+            .expect("newer save thread completes")
+            .expect("newer save succeeds or is superseded");
+        assert_eq!(profile.load_history(), expected_history);
+    }
+
+    #[test]
+    fn migrates_a_legacy_vertical_layout_to_its_matching_preset() {
+        let profile = TemporaryProfile::unmigrated("legacy-vertical-layout");
+        migrate_legacy_json(&profile, br#"{"theme":"dark","tab_layout":"vertical"}"#);
+
+        let settings = profile.0.load_settings();
+        assert_eq!(settings.theme, elaris_core::ThemeMode::Dark);
+        assert_eq!(settings.tab_layout, elaris_core::TabLayout::Vertical);
+        assert_eq!(
+            settings.workspace.default_preset_id,
+            elaris_core::VERTICAL_PRESET_ID
+        );
+        profile
+            .0
+            .save_settings(&settings)
+            .expect("saves migrated settings");
+        assert_eq!(profile.0.load_settings(), settings);
+    }
+
+    #[test]
+    fn retains_legacy_workspace_presets_for_shell_expansion() {
+        let profile = TemporaryProfile::unmigrated("legacy-workspace-presets");
+        migrate_legacy_json(
+            &profile,
+            br#"{
+                "tab_layout":"vertical",
+                "workspace":{
+                    "default_preset_id":"vertical",
+                    "presets":[
+                        {"id":"horizontal","name":"Horizontal","layout":{"components":[
+                            {"id":"tab-strip","region":"top","order":0,"visible":true},
+                            {"id":"address-toolbar","region":"top","order":1,"visible":true},
+                            {"id":"sidebar","region":"leading","order":0,"visible":false}
+                        ]}},
+                        {"id":"vertical","name":"Vertical","layout":{"components":[
+                            {"id":"tab-strip","region":"top","order":0,"visible":false},
+                            {"id":"address-toolbar","region":"top","order":1,"visible":false},
+                            {"id":"sidebar","region":"leading","order":0,"visible":true}
+                        ]}}
+                    ]
+                }
+            }"#,
+        );
+
+        let settings = profile.0.load_settings();
+        assert_eq!(
+            settings.workspace.default_preset_id,
+            elaris_core::VERTICAL_PRESET_ID
+        );
+        assert!(settings.workspace.is_valid());
+        assert!(
+            settings
+                .workspace
+                .default_preset()
+                .unwrap()
+                .layout
+                .component(elaris_core::SIDEBAR_COMPONENT_ID)
+                .unwrap()
+                .visible
+        );
+    }
+
+    #[test]
+    fn invalid_workspace_data_falls_back_without_losing_other_settings() {
+        let profile = TemporaryProfile::unmigrated("invalid-workspace");
+        migrate_legacy_json(
+            &profile,
+            br#"{"theme":"dark","tab_layout":"vertical","workspace":{"default_preset_id":"missing","presets":[]}}"#,
+        );
+
+        let settings = profile.0.load_settings();
+        assert_eq!(settings.theme, elaris_core::ThemeMode::Dark);
+        assert_eq!(
+            settings.workspace.default_preset_id,
+            elaris_core::VERTICAL_PRESET_ID
+        );
+    }
+
+    #[test]
+    fn incomplete_workspace_data_migrates_the_legacy_layout() {
+        let profile = TemporaryProfile::unmigrated("incomplete-workspace");
+        migrate_legacy_json(
+            &profile,
+            br#"{"theme":"dark","tab_layout":"vertical","workspace":{"presets":[]}}"#,
+        );
+
+        let settings = profile.0.load_settings();
+        assert_eq!(settings.theme, elaris_core::ThemeMode::Dark);
+        assert_eq!(
+            settings.workspace.default_preset_id,
+            elaris_core::VERTICAL_PRESET_ID
+        );
+    }
+
+    #[test]
+    fn invalid_space_layout_falls_back_to_the_profile_default() {
+        let profile = TemporaryProfile::new("invalid-space-layout");
+        let mut settings = BrowserSettings::default();
+        let space_id = settings.spaces.active().id;
+        let mut invalid = elaris_core::WorkspaceLayout::vertical();
+        invalid.components[0].order = 1;
+        settings.spaces.get_mut(space_id).unwrap().layout_override = Some(invalid);
+        profile.0.save_settings(&settings).expect("saves settings");
+
+        let loaded = profile.0.load_settings();
+        assert_eq!(loaded.spaces.get(space_id).unwrap().layout_override, None);
+        assert_eq!(
+            loaded.workspace.default_preset_id,
+            elaris_core::VERTICAL_PRESET_ID
+        );
+    }
+
+    #[test]
+    fn ignores_an_unreadable_history() {
+        let profile = TemporaryProfile::new("corrupt");
+        let path = profile.0.root().join(HISTORY_FILE);
+        let contents = b"{ not json";
+        fs::write(&path, contents).expect("writes");
+        assert_eq!(
+            profile.0.load_history_outcome(),
+            ProfileLoadOutcome::Corrupt
+        );
+        assert!(!path.exists());
+        let backup = fs::read_dir(profile.0.root())
+            .unwrap()
+            .filter_map(Result::ok)
+            .find(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("History.json.damaged-")
+            })
+            .expect("preserves the unreadable history");
+        assert_eq!(fs::read(backup.path()).unwrap(), contents);
+    }
+
+    #[test]
+    fn saves_icons_and_removes_those_of_forgotten_pages() {
+        let profile = TemporaryProfile::new("favicons");
+        let mut history = History::default();
+        history.record_visit("https://kept.example/", "Kept", 1);
+        history.record_visit("https://gone.example/", "Gone", 2);
+        profile
+            .0
+            .save_favicon("https://kept.example/", &icon())
+            .expect("saves");
+        profile
+            .0
+            .save_favicon("https://gone.example/", &icon())
+            .expect("saves");
+        assert_eq!(
+            profile.0.load_favicon("https://kept.example/"),
+            Some(icon())
+        );
+
+        history.remove_page("https://gone.example/");
+        profile.0.prune_favicons(&history).expect("prunes");
+        assert_eq!(profile.0.load_favicon("https://gone.example/"), None);
+        assert_eq!(
+            profile.0.load_favicon("https://kept.example/"),
+            Some(icon())
+        );
+    }
+
+    #[test]
+    fn missing_or_unreadable_icons_are_ignored() {
+        let profile = TemporaryProfile::new("missing-or-unreadable-favicon");
+        assert_eq!(profile.0.load_favicon("https://missing.example/"), None);
+
+        let path = favicons::path(&profile.0.favicons_dir(), "https://unreadable.example/");
+        fs::create_dir_all(&path).expect("creates an unreadable icon path");
+        assert_eq!(profile.0.load_favicon("https://unreadable.example/"), None);
+    }
+
+    #[test]
+    fn clears_history_and_reports_usage() {
+        let profile = TemporaryProfile::new("clear");
+        let mut history = History::default();
+        history.record_visit("https://example.com/", "Example", 1);
+        profile.0.save_history(&history).expect("saves");
+        profile
+            .0
+            .save_favicon("https://example.com/", &icon())
+            .expect("saves");
+        assert!(profile.0.data_usage().history > 0);
+        assert!(profile.0.data_usage().favicons > 0);
+
+        profile
+            .0
+            .clear(&ClearBrowsingData::everything(), &mut history)
+            .expect("clears");
+        assert!(history.pages().is_empty());
+        assert_eq!(profile.0.load_history(), History::default());
+        assert_eq!(profile.0.data_usage().favicons, 0);
+    }
+
+    #[test]
+    fn an_unknown_space_colour_keeps_every_space() {
+        let source = r#"
+[spaces]
+active = 2
+[[spaces.spaces]]
+id = 1
+name = "Home"
+[[spaces.spaces]]
+id = 2
+name = "Work"
+color = "mauve"
+favourites = [{ title = "Docs", url = "https://docs.example" }]
+"#;
+        let (settings, _) = decode_settings(source.as_bytes()).expect("settings decode");
+        let spaces = settings.spaces.all();
+        assert_eq!(spaces.len(), 2);
+        assert_eq!(settings.spaces.active().name, "Work");
+        assert_eq!(spaces[1].color, elaris_core::WindowColor::System);
+        assert_eq!(spaces[1].favourites.len(), 1);
+    }
+
+    #[test]
+    fn unreadable_shortcuts_and_spaces_are_dropped_alone() {
+        let source = r#"
+[spaces]
+active = 3
+[[spaces.spaces]]
+id = 1
+name = "Home"
+pinned_tabs = [{ url = "https://untitled.example" }, { title = 4 }, { title = "Mail", url = "https://mail.example" }]
+[[spaces.spaces]]
+id = 2
+name = 7
+[[spaces.spaces]]
+id = 3
+name = "Work"
+"#;
+        let (settings, partially_unreadable) =
+            decode_settings(source.as_bytes()).expect("settings decode");
+        assert!(partially_unreadable);
+        let spaces = settings.spaces.all();
+        assert_eq!(
+            spaces.iter().map(|space| space.id).collect::<Vec<_>>(),
+            [1, 3]
+        );
+        assert_eq!(settings.spaces.active().name, "Work");
+        let pinned = &spaces[0].pinned_tabs;
+        assert_eq!(pinned.len(), 2);
+        assert_eq!(pinned[0].title, "https://untitled.example");
+        assert_eq!(pinned[1].title, "Mail");
+    }
+
+    #[test]
+    fn duplicate_space_ids_are_repaired_not_reset() {
+        let source = r#"
+theme = "dark"
+[spaces]
+active = 1
+[[spaces.spaces]]
+id = 1
+name = "Home"
+[[spaces.spaces]]
+id = 1
+name = "Work"
+"#;
+        let (settings, partially_unreadable) =
+            decode_settings(source.as_bytes()).expect("settings decode");
+        assert!(partially_unreadable);
+        let spaces = settings.spaces.all();
+        assert_eq!(spaces.len(), 2);
+        assert_ne!(spaces[0].id, spaces[1].id);
+        assert_eq!(settings.spaces.active().name, "Home");
+    }
+}

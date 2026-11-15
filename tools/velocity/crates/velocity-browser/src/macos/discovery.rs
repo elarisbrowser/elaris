@@ -250,7 +250,7 @@ fn photon_checkout_roots() -> Vec<PathBuf> {
     ancestors
         .into_iter()
         .filter(|path| {
-            path.join("photon").is_file() && path.join("crates/photon-app/Cargo.toml").is_file()
+            path.join("photon").is_file() && path.join("crates/elaris-app/Cargo.toml").is_file()
         })
         .map(|path| path.canonicalize().unwrap_or(path))
         .collect::<BTreeSet<_>>()

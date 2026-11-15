@@ -13,7 +13,7 @@ The inspected macOS path is:
 ```text
 Ladybird WebContent rendering and compositor backing-store update
   → LibPhotonEmbedder publishes an IOSurface-backed frame update with backing-pool generation and WebView frame ID
-  → photon-shell receives the callback and queues the newest available surface
+  → elaris-shell receives the callback and queues the newest available surface
   → PresentationRuntime may replace an uninstalled surface with a newer one
   → PhotonWebView installs the selected surface into its page view
   → GPUI-CE samples the external Metal surface while rendering the Photon window

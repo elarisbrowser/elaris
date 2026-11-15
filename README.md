@@ -1,4 +1,4 @@
-<p align="center"><img src="crates/photon-brand/assets/brand-kit/logo/logo.svg" alt="Photon" width="96" /></p>
+<p align="center"><img src="crates/elaris-brand/assets/brand-kit/logo/logo.svg" alt="Photon" width="96" /></p>
 
 <h1 align="center">Photon</h1>
 
@@ -17,7 +17,7 @@
 ## Run from source
 
 Install the platform prerequisites in [contributor setup](CONTRIBUTOR_SETUP.md)
-first, including Rust through rustup. `./photon` runs Cargo; it does not install
+first, including Rust through rustup. `./elaris` runs Cargo; it does not install
 Rust.
 
 ```sh
@@ -25,16 +25,16 @@ git clone --recurse-submodules https://github.com/PhotonBrowser/photon.git
 cd photon
 ```
 
-On macOS, run `./photon setup --install-system-deps`; on Linux, install the
+On macOS, run `./elaris setup --install-system-deps`; on Linux, install the
 packages listed in [contributor setup](CONTRIBUTOR_SETUP.md), then run
-`./photon setup`. Follow the platform-specific build and run guidance there
+`./elaris setup`. Follow the platform-specific build and run guidance there
 before launching Photon.
 
-Setup installs or refreshes the `photon` command and `ph` alias in Cargo's bin
+Setup installs or refreshes the `elaris` command and `el` alias in Cargo's bin
 directory. Full Linux setup also registers a per-user desktop launcher and web
-URL handlers; UI-only setup does not install or update them. `photon install`
+URL handlers; UI-only setup does not install or update them. `elaris install`
 refreshes only the CLI.
-Make sure `~/.cargo/bin` is on your `PATH` to use `photon` without the `./`
+Make sure `~/.cargo/bin` is on your `PATH` to use `elaris` without the `./`
 prefix.
 
 To work on the GPUI shell on Linux without setting up Ladybird Engine, clone
@@ -43,8 +43,8 @@ without submodules and use the UI-only path:
 ```sh
 git clone https://github.com/PhotonBrowser/photon.git
 cd photon
-./photon setup --ui-only
-photon run --ui
+./elaris setup --ui-only
+elaris run --ui
 ```
 
 This opens the New Tab page and Photon-owned settings pages; web pages require
@@ -56,16 +56,16 @@ Start with [contributor setup](CONTRIBUTOR_SETUP.md), then use the [build guide]
 
 ```mermaid
 flowchart LR
-    User[You] --> App[photon-app]
-    App --> Shell[photon-shell<br/>windows, tabs, and UI]
-    Shell --> Core[photon-core<br/>browser rules and state]
-    Shell --> Storage[photon-storage<br/>profile files]
+    User[You] --> App[elaris-app]
+    App --> Shell[elaris-shell<br/>windows, tabs, and UI]
+    Shell --> Core[elaris-core<br/>browser rules and state]
+    Shell --> Storage[elaris-storage<br/>profile files]
     Shell --> Embedder[Photon Engine API]
     Embedder --> Engine[Ladybird Engine<br/>web pages]
     Shell --> Platform[Platform adapters<br/>macOS · Linux · Windows]
-    Shell --> PerfUI[photon-performance-ui<br/>GPUI charts and overlays]
-    PerfUI --> Perf[photon-performance<br/>sampling and diagnostics]
-    CLI[photon-cli<br/>setup and developer commands]
+    Shell --> PerfUI[elaris-performance-ui<br/>GPUI charts and overlays]
+    PerfUI --> Perf[elaris-performance<br/>sampling and diagnostics]
+    CLI[elaris-cli<br/>setup and developer commands]
 ```
 
 The shell connects the browser interface to framework-independent browser
@@ -76,10 +76,10 @@ and common change locations.
 <details>
 <summary>Rust crate guides</summary>
 
-- [photon-app](crates/photon-app/README.md) · [photon-brand](crates/photon-brand/README.md) · [photon-cli](crates/photon-cli/README.md) · [photon-core](crates/photon-core/README.md)
-- [photon-performance](crates/photon-performance/README.md) · [photon-performance-ui](crates/photon-performance-ui/README.md)
-- [photon-presentation-broker](crates/photon-presentation-broker/README.md) · [photon-presentation-ipc](crates/photon-presentation-ipc/README.md) · [photon-shell](crates/photon-shell/README.md)
-- [photon-storage](crates/photon-storage/README.md) · [gpui-motion](crates/gpui-motion/README.md)
+- [elaris-app](crates/elaris-app/README.md) · [elaris-brand](crates/elaris-brand/README.md) · [elaris-cli](crates/elaris-cli/README.md) · [elaris-core](crates/elaris-core/README.md)
+- [elaris-performance](crates/elaris-performance/README.md) · [elaris-performance-ui](crates/elaris-performance-ui/README.md)
+- [elaris-presentation-broker](crates/elaris-presentation-broker/README.md) · [elaris-presentation-ipc](crates/elaris-presentation-ipc/README.md) · [elaris-shell](crates/elaris-shell/README.md)
+- [elaris-storage](crates/elaris-storage/README.md) · [gpui-motion](crates/gpui-motion/README.md)
 
 </details>
 

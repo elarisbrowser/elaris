@@ -2,7 +2,7 @@
 
 ## Profile data and settings
 
-[`photon-storage`](../crates/photon-storage/src/lib.rs) owns the profile: one
+[`elaris-storage`](../crates/elaris-storage/src/lib.rs) owns the profile: one
 folder holding everything Photon keeps between launches.
 
 | File or folder | What it is |
@@ -13,8 +13,11 @@ folder holding everything Photon keeps between launches.
 | `Favicons/` | The last icon each visited page showed |
 | `Engine/` | The Engine's cookies, site storage and cache |
 
-The default profile is in the platform's application data folder, under the
-brand's folder name (`~/Library/Application Support/Photon/Default` on macOS).
+The default profile is in the platform's application data folder, under
+`Elaris` (`~/Library/Application Support/Elaris/Default` on macOS). On first
+launch after the rename, an existing `Photon/Default` profile and settings file
+move into the corresponding `Elaris` folder. If the destination already exists,
+the legacy folder is left untouched.
 By default, `config.toml` is in the platform's configuration folder; when
 `PHOTON_PROFILE_DIR` selects an isolated profile, settings are stored there.
 `PHOTON_PROFILE_DIR` chooses another folder, and `PHOTON_TEMPORARY_PROFILE`
@@ -40,7 +43,7 @@ the source file.
 
 ## Settings
 
-`BrowserSettings` in [`photon-core`](../crates/photon-core/src/settings.rs)
+`BrowserSettings` in [`elaris-core`](../crates/elaris-core/src/settings.rs)
 holds the theme, transparency, named workspace presets, search engine, pop-up
 policy, the new tab page's layout, the sidebar width, the spaces (each with
 its name, preset assignment, window colour, pinned tabs and favourites) and
@@ -65,7 +68,7 @@ spinner_step_interval_ms = 80
 ```
 
 Fields have serde defaults, so a profile saved by an older build still loads.
-When a profile opens, `photon-storage` runs pending migrations in order and
+When a profile opens, `elaris-storage` runs pending migrations in order and
 records the completed version in `.photon-profile-version`. The first migration
 converts old `config.json` or `Settings.json` settings to TOML and keeps the
 source as a timestamped backup. Future profile migrations are added as the next
@@ -75,7 +78,7 @@ Profile-wide favourites from older settings migrate into the active space.
 spaces, whose favourites and pinned tabs stay while their colours and
 dismissed empty-favourites hints reset.
 
-In the shell, [`ui/settings.rs`](../crates/photon-shell/src/platform/ui/settings.rs)
+In the shell, [`ui/settings.rs`](../crates/elaris-shell/src/platform/ui/settings.rs)
 keeps one app-wide `Settings` global:
 
 - `Settings::get(cx)` reads; `Settings::update(cx, change)` changes, saves at
@@ -86,12 +89,12 @@ keeps one app-wide `Settings` global:
 
 ## History
 
-`History` in [`photon-core`](../crates/photon-core/src/history.rs) records
+`History` in [`elaris-core`](../crates/elaris-core/src/history.rs) records
 visited web pages (titles, visit counts, last visit) and queries searched for,
 trims its oldest entries, lists the most visited pages, gives omnibox
 suggestions, and clears what a `ClearBrowsingData` request asks for.
 
-In the shell, [`ui/history.rs`](../crates/photon-shell/src/platform/ui/history.rs)
+In the shell, [`ui/history.rs`](../crates/elaris-shell/src/platform/ui/history.rs)
 keeps one app-wide `BrowsingHistory`:
 
 - Tabs record a visit when their address changes, then keep its title and
@@ -113,11 +116,12 @@ asks the Engine to delete the cache and site data through the embedder's
 
 ## Branding
 
-[`photon-brand`](../crates/photon-brand/src/lib.rs) holds the browser's name,
+[`elaris-brand`](../crates/elaris-brand/src/lib.rs) holds the browser's name,
 the engine's name, the internal page scheme, the profile folder name and the
 logo. Everything people see that names the browser reads from it: window
-titles, notices, settings text, `photon://` addresses, the profile folder and
+titles, notices, settings text, `elaris://` addresses, the profile folder and
 the logo on tabs and the new tab page. To rebrand, change it there.
 
-Changing the page scheme or folder name also moves the page addresses and
-where profiles are kept. Developer logs and panic messages still say Photon.
+The former `photon://` page scheme remains accepted for saved links. Native app
+identifiers remain stable across the visible name change. Developer logs and
+panic messages still say Photon.

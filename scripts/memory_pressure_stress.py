@@ -292,7 +292,7 @@ class MemoryPressureScenario:
         missing = [str(path) for path in required if not path.is_file()]
         if missing:
             raise StressFailure(
-                "Photon's Engine helpers are missing; run ./photon build first: "
+                "Photon's Engine helpers are missing; run ./elaris build first: "
                 + ", ".join(missing)
             )
 
@@ -306,7 +306,7 @@ class MemoryPressureScenario:
         )
         if registered.returncode != 0:
             raise StressFailure(
-                "Photon's presentation service is not registered; run './photon run' "
+                "Photon's presentation service is not registered; run './elaris run' "
                 "once to initialize this development build"
             )
 

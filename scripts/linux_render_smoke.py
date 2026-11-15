@@ -213,7 +213,7 @@ def run_smoke() -> None:
 
             output = log_path.read_text(encoding="utf-8", errors="replace")
             if process.returncode != 0:
-                raise RuntimeError(f"photon run exited with {process.returncode}")
+                raise RuntimeError(f"elaris run exited with {process.returncode}")
             if not server.page_ready.is_set():
                 raise RuntimeError("the local page did not report its canvas pixel")
             if "event=first_page_render" not in output:

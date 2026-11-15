@@ -47,7 +47,7 @@ Style and layout durations can overlap through nested update work. They must not
 | Transaction scope planning | `Engine/Libraries/LibWeb/Rust/src/css/style/flush.rs` (`plan_is_broad`, transaction publication) | Document, tree-scope, and root subtree regions can produce an unscoped transaction. This is distinct from the Rust density heuristic. |
 | Layout rounds | `Engine/Libraries/LibWeb/Layout/UpdateLayout.cpp`, `Engine/Libraries/LibWeb/Rust/src/layout/update_layout.rs`, `Engine/Libraries/LibWeb/Rust/src/layout/layout_node_arena.rs` | Full/partial counts already existed; opt-in elapsed timers wrap the classified render-state round and committed-layout preparation. |
 | Diagnostic data and export | `Engine/Libraries/LibWeb/CSS/PerformanceDiagnostics.h`, `Engine/Services/WebContent/ConnectionFromClient.cpp` | Per-document counters are collected only during an authenticated diagnostics session and exported without page content. |
-| Surface and drawable stages | `crates/photon-shell/src/platform/macos/presentation.rs`, `crates/photon-shell/src/platform/engine/session.rs`, `vendor/gpui-ce/crates/gpui_apple/src/metal_renderer.rs` | Photon reuses the Engine surface publication identity through installation and drawable callbacks; drawable feedback uses Metal host time. |
+| Surface and drawable stages | `crates/elaris-shell/src/platform/macos/presentation.rs`, `crates/elaris-shell/src/platform/engine/session.rs`, `vendor/gpui-ce/crates/gpui_apple/src/metal_renderer.rs` | Photon reuses the Engine surface publication identity through installation and drawable callbacks; drawable feedback uses Metal host time. |
 | Metric validation and report | `tools/velocity/crates/velocity-browser/src/photon.rs`, `tools/velocity/crates/velocity-cli/src/responsiveness_cli.rs` | Velocity validates the tab-scoped event stream, retains timing coverage, and reports drawable intervals separately from Engine style timing. |
 
 The implementation reuses Ladybird's existing style and layout counters, adds broad/narrow apply counts and durations only while authenticated diagnostics are enabled, and times classified layout rounds behind the same opt-in session. Rust diagnostics do not gather per-element traces while disabled. Unscoped/fallback cause reporting remains unavailable; `style_fallback_reason_available` is explicitly `false`.
@@ -141,10 +141,10 @@ The timer queue p95 observed during these fixtures was roughly 0.05–0.08 ms. T
 
 Validation completed on this checkout:
 
-- `photon format` — passed.
-- `photon check` — passed.
-- `photon test` — passed.
-- `photon build` — passed; the release Photon executable used for the live captures was built before those captures.
+- `elaris format` — passed.
+- `elaris check` — passed.
+- `elaris test` — passed.
+- `elaris build` — passed; the release Photon executable used for the live captures was built before those captures.
 - `cargo fmt --all -- --check` in `tools/velocity/` — passed.
 - `cargo test --workspace` in `tools/velocity/` — 165 tests passed (43 browser, 92 CLI, 17 core, 13 metrics); doc tests passed with no tests defined.
 

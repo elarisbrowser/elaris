@@ -22,9 +22,9 @@ own window colour and gradient.
 
 ## Ownership
 
-`photon-core/src/workspace.rs` owns the serializable preset model and layout
-values. `photon-core/src/spaces.rs` owns each space's preset assignment and
-legacy layout snapshot. `photon-storage` persists those settings in the
+`elaris-core/src/workspace.rs` owns the serializable preset model and layout
+values. `elaris-core/src/spaces.rs` owns each space's preset assignment and
+legacy layout snapshot. `elaris-storage` persists those settings in the
 existing profile document.
 
 The shell's `ui/workspace_layout.rs` resolves saved presets through the browser

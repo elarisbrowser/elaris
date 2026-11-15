@@ -1,0 +1,237 @@
+//! `elaris://downloads`: the files Engine saved for pages, with their progress,
+//! and ways to pause, cancel, open or find them.
+
+use gpui::{
+    Context, Render, Subscription, Window, div, prelude::*, px, relative, rgb, rgba, uniform_list,
+};
+use std::rc::Rc;
+
+use super::super::super::engine::{Download, DownloadStatus, EngineRuntime};
+use super::super::button::{ButtonKind, ButtonSize, button};
+use super::super::downloads::{Downloads, file_name, progress_fraction, status_text};
+use super::super::icons::download_icon;
+use super::super::layout::{h_stack, v_stack};
+use super::super::settings::Settings;
+use super::super::{metrics, theme::ThemeColors, theme::page_palette as palette};
+use super::layout::{group, heading, secondary_text};
+use super::{PageContext, PageDefinition, PageIcon};
+
+pub(super) const PAGE: PageDefinition = PageDefinition {
+    name: "downloads",
+    title: "Downloads",
+    icon: PageIcon::Symbol(|color, size| download_icon(color, size).into_any_element()),
+    shows_address: true,
+    single_tab: true,
+    build: |context, cx| cx.new(|cx| DownloadsPage::new(context, cx)).into(),
+};
+
+pub(in super::super) struct DownloadsPage {
+    runtime: Rc<EngineRuntime>,
+    space: elaris_core::SpaceId,
+    /// Whether the page is in a private window, which lists only private downloads.
+    private: bool,
+    _downloads: Subscription,
+}
+
+impl DownloadsPage {
+    fn new(context: PageContext, cx: &mut Context<Self>) -> Self {
+        let profile_path = Settings::space_engine_dir(context.space, cx).ok().flatten();
+        context
+            .runtime
+            .ensure_profile_session(profile_path.as_deref());
+        Self {
+            runtime: context.runtime,
+            space: context.space,
+            private: context.private,
+            _downloads: cx.observe_global::<Downloads>(|_, cx| cx.notify()),
+        }
+    }
+}
+
+fn progress_bar(download: &Download, palette: ThemeColors) -> impl IntoElement {
+    if !download.status.is_active() {
+        return div().h(px(metrics::DOWNLOAD_PROGRESS_HEIGHT));
+    }
+    let fraction = progress_fraction(download).unwrap_or(0.0);
+    div()
+        .w_full()
+        .h(px(metrics::DOWNLOAD_PROGRESS_HEIGHT))
+        .rounded_full()
+        .bg(rgba(palette.menu_border))
+        .child(
+            div()
+                .h_full()
+                .w(relative(fraction))
+                .rounded_full()
+                .bg(rgb(palette.chosen)),
+        )
+}
+
+impl DownloadsPage {
+    fn row(
+        runtime: &Rc<EngineRuntime>,
+        download: &Download,
+        palette: ThemeColors,
+    ) -> impl IntoElement {
+        let id = download.id;
+        let mut actions = h_stack().gap(px(metrics::MENU_ITEM_GAP)).flex_shrink_0();
+        let action = |name: &'static str, kind: ButtonKind, handler: super::super::ClickHandler| {
+            button(
+                gpui::ElementId::Name(format!("download-{name}-{id}").into()),
+                name,
+                kind,
+                true,
+                ButtonSize::Small,
+                palette,
+                handler,
+            )
+        };
+        match download.status {
+            DownloadStatus::InProgress | DownloadStatus::Paused => {
+                let resume_runtime = runtime.clone();
+                let paused = download.status == DownloadStatus::Paused;
+                actions = actions.child(action(
+                    if paused { "Resume" } else { "Pause" },
+                    ButtonKind::Secondary,
+                    Box::new(move |_, _, _| {
+                        if paused {
+                            resume_runtime.resume_download(id);
+                        } else {
+                            resume_runtime.pause_download(id);
+                        }
+                    }),
+                ));
+                let cancel_runtime = runtime.clone();
+                actions = actions.child(action(
+                    "Cancel",
+                    ButtonKind::Destructive,
+                    Box::new(move |_, _, _| cancel_runtime.cancel_download(id)),
+                ));
+            }
+            DownloadStatus::Completed => {
+                let path = download.path.clone();
+                actions = actions.child(action(
+                    "Open",
+                    ButtonKind::Secondary,
+                    Box::new(move |_, _, cx| cx.open_with_system(&path)),
+                ));
+                let path = download.path.clone();
+                actions = actions.child(action(
+                    "Show in Folder",
+                    ButtonKind::Secondary,
+                    Box::new(move |_, _, cx| cx.reveal_path(&path)),
+                ));
+            }
+            DownloadStatus::Canceled | DownloadStatus::Failed => {}
+        }
+        h_stack()
+            .h(px(metrics::DOWNLOAD_ROW_HEIGHT))
+            .w_full()
+            .items_center()
+            .gap(px(metrics::LIST_ROW_GAP))
+            .p(px(metrics::LIST_ROW_PADDING))
+            .child(download_icon(
+                palette.text_secondary,
+                metrics::LIST_ROW_ICON_SIZE,
+            ))
+            .child(
+                v_stack()
+                    .flex_1()
+                    .min_w_0()
+                    .gap(px(metrics::MENU_ITEM_GAP * 2.0))
+                    .child(
+                        div()
+                            .truncate()
+                            .text_size(px(metrics::MENU_FONT_SIZE))
+                            .text_color(rgb(palette.text_primary))
+                            .child(file_name(download)),
+                    )
+                    .child(progress_bar(download, palette))
+                    .child(secondary_text(status_text(download), palette).truncate()),
+            )
+            .child(actions)
+    }
+}
+
+impl Render for DownloadsPage {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let palette = palette(window, cx);
+        let downloads: Vec<_> = Downloads::list(self.space, self.private, cx).collect();
+        let has_inactive = downloads
+            .iter()
+            .any(|download| !download.status.is_active());
+        let runtime = self.runtime.clone();
+        let profile_path = super::super::settings::Settings::space_engine_dir(self.space, cx)
+            .ok()
+            .flatten();
+        let header = h_stack()
+            .w_full()
+            .items_end()
+            .justify_between()
+            .gap(px(metrics::LIST_ROW_GAP))
+            .child(heading(
+                "downloads-heading",
+                "Downloads",
+                "Files you download are saved to your Downloads folder.",
+                palette,
+            ))
+            .child(button(
+                "downloads-clear",
+                "Clear List",
+                ButtonKind::Secondary,
+                has_inactive,
+                ButtonSize::Small,
+                palette,
+                Box::new(move |_, _, _| runtime.clear_inactive_downloads(profile_path.as_deref())),
+            ));
+        let list: gpui::AnyElement = if downloads.is_empty() {
+            group(palette)
+                .p(px(metrics::LIST_ROW_PADDING))
+                .child(secondary_text("Nothing downloaded yet.", palette))
+                .into_any_element()
+        } else {
+            let runtime = self.runtime.clone();
+            let private = self.private;
+            let space = self.space;
+            group(palette)
+                .p(px(0.))
+                .h_full()
+                .child(
+                    uniform_list(
+                        "downloads-list",
+                        downloads.len(),
+                        move |range, _window, app| {
+                            range
+                                .map(|index| {
+                                    let Some(download) =
+                                        Downloads::list(space, private, app).nth(index)
+                                    else {
+                                        return div().into_any_element();
+                                    };
+                                    DownloadsPage::row(&runtime, download, palette)
+                                        .into_any_element()
+                                })
+                                .collect()
+                        },
+                    )
+                    .w_full()
+                    .h_full(),
+                )
+                .into_any_element()
+        };
+        v_stack()
+            .id("downloads-page")
+            .size_full()
+            .items_center()
+            .overflow_hidden()
+            .p(px(metrics::INTERNAL_PAGE_INSET))
+            .child(
+                v_stack()
+                    .size_full()
+                    .max_w(px(metrics::INTERNAL_PAGE_MAX_WIDTH))
+                    .gap(px(metrics::INTERNAL_PAGE_SECTION_GAP))
+                    .child(header)
+                    .child(div().flex_1().min_h(px(0.)).w_full().child(list)),
+            )
+    }
+}

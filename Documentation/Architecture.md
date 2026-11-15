@@ -14,8 +14,8 @@ Photon
   │
   ▼
 Rust + GPUI-CE shell
-  ├── photon-core
-  ├── photon-storage
+  ├── elaris-core
+  ├── elaris-storage
   └── Photon Engine API
           │
           ▼
@@ -29,7 +29,7 @@ implements web page behavior.
 ## What happens when you open a page
 
 1. The shell receives your address or search text.
-2. `photon-core` resolves it into a navigation request and updates browser
+2. `elaris-core` resolves it into a navigation request and updates browser
    state.
 3. The shell sends the request through the Photon Engine API.
 4. The Engine loads the page and reports navigation, title, and presentation
@@ -45,35 +45,35 @@ receive page pixel buffers.
 
 | Part | What it does |
 | --- | --- |
-| `photon-app` | Starts the desktop application. |
-| `photon-shell` | Owns browser windows, shared GPUI views, tab coordination, Engine sessions, and platform adapters. |
-| `photon-core` | Owns browser state and rules, including navigation, address/search resolution, and tab-sleep policy. It has no UI or Engine dependency. |
-| `photon-storage` | Reads and writes profile data such as history, icons, settings, and website data. |
+| `elaris-app` | Starts the desktop application. |
+| `elaris-shell` | Owns browser windows, shared GPUI views, tab coordination, Engine sessions, and platform adapters. |
+| `elaris-core` | Owns browser state and rules, including navigation, address/search resolution, and tab-sleep policy. It has no UI or Engine dependency. |
+| `elaris-storage` | Reads and writes profile data such as history, icons, settings, and website data. |
 | `Engine/` | Ladybird and Photon’s embedder API for creating and controlling web views. |
 | `native/embedder/` | Bridges the C++ embedder API to the private C ABI used by Rust. |
-| `photon-cli` | Provides setup, build, run, and development commands. Cargo CLI installation stays separate from the Linux desktop integration commands that manage XDG launcher files. |
+| `elaris-cli` | Provides setup, build, run, and development commands. Cargo CLI installation stays separate from the Linux desktop integration commands that manage XDG launcher files. |
 
 Other focused packages provide branding, performance diagnostics, sound,
 motion, and macOS presentation transport. Performance sampling and data live
-in `photon-performance`; its GPUI charts and overlays live in
-`photon-performance-ui`. Their package READMEs describe those areas. Generic
+in `elaris-performance`; its GPUI charts and overlays live in
+`elaris-performance-ui`. Their package READMEs describe those areas. Generic
 GPUI-CE code lives in the pinned `vendor/gpui-ce` dependency.
 
 ## How Photon connects to the Engine
 
-Rust code in `photon-shell` calls the public C++ `Photon::Runtime` and
+Rust code in `elaris-shell` calls the public C++ `Photon::Runtime` and
 `Photon::View` API in
 [`PhotonEmbedder.h`](../Engine/Libraries/LibPhotonEmbedder/include/LibPhotonEmbedder/PhotonEmbedder.h).
 [`PhotonEmbedderBridge.cpp`](../native/embedder/PhotonEmbedderBridge.cpp)
 adapts that API to a private C interface, which Rust calls through
-[`engine_ffi.rs`](../crates/photon-shell/src/platform/engine_ffi.rs).
+[`engine_ffi.rs`](../crates/elaris-shell/src/platform/engine_ffi.rs).
 
 This boundary keeps engine changes separate from normal browser UI work. Keep
 Ladybird classes and engine implementation details inside `Engine/` and the
 embedder integration. Keep shared views in
-`crates/photon-shell/src/platform/ui/`, shared Engine calls in
-`crates/photon-shell/src/platform/engine/`, and operating-system behavior in
-`crates/photon-shell/src/platform/<target>/` (`macos/`, `linux/`, `windows/`).
+`crates/elaris-shell/src/platform/ui/`, shared Engine calls in
+`crates/elaris-shell/src/platform/engine/`, and operating-system behavior in
+`crates/elaris-shell/src/platform/<target>/` (`macos/`, `linux/`, `windows/`).
 Code shared by several targets has its own folder: `unix/` for macOS and Linux,
 and `portable/` for fallbacks used where no native adapter exists (the CPU page
 renderer, display metadata and memory pressure). A shared UI component with a
@@ -83,12 +83,12 @@ native half keeps it beside the component, as `ui/glass/macos.rs` does.
 
 | If you are changing… | Start here |
 | --- | --- |
-| Address handling, navigation rules, or browser state | [`photon-core`](../crates/photon-core/README.md) |
-| History, profile files, or persisted settings | [`photon-storage`](../crates/photon-storage/README.md) |
-| Shared browser interface or interactions | [`photon-shell` UI](../crates/photon-shell/src/platform/ui/mod.rs) |
-| Engine sessions and callbacks | [`photon-shell` Engine adapter](../crates/photon-shell/src/platform/engine/mod.rs) |
-| Native window or operating-system behavior | [`photon-shell` platform adapters](../crates/photon-shell/src/platform/mod.rs) |
-| Rust-to-Engine bridge | [`native/embedder`](../native/embedder/PhotonEmbedderBridge.cpp) and [`engine_ffi.rs`](../crates/photon-shell/src/platform/engine_ffi.rs) |
+| Address handling, navigation rules, or browser state | [`elaris-core`](../crates/elaris-core/README.md) |
+| History, profile files, or persisted settings | [`elaris-storage`](../crates/elaris-storage/README.md) |
+| Shared browser interface or interactions | [`elaris-shell` UI](../crates/elaris-shell/src/platform/ui/mod.rs) |
+| Engine sessions and callbacks | [`elaris-shell` Engine adapter](../crates/elaris-shell/src/platform/engine/mod.rs) |
+| Native window or operating-system behavior | [`elaris-shell` platform adapters](../crates/elaris-shell/src/platform/mod.rs) |
+| Rust-to-Engine bridge | [`native/embedder`](../native/embedder/PhotonEmbedderBridge.cpp) and [`engine_ffi.rs`](../crates/elaris-shell/src/platform/engine_ffi.rs) |
 | Theme colors, spacing, or typography | [Theme guide](Theme.md) |
 | Generic GPUI-CE behavior | [`vendor/gpui-ce`](../vendor/gpui-ce/README.md) |
 

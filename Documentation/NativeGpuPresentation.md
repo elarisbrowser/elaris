@@ -15,11 +15,11 @@ The page layer and the cutout must share one edge. A layer that reaches past the
 When a frame is shown, the frames it replaced are released at once, like Ladybird's view releasing its previous front buffer. A frame that was never shown is reported finished and can be reused immediately. A frame that Core Animation displayed is not reported finished while the window server may still read it: the compositor does not render into it and adds a backing store rather than wait. While the window is fully occluded Photon marks the active view hidden, and Engine stops rendering frames. At shutdown, the application disables new frame publication, releases pending and displayed leases, and checks `received == completed == released` with `outstanding == 0`.
 
 The XPC protocol, Rust client channel, and native Objective-C transport live in
-`crates/photon-presentation-ipc`. The small
-`crates/photon-presentation-broker` executable starts the service; the CLI
+`crates/elaris-presentation-ipc`. The small
+`crates/elaris-presentation-broker` executable starts the service; the CLI
 command stages and registers that executable. It transports IOSurface Mach
 ports and shared-event handles between the Engine and Photon processes.
-`photon run` rebuilds the broker and restarts its service when the executable
+`elaris run` rebuilds the broker and restarts its service when the executable
 changes. GPUI-CE contains only the generic cutout primitive.
 
-`photon run --verbose --shutdown-after-seconds 5` provides a fixed-window trace ending in the shutdown lease accounting. `EXTERNAL_IMAGE_LEASE_TRACE=1` adds the Engine side, including each release's `iosurface_in_use` state.
+`elaris run --verbose --shutdown-after-seconds 5` provides a fixed-window trace ending in the shutdown lease accounting. `EXTERNAL_IMAGE_LEASE_TRACE=1` adds the Engine side, including each release's `iosurface_in_use` state.

@@ -7,12 +7,12 @@ tested revision pinned by the root repository are Photon-owned. Keep the
 upstream remote for reference, but import its changes selectively; Photon does
 not target regular upstream merges or clean mergeability. The fork can evolve
 its APIs and internals to support Photon’s animation, rendering, and performance
-goals. Use `photon deps sync gpui` only when a broad upstream merge is intended.
+goals. Use `elaris deps sync gpui` only when a broad upstream merge is intended.
 Before advancing the root gitlink, validate and push the tested fork commit to
 Photon’s `origin`; never pin an untested upstream tip.
 
 Keep reusable framework behavior in GPUI-CE and Photon application policy in
-`photon-shell`. Do not add Photon or Ladybird lifecycle types to GPUI-CE.
+`elaris-shell`. Do not add Photon or Ladybird lifecycle types to GPUI-CE.
 
 Photon needs a generic macOS `ExternalMetalSurface` for an externally-produced
 BGRA IOSurface. Its descriptor includes the logical resource and generation
@@ -43,10 +43,10 @@ is restored after exiting fullscreen. The shell removes titlebar insets
 reserved for window controls in native and borderless fullscreen, so its
 content can use that space when the controls are hidden. It configures the
 behavior in
-[`platform/macos/window_settings.rs`](../../crates/photon-shell/src/platform/macos/window_settings.rs);
+[`platform/macos/window_settings.rs`](../../crates/elaris-shell/src/platform/macos/window_settings.rs);
 the generic AppKit integration stays in the GPUI-CE submodule.
 
-Photon's AppKit extension in `photon-shell` also hosts retained `NSView`s as
+Photon's AppKit extension in `elaris-shell` also hosts retained `NSView`s as
 GPUI layout elements. It owns frame synchronization and view attachment
 lifetime; AppKit continues to draw and handle input for each native control.
 The macOS 26+ button style uses AppKit's Liquid Glass bezel, with a native
@@ -56,4 +56,4 @@ limits.
 
 Photon owns XPC presentation, frame ordering, generations, retirement, release
 forwarding, Engine thread affinity, browser input, and application startup.
-`photon run` builds and launches the optimized release app by default. Use `photon run --ui` to run without requiring Engine.
+`elaris run` builds and launches the optimized release app by default. Use `elaris run --ui` to run without requiring Engine.

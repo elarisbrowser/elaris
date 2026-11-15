@@ -6,9 +6,9 @@ transparency level, and every view.
 
 ## Colors
 
-[`theme.toml`](../crates/photon-shell/theme.toml) is the source of color,
+[`theme.toml`](../crates/elaris-shell/theme.toml) is the source of color,
 opacity, transparency, window tint, and corner-radius values.
-[`theme.rs`](../crates/photon-shell/src/platform/ui/theme.rs) resolves these
+[`theme.rs`](../crates/elaris-shell/src/platform/ui/theme.rs) resolves these
 values into `ThemeColors`, the semantic roles views use. Views get the active set from
 `theme::palette(window, cx)`, which reads the appearance and transparency
 from the [settings](Profile.md), and never choose colors locally.
@@ -69,7 +69,7 @@ sharp.
 
 ## Dimensions and typography
 
-[`metrics.rs`](../crates/photon-shell/src/platform/ui/metrics.rs) holds shared
+[`metrics.rs`](../crates/elaris-shell/src/platform/ui/metrics.rs) holds shared
 logical-pixel measurements: window geometry, the tab strip, toolbar, sidebar
 and its tabs, menus, the omnibox (with a larger size in the sidebar) and its
 suggestions, the page frame, chips, controls, settings rows and new tab tiles.
@@ -81,7 +81,7 @@ mechanics such as `flex_1`, `size_full` and `min_w_0` stay in the view.
 
 ## Elevation
 
-[`layout.rs`](../crates/photon-shell/src/platform/ui/layout.rs) names the
+[`layout.rs`](../crates/elaris-shell/src/platform/ui/layout.rs) names the
 shell's shadows. Use `element.elevated(Elevation::…)`, not shadow sizes:
 
 | Level | Used for |
@@ -98,32 +98,32 @@ revealed sidebar and a dragged tab all use the same surface role.
 
 ## Shared components
 
-- [`menu.rs`](../crates/photon-shell/src/platform/ui/menu.rs): the popover
+- [`menu.rs`](../crates/elaris-shell/src/platform/ui/menu.rs): the popover
   surface and menu rows. Menus are compact like Chromium's: full-width flat
   rows with no gaps, padding only above and below, edge-to-edge separators and
   a light border. `popover_surface` takes any width; `menu_surface` is the
   standard menu. Rows include actions, checkboxes, switches, a stepper, small
   headings and blocks that line up embedded controls.
-- [`controls.rs`](../crates/photon-shell/src/platform/ui/controls.rs):
+- [`controls.rs`](../crates/elaris-shell/src/platform/ui/controls.rs):
   segmented `choices`, colour `swatches`,
   `switch` and `check_mark`, used by menus and pages, `text_field` for a
   dialog's text field with its text centred, and
   `themed_text_input` for every text field's caret and selection.
-- [`dropdown.rs`](../crates/photon-shell/src/platform/ui/dropdown.rs): a
+- [`dropdown.rs`](../crates/elaris-shell/src/platform/ui/dropdown.rs): a
   button showing the chosen option that opens a menu of the options, which
   animates in and back out like any menu.
-- [`button.rs`](../crates/photon-shell/src/platform/ui/button.rs): text and
-  icon buttons, and the toolbar and menu buttons both tab layouts share. [`modal.rs`](../crates/photon-shell/src/platform/ui/modal.rs):
+- [`button.rs`](../crates/elaris-shell/src/platform/ui/button.rs): text and
+  icon buttons, and the toolbar and menu buttons both tab layouts share. [`modal.rs`](../crates/elaris-shell/src/platform/ui/modal.rs):
   a centered modal over a dimmed window.
 - Page layout and settings rows live in [`pages/`](Pages.md).
 
 ## Icons
 
-[`icons.rs`](../crates/photon-shell/src/platform/ui/icons.rs) gives each icon
+[`icons.rs`](../crates/elaris-shell/src/platform/ui/icons.rs) gives each icon
 a function taking a color and a size, such as `back_icon(color, size)`, so
 views never handle SVG data. Icons are [Lucide](https://lucide.dev) (ISC
 license), vendored unchanged from `lucide-static` 0.460.0 in
-[`assets/icons/lucide/`](../crates/photon-shell/assets/icons/lucide) with
+[`assets/icons/lucide/`](../crates/elaris-shell/assets/icons/lucide) with
 its license. Only the loading spinner, whose spokes fade behind the leading
 one, and the brand logo are drawn by Photon.
 
@@ -134,7 +134,7 @@ folder, then add a function that loads it with `lucide!("name")`.
 
 [`gpui-motion`](../crates/gpui-motion/README.md) provides reusable animation
 mechanics. The shell's
-[`motion/`](../crates/photon-shell/src/platform/ui/motion/) keeps Photon
+[`motion/`](../crates/elaris-shell/src/platform/ui/motion/) keeps Photon
 visual presets and distances. An `Entrance` describes an element effect,
 composed from:
 
@@ -233,7 +233,7 @@ switching tabs. Animate only what just changed:
 - Build menus and popovers from `menu.rs`, and controls from `controls.rs`,
   so hover, selected, chosen and focus look the same everywhere.
 - Animate with `motion/`, and only on a change.
-- Take the browser's name, page scheme and logo from `photon-brand`, never
+- Take the browser's name, page scheme and logo from `elaris-brand`, never
   literals (see [Profile and branding](Profile.md)).
 
 Liquid Glass behind GPUI elements is described in [Glass](Glass.md).

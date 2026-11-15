@@ -1,7 +1,7 @@
 # Glass
 
 Photon draws Liquid Glass behind GPUI elements with one element, `glass`, in
-[`ui/glass.rs`](../crates/photon-shell/src/platform/ui/glass.rs). On macOS 26
+[`ui/glass.rs`](../crates/elaris-shell/src/platform/ui/glass.rs). On macOS 26
 and later it puts native glass beneath the element's GPUI children. Everywhere
 else, and when **Settings → Appearance → Glass menus** is off, the element is a
 plain `div` with its fallback styles.
@@ -64,7 +64,7 @@ Glass inside GPUI's window refracts only what lies beneath GPUI: to show, it
 clears GPUI's drawing, so it cuts through any GPUI interface behind it. A panel
 that floats over GPUI content and must be native opens in a native `NSPopover`
 instead, with `NativePanel` in
-[`ui/native_panel.rs`](../crates/photon-shell/src/platform/ui/native_panel.rs),
+[`ui/native_panel.rs`](../crates/elaris-shell/src/platform/ui/native_panel.rs),
 as Zen's panels do. The popover is its own window, composited by the system,
 so its material refracts everything behind it. It takes any GPUI content,
 points at an anchor in the browser window, and AppKit animates it in and out
@@ -99,7 +99,7 @@ Adding, hiding or removing a view there redraws the whole window's glass,
 which flickers, so each glass view is inserted once and never hidden or
 removed while its window lives: glass that should not show waits out of sight
 instead. The native view and its placement live in `AppKitGlassBackdrop` in
-[`macos/glass_backdrop.rs`](../crates/photon-shell/src/platform/macos/glass_backdrop.rs).
+[`macos/glass_backdrop.rs`](../crates/elaris-shell/src/platform/macos/glass_backdrop.rs).
 
 Native AppKit controls that need no GPUI content, such as the site information
 popover and context menus, use AppKit directly instead; see

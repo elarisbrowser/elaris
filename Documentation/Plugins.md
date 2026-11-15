@@ -1,7 +1,7 @@
 # Plugins and optional features
 
 Photon treats each optional browser capability as a built-in plugin. Every
-plugin has its own manifest module in `crates/photon-core/src/features/`. The
+plugin has its own manifest module in `crates/elaris-core/src/features/`. The
 core build script discovers those files and generates the registry and
 `Feature` constants, so adding a feature module adds its stable ID and settings
 entry without editing a central catalog. The module declares the feature's
@@ -13,8 +13,8 @@ new-tab controls, and tab management, including Liquid Glass and background
 texture.
 
 To add a built-in plugin, create matching snake-case modules in
-`crates/photon-core/src/features/` and
-`crates/photon-shell/src/platform/ui/window/plugins/`. Define the core
+`crates/elaris-core/src/features/` and
+`crates/elaris-shell/src/platform/ui/window/plugins/`. Define the core
 `DEFINITION` with the `feature!` macro; its filename supplies the stable
 kebab-case key and generated `Feature::Name` constant. Declare contributed
 commands with that manifest, and declare pages, workspace components, and

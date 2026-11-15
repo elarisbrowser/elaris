@@ -1,15 +1,15 @@
 # The browser's own pages
 
-Photon draws some pages itself, natively in GPUI, rather than loading them in
+Elaris draws some pages itself, natively in GPUI, rather than loading them in
 the Engine: the new tab page and settings. Each lives at an address with the
-brand's page scheme, such as `photon://settings`, and is a view in
-[`ui/pages/`](../crates/photon-shell/src/platform/ui/pages/mod.rs).
+brand's page scheme, such as `elaris://settings`, and is a view in
+[`ui/pages/`](../crates/elaris-shell/src/platform/ui/pages/mod.rs).
 
 ## How a tab shows a page
 
 A tab shows either a web view or a page
-([`window/content.rs`](../crates/photon-shell/src/platform/ui/window/content.rs)).
-Navigating the active tab to a `photon://` address opens that page in it, and
+([`window/content.rs`](../crates/elaris-shell/src/platform/ui/window/content.rs)).
+Navigating the active tab to an `elaris://` address opens that page in it, and
 any other address opens a web view, replacing whichever the tab showed. Pages
 sit in the same frame as web pages: the same inset and rounded corners, on the
 theme's `surface`.
@@ -19,12 +19,12 @@ can type at once. Pages are not recorded in the history.
 
 ## The registry
 
-[`pages/registry.rs`](../crates/photon-shell/src/platform/ui/pages/registry.rs)
+[`pages/registry.rs`](../crates/elaris-shell/src/platform/ui/pages/registry.rs)
 lists every page. Each page module declares a `PageDefinition`:
 
 | Field | Meaning |
 | --- | --- |
-| `name` | The name in its address, as `settings` in `photon://settings` |
+| `name` | The name in its address, as `settings` in `elaris://settings` |
 | `title` | The tab's title |
 | `icon` | `PageIcon::Logo` (the brand logo) or `PageIcon::Symbol(fn)` |
 | `shows_address` | Whether the omnibox shows the address |
@@ -41,9 +41,9 @@ another page. The window needs no code for a new page.
    `pub(super) const PAGE: PageDefinition`.
 2. Add it to `PAGES` in `registry.rs`, with a named constant if other code
    opens it, as with `NEW_TAB` and `SETTINGS`.
-3. Build it from the shared parts: [`pages/layout.rs`](../crates/photon-shell/src/platform/ui/pages/layout.rs)
+3. Build it from the shared parts: [`pages/layout.rs`](../crates/elaris-shell/src/platform/ui/pages/layout.rs)
    (scrolling column, headings, labels, groups),
-   [`pages/controls.rs`](../crates/photon-shell/src/platform/ui/pages/controls.rs)
+   [`pages/controls.rs`](../crates/elaris-shell/src/platform/ui/pages/controls.rs)
    (switch and checkbox rows), and the shell-wide
    [controls and menus](Theme.md#shared-components).
 4. Read and change settings with `Settings::get` and `Settings::update`, and
@@ -51,22 +51,22 @@ another page. The window needs no code for a new page.
 
 ## Performance
 
-`photon://performance` is a native GPUI task and performance page. It samples
-the Photon shell process and the WebContent/worker processes owned by each tab
+`elaris://performance` is a native GPUI task and performance page. It samples
+the Elaris shell process and the WebContent/worker processes owned by each tab
 while the page is open, and shows rolling CPU and memory charts. Shared Engine
 services and GPU allocations are not attributed to those totals. UI loop delay
 events are measured separately from page frame gaps.
 
 ## AppKit showcase
 
-On macOS, `photon://appkit` opens a live showcase of native AppKit buttons in
+On macOS, `elaris://appkit` opens a live showcase of native AppKit buttons in
 the GPUI layout tree. It demonstrates a native segmented tab bar, SF Symbol
 controls, Liquid Glass and toolbar bezels, borderless and disabled buttons,
 and native action callbacks.
 
 ## New tab page
 
-[`pages/new_tab/`](../crates/photon-shell/src/platform/ui/pages/new_tab/mod.rs)
+[`pages/new_tab/`](../crates/elaris-shell/src/platform/ui/pages/new_tab/mod.rs)
 shows the brand logo and shortcuts to sites:
 
 - `tiles.rs`: the shortcut grid. Hovering a tile offers to remove it; an "Add
@@ -78,14 +78,14 @@ shows the brand logo and shortcuts to sites:
 - `options.rs`: what those options do, shared with the settings page, which
   lays them out in its own style.
 
-The rules live in [`photon-core/src/new_tab.rs`](../crates/photon-core/src/new_tab.rs):
+The rules live in [`elaris-core/src/new_tab.rs`](../crates/elaris-core/src/new_tab.rs):
 pinned sites first, then the most visited sites, one per site, up to the
 chosen 4, 6, 8, 10 or 12, in at most two rows. Removing a tile hides its whole
 site until removed sites are restored.
 
 ## Settings
 
-[`pages/settings/`](../crates/photon-shell/src/platform/ui/pages/settings/mod.rs)
+[`pages/settings/`](../crates/elaris-shell/src/platform/ui/pages/settings/mod.rs)
 has a sidebar of sections, one shown at a time, each in its own module:
 
 | Section | Settings |
@@ -101,4 +101,4 @@ Changes save at once and apply in every window; see
 [Profile and branding](Profile.md). "Reset to defaults", at the foot of the
 sidebar, asks before returning every setting to its default, keeping the
 favourites, the new tab page's shortcuts and the pinned tabs
-([`reset.rs`](../crates/photon-shell/src/platform/ui/pages/settings/reset.rs)).
+([`reset.rs`](../crates/elaris-shell/src/platform/ui/pages/settings/reset.rs)).

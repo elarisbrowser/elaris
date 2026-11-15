@@ -4,7 +4,7 @@ Photon's primary development platform is macOS. Linux support is experimental: U
 
 ## Bootstrap prerequisites
 
-Install Rust with [rustup](https://rustup.rs) before running `./photon setup`. The `./photon` launcher starts the CLI with `cargo run`, so it cannot install Rust for you. In the repository, rustup selects the pinned Rust 1.99.0 toolchain from `rust-toolchain.toml` (and installs it on first use). Ensure `~/.cargo/bin` is on `PATH` so `cargo`, `rustc`, and `rustup` are available.
+Install Rust with [rustup](https://rustup.rs) before running `./elaris setup`. The `./elaris` launcher starts the CLI with `cargo run`, so it cannot install Rust for you. In the repository, rustup selects the pinned Rust 1.99.0 toolchain from `rust-toolchain.toml` (and installs it on first use). Ensure `~/.cargo/bin` is on `PATH` so `cargo`, `rustc`, and `rustup` are available.
 
 ## macOS
 
@@ -15,14 +15,14 @@ Clone and set up Photon:
 ```sh
 git clone --recurse-submodules https://github.com/PhotonBrowser/photon.git
 cd photon
-./photon setup --install-system-deps
-photon check
-photon test
-photon build
-photon run
+./elaris setup --install-system-deps
+elaris check
+elaris test
+elaris build
+elaris run
 ```
 
-The system dependency option installs Ladybird's Homebrew build packages. Setup verifies tools, initializes missing pinned submodules, configures their remotes and persistent development branches, prepares formatting tools, and installs the `photon` command and `ph` alias in Cargo's bin directory. It does not install Xcode Command Line Tools, Homebrew itself, Rust, or Python.
+The system dependency option installs Ladybird's Homebrew build packages. Setup verifies tools, initializes missing pinned submodules, configures their remotes and persistent development branches, prepares formatting tools, and installs the `elaris` command and `el` alias in Cargo's bin directory. It does not install Xcode Command Line Tools, Homebrew itself, Rust, or Python.
 
 ## Linux
 
@@ -33,8 +33,8 @@ To work on the GPUI shell without downloading or preparing the Engine, install G
 ```sh
 git clone https://github.com/PhotonBrowser/photon.git
 cd photon
-./photon setup --ui-only
-photon run --ui
+./elaris setup --ui-only
+elaris run --ui
 ```
 
 This initializes GPUI-CE and skips Engine, Qt, Python, CMake, Ninja, C++ compiler, and clang-format setup. It still needs the native desktop libraries required by GPUI-CE and a graphical Linux session. Web pages and Engine-backed form controls are unavailable in this mode. You can run the full setup later; it initializes the Engine and keeps the existing GPUI-CE worktree.
@@ -44,14 +44,14 @@ For the full browser, install Python 3 with pip, a C++23-capable compiler, CMake
 ```sh
 git clone https://github.com/PhotonBrowser/photon.git
 cd photon
-./photon setup
-photon check
-photon test
-photon build
-photon run
+./elaris setup
+elaris check
+elaris test
+elaris build
+elaris run
 ```
 
-Setup does not install Linux packages. Full `photon setup` installs the CLI and then registers the per-user desktop launcher and HTTP/HTTPS handlers; `photon setup --ui-only` does not install or update desktop integration. `photon install` installs or refreshes only the CLI, while `photon desktop install` and `photon desktop uninstall` manage the launcher separately. Photon is not selected as the default browser automatically. `photon check` and `photon test` pass in Ubuntu CI. `photon build` and full `photon run` use the portable Linux Engine and GPUI paths, but need a working graphical session and have not yet been verified as end-to-end runtime paths by CI. `photon run --ui` launches the shell without the Engine and cannot load web pages.
+Setup does not install Linux packages. Full `elaris setup` installs the CLI and then registers the per-user desktop launcher and HTTP/HTTPS handlers; `elaris setup --ui-only` does not install or update desktop integration. `elaris install` installs or refreshes only the CLI, while `elaris desktop install` and `elaris desktop uninstall` manage the launcher separately. Photon is not selected as the default browser automatically. `elaris check` and `elaris test` pass in Ubuntu CI. `elaris build` and full `elaris run` use the portable Linux Engine and GPUI paths, but need a working graphical session and have not yet been verified as end-to-end runtime paths by CI. `elaris run --ui` launches the shell without the Engine and cannot load web pages.
 
 ## Recover an existing checkout
 
@@ -59,9 +59,9 @@ If cloning was done without submodules, initialize the pinned dependencies and t
 
 ```sh
 git submodule update --init --recursive
-./photon setup
+./elaris setup
 ```
 
-If setup reports a missing tool, install the named prerequisite and retry. Setup can be rerun: it initializes missing submodules and preserves initialized dependency branches and commits. It does configure remotes to the HTTPS URLs in `photon.toml`; it does not advance dependency pins. Check `photon deps status` before dependency work. Do not use `git submodule update --remote` for routine setup.
+If setup reports a missing tool, install the named prerequisite and retry. Setup can be rerun: it initializes missing submodules and preserves initialized dependency branches and commits. It does configure remotes to the HTTPS URLs in `photon.toml`; it does not advance dependency pins. Check `elaris deps status` before dependency work. Do not use `git submodule update --remote` for routine setup.
 
 See [Building Photon](Documentation/Building.md) for command behavior and detailed troubleshooting, and [Upstream maintenance](Documentation/Upstream.md) for dependency branch and pin workflows.

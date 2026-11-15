@@ -73,18 +73,18 @@ jobs:
           shared-key: checks
 
       - name: Check Photon
-        run: ./photon check --verbose
+        run: ./elaris check --verbose
 
       - name: Build Linux UI-only shell
-        run: cargo build --release -p photon-app --bin Photon --features ui-only
+        run: cargo build --release -p elaris-app --bin Photon --features ui-only
 
       - name: Smoke test CLI
         run: |
-          ./photon --help
-          ./photon doctor
-          ./photon deps status
-          ./photon run --help
-          ./photon desktop --help
+          ./elaris --help
+          ./elaris doctor
+          ./elaris deps status
+          ./elaris run --help
+          ./elaris desktop --help
 
       - name: Verify Linux desktop integration
         run: |
@@ -92,13 +92,13 @@ jobs:
           trap 'rm -rf "$temp_root"' EXIT
           CARGO_INSTALL_ROOT="$temp_root/cargo" \
           XDG_DATA_HOME="$temp_root/share" \
-            ./photon install
+            ./elaris install
           desktop_file="$temp_root/share/applications/org.photonbrowser.photon.desktop"
           icon_file="$temp_root/share/icons/hicolor/1024x1024/apps/org.photonbrowser.photon.png"
           test ! -e "$desktop_file"
           CARGO_INSTALL_ROOT="$temp_root/cargo" \
           XDG_DATA_HOME="$temp_root/share" \
-            ./photon desktop install
+            ./elaris desktop install
           desktop-file-validate "$desktop_file"
           test -x "$temp_root/cargo/bin/photon"
           test -s "$icon_file"
@@ -106,7 +106,7 @@ jobs:
           grep -F "x-scheme-handler/https=org.photonbrowser.photon.desktop;" "$temp_root/share/applications/mimeinfo.cache"
           CARGO_INSTALL_ROOT="$temp_root/cargo" \
           XDG_DATA_HOME="$temp_root/share" \
-            ./photon desktop uninstall
+            ./elaris desktop uninstall
           test ! -e "$desktop_file"
           test ! -e "$icon_file"
           test -x "$temp_root/cargo/bin/photon"
@@ -170,7 +170,7 @@ jobs:
           shared-key: checks
 
       - name: Test Photon
-        run: ./photon test
+        run: ./elaris test
 
   checks:
     name: Photon checks

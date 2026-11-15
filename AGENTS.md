@@ -8,18 +8,18 @@
 - **Respect architectural boundaries.** Keep normal UI work independent of engine internals. The shell must use the explicit Photon Engine embedder API, not arbitrary engine implementation details.
 - **Keep Photon lightweight.** Do not add browser chrome unless explicitly requested. Never use an embedded browser to render Photon UI; do not introduce Qt Quick, Electron, or Tauri into the app shell.
 - **Preserve upstream mergeability.** Keep Photon Engine regularly mergeable with Ladybird and the Photon GPUI-CE fork regularly mergeable with `gpui-ce/gpui-ce`.
-- **Verify changes.** Run `photon format`, `photon check`, and relevant `photon test` commands.
+- **Verify changes.** Run `elaris format`, `elaris check`, and relevant `elaris test` commands.
 - **No computer use**, except when the sole purpose is taking screenshots.
 
 ## Architecture and crate ownership
 
 | Component | Responsibility | Boundary |
 | --- | --- | --- |
-| `photon-core` | Browser state, commands, address/search rules, tab-sleep policy, and application logic | Must remain independent of UI frameworks, native handles, and Ladybird classes. |
-| `photon-cli` | Developer setup, build, run, dependency, and CLI installation commands | `photon install` installs the Cargo CLI only; keep OS desktop integration in its own platform-specific command module. |
-| `photon-shell` | Shared GPUI views, browser/window lifecycle, Engine adapter, and target OS adapters | Shell calls the explicit Engine embedder API; keep target OS behavior under `platform/<target>/`. |
-| `photon-presentation-ipc` | Presentation XPC transport | Owns transport, not browser policy. |
-| `photon-presentation-broker` | Presentation broker service executable | Keep service-executable responsibilities here. |
+| `elaris-core` | Browser state, commands, address/search rules, tab-sleep policy, and application logic | Must remain independent of UI frameworks, native handles, and Ladybird classes. |
+| `elaris-cli` | Developer setup, build, run, dependency, and CLI installation commands | `elaris install` installs the Cargo CLI only; keep OS desktop integration in its own platform-specific command module. |
+| `elaris-shell` | Shared GPUI views, browser/window lifecycle, Engine adapter, and target OS adapters | Shell calls the explicit Engine embedder API; keep target OS behavior under `platform/<target>/`. |
+| `elaris-presentation-ipc` | Presentation XPC transport | Owns transport, not browser policy. |
+| `elaris-presentation-broker` | Presentation broker service executable | Keep service-executable responsibilities here. |
 | `Engine/` | Ladybird engine and Photon Engine embedder implementation | Engine changes belong here; shell calls the explicit embedder API in `LibPhotonEmbedder`. |
 | `PhotonBrowser/gpui-ce` | Generic GPUI-CE changes in the pinned submodule | Keep Photon-specific native integrations in Photon crates. |
 
@@ -37,9 +37,9 @@ Do not scatter hard-coded design values throughout views. Use these authoritativ
 
 | Concern | Location |
 | --- | --- |
-| Shared semantic shell color-role resolution | `crates/photon-shell/src/platform/ui/theme.rs` |
-| Colors, opacity, transparency, window tint, and corner radii | `crates/photon-shell/theme.toml` |
-| Other shared measurements and typography sizes | `crates/photon-shell/src/platform/ui/metrics.rs` |
+| Shared semantic shell color-role resolution | `crates/elaris-shell/src/platform/ui/theme.rs` |
+| Colors, opacity, transparency, window tint, and corner radii | `crates/elaris-shell/theme.toml` |
+| Other shared measurements and typography sizes | `crates/elaris-shell/src/platform/ui/metrics.rs` |
 | Native window controls and native material behavior | `platform/<target>/window_settings.rs` in the relevant platform adapter |
 
 Views must use **semantic color roles and named style tokens** instead of local color or dimension literals. Keep ordinary UI changes independent of Engine implementation details.
@@ -48,7 +48,7 @@ For GPUI-CE work, read the [GPUI-CE documentation](https://gpui-ce.github.io/gpu
 
 ## Checkout and dependency setup
 
-1. When setting up a checkout, run **`photon setup`**. It initializes pinned submodules, activates persistent Photon development branches, and installs the CLI. Full Linux setup also installs the per-user desktop entry; `photon setup --ui-only` does not install or update it.
+1. When setting up a checkout, run **`elaris setup`**. It initializes pinned submodules, activates persistent Photon development branches, and installs the CLI. Full Linux setup also installs the per-user desktop entry; `elaris setup --ui-only` does not install or update it.
 2. Read [`Documentation/Upstream.md`](Documentation/Upstream.md) **before any Engine or GPUI-CE upstream sync**. Its documented branch and remote arrangements are authoritative.
 3. Use `vendor/gpui-ce/main` for ordinary GPUI work. Use the other persistent Photon dependency branches documented in `Documentation/Upstream.md` for routine edits and upstream syncs; **do not create a new branch for each change**.
 4. Keep `origin` pointed at the **Photon-owned repository** and `upstream` pointed at **Ladybird** or **`gpui-ce/gpui-ce`**, as appropriate.
@@ -57,9 +57,9 @@ For GPUI-CE work, read the [GPUI-CE documentation](https://gpui-ce.github.io/gpu
 
 ### CLI and desktop installation
 
-- `photon install` installs or refreshes only the `photon` and `ph` CLI binaries in Cargo's bin directory. Do not attach OS application registration to this command.
-- Linux launcher, icon, and URL-handler files belong to `photon desktop install` and `photon desktop uninstall`, implemented in `crates/photon-cli/src/commands/linux_desktop.rs`. These are maintenance commands; full `photon setup` invokes the installer automatically after installing the CLI. `--ui-only` leaves existing desktop files untouched and does not install them.
-- Keep these semantics aligned in `crates/photon-cli/AGENTS.md`, `Documentation/Building.md`, and `Documentation/Linux.md`.
+- `elaris install` installs or refreshes only the `elaris` and `el` CLI binaries in Cargo's bin directory. Do not attach OS application registration to this command.
+- Linux launcher, icon, and URL-handler files belong to `elaris desktop install` and `elaris desktop uninstall`, implemented in `crates/elaris-cli/src/commands/linux_desktop.rs`. These are maintenance commands; full `elaris setup` invokes the installer automatically after installing the CLI. `--ui-only` leaves existing desktop files untouched and does not install them.
+- Keep these semantics aligned in `crates/elaris-cli/AGENTS.md`, `Documentation/Building.md`, and `Documentation/Linux.md`.
 
 ## Upstream synchronization and conflict resolution
 
@@ -86,12 +86,12 @@ A submodule entry is a **commit pointer, not a text file**. When the parent repo
 For normal changes:
 
 ```sh
-photon format
-photon check
-photon test
+elaris format
+elaris check
+elaris test
 ```
 
-Run the **relevant** tests when the full suite is not appropriate, plus any dependency-specific checks or builds required by the affected area. `photon format` and `photon check` cover the **entire Cargo workspace**; do not maintain hand-written per-command package lists.
+Run the **relevant** tests when the full suite is not appropriate, plus any dependency-specific checks or builds required by the affected area. `elaris format` and `elaris check` cover the **entire Cargo workspace**; do not maintain hand-written per-command package lists.
 
 When adding a crate, update the Cargo workspace and architecture documentation. Keep crate boundaries aligned with independent ownership. Keep generated output outside source trees.
 
@@ -105,7 +105,7 @@ Before describing work as finished, confirm:
 - [ ] No UI-to-engine internals coupling or page pixel buffers have been introduced.
 - [ ] UI styling uses shared semantic roles, tokens, and platform adapters.
 - [ ] Engine behavior changes account for existing Qt/AppKit behavior.
-- [ ] `photon format`, `photon check`, and relevant tests have been run, with results reported.
+- [ ] `elaris format`, `elaris check`, and relevant tests have been run, with results reported.
 - [ ] Any upstream sync has resolved conflicts intentionally and retained required behavior.
 - [ ] Any changed dependency pin refers to a tested commit present on a Photon-owned remote.
 - [ ] `git submodule status --recursive` has been verified after a gitlink change.

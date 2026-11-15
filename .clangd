@@ -31,7 +31,7 @@ CompileFlags:
     - -I../../../build/engine-debug/Libraries
 ---
 If:
-  PathMatch: .*crates/photon-presentation-ipc/native/.*\.m
+  PathMatch: .*crates/elaris-presentation-ipc/native/.*\.m
 CompileFlags:
   Compiler: clang
   Add:

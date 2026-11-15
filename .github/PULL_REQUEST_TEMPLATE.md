@@ -10,10 +10,10 @@
 
 <!-- Mark what you ran. Explain skipped checks and any platform limitations. -->
 
-- [ ] `photon format`
-- [ ] `photon check`
-- [ ] `photon test`
-- [ ] `photon build` (when applicable)
+- [ ] `elaris format`
+- [ ] `elaris check`
+- [ ] `elaris test`
+- [ ] `elaris build` (when applicable)
 - [ ] Manual testing (describe below, when applicable)
 
 **Test environment / results:**

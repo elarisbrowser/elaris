@@ -1,73 +1,73 @@
 # Building Photon
 
-Use the `photon` CLI for setup, formatting, linting, building, and running Photon. The repository pins Rust/Cargo 1.99.0, a C++23-capable compiler, CMake 3.30+, Ninja 1.10+, Python 3 with pip, and the native packages required by the pinned Engine. macOS is the primary development platform. Linux is experimental; Ubuntu 24.04 CI validates workspace checks, CLI smoke commands, and tests in the [latest passing run](https://github.com/PhotonBrowser/photon/actions/runs/40202068735). A complete Engine build and graphical browser run are not CI-verified. See [contributor setup](../CONTRIBUTOR_SETUP.md) for platform prerequisites and first checkout.
+Use the `elaris` CLI for setup, formatting, linting, building, and running Photon. The repository pins Rust/Cargo 1.99.0, a C++23-capable compiler, CMake 3.30+, Ninja 1.10+, Python 3 with pip, and the native packages required by the pinned Engine. macOS is the primary development platform. Linux is experimental; Ubuntu 24.04 CI validates workspace checks, CLI smoke commands, and tests in the [latest passing run](https://github.com/PhotonBrowser/photon/actions/runs/40202068735). A complete Engine build and graphical browser run are not CI-verified. See [contributor setup](../CONTRIBUTOR_SETUP.md) for platform prerequisites and first checkout.
 
 ## Platform status
 
 | Command | macOS | Linux |
 | --- | --- | --- |
-| `photon setup` | Implemented but unverified | Full setup is implemented but unverified; Linux system packages are manual |
-| `photon setup --ui-only` | Implemented; Engine setup is skipped | Initializes GPUI and prepares the shell without Engine or Ladybird build prerequisites |
-| `photon desktop install` / `uninstall` | Not applicable | Installs or removes the per-user launcher, icon, and URL-handler registration |
-| `photon check` | Verified working in the current macOS checkout | Verified working by Ubuntu 24.04 CI |
-| `photon test` | Verified working in the current macOS checkout | Verified working by Ubuntu 24.04 CI |
-| `photon build` | Implemented but unverified; Engine build was not run in this audit | Partially implemented; Linux Engine build path exists, but full Engine build is not verified here or by CI |
-| `photon run` | Implemented but unverified; native run path was not launched in this audit | Partially implemented; portable run path exists, but end-to-end graphical runtime is not CI-verified |
+| `elaris setup` | Implemented but unverified | Full setup is implemented but unverified; Linux system packages are manual |
+| `elaris setup --ui-only` | Implemented; Engine setup is skipped | Initializes GPUI and prepares the shell without Engine or Ladybird build prerequisites |
+| `elaris desktop install` / `uninstall` | Not applicable | Installs or removes the per-user launcher, icon, and URL-handler registration |
+| `elaris check` | Verified working in the current macOS checkout | Verified working by Ubuntu 24.04 CI |
+| `elaris test` | Verified working in the current macOS checkout | Verified working by Ubuntu 24.04 CI |
+| `elaris build` | Implemented but unverified; Engine build was not run in this audit | Partially implemented; Linux Engine build path exists, but full Engine build is not verified here or by CI |
+| `elaris run` | Implemented but unverified; native run path was not launched in this audit | Partially implemented; portable run path exists, but end-to-end graphical runtime is not CI-verified |
 
 ## Common commands
 
-On a fresh checkout, install Rust with rustup, then run `./photon setup` from
+On a fresh checkout, install Rust with rustup, then run `./elaris setup` from
 the repository root. The launcher uses Cargo; rustup selects the version pinned
-in `rust-toolchain.toml`. After setup installs the CLI, use `photon` below.
+in `rust-toolchain.toml`. After setup installs the CLI, use `elaris` below.
 
 ```sh
-photon setup
-photon doctor
-photon format
-photon lint
-photon check
-photon test
-photon build
-photon run
+elaris setup
+elaris doctor
+elaris format
+elaris lint
+elaris check
+elaris test
+elaris build
+elaris run
 ```
 
-- `photon setup` checks required tools, initializes missing pinned dependencies, prepares Rust formatting/lint tools and clang-format 22, and installs or refreshes the `photon` command in Cargo's bin directory. Full Linux setup also installs the per-user desktop launcher, icon, and URL handlers. `photon setup --ui-only` does not install or update desktop integration. On macOS, add `--install-system-deps` to install the required Homebrew packages. On Linux, install packages from Ladybird's guide first. Setup preserves initialized dependency branches and does not advance root pins. The pinned clang-format 22.1.8 stays under the ignored `build/tools/` directory.
-- `photon install` installs or refreshes only the `photon` and `ph` CLI binaries in Cargo's bin directory. It does not install desktop files.
-- Full Linux `photon setup` installs desktop integration automatically; no separate command is needed. `photon desktop install` and `photon desktop uninstall` are maintenance commands for refreshing or removing Linux's per-user desktop entry, icon, and HTTP/HTTPS handler declarations. The CLI must already be installed. Choose another default browser in desktop settings before uninstalling Photon if it is currently selected.
-- `photon setup --ui-only` initializes the pinned GPUI-CE checkout and installs the CLI while skipping the Engine submodule, C++ compiler, Python, CMake, Ninja, and clang-format setup. It supports `photon run --ui`; it does not prepare `photon build`, full `photon check`, or web-page loading. The mode preserves any existing Engine checkout.
-- `photon doctor` reports tool versions, Rust components, dependency revisions, and build directories. `photon setup` is the strict prerequisite check.
-- `photon format` formats Rust and Photon-owned native code, including the Engine embedder with its matching style version.
-- `photon lint` checks Rust formatting, runs Clippy with warnings treated as errors, and checks Photon and Engine embedder C++ formatting.
-- `photon check` runs linting, compiles the Cargo workspace, and verifies architecture and dependency checkout rules.
-- `photon test` runs the Rust workspace tests.
-- `photon build` builds the Engine and the GPUI-CE application. It requires initialized Engine and GPUI-CE submodules and a full set of Ladybird build prerequisites; it can take a long time on the first run. Pass `--debug` for an unoptimized build.
-- `photon run` builds and launches the native app in release mode by default. Use `--debug` for an unoptimized build, `--url URL` or a positional `URL` to choose the initial page, or `--shutdown-after-seconds N` to quit after a fixed interval. `--verbose` prints output from the underlying build tools.
-- `photon run --ui` builds and launches the shared browser window with the New Tab page, without building, linking, or starting Photon Engine. Shell-owned pages remain available; web pages cannot be opened in this mode. The path is available on macOS, Linux, and Windows.
+- `elaris setup` checks required tools, initializes missing pinned dependencies, prepares Rust formatting/lint tools and clang-format 22, and installs or refreshes the `elaris` command in Cargo's bin directory. Full Linux setup also installs the per-user desktop launcher, icon, and URL handlers. `elaris setup --ui-only` does not install or update desktop integration. On macOS, add `--install-system-deps` to install the required Homebrew packages. On Linux, install packages from Ladybird's guide first. Setup preserves initialized dependency branches and does not advance root pins. The pinned clang-format 22.1.8 stays under the ignored `build/tools/` directory.
+- `elaris install` installs or refreshes only the `elaris` and `el` CLI binaries in Cargo's bin directory. It does not install desktop files.
+- Full Linux `elaris setup` installs desktop integration automatically; no separate command is needed. `elaris desktop install` and `elaris desktop uninstall` are maintenance commands for refreshing or removing Linux's per-user desktop entry, icon, and HTTP/HTTPS handler declarations. The CLI must already be installed. Choose another default browser in desktop settings before uninstalling Photon if it is currently selected.
+- `elaris setup --ui-only` initializes the pinned GPUI-CE checkout and installs the CLI while skipping the Engine submodule, C++ compiler, Python, CMake, Ninja, and clang-format setup. It supports `elaris run --ui`; it does not prepare `elaris build`, full `elaris check`, or web-page loading. The mode preserves any existing Engine checkout.
+- `elaris doctor` reports tool versions, Rust components, dependency revisions, and build directories. `elaris setup` is the strict prerequisite check.
+- `elaris format` formats Rust and Photon-owned native code, including the Engine embedder with its matching style version.
+- `elaris lint` checks Rust formatting, runs Clippy with warnings treated as errors, and checks Photon and Engine embedder C++ formatting.
+- `elaris check` runs linting, compiles the Cargo workspace, and verifies architecture and dependency checkout rules.
+- `elaris test` runs the Rust workspace tests.
+- `elaris build` builds the Engine and the GPUI-CE application. It requires initialized Engine and GPUI-CE submodules and a full set of Ladybird build prerequisites; it can take a long time on the first run. Pass `--debug` for an unoptimized build.
+- `elaris run` builds and launches the native app in release mode by default. Use `--debug` for an unoptimized build, `--url URL` or a positional `URL` to choose the initial page, or `--shutdown-after-seconds N` to quit after a fixed interval. `--verbose` prints output from the underlying build tools.
+- `elaris run --ui` builds and launches the shared browser window with the New Tab page, without building, linking, or starting Photon Engine. Shell-owned pages remain available; web pages cannot be opened in this mode. The path is available on macOS, Linux, and Windows.
 - Browser context menus and page `<select>` controls use the shared GPUI menu surface and work without platform-native menu hooks. They inherit the semantic theme roles, menu metrics, and motion used by Photon popovers.
-- `photon clean` removes generated build trees and stops the checkout-specific presentation broker.
+- `elaris clean` removes generated build trees and stops the checkout-specific presentation broker.
 
 ## Troubleshooting
 
-- **Missing Engine or GPUI-CE:** From the checkout root, run `git submodule update --init --recursive`, then `./photon setup`. Setup initializes missing submodules without checking out over initialized worktrees.
+- **Missing Engine or GPUI-CE:** From the checkout root, run `git submodule update --init --recursive`, then `./elaris setup`. Setup initializes missing submodules without checking out over initialized worktrees.
 - **Setup reports a missing prerequisite:** Install the named tool or library. On Linux, follow the package section for your distribution in [Ladybird's build guide](../Engine/Documentation/BuildInstructionsLadybird.md); check the documented Qt, compiler, CMake, and Ninja minimum versions.
 - **Linux CMake cannot find Qt:** Ladybird requires Qt 6.10 or newer. Older distribution packages need a newer Qt installation and an appropriate `CMAKE_PREFIX_PATH`.
-- **`photon doctor` reports missing values:** Doctor is informational and does not fail merely because a tool or submodule is missing. Use its output to locate the problem, then rerun setup after correcting it.
+- **`elaris doctor` reports missing values:** Doctor is informational and does not fail merely because a tool or submodule is missing. Use its output to locate the problem, then rerun setup after correcting it.
 - **Setup changed a remote URL:** Setup intentionally enforces HTTPS remotes from `photon.toml`; adjust that configuration for a persistent SSH preference. It does not move a dependency commit or advance a root gitlink.
 
-`photon check` includes the lint checks, so run it before sharing a change. Build and run commands use release mode by default; `photon test` uses release mode. `--release` remains accepted for existing build scripts; `--debug` selects an unoptimized build.
+`elaris check` includes the lint checks, so run it before sharing a change. Build and run commands use release mode by default; `elaris test` uses release mode. `--release` remains accepted for existing build scripts; `--debug` selects an unoptimized build.
 
 ## Zed and C++ diagnostics
 
-Zed uses clangd with the root `.clangd` configuration for Photon C++, Objective-C++, and Objective-C files. The configuration supplies the native bridge's include paths and generated Engine headers. Run `photon build` once to generate those headers. After changing `.clangd` or `.zed/settings.json`, run **zed: restart language server** from Zed's command palette.
+Zed uses clangd with the root `.clangd` configuration for Photon C++, Objective-C++, and Objective-C files. The configuration supplies the native bridge's include paths and generated Engine headers. Run `elaris build` once to generate those headers. After changing `.clangd` or `.zed/settings.json`, run **zed: restart language server** from Zed's command palette.
 
 ## Build behavior
 
 The first Engine build configures Ladybird dependencies under `build/` and compiles Photon Engine helper processes plus LibPhotonEmbedder. Incremental builds use an Engine fingerprint to rebuild Ladybird only when Engine sources or configuration change. Rust app or GPUI-CE changes rebuild the application. Build products and downloaded tools stay under ignored build directories.
 
-On macOS, `photon run` starts the Photon-owned presentation broker before opening the native window. Set `PHOTON_WINDOW_BACKGROUND` to `opaque`, `blurred` (the default), or `liquid-glass` before launching to choose the window background. Liquid Glass uses AppKit's regular glass effect on macOS 26 and later and falls back to blurred material on earlier versions. Linux uses the shared GPUI browser shell and an interim CPU-backed Engine frame path; its system integration and full runtime validation remain incomplete. See [Linux support](Linux.md) for the checklist. Windows remains experimental: Ladybird supports WSL2 as its build route, while native Clang-CL builds are experimental.
+On macOS, `elaris run` starts the Photon-owned presentation broker before opening the native window. Set `PHOTON_WINDOW_BACKGROUND` to `opaque`, `blurred` (the default), or `liquid-glass` before launching to choose the window background. Liquid Glass uses AppKit's regular glass effect on macOS 26 and later and falls back to blurred material on earlier versions. Linux uses the shared GPUI browser shell and an interim CPU-backed Engine frame path; its system integration and full runtime validation remain incomplete. See [Linux support](Linux.md) for the checklist. Windows remains experimental: Ladybird supports WSL2 as its build route, while native Clang-CL builds are experimental.
 
-Platform-specific behavior belongs under `crates/photon-shell/src/platform/<target>/`. Keep the GPUI views in `platform/ui/`, the shared Engine adapter in `platform/engine/`, and the Apple-only XPC/IOSurface presentation path in `platform/macos/`. Linux and Windows currently use the portable CPU frame adapter; future DMA-BUF or DXGI imports belong in their target renderers without changing shared WebView code.
+Platform-specific behavior belongs under `crates/elaris-shell/src/platform/<target>/`. Keep the GPUI views in `platform/ui/`, the shared Engine adapter in `platform/engine/`, and the Apple-only XPC/IOSurface presentation path in `platform/macos/`. Linux and Windows currently use the portable CPU frame adapter; future DMA-BUF or DXGI imports belong in their target renderers without changing shared WebView code.
 
 ## Upstream dependencies
 
-Use `photon deps status` to see each submodule's branch, pin, worktree state, and cached upstream counts. Engine updates follow the upstream merge workflow. GPUI-CE is Photon-led: use its upstream counts for reference and sync GPUI-CE only when deliberately reviewing or importing an upstream change. `photon deps sync --check` previews upstream merges; add `engine` or `gpui` to operate on one checkout. An unqualified sync includes both dependencies. Syncs merge locally without requiring GitHub authentication; pass `--review` to also create the GitHub review issue. Use `photon deps edit` to switch clean checkouts to persistent Photon branches, and `photon deps restore` to return them to the commits recorded by this root checkout. After validating and pushing dependency commits, `photon deps pin` validates and commits updated root gitlinks. See [Upstream maintenance](Upstream.md).
+Use `elaris deps status` to see each submodule's branch, pin, worktree state, and cached upstream counts. Engine updates follow the upstream merge workflow. GPUI-CE is Photon-led: use its upstream counts for reference and sync GPUI-CE only when deliberately reviewing or importing an upstream change. `elaris deps sync --check` previews upstream merges; add `engine` or `gpui` to operate on one checkout. An unqualified sync includes both dependencies. Syncs merge locally without requiring GitHub authentication; pass `--review` to also create the GitHub review issue. Use `elaris deps edit` to switch clean checkouts to persistent Photon branches, and `elaris deps restore` to return them to the commits recorded by this root checkout. After validating and pushing dependency commits, `elaris deps pin` validates and commits updated root gitlinks. See [Upstream maintenance](Upstream.md).

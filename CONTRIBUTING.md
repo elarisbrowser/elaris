@@ -26,12 +26,12 @@ The PR template repeats these acknowledgments, and CI checks that both are selec
 3. Run the checks that apply to your change:
 
    ```bash
-   photon format
-   photon check
-   photon test
+   elaris format
+   elaris check
+   elaris test
    ```
 
-   `photon build` builds the Engine and can take a while. Run it for Engine or native integration changes when practical. Explain skipped checks and platform limitations in your PR.
+   `elaris build` builds the Engine and can take a while. Run it for Engine or native integration changes when practical. Explain skipped checks and platform limitations in your PR.
 4. Open a pull request against `main`. Complete the PR template honestly, link the related issue, and include screenshots or recordings for visible UI changes. Its checklist asks you to confirm that you understand the full diff and will address automated review findings before requesting maintainer review.
 5. Respond to review feedback. Maintainers may request changes or decline proposals that do not fit the project's direction.
 
@@ -41,11 +41,11 @@ The PR template repeats these acknowledgments, and CI checks that both are selec
 
 | Area | Location |
 | --- | --- |
-| Browser UI, tabs, and GPUI views | `crates/photon-shell/src/platform/ui/` |
-| Platform-specific integration | `crates/photon-shell/src/platform/<target>/` |
-| Shared browser rules and state | `crates/photon-core/` |
-| Profile and persistent data | `crates/photon-storage/` |
-| Rust-to-Engine integration | `crates/photon-shell/src/platform/engine/` and `native/embedder/` |
+| Browser UI, tabs, and GPUI views | `crates/elaris-shell/src/platform/ui/` |
+| Platform-specific integration | `crates/elaris-shell/src/platform/<target>/` |
+| Shared browser rules and state | `crates/elaris-core/` |
+| Profile and persistent data | `crates/elaris-storage/` |
+| Rust-to-Engine integration | `crates/elaris-shell/src/platform/engine/` and `native/embedder/` |
 | Ladybird-based engine and embedder API | [Photon Engine](https://github.com/PhotonBrowser/photon-engine) |
 | Generic GPUI-CE framework changes | [Photon GPUI-CE](https://github.com/PhotonBrowser/gpui-ce) |
 | Generic motion library changes | `crates/gpui-motion/` |

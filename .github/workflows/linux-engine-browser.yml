@@ -80,7 +80,7 @@ jobs:
           shared-key: linux-engine-browser
 
       - name: Build Photon Engine and app
-        run: ./photon build --debug --verbose
+        run: ./elaris build --debug --verbose
 
       - name: Load and render a local web page through Photon
         run: >-

@@ -1550,6 +1550,135 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "252afb9ae5eaa683babdc6a068b3f5726eb19e05070c731f9b2a23a7c3e8ed34"
 
 [[package]]
+name = "elaris-app"
+version = "0.1.0"
+dependencies = [
+ "elaris-shell",
+]
+
+[[package]]
+name = "elaris-brand"
+version = "0.1.0"
+
+[[package]]
+name = "elaris-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "elaris-brand",
+ "indicatif",
+ "libc",
+ "owo-colors",
+ "serde",
+ "serde_json",
+ "toml 0.8.23",
+]
+
+[[package]]
+name = "elaris-core"
+version = "0.1.0"
+dependencies = [
+ "elaris-brand",
+ "serde",
+ "serde_json",
+ "url",
+]
+
+[[package]]
+name = "elaris-performance"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "mach2 0.5.0",
+]
+
+[[package]]
+name = "elaris-performance-ui"
+version = "0.1.0"
+dependencies = [
+ "elaris-performance",
+ "gpui-ce",
+]
+
+[[package]]
+name = "elaris-presentation-broker"
+version = "0.1.0"
+dependencies = [
+ "elaris-presentation-ipc",
+]
+
+[[package]]
+name = "elaris-presentation-ipc"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cc",
+ "foreign-types",
+ "mach2 0.5.0",
+ "metal",
+ "objc",
+]
+
+[[package]]
+name = "elaris-shell"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "block2 0.6.2",
+ "cc",
+ "core-video",
+ "dispatch2",
+ "elaris-brand",
+ "elaris-core",
+ "elaris-performance",
+ "elaris-performance-ui",
+ "elaris-presentation-ipc",
+ "elaris-sound",
+ "elaris-storage",
+ "foreign-types",
+ "futures",
+ "gpui-ce",
+ "gpui-ce-motion",
+ "gpui_ce_apple",
+ "gpui_ce_elements",
+ "gpui_ce_platform",
+ "image",
+ "io-surface",
+ "libc",
+ "mach2 0.5.0",
+ "metal",
+ "objc",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-core-graphics",
+ "objc2-foundation 0.3.2",
+ "objc2-quartz-core 0.3.2",
+ "raw-window-handle",
+ "rodio",
+ "serde",
+ "serde_json",
+ "toml 0.8.23",
+ "url",
+]
+
+[[package]]
+name = "elaris-sound"
+version = "0.1.0"
+
+[[package]]
+name = "elaris-storage"
+version = "0.1.0"
+dependencies = [
+ "elaris-brand",
+ "elaris-core",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml 0.8.23",
+]
+
+[[package]]
 name = "embed-resource"
 version = "3.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4519,135 +4648,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e57fef6bc5981e38c2ce2d63bfa546861309f875b8a75f092d1d54ae2d64f266"
 dependencies = [
  "siphasher",
-]
-
-[[package]]
-name = "photon-app"
-version = "0.1.0"
-dependencies = [
- "photon-shell",
-]
-
-[[package]]
-name = "photon-brand"
-version = "0.1.0"
-
-[[package]]
-name = "photon-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "indicatif",
- "libc",
- "owo-colors",
- "photon-brand",
- "serde",
- "serde_json",
- "toml 0.8.23",
-]
-
-[[package]]
-name = "photon-core"
-version = "0.1.0"
-dependencies = [
- "photon-brand",
- "serde",
- "serde_json",
- "url",
-]
-
-[[package]]
-name = "photon-performance"
-version = "0.1.0"
-dependencies = [
- "libc",
- "mach2 0.5.0",
-]
-
-[[package]]
-name = "photon-performance-ui"
-version = "0.1.0"
-dependencies = [
- "gpui-ce",
- "photon-performance",
-]
-
-[[package]]
-name = "photon-presentation-broker"
-version = "0.1.0"
-dependencies = [
- "photon-presentation-ipc",
-]
-
-[[package]]
-name = "photon-presentation-ipc"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "cc",
- "foreign-types",
- "mach2 0.5.0",
- "metal",
- "objc",
-]
-
-[[package]]
-name = "photon-shell"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "block2 0.6.2",
- "cc",
- "core-video",
- "dispatch2",
- "foreign-types",
- "futures",
- "gpui-ce",
- "gpui-ce-motion",
- "gpui_ce_apple",
- "gpui_ce_elements",
- "gpui_ce_platform",
- "image",
- "io-surface",
- "libc",
- "mach2 0.5.0",
- "metal",
- "objc",
- "objc2 0.6.4",
- "objc2-app-kit 0.3.2",
- "objc2-core-graphics",
- "objc2-foundation 0.3.2",
- "objc2-quartz-core 0.3.2",
- "photon-brand",
- "photon-core",
- "photon-performance",
- "photon-performance-ui",
- "photon-presentation-ipc",
- "photon-sound",
- "photon-storage",
- "raw-window-handle",
- "rodio",
- "serde",
- "serde_json",
- "toml 0.8.23",
- "url",
-]
-
-[[package]]
-name = "photon-sound"
-version = "0.1.0"
-
-[[package]]
-name = "photon-storage"
-version = "0.1.0"
-dependencies = [
- "photon-brand",
- "photon-core",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
- "toml 0.8.23",
 ]
 
 [[package]]

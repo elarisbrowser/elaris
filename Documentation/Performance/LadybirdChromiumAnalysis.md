@@ -31,7 +31,7 @@ No source-backed opportunity was established for replacing Ladybird’s current 
 
 ## Local architecture and boundaries
 
-Photon’s shell owns GPUI views, native window integration, and the host side of the presentation surface. Browser behavior—DOM, CSS, layout, painting, event dispatch, and LibJS—is in the Ladybird Engine checkout. On macOS the shell receives an external Metal surface from the Engine compositor; layout/style changes therefore belong in Engine code, not in shell views. See [`renderer.rs`](../../crates/photon-shell/src/platform/macos/renderer.rs#L1) and [`PhotonEmbedderBridge.cpp`](../../native/embedder/PhotonEmbedderBridge.cpp#L102).
+Photon’s shell owns GPUI views, native window integration, and the host side of the presentation surface. Browser behavior—DOM, CSS, layout, painting, event dispatch, and LibJS—is in the Ladybird Engine checkout. On macOS the shell receives an external Metal surface from the Engine compositor; layout/style changes therefore belong in Engine code, not in shell views. See [`renderer.rs`](../../crates/elaris-shell/src/platform/macos/renderer.rs#L1) and [`PhotonEmbedderBridge.cpp`](../../native/embedder/PhotonEmbedderBridge.cpp#L102).
 
 The inspected paths are:
 
