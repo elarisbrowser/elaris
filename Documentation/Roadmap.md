@@ -19,13 +19,13 @@ documented in the guides linked from the [README](../README.md).
 - Add optional local notes and time reports tied to browsing activity.
 - Add native ad and tracker blocking with per-site controls and explicit Engine
   APIs.
-- Define separate stable and canary release channels once Photon can sign and
+- Define separate stable and canary release channels once Elaris can sign and
   publish installable builds with a reliable update path.
 
 ## Deferred
 
 Chrome extension compatibility is not planned currently. Extension support needs
-a security review and explicit Photon Engine APIs.
+a security review and explicit Elaris Engine APIs.
 
 Engine performance investigations and measurements live in
 [Performance](Performance.md) and [Compositor performance](CompositorPerformance.md).

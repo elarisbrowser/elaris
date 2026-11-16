@@ -1,8 +1,8 @@
-<p align="center"><img src="../elaris-brand/assets/logo.svg" alt="Photon" width="72" /></p>
+<p align="center"><img src="../elaris-brand/assets/logo.svg" alt="Elaris" width="72" /></p>
 
 # `elaris-storage`
 
-File-backed persistence for a Photon profile: browser settings, history, sessions, favicons, site data, and the Engine cache. It uses plain Rust file access and does not depend on GPUI or Engine types.
+File-backed persistence for a Elaris profile: browser settings, history, sessions, favicons, site data, and the Engine cache. It uses plain Rust file access and does not depend on GPUI or Engine types.
 
 ## Use
 

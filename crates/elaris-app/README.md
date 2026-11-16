@@ -1,8 +1,8 @@
-<p align="center"><img src="../elaris-brand/assets/logo.svg" alt="Photon" width="72" /></p>
+<p align="center"><img src="../elaris-brand/assets/logo.svg" alt="Elaris" width="72" /></p>
 
 # `elaris-app`
 
-The executable entry point for the Photon browser. It starts the `elaris-shell` application and is built by the repository's `elaris` command.
+The executable entry point for the Elaris browser. It starts the `elaris-shell` application and is built by the repository's `elaris` command.
 
 ## Run
 

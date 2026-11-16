@@ -1,13 +1,13 @@
 # Chromium–Ladybird Performance Analysis
 
 **Reviewed:** 17 October 2026  
-**Photon root revision:** `a950612155636c31fa06c6d5b0f702caf5f33caf`  
+**Elaris root revision:** `a950612155636c31fa06c6d5b0f702caf5f33caf`  
 **Ladybird Engine revision:** `c3e20b5e55c478b5630f06af910ad5784f1ecb22`  
 **Chromium source revision:** `58454d73e25bfac1610e92556a37a1c0fc1fa89e` (Chromium `main` observed during this review)
 
 ## Scope and evidence
 
-This is source research, not a benchmark report. I reviewed Photon’s Engine submodule, shell integration, and `tools/velocity/`, then used the reviewed `chromium-search` utility to query individual files at the pinned Chromium revision. Chromium was not cloned or downloaded. The utility was fetched from [`jclay/chromium-search`](https://github.com/jclay/chromium-search) at commit `2db9c99d55ce8ffbc9fd9d5f876467e5b966f2a5` (SHA-256 `68a80953e771350dd3ab4d168f189f8fbfa91aaa7b1efbe28e7f5bfaa62f7d2c`), reviewed, and installed as `/Users/theo/.local/bin/chromium-search` with Python 3.13. A symlink in `/opt/homebrew/bin` makes it available on `PATH`; it was not added to the Photon source tree.
+This is source research, not a benchmark report. I reviewed Elaris’s Engine submodule, shell integration, and `tools/velocity/`, then used the reviewed `chromium-search` utility to query individual files at the pinned Chromium revision. Chromium was not cloned or downloaded. The utility was fetched from [`jclay/chromium-search`](https://github.com/jclay/chromium-search) at commit `2db9c99d55ce8ffbc9fd9d5f876467e5b966f2a5` (SHA-256 `68a80953e771350dd3ab4d168f189f8fbfa91aaa7b1efbe28e7f5bfaa62f7d2c`), reviewed, and installed as `/Users/theo/.local/bin/chromium-search` with Python 3.13. A symlink in `/opt/homebrew/bin` makes it available on `PATH`; it was not added to the Elaris source tree.
 
 Evidence labels used below:
 
@@ -15,7 +15,7 @@ Evidence labels used below:
 - **Hypothesis:** the difference could affect performance in the stated workload, but no profile or benchmark here confirms it.
 - **Measured:** a controlled run confirms the impact. This review produced no measured findings.
 
-The Photon and Engine checkouts were already substantially modified when reviewed. The Engine working tree includes uncommitted performance and memory work. Findings below describe the checked-out source and do not treat those edits as a clean upstream baseline or as measured improvements. Recheck the working-tree diff before using these findings to plan a patch.
+The Elaris and Engine checkouts were already substantially modified when reviewed. The Engine working tree includes uncommitted performance and memory work. Findings below describe the checked-out source and do not treat those edits as a clean upstream baseline or as measured improvements. Recheck the working-tree diff before using these findings to plan a patch.
 
 ## A. Executive summary
 
@@ -25,13 +25,13 @@ Three differences merit focused measurement and possible follow-up:
 
 1. **Task selection does not use the task source as a scheduling priority.** Ladybird’s HTML queue distinguishes normal from idle tasks and scans runnable normal tasks in insertion order; Chromium’s main-thread scheduler has a dedicated input queue and priority selection. This may affect queued interaction work during a normal-task backlog, but it cannot preempt a running JavaScript task, and eligible compositor scrolling already avoids the main thread.
 2. **Style transactions can fall back to a complete document reaction batch.** Blink uses selector-feature invalidation sets to target affected descendants. Ladybird has substantial retained and region-based style work too; the source difference only creates an opportunity if common changes reach the broader fallback often enough to matter.
-3. **Ladybird’s ordinary GC mark phase is synchronous while its sweep is incremental.** V8 has incremental marking steps and optional concurrent marking. The difference is real; pause reduction in Photon is still a hypothesis, and incremental marking would be a substantial collector project.
+3. **Ladybird’s ordinary GC mark phase is synchronous while its sweep is incremental.** V8 has incremental marking steps and optional concurrent marking. The difference is real; pause reduction in Elaris is still a hypothesis, and incremental marking would be a substantial collector project.
 
 No source-backed opportunity was established for replacing Ladybird’s current partial-layout, paint-retention, or compositor-scroll designs. The DOM, CSS-value, and LibJS object representations also do not establish a memory-efficiency gap without comparable size profiles. The best first implementation candidate is a narrowly scoped scheduler improvement for eligible queued input-related tasks, gated by a queue-wait benchmark and strict event-ordering tests.
 
 ## Local architecture and boundaries
 
-Photon’s shell owns GPUI views, native window integration, and the host side of the presentation surface. Browser behavior—DOM, CSS, layout, painting, event dispatch, and LibJS—is in the Ladybird Engine checkout. On macOS the shell receives an external Metal surface from the Engine compositor; layout/style changes therefore belong in Engine code, not in shell views. See [`renderer.rs`](../../crates/elaris-shell/src/platform/macos/renderer.rs#L1) and [`PhotonEmbedderBridge.cpp`](../../native/embedder/PhotonEmbedderBridge.cpp#L102).
+Elaris’s shell owns GPUI views, native window integration, and the host side of the presentation surface. Browser behavior—DOM, CSS, layout, painting, event dispatch, and LibJS—is in the Ladybird Engine checkout. On macOS the shell receives an external Metal surface from the Engine compositor; layout/style changes therefore belong in Engine code, not in shell views. See [`renderer.rs`](../../crates/elaris-shell/src/platform/macos/renderer.rs#L1) and [`PhotonEmbedderBridge.cpp`](../../native/embedder/PhotonEmbedderBridge.cpp#L102).
 
 The inspected paths are:
 
@@ -173,9 +173,9 @@ The measurement work comes first because each candidate’s measured bottleneck 
 
 Velocity already supports startup timing, resource monitoring, and repeatable idle/page/tab resource workloads. Resource sampling records process CPU time, macOS physical footprint, resident bytes, process identity/role, and coverage at a default 100 ms interval. Multi-tab scenarios report process-tree memory scaling; they do not claim an isolated memory cost per tab. Aggregate RSS can double-count shared pages, and sampled peaks can miss short transients. See [`README.md`](../../tools/velocity/README.md#L274) and [`resource.rs`](../../tools/velocity/crates/velocity-metrics/src/resource.rs#L182).
 
-Fixtures include simple, complex, and deterministic dynamic pages. The current resource fixture does not isolate DOM mutation throughput, style recalculation, layout, scrolling, paint, or interaction latency. Velocity’s startup `window_ready_ms` is a stable native window observation, not page readiness or navigation latency. The README identifies navigation-latency benchmarking and system-cache control as not implemented. A Speedometer 3.1 benchmark path and restricted Photon result observer exist; Photon’s authenticated protocol does not expose arbitrary JavaScript evaluation or input injection. See [`speedometer_cli.rs`](../../tools/velocity/crates/velocity-cli/src/speedometer_cli.rs#L550), [`photon.rs`](../../tools/velocity/crates/velocity-browser/src/photon.rs#L445), and [`README.md`](../../tools/velocity/README.md#L346).
+Fixtures include simple, complex, and deterministic dynamic pages. The current resource fixture does not isolate DOM mutation throughput, style recalculation, layout, scrolling, paint, or interaction latency. Velocity’s startup `window_ready_ms` is a stable native window observation, not page readiness or navigation latency. The README identifies navigation-latency benchmarking and system-cache control as not implemented. A Speedometer 3.1 benchmark path and restricted Elaris result observer exist; Elaris’s authenticated protocol does not expose arbitrary JavaScript evaluation or input injection. See [`speedometer_cli.rs`](../../tools/velocity/crates/velocity-cli/src/speedometer_cli.rs#L550), [`photon.rs`](../../tools/velocity/crates/velocity-browser/src/photon.rs#L445), and [`README.md`](../../tools/velocity/README.md#L346).
 
-The inspected Engine has style update and reaction counters, partial/full layout counters, per-phase GC timing, and paint damage/retention mechanisms. These are internal engine diagnostics; they are not currently reported by Velocity’s authenticated automation protocol. Photon’s current uncommitted performance work includes process and managed-heap monitoring, but Velocity does not read a reliable per-tab heap metric from that work. When several documents share a WebContent process, dividing process or heap bytes evenly among tabs is only an attribution heuristic, not a per-tab measurement.
+The inspected Engine has style update and reaction counters, partial/full layout counters, per-phase GC timing, and paint damage/retention mechanisms. These are internal engine diagnostics; they are not currently reported by Velocity’s authenticated automation protocol. Elaris’s current uncommitted performance work includes process and managed-heap monitoring, but Velocity does not read a reliable per-tab heap metric from that work. When several documents share a WebContent process, dividing process or heap bytes evenly among tabs is only an attribution heuristic, not a per-tab measurement.
 
 ### Proposed workload set
 
@@ -193,7 +193,7 @@ Add diagnostics through an explicit versioned, authenticated automation capabili
 - **Browser-observable:** event-to-visible/present latency and frame-interval distribution.
 - **Engine-internal:** style, layout, paint, input dispatch, and GC phase timings; DOM node count; LibJS heap live bytes.
 - **OS resource:** existing process CPU, physical footprint, and RSS, reported as process/session totals.
-- **Photon compositor:** frame received/installed and GPU presentation completion if the platform can provide it. Do not label frame production time as presentation latency.
+- **Elaris compositor:** frame received/installed and GPU presentation completion if the platform can provide it. Do not label frame production time as presentation latency.
 
 The proposed field names (`layout_duration_ms`, `style_recalculation_ms`, `paint_duration_ms`, `input_processing_ms`, `frame_interval_ms`, `gc_pause_ms`, `dom_node_count`, `js_heap_bytes`, and `decoded_image_bytes`) are diagnostic ideas, not current Velocity or automation capabilities. `js_heap_bytes` must be explicitly defined; it is not process footprint. A per-tab metric is only valid if the engine can attribute it to documents even when they share a process.
 

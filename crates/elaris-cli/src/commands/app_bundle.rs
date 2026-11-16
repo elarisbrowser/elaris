@@ -342,7 +342,7 @@ mod tests {
     #[test]
     fn ui_bundle_has_metadata_without_browser_handlers() {
         let plist = ui_info_plist();
-        assert!(plist.contains("<string>org.photonbrowser.photon.development.ui-only</string>"));
+        assert!(plist.contains("<string>org.elarisbrowser.photon.development.ui-only</string>"));
         assert!(plist.contains("<key>CFBundleIconFile</key>"));
         assert!(!plist.contains("CFBundleURLTypes"));
         assert!(!plist.contains("CFBundleDocumentTypes"));

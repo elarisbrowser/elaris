@@ -1,7 +1,7 @@
 # PhotonWebView
 
 `PhotonWebView` is the shell's web page view. A browser tab shows either one
-web view, with its own Photon Engine session, or one of
+web view, with its own Elaris Engine session, or one of
 [the browser's own pages](Pages.md). The shell window provides the
 [tab strip and toolbar, or sidebar](Sidebar.md) (navigation, omnibox, tabs
 and the browser menu) and an optional performance overlay around the active tab's view.
@@ -18,10 +18,10 @@ narrow native embedder API. The active tab receives Engine visibility and focus
 updates; inactive tabs retain their page state without rendering frames.
 
 On macOS the Engine publishes IOSurface-backed BGRA frames with producer
-`MTLSharedEvent` values. Once a frame's producer work is done, Photon shows it
+`MTLSharedEvent` values. Once a frame's producer work is done, Elaris shows it
 in the view's own Core Animation layer beneath GPUI-CE, which leaves a hole
 where the page is, so browser UI drawn over the page stays on top. See
-[native GPU presentation](NativeGpuPresentation.md). During shutdown Photon
+[native GPU presentation](NativeGpuPresentation.md). During shutdown Elaris
 disables new publications, drains all leases, and reports zero outstanding
 frames.
 

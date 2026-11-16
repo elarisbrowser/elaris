@@ -1,6 +1,6 @@
-<p align="center"><img src="crates/elaris-brand/assets/brand-kit/logo/logo.svg" alt="Photon" width="96" /></p>
+<p align="center"><img src="crates/elaris-brand/assets/brand-kit/logo/logo.svg" alt="Elaris" width="96" /></p>
 
-<h1 align="center">Photon</h1>
+<h1 align="center">Elaris</h1>
 
 <p align="center"><strong>A browser built on <a href="https://ladybird.org">Ladybird</a>.</strong></p>
 
@@ -28,7 +28,7 @@ cd photon
 On macOS, run `./elaris setup --install-system-deps`; on Linux, install the
 packages listed in [contributor setup](CONTRIBUTOR_SETUP.md), then run
 `./elaris setup`. Follow the platform-specific build and run guidance there
-before launching Photon.
+before launching Elaris.
 
 Setup installs or refreshes the `elaris` command and `el` alias in Cargo's bin
 directory. Full Linux setup also registers a per-user desktop launcher and web
@@ -47,10 +47,10 @@ cd photon
 elaris run --ui
 ```
 
-This opens the New Tab page and Photon-owned settings pages; web pages require
+This opens the New Tab page and Elaris-owned settings pages; web pages require
 the full Engine setup.
 
-## Develop Photon
+## Develop Elaris
 
 Start with [contributor setup](CONTRIBUTOR_SETUP.md), then use the [build guide](Documentation/Building.md) and [architecture guide](Documentation/Architecture.md). See [contribution guidance](CONTRIBUTING.md) for pull requests and the [roadmap](Documentation/Roadmap.md) for planned work.
 
@@ -60,7 +60,7 @@ flowchart LR
     App --> Shell[elaris-shell<br/>windows, tabs, and UI]
     Shell --> Core[elaris-core<br/>browser rules and state]
     Shell --> Storage[elaris-storage<br/>profile files]
-    Shell --> Embedder[Photon Engine API]
+    Shell --> Embedder[Elaris Engine API]
     Embedder --> Engine[Ladybird Engine<br/>web pages]
     Shell --> Platform[Platform adapters<br/>macOS · Linux · Windows]
     Shell --> PerfUI[elaris-performance-ui<br/>GPUI charts and overlays]

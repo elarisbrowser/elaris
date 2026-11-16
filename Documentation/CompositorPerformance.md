@@ -16,7 +16,7 @@ Fix: `Photon::View::set_display_metadata(display_id, refresh_rate)` (mirrors Qt'
 
 ## 2. Release round trip longer than one tick — fixed
 
-The pool has 3 IOSurfaces (`backing_store_count_for`). Photon holds the displayed frame and the newly received frame, so the compositor has one store to render into. The displayed store comes back only after:
+The pool has 3 IOSurfaces (`backing_store_count_for`). Elaris holds the displayed frame and the newly received frame, so the compositor has one store to render into. The displayed store comes back only after:
 
 1. compositor publish → UI IPC → `server_did_paint` → `native_frame_ready`
 2. Rust `receive_frame` → `request_redraw` (`app.spawn`) → `present_latest` → `cx.refresh()`
@@ -35,7 +35,7 @@ Measured on a full-window `requestAnimationFrame` animation at 120 Hz after fix 
 | Vsync ticks / rAF delivered | ~115/s | |
 | Compositor frames submitted | ~28/s | |
 | Compositor GPU work per frame | 1.5 ms | 3.9 ms |
-| Next frame published → previous frame released by Photon | 11.4 ms | 20.1 ms |
+| Next frame published → previous frame released by Elaris | 11.4 ms | 20.1 ms |
 | Release received → next frame begins (vsync wait) | 4.3 ms | 6.0 ms |
 
 Ticks were deferred with `blocked=true backing_available=false` far more often than frames were submitted. Engine paint is not the limit; the release hand-back is.
@@ -45,7 +45,7 @@ The growth heuristic `add_backing_store_if_window_server_still_reads_every_relea
 Fixes:
 
 - The compositor allocates 4 stores when the client samples them on its GPU (`BackingStoreManager::ClientSamplesOnGpu`), 3 otherwise.
-- Photon releases a replaced frame once a command buffer sampling a newer frame has been *submitted* and the replaced frame's own sampling command buffers have completed (`presentation::Sampling`), instead of waiting for the newer frame's GPU completion. GPUI-CE submits on one queue in order, and may re-present its last drawn scene without redrawing, so release cannot happen at swap time.
+- Elaris releases a replaced frame once a command buffer sampling a newer frame has been *submitted* and the replaced frame's own sampling command buffers have completed (`presentation::Sampling`), instead of waiting for the newer frame's GPU completion. GPUI-CE submits on one queue in order, and may re-present its last drawn scene without redrawing, so release cannot happen at swap time.
 
 After both, on the same animation:
 
@@ -105,9 +105,9 @@ In these runs each scroll frame re-rasterized the whole viewport, so GPU time sc
 
 **Current tree note (2026-10-26):** Engine now has conditional viewport scroll blitting in `ContextPresenter`: eligible static display lists reuse a stable raster for both whole-pixel and fractional viewport offsets, then repaint the exposed strip. Fractional shifts use linear GPU sampling from a temporary copy, so frames do not repeatedly resample one another. Static nested display lists qualify when their resources are immutable; animated or live nested content still takes the full repaint path. The measurements above predate that path, so the 4K estimate needs to be measured again before treating it as current.
 
-**Photon Metal stall found (2026-10-26):** A one-second sample of the running Photon Compositor caught its main thread in `-[MTLCommandBuffer waitUntilCompleted]` for 209 of 693 samples (30%). The stack led through `ContextPresenter::paint_current_display_list` to the partial-damage scratch surface flush. Photon uses this path for published GPU frames with partial damage, including scroll frames; the regular frame submission was already asynchronous, but this intermediate flush waited for GPU completion before copying the scratch image into the published backing. The corresponding Ladybird Compositor sample showed frame work without this GPU-completion wait. The scratch surface is now submitted asynchronously before snapshotting; its destination work is submitted afterward to the same ordered Metal queue, preserving the dependency without blocking the compositor thread. A fresh scroll capture after restarting Photon is still needed to measure the improvement.
+**Elaris Metal stall found (2026-10-26):** A one-second sample of the running Elaris Compositor caught its main thread in `-[MTLCommandBuffer waitUntilCompleted]` for 209 of 693 samples (30%). The stack led through `ContextPresenter::paint_current_display_list` to the partial-damage scratch surface flush. Elaris uses this path for published GPU frames with partial damage, including scroll frames; the regular frame submission was already asynchronous, but this intermediate flush waited for GPU completion before copying the scratch image into the published backing. The corresponding Ladybird Compositor sample showed frame work without this GPU-completion wait. The scratch surface is now submitted asynchronously before snapshotting; its destination work is submitted afterward to the same ordered Metal queue, preserving the dependency without blocking the compositor thread. A fresh scroll capture after restarting Elaris is still needed to measure the improvement.
 
-For a live scroll run, start Photon with `PHOTON_FRAME_PROFILE=1`. The five-second `Photon compositor profile` report includes `scroll blit` counts. `used_fractional_offset` means a fractional GPU shift reused a stable cached raster; `used` means an integer-aligned shift reused it. The other counters identify why reuse was skipped.
+For a live scroll run, start Elaris with `PHOTON_FRAME_PROFILE=1`. The five-second `Elaris compositor profile` report includes `scroll blit` counts. `used_fractional_offset` means a fractional GPU shift reused a stable cached raster; `used` means an integer-aligned shift reused it. The other counters identify why reuse was skipped.
 
 ## 8. Blank launch — not reproduced
 
@@ -168,7 +168,7 @@ Pitfalls for this measurement: repeated test loads of GitHub got its error page,
 - Engine `1c9ff08eb5` Compositor: Purge unused GPU cache once a page stops drawing
 - GPUI-CE `fdd3033141` gpui_apple: Release external surface textures that are no longer drawn
 
-`Tests/Compositor/TestContextState.cpp` does not compile on Engine `master` independently of these changes: its `TestCompositorClient` still uses the old `did_present_frame` signature (without `presentation_signal_value`) and `spin_event_loop_until` overloads. Photon's Engine build does not build these tests (`ENABLE_LADYBIRD_UI` is off), which is why the breakage went unnoticed.
+`Tests/Compositor/TestContextState.cpp` does not compile on Engine `master` independently of these changes: its `TestCompositorClient` still uses the old `did_present_frame` signature (without `presentation_signal_value`) and `spin_event_loop_until` overloads. Elaris's Engine build does not build these tests (`ENABLE_LADYBIRD_UI` is off), which is why the breakage went unnoticed.
 
 ## Checklist
 

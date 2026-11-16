@@ -1,4 +1,4 @@
-name: Photon upstream sync review
+name: Elaris upstream sync review
 
 on:
   repository_dispatch:
@@ -10,15 +10,15 @@ permissions:
   issues: write
 
 concurrency:
-  group: photon-upstream-sync-issues
+  group: elaris-upstream-sync-issues
   cancel-in-progress: false
 
 jobs:
   upstream-sync-review:
-    name: Document completed Photon upstream sync
+    name: Document completed Elaris upstream sync
     runs-on: ubuntu-latest
     steps:
-      - name: Check out Photon workflow source
+      - name: Check out Elaris workflow source
         uses: actions/checkout@v7
         with:
           fetch-depth: 1

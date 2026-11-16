@@ -1,6 +1,6 @@
-# Photon Automation Protocol v1
+# Elaris Automation Protocol v1
 
-Photon has an optional, local automation interface for isolated testing and
+Elaris has an optional, local automation interface for isolated testing and
 Velocity resource and responsiveness workloads. It is not enabled in normal
 browser sessions and is not a remote debugging service.
 
@@ -10,7 +10,7 @@ depend on this test-only interface.
 
 ## Enable an isolated session
 
-Launch the Photon executable with:
+Launch the installed `Photon` executable for Elaris with:
 
 ```sh
 Photon --automation-socket /private/session/Automation/photon.sock
@@ -18,22 +18,22 @@ Photon --automation-socket /private/session/Automation/photon.sock
 
 The launch must also set `PHOTON_PROFILE_DIR` and `HOME` to private sibling
 directories inside a private, current-user-owned session root. The socket's parent directory must already exist, be owned
-by the current user, and have mode `0700`. Photon reads a sibling file named
+by the current user, and have mode `0700`. Elaris reads a sibling file named
 `token`; it must be a current-user-owned regular file with mode `0600` and
 contain a 256-bit hexadecimal token. The token must not be passed in argv.
 Velocity creates both the isolated profile and credential for each managed
-session. Photon keeps settings, browsing data, and its Engine profile under the
+session. Elaris keeps settings, browsing data, and its Engine profile under the
 provided profile root.
 
-Photon refuses to replace an existing socket. The socket is restricted to the
+Elaris refuses to replace an existing socket. The socket is restricted to the
 current user, every request requires token authentication, request and response
 frames are limited to 64 KiB, and only one request is dispatched at a time.
-Shutdown removes only the socket inode created by that Photon process. The
+Shutdown removes only the socket inode created by that Elaris process. The
 interface accepts only `about:blank` and absolute HTTP(S) URLs and provides no
 shell, arbitrary JavaScript, preference, or filesystem commands.
 
 Starting a managed executable directly is required. If macOS or another
-launcher hands the request to an existing Photon process, Velocity's managed
+launcher hands the request to an existing Elaris process, Velocity's managed
 process ownership check rejects the exited child and does not signal the
 existing session.
 
@@ -86,28 +86,28 @@ Errors use a stable code and explanatory message:
 | `list_windows` | — | Stable window IDs and current tab counts |
 | `list_processes` | — | Read-only active process snapshot from `WebView::ProcessManager` and the macOS `ProcessReaper` |
 | `list_tabs` | optional `window_id` | Tab/window IDs, URL, active/loading/error state, sleeping state, latest memory estimates, engine load-finished state, and document generation |
-| `new_tab` | `window_id`, `url` | The ID of a real Photon tab |
+| `new_tab` | `window_id`, `url` | The ID of a real Elaris tab |
 | `close_tab` | `tab_id` | Accepted closing state, using ordinary tab lifecycle logic |
 | `activate_tab` | `tab_id` | Activates an existing tab and requests foreground activation of its native app/window |
 | `split_tab` | `tab_id` | Shows the tab in split view beside its window's active tab |
 | `navigate` | `tab_id`, `url` | Navigation request ID and requested state |
-| `reload` | `tab_id` | Reloads the current page through Photon's navigation command |
+| `reload` | `tab_id` | Reloads the current page through Elaris's navigation command |
 | `get_tab_status` | `tab_id` | Current URL, loading/error state, crash status, engine load-finished state, document generation, and window/tab counts |
 | `probe_speedometer_result` | `tab_id`, `document_generation` | Installs the restricted read-only observer for the expected document generation |
 | `performance_start` | `tab_id` | Starts bounded task-queue diagnostics for the WebContent processes hosting this tab |
 | `performance_snapshot` | `tab_id` | Returns the current task-queue diagnostics, using process scope |
 | `performance_stop` | `tab_id` | Returns a final snapshot and disables task-queue diagnostics for this tab's processes |
-| `set_memory_pressure` | `level`: `system`, `normal`, `warning`, or `critical` | Test-only pressure injection for the isolated Photon process; returns the effective level |
+| `set_memory_pressure` | `level`: `system`, `normal`, `warning`, or `critical` | Test-only pressure injection for the isolated Elaris process; returns the effective level |
 
-Photon advertises `performance_diagnostics_v1` only when the diagnostics
+Elaris advertises `performance_diagnostics_v1` only when the diagnostics
 operations are available. The operations require the same per-session token
 authentication as every other command. Their output has `schema_version: 1`,
 is limited by the 64 KiB protocol response bound, and contains no page text,
 DOM content, URLs, or JavaScript values. The command accepts only a tab ID; it
 does not evaluate caller-provided code or inject input.
 
-Photon advertises `memory_pressure_test_v1` for isolated automation sessions.
-`set_memory_pressure` overrides the observed pressure level for that Photon
+Elaris advertises `memory_pressure_test_v1` for isolated automation sessions.
+`set_memory_pressure` overrides the observed pressure level for that Elaris
 process and wakes its pressure cleanup path immediately. `system` removes the
 override and resumes reading the operating system. Critical pressure can discard
 eligible hidden test tabs, so use this command only in a disposable automation
@@ -128,7 +128,7 @@ queues a second time.
 
 The scope is `webcontent_process`, not tab. A WebContent process may host
 multiple documents, and the response marks whether it is shared with other
-Photon views. If a tab spans multiple WebContent processes, Photon returns one
+Elaris views. If a tab spans multiple WebContent processes, Elaris returns one
 row per process and Velocity does not merge process percentiles into a single
 distribution. The metrics use the process-local monotonic clock; no cross-process
 durations are calculated.
@@ -142,7 +142,7 @@ start identities captured when its process handle was registered. The process
 start time also serves as a launch-generation identity, so a recycled PID is
 distinguishable. The `complete` flag applies only to this explicitly named
 scope; it does not claim that every unrelated helper or native service belongs
-to that scope. If Photon could not capture a process or parent identity, the
+to that scope. If Elaris could not capture a process or parent identity, the
 corresponding field is null and the snapshot's `complete` flag is false.
 
 Example response (identifiers and timestamps are illustrative):
@@ -198,27 +198,27 @@ navigation.
 
 Velocity generates one token per iteration using the operating system random
 source, creates mode-`0700` profile and short-path socket directories plus a
-mode-`0600` token file, then launches Photon with the socket path. The socket
+mode-`0600` token file, then launches Elaris with the socket path. The socket
 directory is separate from the browser profile to stay below macOS's Unix
 socket path limit. Velocity removes it only after managed process shutdown is
 verified and its token still matches the session. It negotiates protocol v1
-before treating Photon tab capabilities as available. The isolated default
+before treating Elaris tab capabilities as available. The isolated default
 page is controlled as a real tab; page workloads navigate that tab and
 multi-tab workloads create the requested number of separate tabs. Velocity
 verifies the observed tab IDs/counts and waits for an individual readiness
 beacon for every requested fixture page before starting resource sampling.
-The same resource collector and reporting pipeline is used for Photon and
+The same resource collector and reporting pipeline is used for Elaris and
 other supported browsers.
 
-Photon's normal launch path remains unchanged when the automation argument is
+Elaris's normal launch path remains unchanged when the automation argument is
 absent. Developers can use this interface for isolated tests by creating a
 private profile and socket directory, writing a fresh token file, and
-launching a separate Photon executable with the explicit socket argument.
+launching a separate Elaris executable with the explicit socket argument.
 
 ## Restricted Speedometer result observer
 
 Automation protocol v1 additionally advertises `probe_speedometer_result` in
-Photon builds that implement it. The read-only command takes
+Elaris builds that implement it. The read-only command takes
 `{ "tab_id": N, "document_generation": G }` and installs a fixed observer in
 that tab only if the current document generation still matches. It accepts
 only the official
@@ -250,7 +250,7 @@ document generation and visibility, the current test-frame URL/readiness/
 visibility, bounded parent/frame exceptions, and time since official progress.
 These fields are read-only diagnostics and do not change the benchmark workload
 or score.
-The observer is installed only after Photon has received the document's
+The observer is installed only after Elaris has received the document's
 load-finished callback. `get_tab_status` exposes this as
 `engine_load_finished`, sourced from the embedder's actual `on_load_finish`
 callback. Velocity waits for that signal and checks `error_state` before asking
@@ -260,9 +260,9 @@ Viewport warnings are included in observer payloads when the page reports
 Speedometer's minimum viewport warning.
 For authenticated automation runs, setting
 `PHOTON_AUTOMATION_LIFECYCLE_TRACE=1` emits at most 64 app/window lifecycle
-events to standard error. Normal Photon sessions do not enable this trace.
+events to standard error. Normal Elaris sessions do not enable this trace.
 The observer is available only in an authenticated, explicitly enabled,
-isolated automation session. No credential or score is sent to Photon logs.
+isolated automation session. No credential or score is sent to Elaris logs.
 
 ## Restricted JetStream 3.0 observer and start control
 

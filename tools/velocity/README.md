@@ -1,7 +1,7 @@
 # Velocity
 
 Velocity is an independent Rust workspace for automated browser benchmarks.
-It lives inside the Photon repository and does not depend on Photon application
+It lives inside the Elaris repository and does not depend on Elaris application
 internals.
 
 ## Status
@@ -9,7 +9,7 @@ internals.
 Implemented: macOS browser discovery and managed lifecycle, startup benchmarking,
 round-based comparisons, statistical summaries, baseline regression checks,
 standalone HTML reports, diagnostic resource monitoring, and automated idle,
-local-page, Chromium multi-tab resource workloads, and Photon task-queue
+local-page, Chromium multi-tab resource workloads, and Elaris task-queue
 responsiveness profiling with statistical baseline comparisons.
 
 Not implemented: navigation-latency benchmarking, JavaScript engine suites,
@@ -21,15 +21,15 @@ browser ranking.
 
 ## Supported browsers
 
-macOS discovery recognizes Photon, Google Chrome, Safari, Firefox, Brave, Arc,
-and Helium. Startup runs use isolated profiles for Photon, Chromium-family
+macOS discovery recognizes Elaris, Google Chrome, Safari, Firefox, Brave, Arc,
+and Helium. Startup runs use isolated profiles for Elaris, Chromium-family
 browsers, and Firefox. Safari is discoverable but currently skipped for startup
 benchmarking because its profile cannot be isolated safely by the current
 adapter.
 
 ## Commands
 
-Run from the Photon repository root:
+Run from the Elaris repository root:
 
 ```sh
 cargo run --manifest-path tools/velocity/Cargo.toml -p velocity-cli -- list
@@ -139,7 +139,7 @@ ranking browsers. Profile isolation uses engine-specific launch settings, so
 cross-browser values are descriptive and should be interpreted with the
 recorded profile strategy and limitations.
 
-Compare a Photon report with a previous Photon build using:
+Compare a Elaris report with a previous Elaris build using:
 
 ```sh
 cargo run --manifest-path tools/velocity/Cargo.toml -p velocity-cli -- compare startup \
@@ -348,19 +348,19 @@ completion, including error and cancellation paths.
 
 | Workload | Current automation | Support and limits |
 | --- | --- | --- |
-| Idle | Quartz observes a stable visible window owned by the managed process session; Photon also verifies its authenticated automation session and blank tab | Photon, Chromium-family browsers, and Firefox when isolated profile launch succeeds |
-| Single page | Launch URL or runtime navigation plus the local, run-and-tab-specific readiness beacon | Photon, Chromium-family browsers, and Firefox; Photon runtime navigation uses its Automation Protocol v1 |
-| Multiple tabs | Loopback Chrome DevTools Protocol or Photon Automation Protocol v1; verifies tab count and every fixture beacon | Chrome, Helium, and Photon have verified protocol adapters. Other Chromium products are rejected until isolated-profile tab control is verified. |
+| Idle | Quartz observes a stable visible window owned by the managed process session; Elaris also verifies its authenticated automation session and blank tab | Elaris, Chromium-family browsers, and Firefox when isolated profile launch succeeds |
+| Single page | Launch URL or runtime navigation plus the local, run-and-tab-specific readiness beacon | Elaris, Chromium-family browsers, and Firefox; Elaris runtime navigation uses its Automation Protocol v1 |
+| Multiple tabs | Loopback Chrome DevTools Protocol or Elaris Automation Protocol v1; verifies tab count and every fixture beacon | Chrome, Helium, and Elaris have verified protocol adapters. Other Chromium products are rejected until isolated-profile tab control is verified. |
 
-Photon's protocol is disabled unless the executable receives
+Elaris's protocol is disabled unless the executable receives
 `--automation-socket <absolute-path>`. Velocity creates the iteration's
 isolated browser profile and a separate short-path, mode-`0700` socket
 directory with a 256-bit credential; only the socket path appears in argv.
-Photon validates the current user's private
+Elaris validates the current user's private
 session root and sibling `HOME`/profile directories, socket ownership and
 permissions, and authenticates each request. Protocol support is
 considered available only after a successful version and capability handshake.
-The protocol reuses Photon’s ordinary tab creation, closure, activation, and
+The protocol reuses Elaris’s ordinary tab creation, closure, activation, and
 navigation methods on the GPUI app thread. It does not expose JavaScript
 evaluation or arbitrary filesystem access. Firefox lacks a verified tab
 control adapter, and Safari lacks a safe isolated-profile adapter, so their
@@ -369,7 +369,7 @@ isolated-profile DevTools endpoint in smoke runs. Brave was not installed on
 the verification host and is not advertised as tab-capable. Protocol failure,
 unverified tab count, or a missing fixture beacon fails the iteration.
 
-Photon currently reports document readiness as unavailable in its status
+Elaris currently reports document readiness as unavailable in its status
 command. Page and tab workloads therefore use the existing Velocity fixture
 beacon, which is emitted only after the actual page's `load` event and is
 associated with the run token and tab index. Native window visibility is not
@@ -378,7 +378,7 @@ fixture's fixed, read-only `window.__velocityReady` signal on the assigned
 target and verify that target's URL exactly matches its assigned fixture URL,
 including the run and tab identifiers.
 Chromium tabs are opened and verified sequentially before the next tab is
-created. This does not expose arbitrary JavaScript evaluation through Photon.
+created. This does not expose arbitrary JavaScript evaluation through Elaris.
 See
 [`Documentation/AutomationProtocol.md`](../../Documentation/AutomationProtocol.md)
 for the protocol and isolation details. See
@@ -417,7 +417,7 @@ known unrelated; candidates whose ownership arguments or process identity
 cannot be verified remain uncertain and mark attribution partial. CDP
 targets are not treated as operating-system process IDs.
 
-Photon's authenticated Automation Protocol adds the read-only
+Elaris's authenticated Automation Protocol adds the read-only
 `list_processes` capability. It snapshots the actual active records owned by
 Ladybird's `WebView::ProcessManager`, including the browser process and helper
 roles that manager has launched, and the separate macOS `ProcessReaper`
@@ -435,7 +435,7 @@ unavailable process or parent identity, or unregistered process discovered
 inside the private session lowers attribution coverage. Process lifecycle
 changes are recorded by comparing verified `(PID, start time)` identities
 between samples, so PID reuse cannot inherit CPU history. `VERIFIED COMPLETE`
-for Photon is scoped to the named
+for Elaris is scoped to the named
 `WebView::ProcessManager` plus its separately reported `ProcessReaper`; it is
 not a claim about unrelated native services or every process on the system.
 
@@ -460,7 +460,7 @@ Statuses are `VERIFIED COMPLETE`, `VERIFIED PARTIAL`, `UNKNOWN`, or
 its stated scope complete, every registered process independently verified,
 and no relevant unregistered process observed in the private session. This is
 not a cross-browser completeness claim. Chromium remains `UNKNOWN` when its
-helper set cannot be proven exhaustive; Photon completeness is limited to the
+helper set cannot be proven exhaustive; Elaris completeness is limited to the
 explicit ProcessManager scope. Comparisons remain inconclusive when these
 scopes or coverage states do not support a fair conclusion. No coverage
 percentage is reported because an unknown helper count has no defensible
@@ -468,7 +468,7 @@ denominator.
 
 Cross-browser assessment also requires the registered attribution source and
 named scope to match. Two individually complete process sets with different
-scopes remain inconclusive; a complete Photon ProcessManager set is not
+scopes remain inconclusive; a complete Elaris ProcessManager set is not
 silently treated as equivalent to a different browser's process inventory.
 
 CPU is calculated from valid cumulative counter deltas divided by actual
@@ -519,7 +519,7 @@ launched isolated browser. It is an infrastructure check, not a formal or
 comparative benchmark; results are not ranked.
 
 Monitoring currently requires an engine adapter that supports an isolated
-Velocity profile. Photon, Chromium-family browsers, and Firefox support this
+Velocity profile. Elaris, Chromium-family browsers, and Firefox support this
 path; Safari is discovered but its current adapter cannot isolate a profile, so
 Velocity refuses to monitor it with the user's normal profile.
 
@@ -615,7 +615,7 @@ benchmarks remain future work.
   and diagnostic/resource benchmark commands.
 - `benchmarks/`: reserved for future workload definitions.
 
-Velocity has its own Cargo workspace and lockfile, separate from Photon's root
+Velocity has its own Cargo workspace and lockfile, separate from Elaris's root
 workspace.
 
 ## Speedometer 3.1
@@ -671,7 +671,7 @@ versioned by the official 3.1 URL but do not expose a source commit; reports
 record this distinction. The local cache is stored under
 `~/Library/Caches/Velocity/speedometer/` and is separate from browser profiles.
 
-Chrome and Helium have isolated-profile CDP adapters. Photon has a negotiated,
+Chrome and Helium have isolated-profile CDP adapters. Elaris has a negotiated,
 authenticated `probe_speedometer_result` operation in explicit automation
 sessions. It is restricted to the official Speedometer 3.1 origin or a loopback
 Speedometer 3.1 page and reads the benchmark's official score without accepting
@@ -691,7 +691,7 @@ unknown. After the local-server fixes below, Chrome completed a one-run check
 against the pinned source at `60.720958330347536`; the earlier CDP disconnect
 was not reproduced.
 
-**Photon pinned-source validation (2026-10-15):** The observer's original
+**Elaris pinned-source validation (2026-10-15):** The observer's original
 `page_unavailable` failure came from a native bridge pointer-cast bug: the
 restricted observer treated a returned `ViewHandle` as a `Photon::View`. The
 bridge now unwraps the handle correctly. `get_tab_status` exposes the actual
@@ -720,9 +720,9 @@ exist in the plain-text 404 document. This was a Velocity source-serving bug,
 not a confirmed JavaScript engine stall; the earlier TodoMVC tests were seen
 progressing in the successful run.
 
-Photon completed the full, unmodified pinned Speedometer 3.1 source at commit
+Elaris completed the full, unmodified pinned Speedometer 3.1 source at commit
 `1386415be8fef2f6b6bbdbe1828872471c5d802a` in the repository's installed
-Photon app bundle. The first verified score was `12.438724688400566` (10
+Elaris app bundle. The first verified score was `12.438724688400566` (10
 official internal iterations, completion verified, no failed suites). A
 separate warm-up plus three measured runs scored `12.557977802910989`,
 `12.028336377298244`, and `11.805356945193214` (median `12.028336377298244`,
@@ -735,7 +735,7 @@ reports are under `/tmp/velocity-speedometer-phase9-2-photon-repeatability/`.
 
 For local source-server diagnosis, set `VELOCITY_SPEEDOMETER_HTTP_TRACE=1`;
 the trace records at most 64 request paths/statuses/body sizes/write results.
-For Photon lifecycle diagnosis, set
+For Elaris lifecycle diagnosis, set
 `PHOTON_AUTOMATION_LIFECYCLE_TRACE=1`; that trace is also bounded. Both are
 opt-in and are disabled in ordinary sessions. Failure reports preserve the
 last observed benchmark state, cleanup reason, managed PID/session identity,
@@ -781,7 +781,7 @@ cargo run --manifest-path tools/velocity/Cargo.toml -p velocity-cli -- \
   bench jetstream --browser chrome --runs 5 --warmup 1
 ```
 
-Photon, Chrome, and Helium can be selected by their discovered ID or number.
+Elaris, Chrome, and Helium can be selected by their discovered ID or number.
 Velocity runs browsers sequentially, reuses the official Start Test control,
 uses the complete default workload set and parameters, and verifies all
 workloads finished before accepting the score. The `--benchmark-source local`
@@ -841,7 +841,7 @@ statistics. Raw reports remain available through the normal Velocity history
 archive. Unknown executable build revisions stay unknown; a repository
 revision is not assumed to identify the built browser.
 
-Photon automation uses two authenticated, fixed JetStream 3.0 operations. The
+Elaris automation uses two authenticated, fixed JetStream 3.0 operations. The
 read-only observer is tied to the active document generation and extracts
 bounded state from JetStream's own UI. The start operation can only activate
 JetStream's own default Start Test control on the official page or the pinned
@@ -854,11 +854,11 @@ Helium run scored 457.71. One-run smoke results also completed on Chrome at
 424.11 and 457.14. These measurements are local validation results, not a
 cross-machine target or a basis for comparing different browser versions.
 
-For a fresh Photon development build, run `elaris run` once to register the
+For a fresh Elaris development build, run `elaris run` once to register the
 development app's presentation service before using Velocity. Until registered,
-Photon automation returns a structured service-not-registered failure.
+Elaris automation returns a structured service-not-registered failure.
 
-Photon's hosted diagnostic run reached 7 of 77 workloads, then the official
+Elaris's hosted diagnostic run reached 7 of 77 workloads, then the official
 `transformersjs-bert-wasm` workload failed while compiling the pinned
 ONNX Runtime WebAssembly binary (`ort-wasm-simd-threaded.wasm`, SHA-256
 `f061472c6e77d6d50d079aacdc0ff9b63fee287ddd2cbf46cf62438d3891de2b`). The
@@ -881,7 +881,7 @@ The minimal diagnostic module is 19 bytes:
 
 It contains only an import of shared memory `a.a` with limits flags `0x03`,
 minimum 0 and maximum 1. Node accepts it (`WebAssembly.validate()` is true and
-compilation succeeds). A direct Photon run against the same local test page
+compilation succeeds). A direct Elaris run against the same local test page
 reported `WebAssembly.validate() === false` and the same `CompileError`. The
 official 11 MB ONNX module likewise passes Node validation. Accepting the flag
 alone would be unsafe because sharedness is not carried through the Wasm memory
@@ -889,6 +889,6 @@ type and instance model; completing this workload requires that engine support,
 which is outside Velocity's scope. No official JetStream workloads were
 changed or skipped, and Velocity correctly rejects the incomplete run.
 
-A separate Photon run against the local loopback benchmark copy failed during
+A separate Elaris run against the local loopback benchmark copy failed during
 initial resource prefetch with connection failures; that transport issue has
-not yet been isolated. Photon therefore does not yet complete JetStream 3.0.
+not yet been isolated. Elaris therefore does not yet complete JetStream 3.0.

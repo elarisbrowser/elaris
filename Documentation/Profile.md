@@ -3,7 +3,7 @@
 ## Profile data and settings
 
 [`elaris-storage`](../crates/elaris-storage/src/lib.rs) owns the profile: one
-folder holding everything Photon keeps between launches.
+folder holding everything Elaris keeps between launches.
 
 | File or folder | What it is |
 | --- | --- |
@@ -15,7 +15,7 @@ folder holding everything Photon keeps between launches.
 
 The default profile is in the platform's application data folder, under
 `Elaris` (`~/Library/Application Support/Elaris/Default` on macOS). On first
-launch after the rename, an existing `Photon/Default` profile and settings file
+launch after the rename, an existing `Elaris/Default` profile and settings file
 move into the corresponding `Elaris` folder. If the destination already exists,
 the legacy folder is left untouched.
 By default, `config.toml` is in the platform's configuration folder; when
@@ -110,7 +110,7 @@ keeps one app-wide `BrowsingHistory`:
 ## Clearing browsing data
 
 `ClearBrowsingData` says what to delete and from when: history, searches,
-cache and site data. `BrowsingHistory::clear` deletes Photon's own data and
+cache and site data. `BrowsingHistory::clear` deletes Elaris's own data and
 asks the Engine to delete the cache and site data through the embedder's
 `Runtime::clear_browsing_data`. Settings → Privacy builds the request.
 
@@ -124,4 +124,4 @@ the logo on tabs and the new tab page. To rebrand, change it there.
 
 The former `photon://` page scheme remains accepted for saved links. Native app
 identifiers remain stable across the visible name change. Developer logs and
-panic messages still say Photon.
+panic messages still say Elaris.

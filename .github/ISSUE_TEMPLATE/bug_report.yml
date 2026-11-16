@@ -1,13 +1,13 @@
 name: Bug report
-description: Report a reproducible problem with Photon.
+description: Report a reproducible problem with Elaris.
 title: "[Bug]: "
 labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for helping improve Photon. **Do not report security vulnerabilities here.** Use [private vulnerability reporting](https://github.com/PhotonBrowser/photon/security/advisories/new) instead.
-        Photon is pre-release software; please search existing issues before filing.
+        Thanks for helping improve Elaris. **Do not report security vulnerabilities here.** Use [private vulnerability reporting](https://github.com/PhotonBrowser/photon/security/advisories/new) instead.
+        Elaris is pre-release software; please search existing issues before filing.
   - type: textarea
     id: summary
     attributes:
@@ -21,7 +21,7 @@ body:
     attributes:
       label: Steps to reproduce
       placeholder: |
-        1. Launch Photon...
+        1. Launch Elaris...
         2. Open...
         3. Observe...
     validations:
@@ -46,7 +46,7 @@ body:
   - type: input
     id: revision
     attributes:
-      label: Photon commit or build
+      label: Elaris commit or build
       description: Run `git rev-parse --short HEAD` if building from source.
       placeholder: e.g. abc1234
   - type: textarea

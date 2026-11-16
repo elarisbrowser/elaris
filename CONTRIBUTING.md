@@ -1,11 +1,11 @@
-# Contributing to Photon
+# Contributing to Elaris
 
-Thanks for your interest in Photon! Photon is pre-release software, and contributions of all sizes are welcome for review. Please keep changes focused and be patient with review times.
+Thanks for your interest in Elaris! Elaris is pre-release software, and contributions of all sizes are welcome for review. Please keep changes focused and be patient with review times.
 
 ## Get started
 
 1. Read the [contributor setup guide](CONTRIBUTOR_SETUP.md) for platform prerequisites and first checkout.
-2. Follow [Building Photon](Documentation/Building.md) to build, run, and test the project.
+2. Follow [Building Elaris](Documentation/Building.md) to build, run, and test the project.
 3. Read the [architecture guide](Documentation/Architecture.md) to find the right component.
 4. Check the [roadmap](Documentation/Roadmap.md) and [GitHub issues](https://github.com/PhotonBrowser/photon/issues) before starting work.
 
@@ -17,7 +17,7 @@ AI tools may assist with research, coding, or review, but you are responsible fo
 
 Before requesting maintainer review, resolve merge conflicts and respond to every CodeRabbit and other automated review finding. Verify each suggestion, make the appropriate fix, and explain any finding you leave unresolved. Automated reviews do not replace your own review of the diff or project checks.
 
-The PR template repeats these acknowledgments, and CI checks that both are selected. Maintainers must require the `Photon checks` status in branch protection for this check to block merging.
+The PR template repeats these acknowledgments, and CI checks that both are selected. Maintainers must require the `Elaris checks` status in branch protection for this check to block merging.
 
 ## Submit a pull request
 
@@ -46,13 +46,13 @@ The PR template repeats these acknowledgments, and CI checks that both are selec
 | Shared browser rules and state | `crates/elaris-core/` |
 | Profile and persistent data | `crates/elaris-storage/` |
 | Rust-to-Engine integration | `crates/elaris-shell/src/platform/engine/` and `native/embedder/` |
-| Ladybird-based engine and embedder API | [Photon Engine](https://github.com/PhotonBrowser/photon-engine) |
-| Generic GPUI-CE framework changes | [Photon GPUI-CE](https://github.com/PhotonBrowser/gpui-ce) |
+| Ladybird-based engine and embedder API | [Elaris Engine](https://github.com/PhotonBrowser/photon-engine) |
+| Generic GPUI-CE framework changes | [Elaris GPUI-CE](https://github.com/PhotonBrowser/gpui-ce) |
 | Generic motion library changes | `crates/gpui-motion/` |
 
 Keep shared UI code platform-neutral, platform-specific behavior in its adapter, and engine implementation behind the embedder boundary. Avoid unrelated refactors in focused PRs.
 
-Photon keeps Engine and GPUI-CE as pinned Git submodules. The gpui-motion crate is vendored directly in this repository and can be changed alongside Photon code. Follow [Upstream maintenance](Documentation/Upstream.md) for Engine and GPUI-CE development branches, upstream syncs, validation, and pin updates. Do not use `git submodule update --remote` to change dependency pins.
+Elaris keeps Engine and GPUI-CE as pinned Git submodules. The gpui-motion crate is vendored directly in this repository and can be changed alongside Elaris code. Follow [Upstream maintenance](Documentation/Upstream.md) for Engine and GPUI-CE development branches, upstream syncs, validation, and pin updates. Do not use `git submodule update --remote` to change dependency pins.
 
 ## GitHub issues and Linear
 
@@ -62,4 +62,4 @@ Maintainers also use Linear for internal planning and prioritization. Contributo
 
 ## Before asking for help
 
-Check [Contributor setup](CONTRIBUTOR_SETUP.md), [Building Photon](Documentation/Building.md), and existing GitHub issues. When asking about a build failure, include your OS, tool versions, relevant logs, and commit SHA, with secrets removed.
+Check [Contributor setup](CONTRIBUTOR_SETUP.md), [Building Elaris](Documentation/Building.md), and existing GitHub issues. When asking about a build failure, include your OS, tool versions, relevant logs, and commit SHA, with secrets removed.

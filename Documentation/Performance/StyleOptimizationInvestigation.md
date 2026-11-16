@@ -3,9 +3,9 @@
 > Historical report based on the style engine that preceded Ladybird's differential style engine replacement (`8ea3ff332fa`). Its transaction scope and broad/narrow matching metrics are no longer emitted; retain this report only as evidence from the earlier implementation.
 
 **Reviewed:** 18 October 2026  
-**Photon checkout base:** `a950612155636c31fa06c6d5b0f702caf5f33caf` (dirty)  
+**Elaris checkout base:** `a950612155636c31fa06c6d5b0f702caf5f33caf` (dirty)  
 **Engine checkout base:** `c3e20b5e55c478b5630f06af910ad5784f1ecb22` (dirty)  
-**Velocity executable:** Photon Development (release), `/Users/theo/Documents/code/oss/photon/target/release/Photon`  
+**Velocity executable:** Elaris Development (release), `/Users/theo/Documents/code/oss/photon/target/release/Photon`  
 **Executable and Engine revisions in benchmark reports:** unknown; the authenticated protocol does not attest a binary build revision.
 
 ## Decision
@@ -47,20 +47,20 @@ Style and layout durations can overlap through nested update work. They must not
 | Transaction scope planning | `Engine/Libraries/LibWeb/Rust/src/css/style/flush.rs` (`plan_is_broad`, transaction publication) | Document, tree-scope, and root subtree regions can produce an unscoped transaction. This is distinct from the Rust density heuristic. |
 | Layout rounds | `Engine/Libraries/LibWeb/Layout/UpdateLayout.cpp`, `Engine/Libraries/LibWeb/Rust/src/layout/update_layout.rs`, `Engine/Libraries/LibWeb/Rust/src/layout/layout_node_arena.rs` | Full/partial counts already existed; opt-in elapsed timers wrap the classified render-state round and committed-layout preparation. |
 | Diagnostic data and export | `Engine/Libraries/LibWeb/CSS/PerformanceDiagnostics.h`, `Engine/Services/WebContent/ConnectionFromClient.cpp` | Per-document counters are collected only during an authenticated diagnostics session and exported without page content. |
-| Surface and drawable stages | `crates/elaris-shell/src/platform/macos/presentation.rs`, `crates/elaris-shell/src/platform/engine/session.rs`, `vendor/gpui-ce/crates/gpui_apple/src/metal_renderer.rs` | Photon reuses the Engine surface publication identity through installation and drawable callbacks; drawable feedback uses Metal host time. |
+| Surface and drawable stages | `crates/elaris-shell/src/platform/macos/presentation.rs`, `crates/elaris-shell/src/platform/engine/session.rs`, `vendor/gpui-ce/crates/gpui_apple/src/metal_renderer.rs` | Elaris reuses the Engine surface publication identity through installation and drawable callbacks; drawable feedback uses Metal host time. |
 | Metric validation and report | `tools/velocity/crates/velocity-browser/src/photon.rs`, `tools/velocity/crates/velocity-cli/src/responsiveness_cli.rs` | Velocity validates the tab-scoped event stream, retains timing coverage, and reports drawable intervals separately from Engine style timing. |
 
 The implementation reuses Ladybird's existing style and layout counters, adds broad/narrow apply counts and durations only while authenticated diagnostics are enabled, and times classified layout rounds behind the same opt-in session. Rust diagnostics do not gather per-element traces while disabled. Unscoped/fallback cause reporting remains unavailable; `style_fallback_reason_available` is explicitly `false`.
 
 ## Engine-to-presentation correlation
 
-**Verified lifecycle:** WebContent and the Engine compositor update an IOSurface-backed surface; `LibPhotonEmbedder` publishes `(backing-pool generation, WebView frame ID)`; Photon receives and may coalesce updates before installation; the Photon page view installs a selected surface; GPUI-CE samples it into a Metal window drawable; Metal returns `CAMetalDrawable.presentedTime` feedback.
+**Verified lifecycle:** WebContent and the Engine compositor update an IOSurface-backed surface; `LibPhotonEmbedder` publishes `(backing-pool generation, WebView frame ID)`; Elaris receives and may coalesce updates before installation; the Elaris page view installs a selected surface; GPUI-CE samples it into a Metal window drawable; Metal returns `CAMetalDrawable.presentedTime` feedback.
 
 The generation is an IOSurface pool epoch. The frame ID is a monotonically increasing surface-publication sequence within one WebView. This identity is not a content generation, does not prove pixel changes, and does not prove the window was visible. Navigation retaining the WebView keeps its sequence; a replacement WebView starts a new diagnostic scope. Repeated drawable presentations of one surface are retained separately, and pre-install coalescing is counted.
 
-Photon elapsed stage timestamps use one process-local monotonic origin. Metal `presentedTime` is kept in its host-time domain. There is no validated Engine-to-Metal shared timestamp, so generation-to-presentation duration remains `null`. GPU submission and command-buffer completion are correlated by `(generation, frame ID, drawable ID)`; completion is not presentation. No interval is synthesized when presentation feedback is absent.
+Elaris elapsed stage timestamps use one process-local monotonic origin. Metal `presentedTime` is kept in its host-time domain. There is no validated Engine-to-Metal shared timestamp, so generation-to-presentation duration remains `null`. GPU submission and command-buffer completion are correlated by `(generation, frame ID, drawable ID)`; completion is not presentation. No interval is synthesized when presentation feedback is absent.
 
-The live run uncovered an old Velocity envelope check expecting `photon_window_engine_surface_frames` while Photon returns the correctly tab-scoped `photon_tab_engine_surface_frames`. The validator now checks the tab scope, which restored the already advertised per-drawable event stream. The short style fixtures usually produce only one or two drawable events, so they do not provide frame intervals. The animation fixture supplies enough drawable events for interval distributions.
+The live run uncovered an old Velocity envelope check expecting `photon_window_engine_surface_frames` while Elaris returns the correctly tab-scoped `photon_tab_engine_surface_frames`. The validator now checks the tab scope, which restored the already advertised per-drawable event stream. The short style fixtures usually produce only one or two drawable events, so they do not provide frame intervals. The animation fixture supplies enough drawable events for interval distributions.
 
 ## Chromium comparison
 
@@ -80,7 +80,7 @@ The fixture is deterministic and checks resulting computed custom properties for
 
 ## Measured baselines
 
-All rows below use five successful measured iterations after one warm-up, diagnostics enabled, the same release Photon executable path, isolated profiles, a 100 ms process-resource sampler, and the same Mac17,4 / Apple M5 / 10 logical CPU host on macOS 27.0.1 arm64. Display refresh was reported as 60 Hz. Engine and executable revisions remain unknown in report provenance because the protocol does not attest them. Process memory is process-tree scope, not per-tab memory or JS heap.
+All rows below use five successful measured iterations after one warm-up, diagnostics enabled, the same release Elaris executable path, isolated profiles, a 100 ms process-resource sampler, and the same Mac17,4 / Apple M5 / 10 logical CPU host on macOS 27.0.1 arm64. Display refresh was reported as 60 Hz. Engine and executable revisions remain unknown in report provenance because the protocol does not attest them. Process memory is process-tree scope, not per-tab memory or JS heap.
 
 | Workload (fixture revision) | Fixture median | `style_update_duration_ms` median | Broad matching | Narrow matching | Reaction entries | Full/partial layout duration median | Frame evidence |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
@@ -109,7 +109,7 @@ The five-run animation capture produced 1,105 valid frame-interval samples acros
 
 The animation run measured 1,118 drawable feedback callbacks and 1,105 interval samples, retained 100% of bounded presentation events, and observed pre-install coalescing. Four sessions had no repeated surface presentation; one session had four repeated presentations. These timestamps establish drawable presentation, not changed webpage pixels or user perception. No style transaction is timestamped into a later frame ID, so same-run style/frame co-occurrence does not prove causation.
 
-`engine_surface_to_presentation_latency_ms` remains null. Photon and Metal stages can be correlated after Photon receives the surface, but Engine publication has no timestamp in a validated clock domain shared with Metal. The browser also does not expose changed-pixel or occlusion evidence.
+`engine_surface_to_presentation_latency_ms` remains null. Elaris and Metal stages can be correlated after Elaris receives the surface, but Engine publication has no timestamp in a validated clock domain shared with Metal. The browser also does not expose changed-pixel or occlusion evidence.
 
 ### Instrumentation overhead
 
@@ -144,7 +144,7 @@ Validation completed on this checkout:
 - `elaris format` — passed.
 - `elaris check` — passed.
 - `elaris test` — passed.
-- `elaris build` — passed; the release Photon executable used for the live captures was built before those captures.
+- `elaris build` — passed; the release Elaris executable used for the live captures was built before those captures.
 - `cargo fmt --all -- --check` in `tools/velocity/` — passed.
 - `cargo test --workspace` in `tools/velocity/` — 165 tests passed (43 browser, 92 CLI, 17 core, 13 metrics); doc tests passed with no tests defined.
 

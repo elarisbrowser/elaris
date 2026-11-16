@@ -5,7 +5,7 @@ Engine resource use while it is open. Its process totals exclude shared Engine
 services and GPU allocations; UI loop delay measurements are separate from
 per-tab frame gap diagnostics.
 
-Photon's frame-path and memory work from October 2026, measured before and after
+Elaris's frame-path and memory work from October 2026, measured before and after
 each change. The investigation notes, traces and method are in
 [CompositorPerformance.md](CompositorPerformance.md).
 

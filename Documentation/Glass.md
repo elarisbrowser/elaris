@@ -1,6 +1,6 @@
 # Glass
 
-Photon draws Liquid Glass behind GPUI elements with one element, `glass`, in
+Elaris draws Liquid Glass behind GPUI elements with one element, `glass`, in
 [`ui/glass.rs`](../crates/elaris-shell/src/platform/ui/glass.rs). On macOS 26
 and later it puts native glass beneath the element's GPUI children. Everywhere
 else, and when **Settings → Appearance → Glass menus** is off, the element is a

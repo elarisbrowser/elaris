@@ -1,6 +1,6 @@
 # Shell theme and style tokens
 
-Photon shell views use shared style values so visual changes have one clear
+Elaris shell views use shared style values so visual changes have one clear
 home and stay consistent across light and dark appearances, every
 transparency level, and every view.
 
@@ -16,7 +16,7 @@ from the [settings](Profile.md), and never choose colors locally.
 | Role | Used for |
 | --- | --- |
 | `window_tint` | The window background over the desktop |
-| `page_background`, `page_surface` | Web content and Photon pages, with a surface tone distinct from the window |
+| `page_background`, `page_surface` | Web content and Elaris pages, with a surface tone distinct from the window |
 | `surface` | Chrome controls such as the omnibox field, active tab, buttons, text fields and segmented choices |
 | `hover_surface` | A row or control under the pointer |
 | `selected_surface` | The selected row, an open menu's button, a pressed or hovered button on `surface` |
@@ -42,7 +42,7 @@ in Settings → Appearance or the space's dialog with the shared
 `color_picker`. Hue, tint saturation, and lightness values are in the
 `[window]` section of `theme.toml`; the same values tone swatches and light or
 dark window tints. The system tint uses the `window` color in each appearance's
-palette, while `page` sets the separate web content and Photon page color. This
+palette, while `page` sets the separate web content and Elaris page color. This
 keeps solid themes distinct without requiring a gradient. Draw the window's
 background with `palette.window_background()`, which is the tint or the
 gradient; `window_color_swatch` gives the colour each swatch shows.
@@ -64,7 +64,7 @@ over the window, not layers of their own, so everything on the window is
 exactly as see-through as the window. Menus and dialogs float over pages, so
 they are more opaque and frost the page behind them to stay readable. The
 theme-controlled page/control blur also frosts the backdrop under translucent
-Photon pages, controls and shortcut icon wells while leaving their contents
+Elaris pages, controls and shortcut icon wells while leaving their contents
 sharp.
 
 ## Dimensions and typography
@@ -125,7 +125,7 @@ views never handle SVG data. Icons are [Lucide](https://lucide.dev) (ISC
 license), vendored unchanged from `lucide-static` 0.460.0 in
 [`assets/icons/lucide/`](../crates/elaris-shell/assets/icons/lucide) with
 its license. Only the loading spinner, whose spokes fade behind the leading
-one, and the brand logo are drawn by Photon.
+one, and the brand logo are drawn by Elaris.
 
 To add an icon, download it from the same `lucide-static` version into that
 folder, then add a function that loads it with `lucide!("name")`.
@@ -134,7 +134,7 @@ folder, then add a function that loads it with `lucide!("name")`.
 
 [`gpui-motion`](../crates/gpui-motion/README.md) provides reusable animation
 mechanics. The shell's
-[`motion/`](../crates/elaris-shell/src/platform/ui/motion/) keeps Photon
+[`motion/`](../crates/elaris-shell/src/platform/ui/motion/) keeps Elaris
 visual presets and distances. An `Entrance` describes an element effect,
 composed from:
 
@@ -184,7 +184,7 @@ the window follow the same motion, sample it with `value_at` at one instant per
 frame, as the sidebar does, rather than `value`, which reads the clock on every
 call and lets the parts drift apart.
 
-Photon's motion leans on springs, as Arc's does. A spring can be turned back
+Elaris's motion leans on springs, as Arc's does. A spring can be turned back
 midway and keeps its momentum, where a fixed-length curve restarts from rest.
 Menus and popovers (`popover`) and the find bar spring in on `Curve::SNAPPY`,
 with a slight scale, drop and blur. The blur is left out where the platform

@@ -1,10 +1,10 @@
 # Manual core browser comparison
 
-Open `index.html` in Photon and in one current reference browser. Use the same viewport size, zoom, network, and page sequence in each. Record pass, fail, or unavailable for every case, along with a short note. A failed external service or permission policy should be marked separately from a rendering/engine failure.
+Open `index.html` in Elaris and in one current reference browser. Use the same viewport size, zoom, network, and page sequence in each. Record pass, fail, or unavailable for every case, along with a short note. A failed external service or permission policy should be marked separately from a rendering/engine failure.
 
 ## Setup
 
-1. Record OS, Photon build/commit, reference browser name/version, window size, and network state.
+1. Record OS, Elaris build/commit, reference browser name/version, window size, and network state.
 2. Open `index.html` in both browsers. These fixtures are local and require no server.
 3. If file URLs prevent storage or permission APIs, serve this directory via localhost and repeat the affected case.
 4. Keep one clean browser profile for persistence checks, then repeat selected cases with a temporary/private profile.
@@ -13,7 +13,7 @@ Open `index.html` in Photon and in one current reference browser. Use the same v
 
 | Area | Actions | Pass criteria |
 | --- | --- | --- |
-| Startup and address entry | Launch Photon; enter explicit HTTPS URL, bare domain, `localhost:PORT`, search text, and an invalid/empty address. | Correct destination or clear error; address field remains editable; page title and icon update. |
+| Startup and address entry | Launch Elaris; enter explicit HTTPS URL, bare domain, `localhost:PORT`, search text, and an invalid/empty address. | Correct destination or clear error; address field remains editable; page title and icon update. |
 | Tab lifecycle | New tab, open target-blank link, switch among tabs while pages load, close and reopen a tab, close last tab. | Correct active tab, expected page state retained, no crash or blank/stale content. |
 | Navigation | On Navigation test, follow links, use back/forward, reload, stop a navigation, visit anchors, use push/replaceState then Back/Forward. | URL and displayed document stay in sync; toolbar enablement reflects history; no stuck loading. |
 | Input | On Input and Forms test, type, select/copy/paste, use keyboard navigation, submit invalid and valid forms, invoke Find in Page and zoom. | Text input and selection work; validation identifies invalid fields; find count/highlight and zoom behave consistently. |
@@ -30,11 +30,11 @@ Open `index.html` in Photon and in one current reference browser. Use the same v
 Use this compact format:
 
 ```text
-Date / Photon commit / OS:
+Date / Elaris commit / OS:
 Reference browser and version:
 Viewport and zoom:
 
-Case | Photon (pass/fail/unavailable) | Reference | Notes
+Case | Elaris (pass/fail/unavailable) | Reference | Notes
 Startup/address |
 Tab lifecycle |
 Navigation |

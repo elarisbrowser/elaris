@@ -1,6 +1,6 @@
 # Linux support
 
-Linux is **experimental**. The shared GPUI shell, Engine adapter and Photon
+Linux is **experimental**. The shared GPUI shell, Engine adapter and Elaris
 pages build for Linux. Ubuntu 24.04 CI runs workspace checks and tests, and the
 workflow includes a desktop-entry installation smoke check. A full Engine
 build and a graphical browser run have not yet been verified.
@@ -28,7 +28,7 @@ Issues are tracked under [Implement Linux support](https://linear.app/photonbrow
 6. **Low** — [PHTN-238: Add Linux dependency setup guidance and checks](https://linear.app/photonbrowser/issue/PHTN-238/add-linux-system-dependency-setup-guidance-and-checks).
 7. **Low** — [PHTN-237: Align appearance settings with opaque Linux windows](https://linear.app/photonbrowser/issue/PHTN-237/align-linux-appearance-settings-with-opaque-window-support).
 8. **Low** — [PHTN-236: Import DMA-BUF page frames without CPU copies](https://linear.app/photonbrowser/issue/PHTN-236/import-linux-dma-buf-page-frames-without-cpu-copies).
-9. **Low** — [PHTN-239: Package Photon for supported Linux distributions](https://linear.app/photonbrowser/issue/PHTN-239/package-photon-for-supported-linux-distributions).
+9. **Low** — [PHTN-239: Package Elaris for supported Linux distributions](https://linear.app/photonbrowser/issue/PHTN-239/package-photon-for-supported-linux-distributions).
 
 ## Page presentation
 
@@ -80,7 +80,7 @@ The intended path is **DMA-BUF import**, matching macOS's IOSurface design:
 - [x] Reduced motion follows GNOME's `enable-animations` (`motion_observer.rs`).
 - [x] Default browser through `xdg-settings` once a desktop entry is installed
       (`default_browser.rs`).
-- [x] Install the `org.photonbrowser.photon.desktop` entry and icon, and declare HTTP/HTTPS handlers; [PHTN-230](https://linear.app/photonbrowser/issue/PHTN-230/ship-linux-desktop-entry-and-register-web-url-handlers).
+- [x] Install the `org.elarisbrowser.elaris.desktop` entry and icon, and declare HTTP/HTTPS handlers; [PHTN-230](https://linear.app/photonbrowser/issue/PHTN-230/ship-linux-desktop-entry-and-register-web-url-handlers).
 - [ ] Reduced motion on KDE and other desktops (XDG settings portal), and pass the preference to Engine pages; [PHTN-234](https://linear.app/photonbrowser/issue/PHTN-234/propagate-linux-reduced-motion-preferences-to-web-pages).
 - [ ] Window visibility and display observer (`window_observer.rs`), so hidden windows stop rendering; [PHTN-232](https://linear.app/photonbrowser/issue/PHTN-232/observe-linux-window-visibility-and-display-changes).
 - [ ] Memory-pressure signal (PSI or cgroup) instead of the portable fallback; [PHTN-233](https://linear.app/photonbrowser/issue/PHTN-233/report-linux-memory-pressure-to-photon-tab-sleeping).
@@ -106,10 +106,10 @@ by an earlier full setup, UI-only setup leaves it in place.
 
 No separate command is needed after full setup. `elaris desktop install` is
 available for manual refresh and requires the CLI to be installed first.
-Choosing Photon as the default browser remains a user decision in desktop
+Choosing Elaris as the default browser remains a user decision in desktop
 settings.
 
-The desktop launcher calls the CLI under Cargo's install root. Opening Photon
+The desktop launcher calls the CLI under Cargo's install root. Opening Elaris
 from the launcher builds the browser from this checkout before starting it. If
 you move the checkout or change Cargo's install root, run `./elaris install`
 followed by `elaris desktop install` to refresh both paths. This is developer
@@ -124,5 +124,5 @@ elaris desktop uninstall
 cargo uninstall elaris-cli
 ```
 
-If Photon is your current default browser, choose another default in desktop
+If Elaris is your current default browser, choose another default in desktop
 settings before removing the entry.

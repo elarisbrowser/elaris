@@ -7,7 +7,7 @@
 Describe the next state. Keep the motion state in your view. The library handles
 transitions, springs, and interruptions using stock GPUI CE—no React or renderer fork.
 
-Photon keeps this crate in the main repository at `crates/gpui-motion/`.
+Elaris keeps this crate in the main repository at `crates/gpui-motion/`.
 It is based on [1bye/gpui-motion](https://github.com/1bye/gpui-motion); the
 upstream MIT and Apache-2.0 notices remain in this repository.
 

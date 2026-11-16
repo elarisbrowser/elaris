@@ -22,7 +22,7 @@ jobs:
       VCPKG_MAX_CONCURRENCY: 2
 
     steps:
-      - name: Check out Photon and pinned submodules
+      - name: Check out Elaris and pinned submodules
         uses: actions/checkout@v7
         with:
           submodules: recursive
@@ -44,12 +44,12 @@ jobs:
 
       - name: Set software-rendering and cache paths
         run: |
-          echo "CCACHE_DIR=$RUNNER_TEMP/photon-ccache" >> "$GITHUB_ENV"
+          echo "CCACHE_DIR=$RUNNER_TEMP/elaris-ccache" >> "$GITHUB_ENV"
           echo "CCACHE_MAXSIZE=4G" >> "$GITHUB_ENV"
-          echo "VCPKG_DEFAULT_BINARY_CACHE=$RUNNER_TEMP/photon-vcpkg-binary-cache" >> "$GITHUB_ENV"
-          mkdir -p "$RUNNER_TEMP/photon-ccache" "$RUNNER_TEMP/photon-vcpkg-binary-cache"
+          echo "VCPKG_DEFAULT_BINARY_CACHE=$RUNNER_TEMP/elaris-vcpkg-binary-cache" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/elaris-ccache" "$RUNNER_TEMP/elaris-vcpkg-binary-cache"
           echo "LIBGL_ALWAYS_SOFTWARE=1" >> "$GITHUB_ENV"
-          echo "PHOTON_RENDER_SCREENSHOT=$RUNNER_TEMP/photon-linux-render-smoke.png" >> "$GITHUB_ENV"
+          echo "PHOTON_RENDER_SCREENSHOT=$RUNNER_TEMP/elaris-linux-render-smoke.png" >> "$GITHUB_ENV"
           lvp_icd="$(find /usr/share/vulkan/icd.d -maxdepth 1 -name 'lvp_icd*.json' -print -quit)"
           if [ -n "$lvp_icd" ]; then
             echo "VK_ICD_FILENAMES=$lvp_icd" >> "$GITHUB_ENV"
@@ -58,18 +58,18 @@ jobs:
       - name: Restore C++ compiler cache
         uses: actions/cache@v4
         with:
-          path: ${{ runner.temp }}/photon-ccache
-          key: photon-linux-ccache-${{ steps.engine.outputs.revision }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/elaris-ccache
+          key: elaris-linux-ccache-${{ steps.engine.outputs.revision }}-${{ github.run_id }}
           restore-keys: |
-            photon-linux-ccache-${{ steps.engine.outputs.revision }}-
+            elaris-linux-ccache-${{ steps.engine.outputs.revision }}-
 
       - name: Restore vcpkg binary cache
         uses: actions/cache@v4
         with:
-          path: ${{ runner.temp }}/photon-vcpkg-binary-cache
-          key: photon-linux-vcpkg-${{ steps.engine.outputs.revision }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/elaris-vcpkg-binary-cache
+          key: elaris-linux-vcpkg-${{ steps.engine.outputs.revision }}-${{ github.run_id }}
           restore-keys: |
-            photon-linux-vcpkg-${{ steps.engine.outputs.revision }}-
+            elaris-linux-vcpkg-${{ steps.engine.outputs.revision }}-
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@1.99.0
@@ -79,10 +79,10 @@ jobs:
         with:
           shared-key: linux-engine-browser
 
-      - name: Build Photon Engine and app
+      - name: Build Elaris Engine and app
         run: ./elaris build --debug --verbose
 
-      - name: Load and render a local web page through Photon
+      - name: Load and render a local web page through Elaris
         run: >-
           xvfb-run -a
           -s "-screen 0 1280x800x24 +extension GLX +render -noreset"
@@ -93,5 +93,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-page-render-smoke
-          path: ${{ runner.temp }}/photon-linux-render-smoke.png
+          path: ${{ runner.temp }}/elaris-linux-render-smoke.png
           if-no-files-found: ignore

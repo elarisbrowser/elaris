@@ -7,7 +7,7 @@
 pub const NAME: &str = "elaris.";
 
 /// The name of the web engine, as shown in notices about it.
-pub const ENGINE_NAME: &str = "elaris. Engine";
+pub const ENGINE_NAME: &str = "Ladybird";
 
 /// The scheme of the browser's own pages, as `elaris` in `elaris://settings`.
 pub const PAGE_SCHEME: &str = "elaris";
@@ -17,10 +17,10 @@ pub const LEGACY_PAGE_SCHEME: &str = "photon";
 
 /// The macOS bundle identifier of the app `elaris run` builds for
 /// development, so macOS can open web links with it.
-pub const DEVELOPMENT_BUNDLE_IDENTIFIER: &str = "org.photonbrowser.photon.development";
+pub const DEVELOPMENT_BUNDLE_IDENTIFIER: &str = "org.elarisbrowser.photon.development";
 
 /// The freedesktop desktop-entry ID that Linux installs register Photon under.
-pub const LINUX_DESKTOP_ID: &str = "org.photonbrowser.photon.desktop";
+pub const LINUX_DESKTOP_ID: &str = "org.elarisbrowser.elaris.desktop";
 
 /// The current application data folder.
 pub const DATA_FOLDER: &str = "Elaris";

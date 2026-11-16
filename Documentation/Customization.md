@@ -1,6 +1,6 @@
 # Workspace presets
 
-Photon uses named workspace presets to choose horizontal or vertical tabs and
+Elaris uses named workspace presets to choose horizontal or vertical tabs and
 the side of the window used by the sidebar. In Settings → Appearance, people
 can view, create, edit and delete presets, choose the profile default, and
 assign a preset to the active space. The New Space and Edit Space dialogs also

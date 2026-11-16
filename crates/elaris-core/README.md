@@ -1,4 +1,4 @@
-<p align="center"><img src="../elaris-brand/assets/logo.svg" alt="Photon" width="72" /></p>
+<p align="center"><img src="../elaris-brand/assets/logo.svg" alt="Elaris" width="72" /></p>
 
 # `elaris-core`
 
@@ -6,7 +6,7 @@ Framework-independent browser state and rules: navigation commands, settings, ta
 
 ## Use
 
-Resolve address-bar input with the same rules used by Photon:
+Resolve address-bar input with the same rules used by Elaris:
 
 ```rust
 use elaris_core::normalize_url;

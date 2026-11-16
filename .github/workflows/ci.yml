@@ -1,4 +1,4 @@
-name: Photon CI
+name: Elaris CI
 
 on:
   push:
@@ -9,15 +9,15 @@ permissions:
   contents: read
 
 concurrency:
-  group: photon-ci-${{ github.workflow }}-${{ github.ref }}
+  group: elaris-ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   lint:
-    name: Photon lint and compile
+    name: Elaris lint and compile
     runs-on: ubuntu-24.04
     steps:
-      - name: Check out Photon and pinned submodules
+      - name: Check out Elaris and pinned submodules
         uses: actions/checkout@v7
         with:
           submodules: recursive
@@ -72,7 +72,7 @@ jobs:
         with:
           shared-key: checks
 
-      - name: Check Photon
+      - name: Check Elaris
         run: ./elaris check --verbose
 
       - name: Build Linux UI-only shell
@@ -93,29 +93,29 @@ jobs:
           CARGO_INSTALL_ROOT="$temp_root/cargo" \
           XDG_DATA_HOME="$temp_root/share" \
             ./elaris install
-          desktop_file="$temp_root/share/applications/org.photonbrowser.photon.desktop"
-          icon_file="$temp_root/share/icons/hicolor/1024x1024/apps/org.photonbrowser.photon.png"
+          desktop_file="$temp_root/share/applications/org.elarisbrowser.elaris.desktop"
+          icon_file="$temp_root/share/icons/hicolor/1024x1024/apps/org.elarisbrowser.elaris.png"
           test ! -e "$desktop_file"
           CARGO_INSTALL_ROOT="$temp_root/cargo" \
           XDG_DATA_HOME="$temp_root/share" \
             ./elaris desktop install
           desktop-file-validate "$desktop_file"
-          test -x "$temp_root/cargo/bin/photon"
+          test -x "$temp_root/cargo/bin/elaris"
           test -s "$icon_file"
-          grep -F "x-scheme-handler/http=org.photonbrowser.photon.desktop;" "$temp_root/share/applications/mimeinfo.cache"
-          grep -F "x-scheme-handler/https=org.photonbrowser.photon.desktop;" "$temp_root/share/applications/mimeinfo.cache"
+          grep -F "x-scheme-handler/http=org.elarisbrowser.elaris.desktop;" "$temp_root/share/applications/mimeinfo.cache"
+          grep -F "x-scheme-handler/https=org.elarisbrowser.elaris.desktop;" "$temp_root/share/applications/mimeinfo.cache"
           CARGO_INSTALL_ROOT="$temp_root/cargo" \
           XDG_DATA_HOME="$temp_root/share" \
             ./elaris desktop uninstall
           test ! -e "$desktop_file"
           test ! -e "$icon_file"
-          test -x "$temp_root/cargo/bin/photon"
+          test -x "$temp_root/cargo/bin/elaris"
 
   tests:
-    name: Photon tests
+    name: Elaris tests
     runs-on: ubuntu-24.04
     steps:
-      - name: Check out Photon and pinned submodules
+      - name: Check out Elaris and pinned submodules
         uses: actions/checkout@v7
         with:
           submodules: recursive
@@ -169,11 +169,11 @@ jobs:
         with:
           shared-key: checks
 
-      - name: Test Photon
+      - name: Test Elaris
         run: ./elaris test
 
   checks:
-    name: Photon checks
+    name: Elaris checks
     if: always()
     needs:
       - lint
@@ -186,9 +186,9 @@ jobs:
           TEST_RESULT: ${{ needs.tests.result }}
         run: |
           if [[ "$LINT_RESULT" == "success" && "$TEST_RESULT" == "success" ]]; then
-            echo "All Photon validation jobs passed."
+            echo "All Elaris validation jobs passed."
           else
-            echo "Photon lint and compile job: $LINT_RESULT"
-            echo "Photon test job: $TEST_RESULT"
+            echo "Elaris lint and compile job: $LINT_RESULT"
+            echo "Elaris test job: $TEST_RESULT"
             exit 1
           fi

@@ -1,4 +1,4 @@
-<p align="center"><img src="../elaris-brand/assets/logo.svg" alt="Photon" width="72" /></p>
+<p align="center"><img src="../elaris-brand/assets/logo.svg" alt="Elaris" width="72" /></p>
 
 # `elaris-shell`
 

@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 1620" width="1240" height="1620" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif">
-  <title>How a Photon window composites a page on macOS</title>
+  <title>How a Elaris window composites a page on macOS</title>
   <style>
     .bg { fill: #f6f6f8; }
     .ink { fill: #1d1d22; }
@@ -33,7 +33,7 @@
 
   <rect class="bg" width="1240" height="1620"/>
 
-  <text class="ink h1" x="40" y="54">How a Photon window puts a page on screen (macOS)</text>
+  <text class="ink h1" x="40" y="54">How a Elaris window puts a page on screen (macOS)</text>
   <text class="muted note" x="40" y="80">Exploded view, back to front. Each plane is a separate layer the window server composites; nothing below GPUI-CE's layer is drawn by GPUI-CE.</text>
 
   <!-- Vertical guides through the window's four corners, across all planes. -->
@@ -112,7 +112,7 @@
     <path class="leader" d="M680 661 H770"/>
     <text class="ink label" x="780" y="657">3 · Page layer (Core Animation)</text>
     <text class="muted note" x="780" y="677">Engine's IOSurface frames, shown with no pixel copies.</text>
-    <text class="muted note" x="780" y="695">One CALayer per web view, in Photon's page host view</text>
+    <text class="muted note" x="780" y="695">One CALayer per web view, in Elaris's page host view</text>
     <text class="muted note" x="780" y="713">just beneath GPUI-CE's view.</text>
     <text class="muted code" x="780" y="732">macos/page_layer.rs</text>
 

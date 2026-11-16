@@ -16,7 +16,6 @@ use crate::support::{
 
 const HELPER_PROCESS_TARGETS: &[&str] = &[
     "WebContent",
-    "WebWorker",
     "Compositor",
     "RequestServer",
     "ImageDecoder",
@@ -322,7 +321,7 @@ pub(crate) fn engine_build(root: &Path, release: bool, verbose: bool) -> Result<
         required_outputs.extend([
             root.join("build/Resources/fonts/NotoEmoji.ttf"),
             root.join("build/Resources/fonts/SerenitySans-Regular.ttf"),
-            root.join("build/Resources/ladybird/site-compatibility/cnn.com.json"),
+            root.join("build/Resources/ladybird/WebCompat.json"),
         ]);
     }
     if std::fs::read_to_string(&fingerprint_path).ok().as_deref() == Some(fingerprint.as_str())

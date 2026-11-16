@@ -37,7 +37,7 @@ native-tests = ["gpui", "gpui/test-support"]
 svgtypes = { version = "0.15.3", optional = true }
 unicode-segmentation = { version = "1.13.3", optional = true }
 # Match the published CE API; no workspace patches or Git dependencies.
-gpui = { package = "gpui-ce", version = "=0.2.2", default-features = false, optional = true }
+gpui = { package = "gpui-ce", version = "=0.4.0", default-features = false, optional = true }
 
 gpui_platform = { package = "gpui_ce_platform", version = "=0.1.0", optional = true, features = ["font-kit", "wayland", "x11"] }
 

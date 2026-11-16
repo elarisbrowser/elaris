@@ -1,8 +1,8 @@
-<p align="center"><img src="../elaris-brand/assets/logo.svg" alt="Photon" width="72" /></p>
+<p align="center"><img src="../elaris-brand/assets/logo.svg" alt="Elaris" width="72" /></p>
 
 # `elaris-cli`
 
-The command-line interface for setting up pinned checkouts, building and running Photon, and maintaining upstream dependencies.
+The command-line interface for setting up pinned checkouts, building and running Elaris, and maintaining upstream dependencies.
 
 ## Use
 

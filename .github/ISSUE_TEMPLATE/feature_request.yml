@@ -1,12 +1,12 @@
 name: Feature request
-description: Suggest an improvement to Photon.
+description: Suggest an improvement to Elaris.
 title: "[Feature]: "
 labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for the suggestion! Photon is in active development. Please check the roadmap and existing issues first. Proposals are not commitments to implement.
+        Thanks for the suggestion! Elaris is in active development. Please check the roadmap and existing issues first. Proposals are not commitments to implement.
   - type: textarea
     id: problem
     attributes:

@@ -1,6 +1,6 @@
 # Plugins and optional features
 
-Photon treats each optional browser capability as a built-in plugin. Every
+Elaris treats each optional browser capability as a built-in plugin. Every
 plugin has its own manifest module in `crates/elaris-core/src/features/`. The
 core build script discovers those files and generates the registry and
 `Feature` constants, so adding a feature module adds its stable ID and settings
@@ -40,7 +40,7 @@ drops its scheduler and OS memory-pressure monitor, tab archiving drops its
 periodic timer, Downloads drops its window redraw observer, and performance
 pages drop their samplers and monitoring leases. Glass and background-noise
 caches are released when those features are turned off. The built-in Rust code
-is still statically linked into Photon; runtime switches release resources and
+is still statically linked into Elaris; runtime switches release resources and
 stop work, but do not unload machine code from the process.
 
 ## Third-party extensions

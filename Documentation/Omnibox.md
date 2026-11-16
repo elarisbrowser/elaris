@@ -3,7 +3,7 @@
 The address field in the titlebar is an omnibox: it takes text and decides what
 it means. The framework-free rules live in
 [`elaris-core/src/omnibox/`](../crates/elaris-core/src/omnibox/mod.rs), and
-nothing else in Photon re-implements them.
+nothing else in Elaris re-implements them.
 
 ## Rules
 
@@ -110,7 +110,7 @@ omnibox's `toggle_site_control`, so a change to one belongs in the other.
 
 A page whose certificate fails verification shows a full-page warning
 (`webview/certificate.rs`) with **Go Back** and, under **Details**, a way to
-continue. Continuing lets that host load without verification until Photon
+continue. Continuing lets that host load without verification until Elaris
 quits: `RequestServerManager` sends the host to every RequestServer, which
 skips verification for it. The site is then **Not secure**, with its own
 explanation on the connection page.

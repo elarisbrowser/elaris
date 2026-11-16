@@ -9,7 +9,7 @@ Each summary includes:
 - `start_to_commit_ms`: navigation start to top-level document commit.
 - `commit_to_engine_frame_ms`: commit to the first ready page frame.
 - `engine_frame_to_surface_ms`: the first ready frame to its surface being
-  installed in Photon.
+  installed in Elaris.
 - `surface_to_gpui_render_ms`: surface installation to the first GPUI render
   tree that includes the page surface.
 - `gpui_render_to_gpu_present_complete_ms`: GPUI render to completion of the

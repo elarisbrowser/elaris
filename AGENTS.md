@@ -1,13 +1,13 @@
-# Photon — Agent Development Guide
+# Elaris Browser
 
-> Instructions for coding agents working in the Photon repository. Follow these rules for implementation, refactoring, dependency maintenance, and upstream synchronization.
+> Instructions for coding agents working in the Elaris repository. Follow these rules for implementation, refactoring, dependency maintenance, and upstream synchronization.
 
 ## Core principles
 
 - **Rust owns the browser application.** Use Rust and GPUI-CE for shell presentation, native windows, and rendering. Browser application logic and state belong in Rust.
-- **Respect architectural boundaries.** Keep normal UI work independent of engine internals. The shell must use the explicit Photon Engine embedder API, not arbitrary engine implementation details.
-- **Keep Photon lightweight.** Do not add browser chrome unless explicitly requested. Never use an embedded browser to render Photon UI; do not introduce Qt Quick, Electron, or Tauri into the app shell.
-- **Preserve upstream mergeability.** Keep Photon Engine regularly mergeable with Ladybird and the Photon GPUI-CE fork regularly mergeable with `gpui-ce/gpui-ce`.
+- **Respect architectural boundaries.** Keep normal UI work independent of engine internals. The shell must use the explicit Elaris Engine embedder API, not arbitrary engine implementation details.
+- **Keep Elaris lightweight.** Do not add browser chrome unless explicitly requested. Never use an embedded browser to render Elaris UI; do not introduce Qt Quick, Electron, or Tauri into the app shell.
+- **Preserve upstream mergeability.** Keep Elaris Engine regularly mergeable with Ladybird and the Elaris GPUI-CE fork regularly mergeable with `gpui-ce/gpui-ce`.
 - **Verify changes.** Run `elaris format`, `elaris check`, and relevant `elaris test` commands.
 - **No computer use**, except when the sole purpose is taking screenshots.
 
@@ -20,13 +20,13 @@
 | `elaris-shell` | Shared GPUI views, browser/window lifecycle, Engine adapter, and target OS adapters | Shell calls the explicit Engine embedder API; keep target OS behavior under `platform/<target>/`. |
 | `elaris-presentation-ipc` | Presentation XPC transport | Owns transport, not browser policy. |
 | `elaris-presentation-broker` | Presentation broker service executable | Keep service-executable responsibilities here. |
-| `Engine/` | Ladybird engine and Photon Engine embedder implementation | Engine changes belong here; shell calls the explicit embedder API in `LibPhotonEmbedder`. |
-| `PhotonBrowser/gpui-ce` | Generic GPUI-CE changes in the pinned submodule | Keep Photon-specific native integrations in Photon crates. |
+| `Engine/` | Ladybird engine and Elaris Engine embedder implementation | Engine changes belong here; shell calls the explicit embedder API in `LibPhotonEmbedder`. |
+| `PhotonBrowser/gpui-ce` | Generic GPUI-CE changes in the pinned submodule | Keep Elaris-specific native integrations in Elaris crates. |
 
 ### Native and engine integration
 
 1. Use **C++ only** for the narrow Ladybird embedder boundary and required engine glue.
-2. Photon-specific native integration belongs in Photon crates. Generic GPUI-CE changes belong in the pinned `PhotonBrowser/gpui-ce` submodule.
+2. Elaris-specific native integration belongs in Elaris crates. Generic GPUI-CE changes belong in the pinned `PhotonBrowser/gpui-ce` submodule.
 3. UI code must **not** access arbitrary engine internals or receive page pixel buffers.
 4. Before changing engine behavior, inspect existing Engine **UI/Qt and AppKit implementations** for relevant behavior that must be preserved.
 5. Keep generated files out of source trees.
@@ -48,11 +48,11 @@ For GPUI-CE work, read the [GPUI-CE documentation](https://gpui-ce.github.io/gpu
 
 ## Checkout and dependency setup
 
-1. When setting up a checkout, run **`elaris setup`**. It initializes pinned submodules, activates persistent Photon development branches, and installs the CLI. Full Linux setup also installs the per-user desktop entry; `elaris setup --ui-only` does not install or update it.
+1. When setting up a checkout, run **`elaris setup`**. It initializes pinned submodules, activates persistent Elaris development branches, and installs the CLI. Full Linux setup also installs the per-user desktop entry; `elaris setup --ui-only` does not install or update it.
 2. Read [`Documentation/Upstream.md`](Documentation/Upstream.md) **before any Engine or GPUI-CE upstream sync**. Its documented branch and remote arrangements are authoritative.
-3. Use `vendor/gpui-ce/main` for ordinary GPUI work. Use the other persistent Photon dependency branches documented in `Documentation/Upstream.md` for routine edits and upstream syncs; **do not create a new branch for each change**.
-4. Keep `origin` pointed at the **Photon-owned repository** and `upstream` pointed at **Ladybird** or **`gpui-ce/gpui-ce`**, as appropriate.
-5. Photon root records **exact tested dependency commit IDs**, even when local submodule worktrees are on branches. Never casually advance dependencies with `git submodule update --remote`.
+3. Use `vendor/gpui-ce/main` for ordinary GPUI work. Use the other persistent Elaris dependency branches documented in `Documentation/Upstream.md` for routine edits and upstream syncs; **do not create a new branch for each change**.
+4. Keep `origin` pointed at the **Elaris-owned repository** and `upstream` pointed at **Ladybird** or **`gpui-ce/gpui-ce`**, as appropriate.
+5. Elaris root records **exact tested dependency commit IDs**, even when local submodule worktrees are on branches. Never casually advance dependencies with `git submodule update --remote`.
 6. Never switch or update `Engine/` while CMake or Ninja is building from that checkout. Allow the build to finish or stop it cleanly first.
 
 ### CLI and desktop installation
@@ -63,19 +63,19 @@ For GPUI-CE work, read the [GPUI-CE documentation](https://gpui-ce.github.io/gpu
 
 ## Upstream synchronization and conflict resolution
 
-**Goal:** Incorporate upstream improvements without silently losing working Photon behavior or breaking the integrated build.
+**Goal:** Incorporate upstream improvements without silently losing working Elaris behavior or breaking the integrated build.
 
 1. **Prepare.** Read `Documentation/Upstream.md`; check build activity, working-tree status, dependency branch, remotes, and the currently pinned commits. Do not touch a live Engine checkout during a CMake/Ninja build.
-2. **Review incoming changes.** Understand the intent of both upstream and Photon-specific modifications before resolving overlapping code. Check related callers, interfaces, tests, and platform-specific behavior.
+2. **Review incoming changes.** Understand the intent of both upstream and Elaris-specific modifications before resolving overlapping code. Check related callers, interfaces, tests, and platform-specific behavior.
 3. **Resolve conflicts deliberately.** Never blanket-select `ours` or `theirs`.
-   - If upstream is **substantially better** and supersedes a Photon change, prefer upstream and remove or adapt the redundant Photon implementation, after confirming required Photon behavior remains intact.
+   - If upstream is **substantially better** and supersedes a Elaris change, prefer upstream and remove or adapt the redundant Elaris implementation, after confirming required Elaris behavior remains intact.
    - If two changes implement **different valid behavior** but conflict structurally, integrate both so that they work together.
-   - If a Photon-specific patch remains necessary, preserve or reimplement it against the new upstream structure.
+   - If a Elaris-specific patch remains necessary, preserve or reimplement it against the new upstream structure.
    - Do not keep dead compatibility layers or duplicated implementations merely to avoid choosing a coherent design.
-4. **Validate behavior.** Resolve all conflicts, run relevant dependency checks and builds, inspect regressions, and ensure upstream improvements and required Photon behavior both work. Do not treat a clean merge alone as sufficient validation.
+4. **Validate behavior.** Resolve all conflicts, run relevant dependency checks and builds, inspect regressions, and ensure upstream improvements and required Elaris behavior both work. Do not treat a clean merge alone as sufficient validation.
 5. **Use an isolated review branch** for unusually large or risky upstream merges. Routine dependency edits and syncs stay on documented persistent branches.
-6. **Publish dependency commits before repinning.** Update the parent gitlink only after the tested dependency commit is available on the Photon-owned remote.
-7. **Commit and verify the pin.** Commit the gitlink change in Photon root, then run `git submodule status --recursive` to confirm the resulting dependency state.
+6. **Publish dependency commits before repinning.** Update the parent gitlink only after the tested dependency commit is available on the Elaris-owned remote.
+7. **Commit and verify the pin.** Commit the gitlink change in Elaris root, then run `git submodule status --recursive` to confirm the resulting dependency state.
 
 ### Parent-repository submodule conflicts
 
@@ -95,7 +95,7 @@ Run the **relevant** tests when the full suite is not appropriate, plus any depe
 
 When adding a crate, update the Cargo workspace and architecture documentation. Keep crate boundaries aligned with independent ownership. Keep generated output outside source trees.
 
-For dependency changes and upstream syncs, validate the dependency itself **before pushing or advancing the parent pin**, and recheck the integrated Photon state after repinning. An unresolved conflict, failed test, or unverified integration must be reported rather than treated as complete.
+For dependency changes and upstream syncs, validate the dependency itself **before pushing or advancing the parent pin**, and recheck the integrated Elaris state after repinning. An unresolved conflict, failed test, or unverified integration must be reported rather than treated as complete.
 
 ## Agent completion checklist
 
@@ -107,7 +107,7 @@ Before describing work as finished, confirm:
 - [ ] Engine behavior changes account for existing Qt/AppKit behavior.
 - [ ] `elaris format`, `elaris check`, and relevant tests have been run, with results reported.
 - [ ] Any upstream sync has resolved conflicts intentionally and retained required behavior.
-- [ ] Any changed dependency pin refers to a tested commit present on a Photon-owned remote.
+- [ ] Any changed dependency pin refers to a tested commit present on a Elaris-owned remote.
 - [ ] `git submodule status --recursive` has been verified after a gitlink change.
 - [ ] No generated files or unnecessary browser chrome were added.
 

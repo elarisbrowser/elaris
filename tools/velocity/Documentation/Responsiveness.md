@@ -1,8 +1,8 @@
 # Velocity responsiveness and frame timing
 
-Velocity measures Photon/Ladybird responsiveness before engine optimizations are
+Velocity measures Elaris/Ladybird responsiveness before engine optimizations are
 attempted. It reuses the existing isolated browser launcher, authenticated
-Photon automation, process-tree resource sampler, JSON/HTML reporting, history,
+Elaris automation, process-tree resource sampler, JSON/HTML reporting, history,
 and named baselines. Diagnostics are opt-in and are enabled only for benchmark
 sessions.
 
@@ -16,13 +16,13 @@ Ladybird WebContent rendering and compositor backing-store update
   → elaris-shell receives the callback and queues the newest available surface
   → PresentationRuntime may replace an uninstalled surface with a newer one
   → PhotonWebView installs the selected surface into its page view
-  → GPUI-CE samples the external Metal surface while rendering the Photon window
+  → GPUI-CE samples the external Metal surface while rendering the Elaris window
   → GPUI-CE obtains a CAMetalDrawable and commits the window command buffer
   → CAMetalDrawable presented handler reports presentedTime, when available
 ```
 
 Ladybird owns web-content rendering, its compositor backing stores, and the
-shared-surface update. Photon owns the callback boundary, latest-frame queue,
+shared-surface update. Elaris owns the callback boundary, latest-frame queue,
 surface installation, and window lifecycle. GPUI-CE's macOS Metal renderer owns
 window-drawable acquisition and GPU command submission. Metal/Core Animation
 owns scheduling and displaying the window drawable. Ladybird does not directly
@@ -33,10 +33,10 @@ time or a content/pixel generation.
 | Stage | Measurement | Clock domain | Meaning and limit |
 | --- | --- | --- | --- |
 | Engine frame created/completed | unavailable | — | Ladybird does not export a correlated source timestamp. The frame ID is assigned at native surface publication. |
-| Surface handoff | `surface_handoff` | Photon `Instant` elapsed nanoseconds | Photon callback receipt for a generation/frame ID. It does not measure IPC time because there is no source-process timestamp. |
-| Surface install | `photon_surface_install` | Photon `Instant` elapsed nanoseconds | Photon page-view installation of that surface update. |
-| GPU sampling submission | `gpu_sampling_events[].submitted_elapsed_ns` | Photon `Instant` elapsed nanoseconds | CPU callback immediately before the command buffer that samples the surface is committed. It is paired by `(generation, engine_frame_id, drawable_id)`. It is not GPU start time. |
-| GPU completion callback | `gpu_sampling_events[].completion_callback_elapsed_ns` | Photon `Instant` elapsed nanoseconds | Receipt of that command buffer's completion callback, paired by the same drawable ID. The delta is CPU elapsed time through callback receipt, not a GPU hardware duration or display timestamp. |
+| Surface handoff | `surface_handoff` | Elaris `Instant` elapsed nanoseconds | Elaris callback receipt for a generation/frame ID. It does not measure IPC time because there is no source-process timestamp. |
+| Surface install | `photon_surface_install` | Elaris `Instant` elapsed nanoseconds | Elaris page-view installation of that surface update. |
+| GPU sampling submission | `gpu_sampling_events[].submitted_elapsed_ns` | Elaris `Instant` elapsed nanoseconds | CPU callback immediately before the command buffer that samples the surface is committed. It is paired by `(generation, engine_frame_id, drawable_id)`. It is not GPU start time. |
+| GPU completion callback | `gpu_sampling_events[].completion_callback_elapsed_ns` | Elaris `Instant` elapsed nanoseconds | Receipt of that command buffer's completion callback, paired by the same drawable ID. The delta is CPU elapsed time through callback receipt, not a GPU hardware duration or display timestamp. |
 | Actual drawable presentation | `actual_presentation` | Metal host-time seconds | `CAMetalDrawable.presentedTime` reported by Metal's presented handler. Zero or invalid time is retained as missing/dropped feedback, not converted into a timestamp. |
 
 Apple defines `presentedTime` as the host time when the drawable was displayed;
@@ -47,18 +47,18 @@ not CPU submission or GPU completion ([`presentedTime`](https://developer.apple.
 A presented window drawable does not prove that the window was unobscured or
 that a person perceived its contents.
 
-All elapsed stage durations use one Photon-process monotonic `Instant` origin.
+All elapsed stage durations use one Elaris-process monotonic `Instant` origin.
 Frame intervals use differences between Metal host-time presentation
-timestamps. Velocity never subtracts a Photon `Instant` timestamp from a
+timestamps. Velocity never subtracts a Elaris `Instant` timestamp from a
 Ladybird-process timestamp or a Metal host timestamp. The available `metal`
 crate does not expose GPU start/end timestamps here. The display refresh-rate
 field is the known nominal display rate when the macOS display adapter can
 report one; it is `null` when unknown. It is context, not a fixed threshold,
 and does not describe every variable-refresh presentation interval.
 
-Surface identities use the pair `(generation, frame ID)`. Photon explicitly
+Surface identities use the pair `(generation, frame ID)`. Elaris explicitly
 counts a queued surface that is replaced before installation. One installed engine surface may be
-sampled into more than one Photon window drawable. Photon retains one bounded
+sampled into more than one Elaris window drawable. Elaris retains one bounded
 event for every Metal presented-handler callback, including repeated displays
 of the same engine surface. Each event carries the generation, engine frame ID,
 drawable ID, and that drawable's `presentedTime`; the per-surface frame row
@@ -91,10 +91,10 @@ velocity bench responsiveness \
   --output results/animation.json
 ```
 
-Supported Photon workloads are `task-backlog`, `dom-style`, `style-localized`,
+Supported Elaris workloads are `task-backlog`, `dom-style`, `style-localized`,
 `style-descendant`, `style-sibling`, `style-relational`, `layout-updates`,
 `gc-pressure`, and `animation`. Each measured iteration uses a fresh isolated
-profile and the same managed Photon launch path. Velocity verifies fixture
+profile and the same managed Elaris launch path. Velocity verifies fixture
 completion and correctness before treating a run as successful. It also
 collects process CPU, physical footprint, resident memory, process attribution,
 and measurement provenance. These are process-session measurements, not
@@ -132,7 +132,7 @@ allocation records over 32 cycles. The GC workload does not force collection.
 Options are `--iterations` (1–100, default 10), `--warmup` (0–20, default 1),
 `--timeout` seconds (1–600, default 60), `--diagnostics enabled|disabled|balanced`
 (default `enabled`), `--seed` (balanced mode only), `--output FILE.json`, and
-`--no-record-history`. Only Photon is supported for these Engine/frame
+`--no-record-history`. Only Elaris is supported for these Engine/frame
 diagnostics. Chrome and Helium are not reported as comparable because they do
 not expose equivalent task, style/layout, GC, or drawable-presentation data.
 
@@ -146,7 +146,7 @@ window drawable presentation; reuse is reported separately. The intervals
 describe window drawable presentations and do not prove that each presented
 drawable contained changed browser pixels. Report-level values summarize the
 per-iteration percentiles; raw bounded lifecycle and presentation-event samples
-remain in JSON for re-analysis. Old Photon builds that advertise frame timing
+remain in JSON for re-analysis. Old Elaris builds that advertise frame timing
 but not `performance_drawable_presentation_events_v1` do not produce
 `frame_interval_*` metrics.
 
@@ -164,7 +164,7 @@ Velocity does not synthesize intervals from rAF callbacks, display-link ticks,
 GPU completion, or frame production.
 
 The reports can align available Engine task wait, style/layout activity, GC
-mark/sweep timings, and Photon surface/Metal stages by iteration. Such
+mark/sweep timings, and Elaris surface/Metal stages by iteration. Such
 co-occurrence is correlation only; the current events do not prove which stage
 caused a long interval. Task backlog is timer-source work and is not an input
 latency workload.
@@ -184,7 +184,7 @@ velocity bench responsiveness \
 
 Each warm-up round and measured pair runs diagnostics off and on in a seeded
 random order. Each run uses a fresh private browser profile, the same fixture,
-managed launcher, process sampler, and Photon window creation path. Pair IDs and
+managed launcher, process sampler, and Elaris window creation path. Pair IDs and
 the observed order are retained in raw samples. The fixed default seed is
 `88271498792782`; pass `--seed` to replay a different order. With `N` measured
 iterations and `W` warm-ups, balanced mode executes `2N` measured sessions and
@@ -206,7 +206,7 @@ activity are not currently recorded. Process resource readings are collected
 in both diagnostic modes.
 
 Diagnostics-on controls enable the authenticated fixed-schema performance
-session and frame-timing capability. Photon exposes bounded process/window
+session and frame-timing capability. Elaris exposes bounded process/window
 snapshots through its authenticated automation protocol; the interface does
 not accept page JavaScript or arbitrary commands. `performance_frame_snapshot`
 is capability-gated by `performance_frame_timing_v1`; actual drawable
@@ -232,14 +232,14 @@ Older diagnostic archives may contain transaction scope and broad/narrow matchin
 | `gc_synchronous_sweep_duration_*_ms` | Main-thread JS heap, ms | Synchronous finalization/weak processing/sweep portion; timer-driven incremental sweep is excluded. |
 | `gc_pause_duration_*_ms` | Main-thread JS heap, ms | Duration of the collection call, including completion of prior incremental sweep where needed. |
 | `gc_live_heap_bytes` | Main-thread JS heap, bytes | Live cell plus external bytes after completed sweep; not process memory. |
-| `surface_handoff_to_install_p50_ms`, `surface_install_to_gpu_submission_p50_ms` | Photon process, ms | Differences between local Photon monotonic timestamps at the named stages. |
-| `gpu_sampling_submission_to_completion_callback_p50_ms` | Photon process, ms | Difference between submission and completion callback timestamps for one command buffer sampling the same Engine surface into the same drawable. Not a GPU hardware duration or visible latency. |
-| `frame_gpu_completion_callback_count` | Photon session, callbacks | Number of frame records with a Metal command-buffer completion callback timestamp. |
-| `frame_zero_presented_time_event_count` | Photon session, events | Presented-handler callbacks whose drawable timestamp was zero/invalid; absent handlers are not inferred as drops. |
-| `frame_interval_*_ms` | Photon window drawable, ms | Differences between actual `presentedTime` values for each drawable event, including repeated displays of one engine surface. |
-| `frame_actual_drawable_presentation_count` | Photon window drawable, count | Valid Metal presented-handler events in the bounded event stream. |
-| `frame_reused_count` | Photon window drawable, count | Additional presentation events that display an engine surface ID already observed in the session. |
-| `frame_presentation_event_retention_percent` | Photon timing buffer, percent | Retained drawable events divided by retained plus evicted events. Lower than 100% means the bounded event ring truncated early presentations. |
+| `surface_handoff_to_install_p50_ms`, `surface_install_to_gpu_submission_p50_ms` | Elaris process, ms | Differences between local Elaris monotonic timestamps at the named stages. |
+| `gpu_sampling_submission_to_completion_callback_p50_ms` | Elaris process, ms | Difference between submission and completion callback timestamps for one command buffer sampling the same Engine surface into the same drawable. Not a GPU hardware duration or visible latency. |
+| `frame_gpu_completion_callback_count` | Elaris session, callbacks | Number of frame records with a Metal command-buffer completion callback timestamp. |
+| `frame_zero_presented_time_event_count` | Elaris session, events | Presented-handler callbacks whose drawable timestamp was zero/invalid; absent handlers are not inferred as drops. |
+| `frame_interval_*_ms` | Elaris window drawable, ms | Differences between actual `presentedTime` values for each drawable event, including repeated displays of one engine surface. |
+| `frame_actual_drawable_presentation_count` | Elaris window drawable, count | Valid Metal presented-handler events in the bounded event stream. |
+| `frame_reused_count` | Elaris window drawable, count | Additional presentation events that display an engine surface ID already observed in the session. |
+| `frame_presentation_event_retention_percent` | Elaris timing buffer, percent | Retained drawable events divided by retained plus evicted events. Lower than 100% means the bounded event ring truncated early presentations. |
 | `raf_interval_*_ms` | Fixture, ms | `requestAnimationFrame` callback intervals on the page's `performance.now()` clock. |
 | `process_tree_physical_footprint_*_bytes` | Verified managed process tree, bytes | macOS physical-footprint readings across attributed processes; not per-tab or unique shared memory. |
 | `process_tree_resident_*_bytes` | Verified managed process tree, bytes | RSS readings, which may include shared pages. |
@@ -287,13 +287,13 @@ diagnostic comparisons also need sufficient complete single-process snapshots.
 Balanced overhead reports are intentionally rejected by the independent
 baseline comparison command; their embedded paired assessment is the correct
 analysis for that experimental design. Unknown Engine/executable revisions
-remain `null`. Current Photon automation does not attest the executable's
+remain `null`. Current Elaris automation does not attest the executable's
 source revision, so a dirty checkout's Git HEAD must not be presented as the
 revision inside the benchmarked executable.
 
 ## First local baseline capture
 
-On 2026-10-18, the Photon Development release build was measured on macOS ARM64,
+On 2026-10-18, the Elaris Development release build was measured on macOS ARM64,
 Mac17,4 / Apple M5 (10 logical CPUs), with a reported nominal display rate of
 60 Hz. Each workload used a fresh private profile, one warm-up, and five
 measured iterations, except animation, which requested ten and completed nine.
@@ -318,7 +318,7 @@ heuristic; it does not prove a missed refresh slot, changed browser pixels, or
 the cause of the delay. One requested animation run did not finish within its
 60 second fixture deadline and is excluded from the statistics.
 
-The memory values above are sums over the verified Photon process session tree;
+The memory values above are sums over the verified Elaris process session tree;
 they are neither per-tab measurements nor unique physical memory. Physical
 footprint peak was 443.3 MiB for animation; the other workload peak values
 remain in their raw reports. Style and layout counters do not give layout
@@ -354,9 +354,9 @@ These captures give useful repeatable workload baselines, not a ranking of
 Ladybird bottlenecks. The high task queue wait comes from a saturated timer
 backlog and does not measure input response. The GC pressure mark pauses were
 not correlated to presentation events. Layout pass counts do not show layout
-cost. The animation run does confirm irregular Photon window-drawable timing in
+cost. The animation run does confirm irregular Elaris window-drawable timing in
 this fixture, but current timestamps cannot attribute those intervals to
-Engine rendering, Photon work, GPU execution, window occlusion, or display
+Engine rendering, Elaris work, GPU execution, window occlusion, or display
 scheduling. No Ladybird performance optimization is justified by these
 measurements alone; first add reliable per-frame correlation between the
 drawable timeline and Engine task/style/layout/GC activity, then repeat the
@@ -376,7 +376,7 @@ that it was unobscured or that its browser surface changed.
 
 Rank a Ladybird bottleneck only after workload evidence supports it. Task queue
 wait tails, broad style reaction activity, full layout counts, GC marking
-pauses, frame interval outliers, and Photon stage durations are diagnostic
+pauses, frame interval outliers, and Elaris stage durations are diagnostic
 signals. A source-level architectural difference alone is not a measured
 bottleneck, and timing overlap is not causation. Report a candidate as
 unverified if frame or process coverage is insufficient. Do not rank task

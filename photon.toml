@@ -13,14 +13,14 @@ path = "."
 
 [[repositories.remotes]]
 name = "origin"
-url = "https://github.com/PhotonBrowser/photon.git"
+url = "https://github.com/elarisbrowser/elaris.git"
 
 [[repositories]]
 path = "Engine"
 
 [[repositories.remotes]]
 name = "origin"
-url = "https://github.com/PhotonBrowser/photon-engine.git"
+url = "https://github.com/elarisbrowser/photon-engine.git"
 fetch_branches = ["master"]
 
 [[repositories.remotes]]
@@ -32,7 +32,7 @@ path = "vendor/gpui-ce"
 
 [[repositories.remotes]]
 name = "origin"
-url = "https://github.com/PhotonBrowser/gpui-ce.git"
+url = "https://github.com/elarisbrowser/gpui-ce.git"
 fetch_branches = ["main"]
 
 [[repositories.remotes]]
