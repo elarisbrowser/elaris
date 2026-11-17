@@ -4,7 +4,7 @@ Elaris is a small cross-platform browser shell built with Rust and [Rune](https:
 
 ## Developer CLI
 
-Use `./elaris` for common development tasks:
+Use `./elaris` (Python 3 standard library) for common development tasks:
 
 ```sh
 ./elaris setup          # Initialise submodules and check tools
