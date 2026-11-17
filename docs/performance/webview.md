@@ -6,95 +6,124 @@ device pixels).
 
 ## Pipeline
 
+Ladybird runs on an engine thread of its own (`src/engine.rs`); the UI thread never calls it and
+never waits on it.
+
 1. WebContent renders; Ladybird's Compositor presents into a shared CPU backing store, paced by
    its own display link (`Services/Compositor/VSyncScheduler.cpp`), and tells the UI process over IPC.
-2. Rune calls `app::poll` once per display frame. `Page::poll` pumps Ladybird's event loop once
-   without waiting (`elaris_ladybird_pump`), which handles that IPC and raises `ReadyToPaint`.
-3. `Page::take_frame` skips frames already shown (by serial) or laid out at a stale scale, then
+2. The engine thread sleeps in Ladybird's event loop (`elaris_ladybird_wait`) until that IPC, a
+   Ladybird timer, or a command from the page wakes it (`elaris_ladybird_wake`, which any thread
+   may call). Nothing polls.
+3. On `ReadyToPaint` it skips frames already shown (by serial) or laid out at a stale scale, then
    `elaris_ladybird_copy_frame` converts the displayed BGRx bitmap into a new RGBA `Vec`.
-4. `Pixels::set` swaps the `Vec` in and wakes the window; Rune copies the whole image into its
-   atlas page and uploads the dirty rows (the whole frame) on its next frame.
+4. `Pixels::set`, which Rune allows from any thread, swaps the `Vec` in and wakes the window. Rune
+   copies the whole image into its atlas page and uploads it on its next frame. A frame of a new
+   size goes to the UI thread instead, which sets it together with its layout size.
+5. The UI thread's `Page::poll`, at the start of each Rune frame, forwards viewport, focus and
+   navigation as commands, and reads titles, URLs, loading state and errors back from a channel.
+   While frames keep coming it asks Rune for the next display frame, so Rune draws at the
+   display's rate rather than only when pixels wake it.
 
 The view is not rebuilt for a new frame unless its size changed, so animation costs no layout.
 
 ## Measuring
 
-`ELARIS_PERF=1 ./elaris run <url>` prints, every 5 s, frames shown per second, duplicate, skipped
-(presented but replaced before a poll took them) and stale frames, and n/mean/p50/p95/max for the
-pump, poll cadence, frame interval, copy, `Pixels::set` and input-to-frame latency. Off, it costs a
-cached branch. Workloads: a CSS `left` animation, a `requestAnimationFrame` animation, a 3000-row
-page scrolled by `scrollBy` each animation frame, and an idle page.
+`ELARIS_PERF=1 ./elaris run <url>` prints, every 5 s and per thread:
 
-## Findings
+- **main** (UI): `Drawn`, the interval between frames Rune drew, and `Poll`, between polls.
+- **elaris-engine**: frames shown per second; duplicate, skipped (presented but replaced before
+  the engine took them) and stale frames; and n/mean/p50/p95/max for handling one batch of
+  Ladybird work (`Pump`), frame interval, copy, `Pixels::set`, and input to the next new frame.
 
-**The Ladybird build was unoptimised.** `./elaris cpp-configure` set no `CMAKE_BUILD_TYPE`, so the
-bridge and every Ladybird library and helper compiled without `-O`. It now passes
-`RelWithDebInfo`, as Ladybird's own Release preset does. This is the largest single change: every
-page's layout, paint and script ran at `-O0`.
+Off, it costs a cached branch. Workloads: a CSS `left` animation, a `requestAnimationFrame`
+animation, a 3000-row page scrolled by `scrollBy` each animation frame, an idle page, and
+slaterlabs.dev (a Next.js site) with trackpad scrolling.
 
-**Polling is not the bottleneck.** Rune collapses every wake into its next display frame, so the
-4 ms active interval already means one poll per vsync. Pumps take < 0.1 ms. Input reaches a new
-frame in one display frame (p50 16.6 ms). The pump interval was left as is.
+## Findings, in order
 
-**Frame copy was the main UI-thread cost:** 4–6 ms per frame before, about a third of a 60 Hz
-frame, growing with window size. The bridge now converts a pixel per word store instead of a byte
-at a time, and Rust no longer zero-fills a frame-sized buffer before the copy overwrites it.
+**1. The Ladybird build was unoptimised.** `./elaris cpp-configure` set no `CMAKE_BUILD_TYPE`, so
+the bridge and every Ladybird library and helper compiled without `-O`. It now passes
+`RelWithDebInfo`, as Ladybird's own Release preset does.
 
-**Steady-state results** (Elaris release build, 5 s windows after startup; "before" is the
-unoptimised Ladybird build with the old copy, "optimised" adds the `RelWithDebInfo` build and the
-faster copy, "final" adds the frame wait below):
+**2. Frame copy cost 4–6 ms per frame** on the UI thread, about a third of a 60 Hz frame. The
+bridge now converts a pixel per word store instead of a byte at a time, and Rust no longer
+zero-fills a frame-sized buffer before the copy overwrites it: about 1 ms now.
 
-| Workload | Frames/s before → optimised → final | Interval p95 (ms) | Copy p50 (ms) | Skipped / 5 s |
+**3. Pumping on vsync dropped frames.** With Ladybird optimised, scrolling and JS animation
+skipped frames, showing as 33 ms gaps. Ladybird's Compositor presents on the same display's vsync
+that Rune polls on, so its IPC arrived at about the moment the UI thread pumped; a frame landing
+just after the pump arrived a refresh later with the next one, which replaced it. A first fix
+waited up to 2 ms on the UI thread for the late frame. The engine thread replaces it: it handles
+each present as it arrives, so phase no longer matters, and the UI thread does not wait.
+
+**4. Ladybird blocked the UI thread.** Startup (~130 ms, mostly waiting for helper processes), the
+first pump of a load (~30 ms), the frame wait above (about 1 ms on nearly every animated frame),
+and the 100 ms close grace all ran on the UI thread. All now run on the engine thread. Rune
+reported these blocks in debug builds; with the engine thread it reports none.
+
+**5. Touchpad scrolls had no gesture phase.** Elaris now passes Rune's phase and momentum to
+Ladybird as ongoing, momentum or ended, as Ladybird's Qt frontend does, so a gesture stays on
+one scroller and momentum is told apart from finger scrolling.
+
+## Results
+
+Steady-state 5 s windows after startup, release Elaris build unless noted; "first" is the
+starting point (unoptimised Ladybird, old copy), "UI-thread" is optimised Ladybird with the 2 ms
+wait, "engine thread" is the current design.
+
+| Workload | Frames/s first → UI-thread → engine thread | Skipped / 5 s | Frame interval p95 (ms) | Rune drawn / 5 s |
 |---|---|---|---|---|
-| CSS animation | 59.9 → 60.0 → 60.0 | 16.9 → 17.5 → 17.7 | 4.27 → 1.54 → 0.95 | 0 → 0 → 0 |
-| JS animation | ~60 → 57.0 → 58.4–59.2 | 17.4 → 32.4 → 17.8 | 6.06 → 1.42 → 0.81 | — → 11 → 0–4 |
-| Scrolling | ~60 → 52.6 → 60.0 | 17.0 → 33.4 → 17.7 | 6.05 → 0.95 → 1.54 | — → 37 → 0 |
-| Idle | 0 frames, 50 ms polls throughout | — | — | 0 |
+| CSS animation | 59.9 → 60.0 → 60.0 | 0 → 0 → 0 | 16.9 → 17.7 → 17.8 | 300 |
+| JS animation | ~60 → 58.4–59.2 → 59.0 | — → 0–4 → 0 | 17.4 → 17.8 → 17.8 | 297 |
+| Scrolling | ~60 → 60.0 → 60.0 | — → 0 → 0 | 17.0 → 17.7 → 21.0 | 300 |
+| Scrolling, debug Elaris | ~60 → — → 60.0 | — → — → 0 | 17.0 → — → 19.0 | 300 |
+| slaterlabs.dev | — → 53.6–60.0 → 56.0–60.2 | — → 0–12 → 0 | — → 17.7–32.5 → 18.8 | 300 |
+| Idle | no frames; UI polled every 50 ms → UI sleeps until something changes | 0 | — | — |
 
-`Pixels::set` is free (< 0.02 ms): it only swaps the buffer. Debug and release Elaris builds
-measured the same; the cost was on the C++ side. Copy times vary with how much of the page the
-bitmap's memory has warm in cache, not with the workload's damage.
+On the UI thread a poll now does no engine work, and copy (0.5–1.3 ms) and `Pixels::set`
+(< 0.1 ms) run on the engine thread. Input reaches a new frame in about 4–13 ms, measured from
+when the engine thread receives it. Quitting with ⌘Q exits cleanly in about 50 ms with no helper
+processes left, five runs out of five.
 
-## Present/poll phase
+## Design notes
 
-With Ladybird optimised, scrolling and JS animation skipped frames, showing as 33 ms gaps. Ladybird's
-Compositor presents on a display link (`Services/Compositor/VSyncScheduler.cpp`) tied to the same
-display Rune polls on, so its "presented" IPC message arrives at about the moment Elaris pumps. A
-frame that lands just after the pump waits a whole refresh and arrives with the next one, which
-replaces it.
-
-**Fix:** while frames are flowing (the previous poll showed a new one) and the pump found none,
-`Page::poll` calls `elaris_ladybird_wait_for_frame`, which pumps Ladybird, blocking, until the view
-presents or 2 ms pass. That moves the boundary away from vsync. Measured cost: mean 0.5–0.7 ms per
-poll that waits, p95 1.2–2.1 ms, worst about 3 ms; it never runs on still or idle pages.
+- **Thread affinity.** Ladybird requires every call on the thread that initialised it, not the
+  main thread; the engine thread is that thread. The bridge checks it on every call.
+- **Shutdown.** Rune ends the process from inside its event loop, so no Elaris code runs after
+  the window goes except exit handlers. Closing the window only asks the engine to close. An
+  `atexit` handler then sends the close if it was not sent, and waits for the engine thread, so no
+  Ladybird code runs while the process tears down Ladybird's statics; it runs before them because
+  they were registered first. The wait is after the window has gone, so nothing is seen to block.
+- **Rune pacing.** A `Pixels::set` alone wakes Rune, but in debug builds that drew only every
+  other refresh (30 frames/s). Asking for the next frame (`Tx::wake_after(ZERO)`) while the
+  engine's frame count rises keeps Rune on the display link, as the old per-frame pump did.
 
 **Rejected:**
 
-- *Pumping between vsyncs from a timer thread* via Rune's `AppHandle::wake`. Rune also paces
-  those wakes to the display, so polls stayed on vsync and the extra wakes made it worse
-  (35 frames/s, 62 skipped per 5 s).
+- *Pumping between vsyncs from a timer thread* via Rune's `AppHandle::wake`. Rune paces those
+  wakes to the display too, so polls stayed on vsync and it made things worse (35 frames/s).
 - *Waking on Ladybird's IPC file descriptors.* `EventLoopImplementationUnix::pump` downcasts the
   installed manager to the `final` `EventLoopManagerUnix`, so a host cannot wrap it to learn the
   notifier descriptors, and the Mach port transport keeps its notify pipe private.
 
-**Remaining:** the JS animation still skips 0–4 frames per 5 s, where Ladybird itself presents
-late. The clean fix is a host-driven tick (Ladybird rendering on Elaris's frame clock), which has no
-embedder API; it would need upstream discussion.
+## Remaining limits
 
-## Other limits
-
+- **Ladybird stalls on heavy pages.** slaterlabs.dev pauses for 200–550 ms while it loads,
+  with React errors (#425, #422) in the console. Elaris's own work in those windows is about 1 ms
+  per frame; the pause is in Ladybird. Comparing with Ladybird's own browser would confirm it.
 - **No partial uploads.** `Pixels::set` replaces the whole image, and Rune's atlas copies and
   uploads it whole. Converting only Ladybird's damage rect would still need a full memory copy to
   hand Rune an owned buffer, so damage is not used. GPU texture sharing would remove the copies but
   is deliberately out of scope.
-- **Waiting assumes 60 Hz-ish refresh.** The 2 ms bound is a fraction of any common refresh
-  interval, but on a 120 Hz display it is a quarter of the frame; it was only measured at 60 Hz.
-- **Copy scales with pixels.** At 1 ms for 2.5 MP, a full-screen 5K-class window is around 4–6 ms
-  on the UI thread.
+- **Copy scales with pixels.** About 1 ms for 2.5 MP; a full-screen 5K-class window would be
+  around 4–6 ms, now on the engine thread rather than the UI thread.
+- **A resize shows one frame late.** A frame of a new size travels through the update channel so
+  its pixels and layout change together, which costs up to one UI frame.
 
 ## Not verified
 
-- Real trackpad scrolling and visual smoothness: the scroll workload is driven by script, and the
-  runs were measured, not watched.
-- Comparison with Ladybird's native AppKit frontend.
-- Linux, resizing and display-scale changes under load.
+- Visual smoothness of real trackpad scrolling beyond the user's report on slaterlabs.dev; the
+  test pages are driven by script and were measured, not watched.
+- Rapid resizing while scrolling, display-scale changes, and displays above 60 Hz.
+- Comparison with Ladybird's own browser.
+- Linux.

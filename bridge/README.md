@@ -16,7 +16,7 @@ ctest --test-dir build/cpp-ladybird --output-on-failure -R elaris_ladybird_smoke
 
 `cpp-configure` selects the local vcpkg triplet and Ladybird's pinned Rust toolchain. The smoke test needs Ladybird's resources and helper executables. CMake wires the helper runtime paths to the build libraries and the installed vcpkg libraries.
 
-The smoke executable checks invalid arguments and a failed profile initialization, then creates three views in one application. Each view loads the deterministic `tests/smoke.html`, observes navigation, title, loading start/finish and ready-to-paint callbacks, pumps without blocking, resizes, and is closed and destroyed. It also destroys and reinitializes the application. The test verifies invalid dimensions and rejects a resize from a non-owner thread. CTest passes resource, profile and page paths to the executable.
+The smoke executable checks invalid arguments and a failed profile initialization, then creates three views in one application. Each view loads the deterministic `tests/smoke.html`, observes navigation, title, loading start/finish and ready-to-paint callbacks, pumps without blocking, resizes, waits with a timeout and until woken from another thread, and is closed and destroyed. It also destroys and reinitializes the application. The test verifies invalid dimensions and rejects a resize from a non-owner thread. CTest passes resource, profile and page paths to the executable.
 
 ## Rust boundary
 
@@ -61,4 +61,4 @@ Automatic runs can be added later by defining `push` and `pull_request` path fil
 - Runtime initialization reports that optional site-compatibility data is missing from this checkout's resource package. The local HTML integration test still passes.
 - AppleClang needs one narrow warning exception for the statement-expression expansion inside Ladybird's `WEB_VIEW_APPLICATION` macro. No other Elaris C++ warnings were suppressed.
 
-The bridge reports ready-to-paint only; it does not transfer pixels or connect to Rune rendering. It remains an opt-in integration.
+The bridge copies frames out as RGBA and leaves showing them to the host. A host can give Ladybird a thread of its own: `elaris_ladybird_wait` blocks that thread until Ladybird has work, and `elaris_ladybird_wake` interrupts it from any other thread. Elaris does this so the UI thread never waits on Ladybird; see `docs/performance/webview.md`.
