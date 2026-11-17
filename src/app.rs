@@ -23,6 +23,8 @@ pub(crate) struct AppState {
     pub(crate) address_error: Option<String>,
     pub(crate) browser: Browser,
     pub(crate) appearance: Appearance,
+    /// The sidebar's width in points, which dragging its edge changes.
+    pub(crate) sidebar_width: f32,
     /// The tab and address the address bar shows, so it changes only when the active tab's do.
     shown: Option<(TabId, String)>,
     /// The page title the window shows.
@@ -44,6 +46,7 @@ impl AppState {
             address_error: None,
             browser: Browser::default(),
             appearance: Appearance::default(),
+            sidebar_width: crate::ui::SIDEBAR_WIDTH,
             shown: None,
             window_title: None,
         };

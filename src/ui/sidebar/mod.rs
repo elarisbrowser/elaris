@@ -5,8 +5,10 @@
 //!
 //! - `header`: the titlebar row and its navigation buttons.
 //! - `tabs`: the tab list and the new-tab button.
+//! - `resize`: dragging the sidebar's edge.
 
 mod header;
+pub(crate) mod resize;
 mod tabs;
 
 use rune::tok::type_;
@@ -21,7 +23,7 @@ use crate::appearance::Appearance;
 pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El {
     col()
         .key("sidebar")
-        .w(theme::SIDEBAR_WIDTH)
+        .w(state.sidebar_width)
         .h_full()
         .child(header::view(state, theme, cx))
         .child(body(state, theme))

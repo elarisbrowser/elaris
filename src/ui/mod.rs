@@ -9,7 +9,7 @@ mod sidebar;
 mod theme;
 mod viewport;
 
-pub(crate) use theme::HEADER_HEIGHT;
+pub(crate) use theme::{HEADER_HEIGHT, SIDEBAR_WIDTH};
 
 use rune::{Cx, El, row};
 
@@ -33,4 +33,5 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         .fill(theme.window)
         .child(sidebar::view(state, &theme, cx))
         .child(viewport::view(state, &theme))
+        .child(sidebar::resize::handle(state.sidebar_width))
 }
