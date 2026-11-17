@@ -276,29 +276,26 @@ impl Browser {
         }
         let mut polled = Polled::default();
         self.sync_engine();
-        let Some(engine) = &self.engine else {
-            return polled;
-        };
-        for update in engine.updates() {
+        // Collected first: taking them in needs the browser, which the engine is part of.
+        // Empty, as most polls are, it allocates nothing.
+        let updates: Vec<Update> = self.engine.iter().flat_map(Engine::updates).collect();
+        for update in updates {
             match update {
                 // A tab closed since the engine reported this has nothing to show it.
                 Update::Tab(id, update) => {
-                    if let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id() == id) {
+                    if let Some(tab) = self.tab_mut(id) {
                         tab.update(update);
                         polled.changed = true;
                     }
                 }
                 Update::Failed(error) => {
-                    for tab in &mut self.tabs {
-                        tab.error = Some(error.clone());
-                    }
-                    self.engine_error = Some(error);
+                    self.fail(error);
                     polled.changed = true;
                 }
             }
         }
         if let Some(id) = self.active
-            && let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id() == id)
+            && let Some(tab) = self.tab_mut(id)
         {
             let frames = tab.surface.frames();
             polled.animating = std::mem::replace(&mut tab.engine.frames, frames) != frames;
