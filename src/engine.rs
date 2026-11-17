@@ -295,7 +295,7 @@ mod bridged {
                     self.view().key_event(event)
                 }
                 Command::Focus(focused) => self.view().set_focus(focused),
-                Command::ColorScheme(dark) => self.view().set_color_scheme(dark),
+                Command::ColorScheme(dark) => self.ladybird.set_color_scheme(dark),
                 Command::Close => Ok(()),
             }
         }

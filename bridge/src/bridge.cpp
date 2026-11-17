@@ -13,7 +13,6 @@
 #include <LibGfx/SystemTheme.h>
 #include <LibURL/Parser.h>
 #include <LibURL/URL.h>
-#include <LibWebCommon/CSS/PreferredColorScheme.h>
 #include <LibWebCommon/Page/InputEvent.h>
 #include <LibWebCommon/PixelUnits.h>
 #include <LibWebCommon/UIEvents/KeyCode.h>
@@ -21,6 +20,7 @@
 #include <LibWebView/Application.h>
 #include <LibWebView/HeadlessWebView.h>
 #include <LibWebView/PageBackingStores.h>
+#include <LibWebView/Settings.h>
 
 #include <algorithm>
 #include <array>
@@ -474,13 +474,19 @@ extern "C" int32_t elaris_ladybird_set_focus(ElarisLadybirdView* handle, int32_t
     return 0;
 }
 
-extern "C" int32_t elaris_ladybird_set_color_scheme(ElarisLadybirdView* handle, int32_t dark) {
-    if (!handle)
-        return fail("view is required");
-    if (handle->bridge->owner_thread != std::this_thread::get_id())
+extern "C" int32_t elaris_ladybird_set_color_scheme(ElarisLadybird* bridge, int32_t dark) {
+    if (!bridge || !s_application)
+        return fail("Ladybird is not initialized");
+    if (bridge->owner_thread != std::this_thread::get_id())
         return fail("the colour scheme must change on the initialization thread");
-    handle->view->set_preferred_color_scheme(dark ? Web::CSS::PreferredColorScheme::Dark
-                                                  : Web::CSS::PreferredColorScheme::Light);
+    // A view's own scheme is replaced by this setting whenever a page attaches to it, so the setting is what lasts.
+    auto& settings = WebView::Application::settings();
+    auto appearance = settings.appearance();
+    auto scheme = dark ? WebView::ThemePreference::Dark : WebView::ThemePreference::Light;
+    if (appearance.website_color_scheme != scheme) {
+        appearance.website_color_scheme = scheme;
+        settings.set_appearance(appearance);
+    }
     s_last_error.clear();
     return 0;
 }

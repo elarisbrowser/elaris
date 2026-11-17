@@ -39,7 +39,8 @@ pub(crate) struct Page {
     /// The display scale, as the view last saw it.
     scale: Cell<f32>,
     /// Whether the interface is dark, as the view last drew it, and what the engine was told.
-    dark: Cell<bool>,
+    /// Unknown until the view first builds, and nothing is sent until then.
+    dark: Cell<Option<bool>>,
     applied_dark: Cell<Option<bool>>,
     /// The viewport's size in points, from layout.
     viewport: [f32; 2],
@@ -71,7 +72,7 @@ impl Page {
             started: false,
             pending_load: initial_url,
             scale: Cell::new(1.0),
-            dark: Cell::new(false),
+            dark: Cell::new(None),
             applied_dark: Cell::new(None),
             viewport: [0.0; 2],
             applied: None,
@@ -98,13 +99,13 @@ impl Page {
     /// builds, because only the view knows the system's appearance; a change goes to the engine
     /// at once, since no poll may follow this build.
     pub(crate) fn note_dark(&self, dark: bool) {
-        self.dark.set(dark);
+        self.dark.set(Some(dark));
         self.send_color_scheme();
     }
 
     fn send_color_scheme(&self) {
-        let dark = self.dark.get();
         if let Some(engine) = &self.engine
+            && let Some(dark) = self.dark.get()
             && self.applied_dark.replace(Some(dark)) != Some(dark)
         {
             engine.send(Command::ColorScheme(dark));
@@ -247,8 +248,10 @@ impl Page {
         }
         // Before the first load, so the first page lays out in the right scheme.
         self.send_color_scheme();
-        // The first load waits for the first viewport, so the page lays out at its real size.
+        // The first load waits for the first viewport and the colour scheme, so the page lays out
+        // at its real size and never starts in the wrong scheme.
         if self.applied.is_some()
+            && self.applied_dark.get().is_some()
             && let Some(url) = self.pending_load.take()
         {
             engine.send(Command::Load(url));

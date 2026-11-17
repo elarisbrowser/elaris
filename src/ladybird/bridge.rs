@@ -93,7 +93,7 @@ unsafe extern "C" {
     fn elaris_ladybird_mouse_event(view: *mut RawView, event: *const RawMouseEvent) -> i32;
     fn elaris_ladybird_key_event(view: *mut RawView, event: *const RawKeyEvent) -> i32;
     fn elaris_ladybird_set_focus(view: *mut RawView, focused: i32) -> i32;
-    fn elaris_ladybird_set_color_scheme(view: *mut RawView, dark: i32) -> i32;
+    fn elaris_ladybird_set_color_scheme(bridge: *mut RawBridge, dark: i32) -> i32;
     fn elaris_ladybird_pump(bridge: *mut RawBridge) -> i32;
     fn elaris_ladybird_wait(bridge: *mut RawBridge, timeout_us: i32) -> i32;
     fn elaris_ladybird_create_waker(bridge: *mut RawBridge) -> *mut RawWaker;
@@ -237,6 +237,14 @@ impl Ladybird {
         // SAFETY: `self.owner.raw` is a live bridge owned on this thread.
         status_result(unsafe { elaris_ladybird_wait(self.owner.raw.as_ptr(), micros) })?;
         self.owner.check_callback()
+    }
+
+    /// Whether every page sees a dark or light `prefers-color-scheme`, now and once created.
+    pub fn set_color_scheme(&mut self, dark: bool) -> Result<(), String> {
+        // SAFETY: `self.owner.raw` is a live bridge owned on this thread.
+        status_result(unsafe {
+            elaris_ladybird_set_color_scheme(self.owner.raw.as_ptr(), dark.into())
+        })
     }
 
     /// A handle any thread can use to end a [`Self::wait`].
@@ -387,12 +395,6 @@ impl WebView {
     pub fn set_focus(&mut self, focused: bool) -> Result<(), String> {
         // SAFETY: The view is live on its owner's thread.
         status_result(unsafe { elaris_ladybird_set_focus(self.raw.as_ptr(), focused.into()) })
-    }
-
-    /// Whether pages see a dark or light `prefers-color-scheme`.
-    pub fn set_color_scheme(&mut self, dark: bool) -> Result<(), String> {
-        // SAFETY: The view is live on its owner's thread.
-        status_result(unsafe { elaris_ladybird_set_color_scheme(self.raw.as_ptr(), dark.into()) })
     }
 
     pub fn pump(&mut self) -> Result<(), String> {
