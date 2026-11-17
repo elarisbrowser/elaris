@@ -7,6 +7,7 @@
 #include <AK/Utf16String.h>
 
 #include <LibCore/EventLoop.h>
+#include <LibCore/Timer.h>
 #include <LibGfx/Bitmap.h>
 #include <LibGfx/SharedImageBuffer.h>
 #include <LibGfx/SystemTheme.h>
@@ -450,6 +451,23 @@ extern "C" int32_t elaris_ladybird_pump(ElarisLadybird* bridge) {
     if (bridge->owner_thread != std::this_thread::get_id())
         return fail("event loop must be pumped on the initialization thread");
     s_event_loop->pump(Core::EventLoop::WaitMode::PollForEvents);
+    s_last_error.clear();
+    return 0;
+}
+
+extern "C" int32_t elaris_ladybird_wait_for_frame(ElarisLadybirdView* handle, int32_t timeout_us) {
+    if (!handle || timeout_us < 0 || !s_application)
+        return fail("view and a non-negative timeout are required");
+    if (handle->bridge->owner_thread != std::this_thread::get_id())
+        return fail("event loop must be pumped on the initialization thread");
+    auto serial = handle->view->serial();
+    auto deadline = MonotonicTime::now() + AK::Duration::from_microseconds(timeout_us);
+    // A timer bounds each blocking pump, so the wait ends by the deadline even with nothing else to do.
+    auto timer = Core::Timer::create_single_shot(AK::Duration::from_microseconds(timeout_us), [] {});
+    timer->start();
+    while (handle->view->serial() == serial && MonotonicTime::now() < deadline)
+        s_event_loop->pump(Core::EventLoop::WaitMode::WaitForEvents);
+    timer->stop();
     s_last_error.clear();
     return 0;
 }

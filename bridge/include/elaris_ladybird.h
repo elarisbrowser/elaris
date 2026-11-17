@@ -130,6 +130,9 @@ int32_t elaris_ladybird_key_event(ElarisLadybirdView* view, const ElarisLadybird
 int32_t elaris_ladybird_set_focus(ElarisLadybirdView* view, int32_t focused);
 /* Polls available Ladybird work without waiting; call regularly from the host event loop. */
 int32_t elaris_ladybird_pump(ElarisLadybird* bridge);
+/* Runs Ladybird work, waiting until view presents a new frame or timeout_us passes, whichever is first. For a host
+ * that expects a frame now: it blocks for at most timeout_us. */
+int32_t elaris_ladybird_wait_for_frame(ElarisLadybirdView* view, int32_t timeout_us);
 void elaris_ladybird_destroy_view(ElarisLadybirdView* view);
 void elaris_ladybird_destroy(ElarisLadybird* bridge);
 const char* elaris_ladybird_last_error(void);

@@ -129,6 +129,17 @@ int main(int argc, char** argv) {
             frame_ready = frame_ready || frame_matches(view, width, height, device_pixel_ratio);
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
+        // A still page presents nothing more, so waiting for a frame ends at its timeout.
+        auto wait_start = std::chrono::steady_clock::now();
+        passed = passed && check(elaris_ladybird_wait_for_frame(view, 2000), "wait for frame");
+        if (passed && std::chrono::steady_clock::now() - wait_start > std::chrono::milliseconds(500)) {
+            std::cerr << "waiting for a frame outlasted its timeout\n";
+            passed = false;
+        }
+        if (passed && elaris_ladybird_wait_for_frame(view, -1) == 0) {
+            std::cerr << "a negative frame wait was accepted\n";
+            passed = false;
+        }
         if (!frame_ready) {
             std::cerr << "expected a " << width << "x" << height << " frame at scale " << device_pixel_ratio
                       << " showing the page background\n";

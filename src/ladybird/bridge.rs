@@ -87,6 +87,7 @@ unsafe extern "C" {
     fn elaris_ladybird_key_event(view: *mut RawView, event: *const RawKeyEvent) -> i32;
     fn elaris_ladybird_set_focus(view: *mut RawView, focused: i32) -> i32;
     fn elaris_ladybird_pump(bridge: *mut RawBridge) -> i32;
+    fn elaris_ladybird_wait_for_frame(view: *mut RawView, timeout_us: i32) -> i32;
     fn elaris_ladybird_destroy_view(view: *mut RawView);
     fn elaris_ladybird_destroy(bridge: *mut RawBridge);
     fn elaris_ladybird_last_error() -> *const c_char;
@@ -139,6 +140,10 @@ impl Owner {
     fn pump(&self) -> Result<(), String> {
         // SAFETY: `Owner` is reachable only through non-Send `Rc`s on the initializing thread.
         status_result(unsafe { elaris_ladybird_pump(self.raw.as_ptr()) })?;
+        self.check_callback()
+    }
+
+    fn check_callback(&self) -> Result<(), String> {
         // SAFETY: The pump has returned, so no callback holds the state mutably.
         if unsafe { self.callback.as_ref() }.panicked {
             return Err("Ladybird event callback panicked".to_owned());
@@ -331,6 +336,14 @@ impl WebView {
 
     pub fn pump(&mut self) -> Result<(), String> {
         self.owner.pump()
+    }
+
+    /// Runs Ladybird work until this view presents a new frame, blocking for at most `timeout`.
+    pub fn wait_for_frame(&mut self, timeout: std::time::Duration) -> Result<(), String> {
+        let micros = i32::try_from(timeout.as_micros()).unwrap_or(i32::MAX);
+        // SAFETY: The view is live on its owner's thread.
+        status_result(unsafe { elaris_ladybird_wait_for_frame(self.raw.as_ptr(), micros) })?;
+        self.owner.check_callback()
     }
 }
 
