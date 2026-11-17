@@ -10,7 +10,8 @@ mod theme;
 mod viewport;
 
 pub(crate) use sidebar::resize::settle as settle_sidebar;
-pub(crate) use theme::{HEADER_HEIGHT, SIDEBAR_TOGGLE, SIDEBAR_WIDTH, WINDOW_MIN_SIZE};
+pub(crate) use sidebar::{SidebarState, toggle as toggle_sidebar};
+pub(crate) use theme::{HEADER_HEIGHT, WINDOW_MIN_SIZE};
 
 use rune::{Cx, El, row};
 
@@ -36,9 +37,9 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         .child(sidebar::view(state, &theme))
         .child(viewport::view(state, &theme))
         .child(sidebar::header::view(state, &theme, cx));
-    if state.sidebar_collapsed {
+    if state.sidebar.collapsed {
         window
     } else {
-        window.child(sidebar::resize::handle(state.sidebar_width))
+        window.child(sidebar::resize::handle(state.sidebar.width))
     }
 }

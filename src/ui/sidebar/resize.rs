@@ -19,13 +19,13 @@ pub(crate) fn handle(width: f32) -> El {
         .label("Resize sidebar")
         .on_drag(|state: &mut AppState, drag, tx| match drag.phase {
             // The width at the press, kept for the gesture.
-            rune::Phase::Down => drag.data = state.sidebar_width,
-            rune::Phase::Move => state.sidebar_width = stretched(drag.data + drag.dx),
+            rune::Phase::Down => drag.data = state.sidebar.width,
+            rune::Phase::Move => state.sidebar.width = stretched(drag.data + drag.dx),
             // The spring back waits for the next frame: a drag's commits land at once, and a
             // move in the same frame as the release would land the settle too.
             rune::Phase::Up => {
-                state.sidebar_width = stretched(drag.data + drag.dx);
-                state.sidebar_settling = true;
+                state.sidebar.width = stretched(drag.data + drag.dx);
+                state.sidebar.settling = true;
                 tx.wake_after(std::time::Duration::ZERO);
             }
         })
@@ -34,10 +34,10 @@ pub(crate) fn handle(width: f32) -> El {
 /// Springs a released sidebar back within its limits. The poll calls it every frame; true when
 /// the view needs building for it.
 pub(crate) fn settle(state: &mut AppState, tx: &mut Tx) -> bool {
-    if !std::mem::take(&mut state.sidebar_settling) {
+    if !std::mem::take(&mut state.sidebar.settling) {
         return false;
     }
-    state.sidebar_width = settled(state.sidebar_width);
+    state.sidebar.width = settled(state.sidebar.width);
     tx.animated();
     tx.motion(theme::SIDEBAR_SETTLE);
     true

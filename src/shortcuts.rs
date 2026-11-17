@@ -1,10 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The browser's keyboard shortcuts: which key does what. Rune reports the platform's shortcut
-//! modifier as `cmd`, Command on macOS and Control elsewhere, so the same table serves both.
-//! The page never sees these: it takes no Command or Control chords, so they reach the window.
+//! The browser's keyboard shortcuts: which key does what, and doing it. Rune reports the
+//! platform's shortcut modifier as `cmd`, Command on macOS and Control elsewhere, so the same
+//! table serves both. The page never sees these: it takes no Command or Control chords, so they
+//! reach the window.
 
-use rune::{Key, KeyEvent};
+use rune::{Key, KeyEvent, Tx};
+
+use crate::app::{self, AppState};
+use crate::browser::Browser;
+use crate::tab::{Tab, TabId};
+use crate::ui::{self, ADDRESS};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Shortcut {
@@ -19,6 +25,51 @@ pub(crate) enum Shortcut {
     SelectTab(usize),
     SelectLastTab,
     ToggleSidebar,
+}
+
+/// Rune's hook for keys nothing focused took: runs the shortcut the key is, if any.
+pub(crate) fn on_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> bool {
+    let Some(shortcut) = shortcut(event) else {
+        return false;
+    };
+    match shortcut {
+        Shortcut::NewTab => app::new_tab(state, tx),
+        Shortcut::CloseTab => state.close_active(),
+        Shortcut::FocusAddress => focus_address(state, tx),
+        Shortcut::Reload => state.with_active_tab(Browser::reload),
+        Shortcut::ToggleSidebar => ui::toggle_sidebar(state, tx),
+        Shortcut::PreviousTab
+        | Shortcut::NextTab
+        | Shortcut::SelectTab(_)
+        | Shortcut::SelectLastTab => {
+            if let Some(tab) = target(&state.browser, shortcut) {
+                state.activate(tab);
+            }
+        }
+    }
+    true
+}
+
+/// The tab a tab-selecting shortcut picks.
+fn target(browser: &Browser, shortcut: Shortcut) -> Option<TabId> {
+    let tabs = browser.tabs();
+    let active = || browser.active_tab().map(Tab::id);
+    match shortcut {
+        Shortcut::PreviousTab => browser.tab_beside(active()?, -1),
+        Shortcut::NextTab => browser.tab_beside(active()?, 1),
+        Shortcut::SelectTab(index) => tabs.get(index).map(Tab::id),
+        Shortcut::SelectLastTab => tabs.last().map(Tab::id),
+        _ => None,
+    }
+}
+
+/// Focuses the address field with its text selected, showing the sidebar if it is hidden.
+fn focus_address(state: &mut AppState, tx: &mut Tx) {
+    if state.sidebar.collapsed {
+        ui::toggle_sidebar(state, tx);
+    }
+    state.select_address();
+    tx.focus(ADDRESS, true);
 }
 
 /// The shortcut `event` is, if any.

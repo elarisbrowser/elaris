@@ -23,12 +23,12 @@ pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
         .min_w(0.0)
         .min_h(0.0)
         // With the sidebar hidden, the page sits below the header and in from the left edge too.
-        .pt(if state.sidebar_collapsed {
+        .pt(if state.sidebar.collapsed {
             theme::HEADER_HEIGHT
         } else {
             theme::VIEWPORT_INSET
         })
-        .pl(if state.sidebar_collapsed {
+        .pl(if state.sidebar.collapsed {
             theme::VIEWPORT_INSET
         } else {
             0.0

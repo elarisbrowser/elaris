@@ -137,6 +137,14 @@ impl Browser {
         self.active.and_then(|id| self.tab(id))
     }
 
+    /// The tab `offset` places from `id` in the list, wrapping around its ends.
+    pub(crate) fn tab_beside(&self, id: TabId, offset: isize) -> Option<TabId> {
+        let index = self.tabs.iter().position(|tab| tab.id() == id)?;
+        let len = self.tabs.len() as isize;
+        let beside = (index as isize + offset).rem_euclid(len) as usize;
+        Some(self.tabs[beside].id())
+    }
+
     /// Opens a tab at the end of the list loading `address`, and makes it active if no tab is.
     pub(crate) fn open_tab(&mut self, address: &str) -> Result<TabId, Error> {
         let url = url_for_address(address).map_err(Error::Address)?;
@@ -610,6 +618,17 @@ mod tests {
         assert_eq!(browser.active_tab().map(Tab::id), Some(c));
         browser.close_tab(c);
         assert!(browser.active_tab().is_none());
+    }
+
+    #[test]
+    fn finds_the_tab_beside_another_wrapping_around() {
+        let (mut browser, _fake) = ready();
+        let [a, b, c] = ["a.com", "b.com", "c.com"].map(|a| browser.open_tab(a).unwrap());
+        assert_eq!(browser.tab_beside(a, 1), Some(b));
+        assert_eq!(browser.tab_beside(c, 1), Some(a));
+        assert_eq!(browser.tab_beside(a, -1), Some(c));
+        browser.close_tab(b);
+        assert_eq!(browser.tab_beside(b, 1), None);
     }
 
     #[test]

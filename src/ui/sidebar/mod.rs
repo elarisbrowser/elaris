@@ -13,7 +13,7 @@ pub(crate) mod resize;
 mod tabs;
 
 use rune::tok::type_;
-use rune::{El, col, el, text, text_input};
+use rune::{El, Tx, col, el, text, text_input};
 
 use super::controls::row_button;
 use super::theme::{self, Theme};
@@ -21,13 +21,40 @@ use super::{ADDRESS, icons};
 use crate::app::{self, AppState};
 use crate::appearance::Appearance;
 
+/// How the sidebar is laid out: what the window shows of it, not of the browser.
+pub(crate) struct SidebarState {
+    /// Its width in points, which dragging its edge changes.
+    pub(crate) width: f32,
+    /// Released past its width's limits, and yet to spring back.
+    pub(crate) settling: bool,
+    /// Hidden, leaving the page the window's width.
+    pub(crate) collapsed: bool,
+}
+
+impl Default for SidebarState {
+    fn default() -> Self {
+        Self {
+            width: theme::SIDEBAR_WIDTH,
+            settling: false,
+            collapsed: false,
+        }
+    }
+}
+
+/// Shows or hides the sidebar, springing the page to its new width.
+pub(crate) fn toggle(state: &mut AppState, tx: &mut Tx) {
+    state.sidebar.collapsed = !state.sidebar.collapsed;
+    tx.animated();
+    tx.motion(theme::SIDEBAR_TOGGLE);
+}
+
 /// The sidebar below the header's room. Collapsing springs its width to zero; its contents
 /// keep their width meanwhile, clipped, so they slide away rather than reflow.
 pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
-    let collapsed = state.sidebar_collapsed;
+    let collapsed = state.sidebar.collapsed;
     let sidebar = col()
         .key("sidebar")
-        .w(if collapsed { 0.0 } else { state.sidebar_width })
+        .w(if collapsed { 0.0 } else { state.sidebar.width })
         .h_full()
         // Its empty space moves the window and zooms it on a double click, as a titlebar does;
         // its controls keep their presses.
@@ -46,7 +73,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
 fn body(state: &AppState, theme: &Theme) -> El {
     let mut body = col()
         .key("sidebar-body")
-        .w(state.sidebar_width)
+        .w(state.sidebar.width)
         .grow(1.0)
         .min_h(0.0)
         .px(theme::SIDEBAR_PADDING)

@@ -6,7 +6,7 @@
 
 use rune::{Chrome, Cx, El, Icon, el, row, spacer};
 
-use crate::app::{self, AppState};
+use crate::app::AppState;
 use crate::browser::Browser;
 use crate::tab::TabId;
 use crate::ui::controls::icon_button;
@@ -33,7 +33,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
         ),
         ("Reload", &icons::RELOAD, tab.is_some(), Browser::reload),
     ];
-    let collapsed = state.sidebar_collapsed;
+    let collapsed = state.sidebar.collapsed;
     let toggle_label = if collapsed {
         "Show sidebar"
     } else {
@@ -47,7 +47,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
         theme,
     )
     .shortcut_hint("cmd+s")
-    .on_press_tx(app::toggle_sidebar);
+    .on_press_tx(super::toggle);
     // Over the sidebar it spans the sidebar, its buttons at the far end. With the sidebar
     // hidden it is the whole window's titlebar, its buttons following the toggle, so all of it
     // drags the window and zooms it on a double click.
@@ -64,7 +64,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
     let (mut header, gap) = if collapsed {
         (header.w_full(), el().w(theme::HEADER_GROUP_GAP))
     } else {
-        (header.w(state.sidebar_width), spacer())
+        (header.w(state.sidebar.width), spacer())
     };
     header = header.child(gap);
     for (label, glyph, enabled, navigate) in buttons {
