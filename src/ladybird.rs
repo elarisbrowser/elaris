@@ -7,12 +7,18 @@ mod bridge;
 #[cfg(feature = "ladybird-bridge")]
 pub use bridge::{Ladybird, Waker, WebView};
 
+/// What a view raised, delivered with the id it was created with.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     Navigation(String),
     Title(String),
     Loading(bool),
     ReadyToPaint,
+    /// Whether the view can go back or forward through its session history now.
+    History {
+        back: bool,
+        forward: bool,
+    },
 }
 
 /// The frame a view displays, in device pixels. [`WebView::copy_frame`] returns its pixels as

@@ -16,12 +16,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let saw_frame = Rc::new(Cell::new(false));
     let callback_title = Rc::clone(&saw_title);
     let callback_frame = Rc::clone(&saw_frame);
-    let mut browser = Ladybird::new(&resource_dir, &profile_dir, move |event| match event {
+    let mut browser = Ladybird::new(&resource_dir, &profile_dir, move |_, event| match event {
         Event::Title(title) if title == "Elaris Bridge Smoke" => callback_title.set(true),
         Event::ReadyToPaint => callback_frame.set(true),
         _ => {}
     })?;
-    let mut view = browser.create_view()?;
+    let mut view = browser.create_view(1)?;
     view.load(&file_url)?;
     view.resize(900, 650, 2.0)?;
 
@@ -49,6 +49,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         thread::sleep(Duration::from_millis(5));
     }
     drop(browser);
-    drop(Ladybird::new(&resource_dir, &profile_dir, |_| {})?);
+    drop(Ladybird::new(&resource_dir, &profile_dir, |_, _| {})?);
     Ok(())
 }

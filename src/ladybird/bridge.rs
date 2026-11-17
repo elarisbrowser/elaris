@@ -27,6 +27,7 @@ struct RawWaker {
 #[repr(C)]
 struct RawEvent {
     kind: i32,
+    view_id: u64,
     text: *const c_char,
     value: i32,
 }
@@ -74,6 +75,8 @@ const NO_FRAME: i32 = 1;
 const PIXEL_FORMAT_RGBA8: i32 = 1;
 const KEY_PRESS: i32 = 1;
 const KEY_RELEASE: i32 = 2;
+const HISTORY_BACK: i32 = 1;
+const HISTORY_FORWARD: i32 = 2;
 
 type EventCallback = unsafe extern "C" fn(*mut c_void, *const RawEvent);
 
@@ -85,8 +88,15 @@ unsafe extern "C" {
         context: *mut c_void,
         out_bridge: *mut *mut RawBridge,
     ) -> i32;
-    fn elaris_ladybird_create_view(bridge: *mut RawBridge, out_view: *mut *mut RawView) -> i32;
+    fn elaris_ladybird_create_view(
+        bridge: *mut RawBridge,
+        view_id: u64,
+        out_view: *mut *mut RawView,
+    ) -> i32;
     fn elaris_ladybird_load(view: *mut RawView, url: *const c_char) -> i32;
+    fn elaris_ladybird_reload(view: *mut RawView) -> i32;
+    fn elaris_ladybird_traverse_history(view: *mut RawView, delta: i32) -> i32;
+    fn elaris_ladybird_set_visible(view: *mut RawView, visible: i32) -> i32;
     fn elaris_ladybird_resize(view: *mut RawView, width: i32, height: i32, scale: f64) -> i32;
     fn elaris_ladybird_frame(view: *mut RawView, out_frame: *mut RawFrame) -> i32;
     fn elaris_ladybird_copy_frame(view: *mut RawView, rgba: *mut u8, length: usize) -> i32;
@@ -105,7 +115,7 @@ unsafe extern "C" {
 }
 
 struct CallbackState {
-    callback: Box<dyn FnMut(Event)>,
+    callback: Box<dyn FnMut(u64, Event)>,
     panicked: bool,
 }
 
@@ -133,9 +143,13 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
             2 => Event::Title(text),
             3 => Event::Loading(raw.value != 0),
             4 => Event::ReadyToPaint,
+            5 => Event::History {
+                back: raw.value & HISTORY_BACK != 0,
+                forward: raw.value & HISTORY_FORWARD != 0,
+            },
             _ => return,
         };
-        (state.callback)(event);
+        (state.callback)(raw.view_id, event);
     }));
     state.panicked |= result.is_err();
 }
@@ -179,10 +193,12 @@ pub struct Ladybird {
 }
 
 impl Ladybird {
+    /// Starts Ladybird. `callback` receives every view's events with the id the view was
+    /// created with, synchronously while [`Self::wait`] or [`Self::pump`] runs.
     pub fn new(
         resource_dir: &Path,
         profile_dir: &Path,
-        callback: impl FnMut(Event) + 'static,
+        callback: impl FnMut(u64, Event) + 'static,
     ) -> Result<Self, String> {
         let resource_dir = path_cstring(resource_dir)?;
         let profile_dir = path_cstring(profile_dir)?;
@@ -214,10 +230,11 @@ impl Ladybird {
         })
     }
 
-    pub fn create_view(&mut self) -> Result<WebView, String> {
+    /// A new view, whose events carry `id`.
+    pub fn create_view(&mut self, id: u64) -> Result<WebView, String> {
         let mut raw = std::ptr::null_mut();
         // SAFETY: `self.owner.raw` is a live bridge owned on this thread.
-        let status = unsafe { elaris_ladybird_create_view(self.owner.raw.as_ptr(), &mut raw) };
+        let status = unsafe { elaris_ladybird_create_view(self.owner.raw.as_ptr(), id, &mut raw) };
         status_result(status)?;
         let raw = NonNull::new(raw).ok_or_else(|| "Ladybird returned a null view".to_owned())?;
         Ok(WebView {
@@ -294,6 +311,23 @@ impl WebView {
         let url = CString::new(url).map_err(|_| "URL contains an interior NUL byte".to_owned())?;
         // SAFETY: The view is live on its owner's thread.
         status_result(unsafe { elaris_ladybird_load(self.raw.as_ptr(), url.as_ptr()) })
+    }
+
+    pub fn reload(&mut self) -> Result<(), String> {
+        // SAFETY: The view is live on its owner's thread.
+        status_result(unsafe { elaris_ladybird_reload(self.raw.as_ptr()) })
+    }
+
+    /// Moves through the session history: -1 goes back, 1 forward.
+    pub fn traverse_history(&mut self, delta: i32) -> Result<(), String> {
+        // SAFETY: The view is live on its owner's thread.
+        status_result(unsafe { elaris_ladybird_traverse_history(self.raw.as_ptr(), delta) })
+    }
+
+    /// Whether the view is on screen; a hidden one stops painting.
+    pub fn set_visible(&mut self, visible: bool) -> Result<(), String> {
+        // SAFETY: The view is live on its owner's thread.
+        status_result(unsafe { elaris_ladybird_set_visible(self.raw.as_ptr(), visible.into()) })
     }
 
     /// Sets the viewport in device pixels and the display scale it is laid out at.
@@ -445,11 +479,12 @@ mod tests {
     #[test]
     fn callback_panics_are_contained_at_the_ffi_boundary() {
         let mut state = CallbackState {
-            callback: Box::new(|_| panic!("callback regression test")),
+            callback: Box::new(|_, _| panic!("callback regression test")),
             panicked: false,
         };
         let event = RawEvent {
             kind: 4,
+            view_id: 1,
             text: std::ptr::null(),
             value: 0,
         };
