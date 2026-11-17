@@ -20,6 +20,7 @@ fn main() {
         setup: Some(app::setup),
         poll: Some(app::poll),
         on_key: Some(app::on_key),
+        min_size: Some(ui::WINDOW_MIN_SIZE),
         ..AppSpec::new(
             app::APP_NAME,
             (960.0, 640.0),

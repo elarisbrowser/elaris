@@ -34,7 +34,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
         ("Reload", &icons::RELOAD, tab.is_some(), Browser::reload),
     ];
     let (width, toggle_label) = if state.sidebar_collapsed {
-        (theme::COLLAPSED_HEADER_WIDTH, "Show sidebar")
+        (theme::HEADER_MIN_WIDTH, "Show sidebar")
     } else {
         (state.sidebar_width, "Hide sidebar")
     };
