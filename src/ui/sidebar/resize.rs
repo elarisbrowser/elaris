@@ -3,7 +3,7 @@
 //! Resizing the sidebar by dragging its edge. Past its limits the edge stretches with growing
 //! resistance, as a scroll view does at its ends, and on release it springs back within them.
 
-use rune::{Cursor, El, el};
+use rune::{Cursor, El, Tx, el};
 
 use crate::app::AppState;
 use crate::ui::theme;
@@ -21,12 +21,26 @@ pub(crate) fn handle(width: f32) -> El {
             // The width at the press, kept for the gesture.
             rune::Phase::Down => drag.data = state.sidebar_width,
             rune::Phase::Move => state.sidebar_width = stretched(drag.data + drag.dx),
+            // The spring back waits for the next frame: a drag's commits land at once, and a
+            // move in the same frame as the release would land the settle too.
             rune::Phase::Up => {
-                state.sidebar_width = settled(drag.data + drag.dx);
-                tx.animated();
-                tx.motion(theme::SIDEBAR_SETTLE);
+                state.sidebar_width = stretched(drag.data + drag.dx);
+                state.sidebar_settling = true;
+                tx.wake_after(std::time::Duration::ZERO);
             }
         })
+}
+
+/// Springs a released sidebar back within its limits. The poll calls it every frame; true when
+/// the view needs building for it.
+pub(crate) fn settle(state: &mut AppState, tx: &mut Tx) -> bool {
+    if !std::mem::take(&mut state.sidebar_settling) {
+        return false;
+    }
+    state.sidebar_width = settled(state.sidebar_width);
+    tx.animated();
+    tx.motion(theme::SIDEBAR_SETTLE);
+    true
 }
 
 /// The width the sidebar shows while dragged to `wanted`: exact within its limits, and beyond

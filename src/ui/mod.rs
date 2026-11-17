@@ -9,6 +9,7 @@ mod sidebar;
 mod theme;
 mod viewport;
 
+pub(crate) use sidebar::resize::settle as settle_sidebar;
 pub(crate) use theme::{HEADER_HEIGHT, SIDEBAR_WIDTH};
 
 use rune::{Cx, El, row};

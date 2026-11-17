@@ -25,6 +25,8 @@ pub(crate) struct AppState {
     pub(crate) appearance: Appearance,
     /// The sidebar's width in points, which dragging its edge changes.
     pub(crate) sidebar_width: f32,
+    /// Released past its limits, and yet to spring back.
+    pub(crate) sidebar_settling: bool,
     /// The tab and address the address bar shows, so it changes only when the active tab's do.
     shown: Option<(TabId, String)>,
     /// The page title the window shows.
@@ -47,6 +49,7 @@ impl AppState {
             browser: Browser::default(),
             appearance: Appearance::default(),
             sidebar_width: crate::ui::SIDEBAR_WIDTH,
+            sidebar_settling: false,
             shown: None,
             window_title: None,
         };
@@ -155,6 +158,7 @@ pub(crate) fn poll(state: &mut AppState, _clock: f64, tx: &mut Tx) -> bool {
     state
         .browser
         .set_viewport_focus(tx.focused() == Some(VIEWPORT));
+    let settling = crate::ui::settle_sidebar(state, tx);
     let polled = state.browser.poll();
     // While the page animates, Rune keeps drawing at the display's rate; a frame's pixels alone
     // would only wake it, which can miss every other refresh.
@@ -169,7 +173,7 @@ pub(crate) fn poll(state: &mut AppState, _clock: f64, tx: &mut Tx) -> bool {
             title
         });
     }
-    polled.changed
+    polled.changed || settling
 }
 
 /// After the address bar opens a page, the page takes the keyboard.
