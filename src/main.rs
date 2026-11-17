@@ -5,6 +5,7 @@ mod app;
 mod engine;
 mod input;
 mod page;
+mod perf;
 mod ui;
 
 use rune::{App, AppSpec};

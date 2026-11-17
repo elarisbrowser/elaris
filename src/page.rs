@@ -11,6 +11,7 @@ use rune::{KeyEvent, Mods, Pixels};
 
 use crate::engine::Engine;
 use crate::input;
+use crate::perf::{self, Count, Stage};
 
 /// How often Ladybird is pumped while the page is busy, and while it is quiet.
 const ACTIVE_PUMP_INTERVAL: Duration = Duration::from_millis(4);
@@ -47,6 +48,10 @@ pub(crate) struct Page {
     focus: Focus,
     frame_serial: Option<u64>,
     last_activity: Instant,
+    /// Development timing: the last poll, the last new frame and the oldest unanswered input.
+    last_poll: Option<Instant>,
+    last_frame: Option<Instant>,
+    pending_input: Option<Instant>,
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
@@ -75,6 +80,9 @@ impl Page {
             },
             frame_serial: None,
             last_activity: Instant::now(),
+            last_poll: None,
+            last_frame: None,
+            pending_input: None,
         }
     }
 
@@ -136,7 +144,7 @@ impl Page {
                 self.error = Some(error);
             }
         }
-        self.last_activity = Instant::now();
+        self.note_input();
         !keys.is_empty()
     }
 
@@ -145,13 +153,25 @@ impl Page {
             if let Err(error) = engine.mouse(event) {
                 self.error = Some(error);
             }
-            self.last_activity = Instant::now();
+            self.note_input();
         }
+    }
+
+    fn note_input(&mut self) {
+        let now = Instant::now();
+        self.last_activity = now;
+        self.pending_input.get_or_insert(now);
     }
 
     /// Starts the engine on first use, then forwards viewport and focus changes, runs ready
     /// engine work and takes the newest frame. Call it on the UI thread every pump interval.
     pub(crate) fn poll(&mut self) -> Polled {
+        if perf::enabled() {
+            let now = Instant::now();
+            if let Some(last) = self.last_poll.replace(now) {
+                perf::record(Stage::Poll, now - last);
+            }
+        }
         let mut polled = Polled::default();
         if !self.started {
             self.started = true;
@@ -173,7 +193,7 @@ impl Page {
         let Some(engine) = self.engine.as_mut() else {
             return polled;
         };
-        let events = match engine.pump() {
+        let events = match perf::time(Stage::Pump, || engine.pump()) {
             Ok(events) => events,
             Err(error) => {
                 self.error = Some(error);
@@ -267,24 +287,48 @@ impl Page {
             }
         };
         let current_scale = f64::from(self.scale.get());
-        if self.frame_serial == Some(frame.serial)
-            || (frame.scale - current_scale).abs() > SCALE_TOLERANCE
-        {
+        if self.frame_serial == Some(frame.serial) {
+            perf::count(Count::Duplicate, 1);
             return false;
         }
-        let rgba = match engine.copy_frame(&frame) {
+        if (frame.scale - current_scale).abs() > SCALE_TOLERANCE {
+            perf::count(Count::Stale, 1);
+            return false;
+        }
+        let rgba = match perf::time(Stage::Copy, || engine.copy_frame(&frame)) {
             Ok(rgba) => rgba,
             Err(error) => {
                 self.error = Some(error);
                 return true;
             }
         };
+        let skipped = self
+            .frame_serial
+            .map_or(0, |s| frame.serial.saturating_sub(s + 1));
         self.frame_serial = Some(frame.serial);
-        self.pixels.set(frame.width, frame.height, rgba);
+        perf::time(Stage::Set, || {
+            self.pixels.set(frame.width, frame.height, rgba)
+        });
+        self.note_frame(skipped);
         let size = [
             (f64::from(frame.width) / frame.scale) as f32,
             (f64::from(frame.height) / frame.scale) as f32,
         ];
         std::mem::replace(&mut self.frame_size, size) != size
+    }
+
+    fn note_frame(&mut self, skipped: u64) {
+        if !perf::enabled() {
+            return;
+        }
+        let now = Instant::now();
+        perf::count(Count::Shown, 1);
+        perf::count(Count::Skipped, skipped);
+        if let Some(last) = self.last_frame.replace(now) {
+            perf::record(Stage::FrameInterval, now - last);
+        }
+        if let Some(input) = self.pending_input.take() {
+            perf::record(Stage::InputToFrame, now - input);
+        }
     }
 }
