@@ -1,10 +1,14 @@
 """Rust application and general development commands."""
 
 import argparse
+import os
 import platform
 import sys
 
-from .common import require, run
+from .common import CPP_BUILD_DIR, ROOT, require, run
+
+# Build directories that may hold the compiled bridge, most preferred first.
+BRIDGE_LIB_DIRS = (CPP_BUILD_DIR / "lib", ROOT / "build" / "ladybird-integrated" / "lib")
 
 
 def setup(_args: argparse.Namespace) -> None:
@@ -24,8 +28,23 @@ def build(_args: argparse.Namespace) -> None:
     run("cargo", "build", "--locked")
 
 
-def launch(_args: argparse.Namespace) -> None:
-    run("cargo", "run", "--locked")
+def bridge_lib_dir() -> str:
+    if configured := os.environ.get("ELARIS_LADYBIRD_LIB_DIR"):
+        return configured
+    for directory in BRIDGE_LIB_DIRS:
+        if any(directory.glob("libelaris_ladybird.*")):
+            return str(directory)
+    raise SystemExit("elaris: no built Ladybird bridge found; build it as bridge/README.md describes")
+
+
+def launch(args: argparse.Namespace) -> None:
+    command = ["cargo", "run", "--locked"]
+    if args.engine:
+        os.environ["ELARIS_LADYBIRD_LIB_DIR"] = bridge_lib_dir()
+        command += ["--features", "ladybird-bridge"]
+    if args.url:
+        command += ["--", args.url]
+    run(*command)
 
 
 def check(_args: argparse.Namespace) -> None:
@@ -44,3 +63,6 @@ def register_commands(commands) -> None:
     ):
         subcommand = commands.add_parser(name, help=help_text)
         subcommand.set_defaults(handler=handler)
+        if handler is launch:
+            subcommand.add_argument("--engine", action="store_true", help="Render pages with the built Ladybird bridge")
+            subcommand.add_argument("url", nargs="?", help="Address to open, such as example.com")
