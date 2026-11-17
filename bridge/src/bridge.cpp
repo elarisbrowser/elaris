@@ -219,9 +219,7 @@ extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t 
     auto* handle = new ElarisLadybirdView{bridge, view_id, AK::move(view), {}};
     bridge->views.push_back(handle);
     // The callbacks live in the view, which the handle owns, so they never outlive it.
-    handle->view->on_url_change = [handle](auto const& url) {
-        emit(handle, ELARIS_LADYBIRD_NAVIGATION, to_utf8(url));
-    };
+    handle->view->on_url_change = [handle](auto const& url) { emit(handle, ELARIS_LADYBIRD_NAVIGATION, to_utf8(url)); };
     handle->view->on_title_change = [handle](auto const& title) {
         emit(handle, ELARIS_LADYBIRD_TITLE, to_utf8(title));
     };

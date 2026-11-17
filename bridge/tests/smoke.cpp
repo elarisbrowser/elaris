@@ -69,8 +69,7 @@ static bool check(int32_t result, char const* operation) {
 }
 
 // Pumps until `done` holds, for up to 30 seconds.
-template<typename Done>
-static bool pump_until(ElarisLadybird* bridge, Done done) {
+template <typename Done> static bool pump_until(ElarisLadybird* bridge, Done done) {
     auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
     while (!done()) {
         if (std::chrono::steady_clock::now() >= deadline || !check(elaris_ladybird_pump(bridge), "pump"))
@@ -103,9 +102,11 @@ static bool two_views(ElarisLadybird* bridge, EventsByView& events, std::string 
              check(elaris_ladybird_load(second, url.c_str()), "navigate second view") &&
              pump_until(bridge, [&] { return events[11].history == ELARIS_LADYBIRD_HISTORY_BACK; }) &&
              check(elaris_ladybird_traverse_history(second, -1), "go back") &&
-             pump_until(bridge, [&] {
-                 return events[11].last_title == "Second" && events[11].history == ELARIS_LADYBIRD_HISTORY_FORWARD;
-             }) &&
+             pump_until(bridge,
+                        [&] {
+                            return events[11].last_title == "Second" &&
+                                   events[11].history == ELARIS_LADYBIRD_HISTORY_FORWARD;
+                        }) &&
              check(elaris_ladybird_reload(second), "reload") &&
              check(elaris_ladybird_set_visible(first, 1), "show first view");
     if (passed && (events[10].history != 0 || events[10].last_title != "Elaris Bridge Smoke")) {
