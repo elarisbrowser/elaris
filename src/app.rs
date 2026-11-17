@@ -3,7 +3,7 @@
 //! Application state and the hooks Rune calls: starting the engine, each frame's poll, window
 //! focus and shutdown. What the interface does with tabs goes through the [`Browser`].
 
-use rune::{TextEdit, Tx};
+use rune::{PointerPress, TextEdit, Tx};
 
 use crate::appearance::Appearance;
 use crate::browser::Browser;
@@ -28,6 +28,7 @@ pub(crate) struct AppState {
     shown: Option<(TabId, String)>,
     /// The page title the window shows.
     window_title: Option<String>,
+    context_menu: Option<(Option<TabId>, PointerPress)>,
 }
 
 impl Default for AppState {
@@ -48,6 +49,7 @@ impl AppState {
             sidebar: SidebarState::default(),
             shown: None,
             window_title: None,
+            context_menu: None,
         };
         let opened = start.map(|start| state.browser.open_tab(start));
         state.ensure_a_tab();
@@ -102,6 +104,18 @@ impl AppState {
 
     pub(crate) fn reload(&mut self, tab: TabId) {
         self.browser.reload(tab);
+    }
+
+    pub(crate) fn open_context_menu(&mut self, tab: Option<TabId>, point: PointerPress) {
+        self.context_menu = Some((tab, point));
+    }
+
+    pub(crate) fn context_menu(&self) -> Option<(Option<TabId>, PointerPress)> {
+        self.context_menu
+    }
+
+    pub(crate) fn dismiss_context_menu(&mut self) {
+        self.context_menu = None;
     }
 
     pub(crate) fn close_active(&mut self) {

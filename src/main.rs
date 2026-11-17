@@ -28,15 +28,16 @@ fn main() {
             ui::view,
         )
     };
-    App::new(spec)
+    let app = App::new(spec)
         // macOS drags the titlebar band natively; the window controls sit centred in it, level
         // with the header's buttons.
         .chrome(Chrome {
             traffic_lights: Some(ui::TRAFFIC_LIGHTS),
             ..Chrome::DEFAULT
-        })
-        .on_window(titlebar_controls::install)
-        .on_frame_drawn(|_| perf::frame_drawn())
+        });
+    #[cfg(target_os = "macos")]
+    let app = app.on_window(titlebar_controls::install);
+    app.on_frame_drawn(|_| perf::frame_drawn())
         .on_focus(app::on_window_focus)
         .on_close(app::shut_down)
         .on_quit(app::shut_down)

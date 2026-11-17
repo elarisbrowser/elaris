@@ -14,12 +14,17 @@ mod tabs;
 
 use rune::tok::type_;
 use rune::{El, Tx, col, el, icon, text, text_input};
+use rune_kit::Kit;
 
 use super::controls::row_button;
 use super::theme::{self, Theme};
 use super::{ADDRESS, icons};
 use crate::app::{self, AppState};
 use crate::appearance::Appearance;
+
+pub(crate) fn context_menu(state: &AppState, kit: &Kit, layer: &mut Vec<El>) {
+    tabs::context_menu(state, kit, layer);
+}
 
 /// How the sidebar is laid out: what the window shows of it, not of the browser.
 pub(crate) struct SidebarState {

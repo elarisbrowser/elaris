@@ -14,6 +14,7 @@ pub(crate) use sidebar::{SidebarState, toggle as toggle_sidebar};
 pub(crate) use theme::{TRAFFIC_LIGHTS, WINDOW_MIN_SIZE};
 
 use rune::{Cx, El, row};
+use rune_kit::{Kit, PaletteSeed};
 
 use crate::app::AppState;
 
@@ -29,7 +30,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     state.browser.note_dark(dark);
 
     // The header and the resize handle come last, so they sit over the sidebar and the page.
-    let window = row()
+    let mut window = row()
         .key("window")
         .w_full()
         .h_full()
@@ -37,9 +38,15 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         .child(sidebar::view(state, &theme))
         .child(viewport::view(state, &theme))
         .child(sidebar::header::view(state, &theme, cx));
-    if state.sidebar.collapsed {
-        window
-    } else {
-        window.child(sidebar::resize::handle(state.sidebar.width))
+    if !state.sidebar.collapsed {
+        window = window.child(sidebar::resize::handle(state.sidebar.width));
     }
+    let mut overlays = Vec::new();
+    let kit = Kit::from_palette(PaletteSeed {
+        bg: theme.window,
+        fg: theme.text,
+        accent: theme.icon,
+    });
+    sidebar::context_menu(state, &kit, &mut overlays);
+    rune_kit::root(window, overlays)
 }

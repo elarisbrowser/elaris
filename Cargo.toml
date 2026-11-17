@@ -11,6 +11,10 @@ rev = "cca5df6fafb4721d96fe105f126ebfd2ec351bb6"
 default-features = false
 features = ["accessibility", "embedded-fonts", "metal-backend", "tooling"]
 
+[dependencies.rune-kit]
+git = "https://github.com/anomalyco/rune"
+rev = "cca5df6fafb4721d96fe105f126ebfd2ec351bb6"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2_05 = { package = "objc2", version = "0.5.3" }
 objc2_app_kit_02 = {

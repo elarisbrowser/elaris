@@ -2,7 +2,8 @@
 
 //! The open tabs, scrolling once they outgrow the sidebar, then the new-tab button.
 
-use rune::{El, PopupItem, PopupMenu, ScrollSpec, Tx, col, el, icon};
+use rune::{El, ScrollSpec, Tx, col, el, icon};
+use rune_kit::{Kit, MenuItem, context_menu as menu_at};
 
 use crate::app::{self, AppState};
 use crate::tab::Tab;
@@ -34,17 +35,8 @@ pub(super) fn view(state: &AppState, theme: &Theme) -> El {
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
-        .on_secondary_press(|_: &mut AppState, press, tx: &mut Tx| {
-            tx.popup_menu(
-                PopupMenu::new().item(PopupItem::new("new-tab", "New Tab")),
-                press,
-                |state: &mut AppState, picked, tx| {
-                    if picked == Some("new-tab") {
-                        state.new_tab();
-                        tx.focus(crate::ui::ADDRESS, false);
-                    }
-                },
-            );
+        .on_secondary_press(|state: &mut AppState, press, _| {
+            state.open_context_menu(None, press);
         })
         .child(list)
 }
@@ -89,24 +81,8 @@ fn tab_row(tab: &Tab, active: bool, theme: &Theme) -> El {
         state.activate(id);
     })
     .on_middle_press(move |state: &mut AppState, _| state.close(id))
-    .on_secondary_press(move |_: &mut AppState, press, tx: &mut Tx| {
-        let menu = PopupMenu::new()
-            .item(PopupItem::new("reload", "Reload"))
-            .item(PopupItem::new("duplicate", "Duplicate"))
-            .separator()
-            .item(PopupItem::new("close", "Close Tab"))
-            .item(PopupItem::new("close-others", "Close Other Tabs"));
-        tx.popup_menu(
-            menu,
-            press,
-            move |state: &mut AppState, picked, _| match picked {
-                Some("reload") => state.reload(id),
-                Some("duplicate") => state.duplicate(id),
-                Some("close") => state.close(id),
-                Some("close-others") => state.close_others(id),
-                _ => {}
-            },
-        );
+    .on_secondary_press(move |state: &mut AppState, press, _| {
+        state.open_context_menu(Some(id), press);
     })
     .child(close);
     if active {
@@ -118,4 +94,49 @@ fn tab_row(tab: &Tab, active: bool, theme: &Theme) -> El {
     } else {
         row
     }
+}
+
+pub(super) fn context_menu(state: &AppState, kit: &Kit, layer: &mut Vec<El>) {
+    let Some((tab, point)) = state.context_menu() else {
+        return;
+    };
+    let mut menu = menu_at("sidebar-context-menu", el(), Some(point))
+        .on_close(|state: &mut AppState| state.dismiss_context_menu());
+    if let Some(tab) = tab {
+        menu = menu
+            .item(
+                MenuItem::new("Reload").on_select(move |state: &mut AppState| {
+                    state.dismiss_context_menu();
+                    state.reload(tab);
+                }),
+            )
+            .item(
+                MenuItem::new("Duplicate").on_select(move |state: &mut AppState| {
+                    state.dismiss_context_menu();
+                    state.duplicate(tab);
+                }),
+            )
+            .separator()
+            .item(
+                MenuItem::new("Close Tab").on_select(move |state: &mut AppState| {
+                    state.dismiss_context_menu();
+                    state.close(tab);
+                }),
+            )
+            .item(
+                MenuItem::new("Close Other Tabs").on_select(move |state: &mut AppState| {
+                    state.dismiss_context_menu();
+                    state.close_others(tab);
+                }),
+            );
+    } else {
+        menu = menu.item(MenuItem::new("New Tab").on_select_tx(
+            |state: &mut AppState, tx: &mut Tx| {
+                state.dismiss_context_menu();
+                state.new_tab();
+                tx.focus(crate::ui::ADDRESS, false);
+            },
+        ));
+    }
+    menu.build(kit, layer);
 }
