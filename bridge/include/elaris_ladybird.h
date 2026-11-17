@@ -17,12 +17,18 @@ typedef enum {
     ELARIS_LADYBIRD_TITLE = 2,
     ELARIS_LADYBIRD_LOADING = 3,
     ELARIS_LADYBIRD_FRAME = 4,
+    ELARIS_LADYBIRD_HISTORY = 5, /* Whether the view can go back or forward changed. */
 } ElarisLadybirdEventKind;
+
+/* Bit flags for HISTORY events' value. */
+#define ELARIS_LADYBIRD_HISTORY_BACK 1
+#define ELARIS_LADYBIRD_HISTORY_FORWARD 2
 
 typedef struct {
     ElarisLadybirdEventKind kind;
+    uint64_t view_id; /* The id the host gave the view that raised the event. */
     const char* text; /* Borrowed until the callback returns; empty when unused. */
-    int32_t value;    /* Loading state for LOADING; zero otherwise. */
+    int32_t value;    /* Loading state for LOADING, HISTORY_* flags for HISTORY; zero otherwise. */
 } ElarisLadybirdEvent;
 
 typedef void (*ElarisLadybirdEventCallback)(void* context, const ElarisLadybirdEvent* event);
@@ -125,8 +131,14 @@ typedef struct {
 /* All calls, including callbacks, run on the thread that initializes the bridge. */
 int32_t elaris_ladybird_create(const char* resource_dir, const char* profile_dir, ElarisLadybirdEventCallback callback,
                                void* context, ElarisLadybird** out_bridge);
-int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, ElarisLadybirdView** out_view);
+/* Creates a view; every event it raises carries view_id, which the host chooses. */
+int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t view_id, ElarisLadybirdView** out_view);
 int32_t elaris_ladybird_load(ElarisLadybirdView* view, const char* url);
+int32_t elaris_ladybird_reload(ElarisLadybirdView* view);
+/* Moves through the view's session history: -1 goes back, 1 forward. */
+int32_t elaris_ladybird_traverse_history(ElarisLadybirdView* view, int32_t delta);
+/* Whether the view is on screen. Hidden views stop painting and pages see document.hidden. */
+int32_t elaris_ladybird_set_visible(ElarisLadybirdView* view, int32_t visible);
 /* Sets the viewport in device pixels and the device pixel ratio (display scale) it is laid out at. */
 int32_t elaris_ladybird_resize(ElarisLadybirdView* view, int32_t width, int32_t height, double device_pixel_ratio);
 /* Describes the frame on display, or returns ELARIS_LADYBIRD_NO_FRAME. */

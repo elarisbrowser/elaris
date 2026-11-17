@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <string>
 #include <thread>
 #include <vector>
@@ -14,11 +15,15 @@ struct Events {
     unsigned loading_started{};
     unsigned loading_finished{};
     unsigned frames{};
+    int32_t history{};
     std::string last_title;
 };
 
+// Each view's events, by the id the test gave it.
+using EventsByView = std::map<uint64_t, Events>;
+
 static void on_event(void* context, ElarisLadybirdEvent const* event) {
-    auto& events = *static_cast<Events*>(context);
+    auto& events = (*static_cast<EventsByView*>(context))[event->view_id];
     switch (event->kind) {
     case ELARIS_LADYBIRD_NAVIGATION:
         ++events.navigation;
@@ -32,6 +37,9 @@ static void on_event(void* context, ElarisLadybirdEvent const* event) {
         break;
     case ELARIS_LADYBIRD_FRAME:
         ++events.frames;
+        break;
+    case ELARIS_LADYBIRD_HISTORY:
+        events.history = event->value;
         break;
     }
 }
@@ -60,6 +68,58 @@ static bool check(int32_t result, char const* operation) {
     return false;
 }
 
+// Pumps until `done` holds, for up to 30 seconds.
+template<typename Done>
+static bool pump_until(ElarisLadybird* bridge, Done done) {
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    while (!done()) {
+        if (std::chrono::steady_clock::now() >= deadline || !check(elaris_ladybird_pump(bridge), "pump"))
+            return false;
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    return true;
+}
+
+// Two views at once: each one's events carry its own id, a hidden one keeps its page, and history moves back and
+// forward within one view without touching the other.
+static bool two_views(ElarisLadybird* bridge, EventsByView& events, std::string const& url) {
+    ElarisLadybirdView* first = nullptr;
+    ElarisLadybirdView* second = nullptr;
+    auto other = "data:text/html,<title>Second</title>";
+    bool passed = check(elaris_ladybird_create_view(bridge, 10, &first), "create first view") &&
+                  check(elaris_ladybird_create_view(bridge, 11, &second), "create second view") &&
+                  check(elaris_ladybird_resize(first, 400, 300, 1), "resize first view") &&
+                  check(elaris_ladybird_resize(second, 400, 300, 1), "resize second view") &&
+                  check(elaris_ladybird_load(first, url.c_str()), "load first view") &&
+                  check(elaris_ladybird_load(second, other), "load second view");
+    passed = passed && pump_until(bridge, [&] {
+                 return events[10].last_title == "Elaris Bridge Smoke" && events[11].last_title == "Second";
+             });
+    if (!passed)
+        std::cerr << "each view should see only its own title\n";
+
+    // The hidden first view keeps its page while the second navigates and goes back.
+    passed = passed && check(elaris_ladybird_set_visible(first, 0), "hide first view") &&
+             check(elaris_ladybird_load(second, url.c_str()), "navigate second view") &&
+             pump_until(bridge, [&] { return events[11].history == ELARIS_LADYBIRD_HISTORY_BACK; }) &&
+             check(elaris_ladybird_traverse_history(second, -1), "go back") &&
+             pump_until(bridge, [&] {
+                 return events[11].last_title == "Second" && events[11].history == ELARIS_LADYBIRD_HISTORY_FORWARD;
+             }) &&
+             check(elaris_ladybird_reload(second), "reload") &&
+             check(elaris_ladybird_set_visible(first, 1), "show first view");
+    if (passed && (events[10].history != 0 || events[10].last_title != "Elaris Bridge Smoke")) {
+        std::cerr << "the second view's history reached the first\n";
+        passed = false;
+    }
+    if (!passed)
+        std::cerr << "history should move within the second view alone\n";
+
+    elaris_ladybird_destroy_view(first);
+    elaris_ladybird_destroy_view(second);
+    return passed;
+}
+
 int main(int argc, char** argv) {
     if (argc != 4) {
         std::cerr << "usage: elaris_ladybird_smoke RESOURCE_DIR PROFILE_DIR HTML_FILE\n";
@@ -69,7 +129,7 @@ int main(int argc, char** argv) {
     ElarisLadybird* bridge = nullptr;
     if (elaris_ladybird_create(nullptr, argv[2], nullptr, nullptr, &bridge) == 0 || bridge)
         return 1;
-    if (elaris_ladybird_create_view(nullptr, nullptr) == 0 || !elaris_ladybird_last_error()[0])
+    if (elaris_ladybird_create_view(nullptr, 0, nullptr) == 0 || !elaris_ladybird_last_error()[0])
         return 1;
 
     auto profile_dir = std::filesystem::absolute(argv[2]);
@@ -83,14 +143,16 @@ int main(int argc, char** argv) {
         return 1;
     std::filesystem::remove(profile_blocker);
 
-    Events events;
-    if (!check(elaris_ladybird_create(argv[1], profile_dir.c_str(), on_event, &events, &bridge), "initialize"))
+    EventsByView events_by_view;
+    if (!check(elaris_ladybird_create(argv[1], profile_dir.c_str(), on_event, &events_by_view, &bridge), "initialize"))
         return 1;
 
     bool passed = true;
     for (int cycle = 0; cycle < 3 && passed; ++cycle) {
         ElarisLadybirdView* view = nullptr;
-        passed = check(elaris_ladybird_create_view(bridge, &view), "create view");
+        uint64_t view_id = cycle + 1;
+        auto& events = events_by_view[view_id];
+        passed = check(elaris_ladybird_create_view(bridge, view_id, &view), "create view");
         if (!passed)
             break;
 
@@ -163,14 +225,18 @@ int main(int argc, char** argv) {
                       << events.last_title << "'\n";
             passed = false;
         }
+        if (events_by_view.size() != static_cast<size_t>(cycle) + 1) {
+            std::cerr << "events arrived for a view other than view " << view_id << '\n';
+            passed = false;
+        }
         elaris_ladybird_destroy_view(view);
-        events = {};
         auto close_deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
         while (std::chrono::steady_clock::now() < close_deadline) {
             passed = check(elaris_ladybird_pump(bridge), "pump while closing view");
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
     }
+    passed = passed && two_views(bridge, events_by_view, "file://" + std::filesystem::absolute(argv[3]).string());
     elaris_ladybird_destroy(bridge);
     bridge = nullptr;
     if (passed) {

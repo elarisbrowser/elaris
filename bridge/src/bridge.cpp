@@ -82,7 +82,15 @@ class ElarisWebView final : public WebView::HeadlessWebView {
         return m_serial;
     }
 
+    // Called when whether the view can go back or forward changes.
+    AK::Function<void()> on_navigation_state_change;
+
   private:
+    void did_change_state() override {
+        if (on_navigation_state_change)
+            on_navigation_state_change();
+    }
+
     ElarisWebView(Core::AnonymousBuffer theme, Web::DevicePixelSize size) : HeadlessWebView(AK::move(theme), size) {}
 
     void did_accept_presented_backing_store(i32, Gfx::IntRect damage_rect) override {
@@ -103,6 +111,7 @@ struct ElarisLadybird {
 
 struct ElarisLadybirdView {
     ElarisLadybird* bridge{};
+    uint64_t id{};
     AK::NonnullOwnPtr<ElarisWebView> view;
     Gfx::IntSize copied_size;
 };
@@ -131,11 +140,12 @@ static bool on_owner_thread(ElarisLadybird const* bridge) {
     return bridge->owner_thread == std::this_thread::get_id();
 }
 
-static void emit(ElarisLadybird* bridge, ElarisLadybirdEventKind kind, std::string text = {}, int32_t value = 0) {
-    if (!bridge || !bridge->callback)
+static void emit(ElarisLadybirdView const* view, ElarisLadybirdEventKind kind, std::string text = {},
+                 int32_t value = 0) {
+    if (!view->bridge->callback)
         return;
-    ElarisLadybirdEvent event{kind, text.c_str(), value};
-    bridge->callback(bridge->context, &event);
+    ElarisLadybirdEvent event{kind, view->id, text.c_str(), value};
+    view->bridge->callback(view->bridge->context, &event);
 }
 
 static std::string to_utf8(AK::Utf16String const& value) {
@@ -192,7 +202,8 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
     return succeed();
 }
 
-extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, ElarisLadybirdView** out_view) {
+extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t view_id,
+                                               ElarisLadybirdView** out_view) {
     if (out_view)
         *out_view = nullptr;
     if (!bridge || !out_view || !s_application)
@@ -205,16 +216,25 @@ extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, ElarisLad
         return fail("could not load Ladybird's Default.ini theme");
 
     auto view = ElarisWebView::create(theme.release_value(), {1024, 768});
-    auto* handle = new ElarisLadybirdView{bridge, AK::move(view), {}};
+    auto* handle = new ElarisLadybirdView{bridge, view_id, AK::move(view), {}};
     bridge->views.push_back(handle);
-    handle->view->on_url_change = [bridge](auto const& url) { emit(bridge, ELARIS_LADYBIRD_NAVIGATION, to_utf8(url)); };
-    handle->view->on_title_change = [bridge](auto const& title) {
-        emit(bridge, ELARIS_LADYBIRD_TITLE, to_utf8(title));
+    // The callbacks live in the view, which the handle owns, so they never outlive it.
+    handle->view->on_url_change = [handle](auto const& url) {
+        emit(handle, ELARIS_LADYBIRD_NAVIGATION, to_utf8(url));
     };
-    handle->view->on_loading_state_change = [bridge](bool loading) {
-        emit(bridge, ELARIS_LADYBIRD_LOADING, {}, loading ? 1 : 0);
+    handle->view->on_title_change = [handle](auto const& title) {
+        emit(handle, ELARIS_LADYBIRD_TITLE, to_utf8(title));
     };
-    handle->view->on_ready_to_paint = [bridge] { emit(bridge, ELARIS_LADYBIRD_FRAME); };
+    handle->view->on_loading_state_change = [handle](bool loading) {
+        emit(handle, ELARIS_LADYBIRD_LOADING, {}, loading ? 1 : 0);
+    };
+    handle->view->on_ready_to_paint = [handle] { emit(handle, ELARIS_LADYBIRD_FRAME); };
+    handle->view->on_navigation_state_change = [handle] {
+        auto const& view = *handle->view;
+        emit(handle, ELARIS_LADYBIRD_HISTORY, {},
+             (view.can_navigate_back() ? ELARIS_LADYBIRD_HISTORY_BACK : 0) |
+                 (view.can_navigate_forward() ? ELARIS_LADYBIRD_HISTORY_FORWARD : 0));
+    };
     *out_view = handle;
     return succeed();
 }
@@ -228,6 +248,34 @@ extern "C" int32_t elaris_ladybird_load(ElarisLadybirdView* handle, char const* 
     if (!parsed.has_value())
         return fail("invalid URL");
     handle->view->load(parsed.release_value());
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_reload(ElarisLadybirdView* handle) {
+    if (!handle)
+        return fail("view is required");
+    if (!on_owner_thread(handle->bridge))
+        return fail("navigation must run on the initialization thread");
+    handle->view->reload();
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_traverse_history(ElarisLadybirdView* handle, int32_t delta) {
+    if (!handle)
+        return fail("view is required");
+    if (!on_owner_thread(handle->bridge))
+        return fail("navigation must run on the initialization thread");
+    handle->view->traverse_the_history_by_delta(delta);
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_set_visible(ElarisLadybirdView* handle, int32_t visible) {
+    if (!handle)
+        return fail("view is required");
+    if (!on_owner_thread(handle->bridge))
+        return fail("visibility must change on the initialization thread");
+    handle->view->set_system_visibility_state(visible ? Web::HTML::VisibilityState::Visible
+                                                      : Web::HTML::VisibilityState::Hidden);
     return succeed();
 }
 
