@@ -8,7 +8,7 @@ license = "MIT"
 rust-version = "1.88"
 
 [workspace.dependencies]
-rune = { git = "https://github.com/anomalyco/rune", rev = "cca5df6fafb4721d96fe105f126ebfd2ec351bb6" }
+rune = { git = "https://github.com/anomalyco/rune", rev = "cca5df6fafb4721d96fe105f126ebfd2ec351bb6", default-features = false, features = ["accessibility", "embedded-fonts", "metal-backend"] }
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
