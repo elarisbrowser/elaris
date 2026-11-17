@@ -25,6 +25,11 @@ pub(crate) const ICON_BUTTON: f32 = 28.0;
 pub(crate) const ICON_BUTTON_RADIUS: f32 = radius::SM;
 pub(crate) const ICON: f32 = 16.0;
 pub(crate) const CLOSE_BUTTON: f32 = 22.0;
+/// The space between the navigation buttons.
+pub(crate) const NAV_GAP: f32 = space::S1;
+
+/// How far buttons and rows shrink while pressed, springing back on release.
+pub(crate) const PRESS_SCALE: f32 = 0.97;
 
 /// The address field.
 pub(crate) const FIELD_HEIGHT: f32 = 36.0;

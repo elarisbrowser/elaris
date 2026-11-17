@@ -49,6 +49,7 @@ fn header(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El {
         .h(theme::HEADER_HEIGHT)
         .pl(cx.titlebar_inset())
         .window_drag()
+        .gap(theme::NAV_GAP)
         .center_y()
         .child(spacer())
         .child(nav_button(
@@ -103,6 +104,7 @@ fn icon_button(key: &str, label: &str, glyph: &'static Icon, size: f32, theme: &
         .radius(theme::ICON_BUTTON_RADIUS)
         .hover(theme.control_off)
         .press(theme.press)
+        .press_scale(theme::PRESS_SCALE)
         .label(label)
         .help(label)
         .child(icon(glyph, theme::ICON).color(theme.text_secondary))
@@ -222,6 +224,7 @@ fn row_shell(key: &str, theme: &Theme) -> El {
         .continuous_corners()
         .hover(theme.control_off)
         .press(theme.press)
+        .press_scale(theme::PRESS_SCALE)
 }
 
 fn row_text(content: &str, color: rune::Color) -> El {
