@@ -10,14 +10,14 @@ use rune::{Key, KeyEvent, Tx};
 use crate::app::{self, AppState};
 use crate::browser::Browser;
 use crate::tab::{Tab, TabId};
-use crate::ui::{self, ADDRESS};
+use crate::ui;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Shortcut {
     NewTab,
     CloseTab,
-    /// Focus the address field with its text selected.
-    FocusAddress,
+    /// Open the omnibox with the active page address selected.
+    FocusOmnibox,
     Reload,
     PreviousTab,
     NextTab,
@@ -35,7 +35,7 @@ pub(crate) fn on_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> boo
     match shortcut {
         Shortcut::NewTab => app::new_tab(state, tx),
         Shortcut::CloseTab => state.close_active(),
-        Shortcut::FocusAddress => focus_address(state, tx),
+        Shortcut::FocusOmnibox => focus_omnibox(state, tx),
         Shortcut::Reload => state.with_active_tab(Browser::reload),
         Shortcut::ToggleSidebar => ui::toggle_sidebar(state, tx),
         Shortcut::PreviousTab
@@ -63,13 +63,10 @@ fn target(browser: &Browser, shortcut: Shortcut) -> Option<TabId> {
     }
 }
 
-/// Focuses the address field with its text selected, showing the sidebar if it is hidden.
-fn focus_address(state: &mut AppState, tx: &mut Tx) {
-    if state.sidebar.collapsed {
-        ui::toggle_sidebar(state, tx);
-    }
-    state.select_address();
-    tx.focus(ADDRESS, true);
+/// Opens the omnibox over the active page, whether or not the sidebar is shown.
+fn focus_omnibox(state: &mut AppState, tx: &mut Tx) {
+    state.open_omnibox(crate::omnibox::Mode::Current);
+    tx.focus("omnibox-input", false);
 }
 
 /// The shortcut `event` is, if any.
@@ -81,7 +78,7 @@ pub(crate) fn shortcut(event: &KeyEvent) -> Option<Shortcut> {
     Some(match (key, shift) {
         ('t', false) => Shortcut::NewTab,
         ('w', false) => Shortcut::CloseTab,
-        ('l', false) => Shortcut::FocusAddress,
+        ('l', false) => Shortcut::FocusOmnibox,
         ('r', false) => Shortcut::Reload,
         ('s', false) => Shortcut::ToggleSidebar,
         // Shift turns [ and ] into { and } on most layouts.
@@ -114,7 +111,7 @@ mod tests {
     fn knows_the_browser_shortcuts() {
         assert_eq!(press('t', false), Some(Shortcut::NewTab));
         assert_eq!(press('w', false), Some(Shortcut::CloseTab));
-        assert_eq!(press('l', false), Some(Shortcut::FocusAddress));
+        assert_eq!(press('l', false), Some(Shortcut::FocusOmnibox));
         assert_eq!(press('r', false), Some(Shortcut::Reload));
         assert_eq!(press('s', false), Some(Shortcut::ToggleSidebar));
         assert_eq!(press('{', true), Some(Shortcut::PreviousTab));

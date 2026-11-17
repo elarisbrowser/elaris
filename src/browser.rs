@@ -600,15 +600,20 @@ mod tests {
     }
 
     #[test]
-    fn says_why_it_cannot_navigate() {
+    fn searches_ordinary_text_and_rejects_unsupported_schemes() {
         let (mut browser, fake) = ready();
         let tab = browser.open_tab("example.com").unwrap();
         assert!(matches!(
-            browser.open_tab("two words"),
+            browser.open_tab("ftp://example.com"),
             Err(Error::Address(_))
         ));
+        browser.navigate(tab, "two words").unwrap();
+        assert_eq!(
+            browser.tab(tab).unwrap().url,
+            "https://www.google.com/search?q=two%20words"
+        );
         assert!(matches!(
-            browser.navigate(tab, "two words"),
+            browser.navigate(tab, "ftp://example.com"),
             Err(Error::Address(_))
         ));
         browser.close_tab(tab);

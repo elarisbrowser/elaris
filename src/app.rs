@@ -3,13 +3,15 @@
 //! Application state and the hooks Rune calls: starting the engine, each frame's poll, window
 //! focus and shutdown. What the interface does with tabs goes through the [`Browser`].
 
-use rune::{PointerPress, TextEdit, Tx};
+use rune::{Key, KeyEvent, PointerPress, Tx};
 
+use crate::address;
 use crate::appearance::Appearance;
 use crate::browser::Browser;
 use crate::engine::Engine;
+use crate::omnibox::{self, Action, HistoryEntry, Suggestion};
 use crate::tab::{Tab, TabId};
-use crate::ui::{ADDRESS, SidebarState, VIEWPORT};
+use crate::ui::{SidebarState, VIEWPORT};
 
 /// The window's title when the page has none.
 pub(crate) const APP_NAME: &str = "Elaris";
@@ -18,14 +20,15 @@ pub(crate) const APP_NAME: &str = "Elaris";
 const NEW_TAB_ADDRESS: &str = "about:blank";
 
 pub(crate) struct AppState {
-    pub(crate) address: TextEdit,
-    /// Why the address last submitted could not be opened, until the next is.
+    pub(crate) omnibox: omnibox::State,
+    /// Why the last submitted query could not be opened, until the next is.
     pub(crate) address_error: Option<String>,
     pub(crate) browser: Browser,
     pub(crate) appearance: Appearance,
     pub(crate) sidebar: SidebarState,
-    /// The tab and address the address bar shows, so it changes only when the active tab's do.
+    /// The tab and URL last recorded in local recent history.
     shown: Option<(TabId, String)>,
+    history: Vec<HistoryEntry>,
     /// The page title the window shows.
     window_title: Option<String>,
     context_menu: Option<(Option<TabId>, PointerPress)>,
@@ -42,12 +45,13 @@ impl AppState {
     /// The state for a window with one tab opening `start`, or a blank page.
     fn new(start: Option<&str>) -> Self {
         let mut state = Self {
-            address: TextEdit::new(String::new()),
+            omnibox: omnibox::State::default(),
             address_error: None,
             browser: Browser::default(),
             appearance: Appearance::default(),
             sidebar: SidebarState::default(),
             shown: None,
+            history: Vec::new(),
             window_title: None,
             context_menu: None,
         };
@@ -60,13 +64,10 @@ impl AppState {
         state
     }
 
-    /// Loads what the address bar holds in the active tab.
-    pub(crate) fn submit_address(&mut self) {
-        let address = self.address.text.clone();
-        let result = match self.browser.active_tab().map(|tab| tab.id()) {
-            Some(tab) => self.browser.navigate(tab, &address),
-            None => self.browser.open_tab(&address).map(drop),
-        };
+    /// Loads what the omnibox holds in the active tab.
+    pub(crate) fn submit_omnibox(&mut self) {
+        let address = self.omnibox.input.text.clone();
+        let result = self.navigate_destination(&address);
         self.address_error = result.err().map(|error| error.to_string());
         self.show_active_tab();
     }
@@ -76,6 +77,78 @@ impl AppState {
         if let Ok(tab) = self.browser.open_tab(NEW_TAB_ADDRESS) {
             self.activate(tab);
         }
+    }
+
+    pub(crate) fn open_omnibox(&mut self, mode: omnibox::Mode) {
+        self.omnibox.mode = mode;
+        let use_active_url = mode == omnibox::Mode::Current;
+        let query = if use_active_url {
+            self.browser
+                .active_tab()
+                .map(|tab| tab.url.clone())
+                .filter(|url| *url != NEW_TAB_ADDRESS)
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
+        self.omnibox
+            .open(&query, use_active_url && !query.is_empty());
+        self.address_error = None;
+    }
+
+    pub(crate) fn suggestions(&self) -> Vec<Suggestion> {
+        omnibox::suggestions(
+            &self.omnibox.input.text,
+            self.browser.tabs(),
+            &self.history,
+            self.sidebar.collapsed,
+        )
+    }
+
+    pub(crate) fn choose_suggestion(&mut self, suggestion: Suggestion, tx: &mut Tx) {
+        let result = match suggestion.action {
+            Action::Navigate(url) => self.navigate_destination(&url),
+            Action::Search(query) => self.navigate_destination(&address::search_url(&query)),
+            Action::VisitRecent(url) => self.navigate_destination(&url),
+            Action::SwitchTab(tab) => {
+                self.activate(tab);
+                Ok(())
+            }
+            Action::NewTab => {
+                self.new_tab();
+                Ok(())
+            }
+            Action::ReloadPage => {
+                self.with_active_tab(Browser::reload);
+                Ok(())
+            }
+            Action::CloseTab => {
+                self.close_active();
+                Ok(())
+            }
+            Action::ToggleSidebar => {
+                crate::ui::toggle_sidebar(self, tx);
+                Ok(())
+            }
+        };
+        self.address_error = result.err().map(|error| error.to_string());
+        if self.address_error.is_none() {
+            self.omnibox.close();
+            tx.focus(VIEWPORT, false);
+        }
+    }
+
+    fn navigate_destination(&mut self, url: &str) -> Result<(), crate::browser::Error> {
+        match (self.omnibox.mode, self.browser.active_tab().map(Tab::id)) {
+            (omnibox::Mode::Current, Some(tab)) => self.browser.navigate(tab, url)?,
+            _ => {
+                let tab = self.browser.open_tab(url)?;
+                self.browser.activate_tab(tab);
+            }
+        }
+        self.address_error = None;
+        self.show_active_tab();
+        Ok(())
     }
 
     pub(crate) fn activate(&mut self, tab: TabId) {
@@ -124,12 +197,6 @@ impl AppState {
         }
     }
 
-    /// Selects everything in the address field, ready to replace.
-    pub(crate) fn select_address(&mut self) {
-        self.address.anchor = 0;
-        self.address.focus = self.address.text.len();
-    }
-
     /// Runs `operation` on the active tab, if there is one.
     pub(crate) fn with_active_tab(&mut self, operation: impl FnOnce(&mut Browser, TabId)) {
         if let Some(tab) = self.browser.active_tab().map(|tab| tab.id()) {
@@ -158,16 +225,17 @@ impl AppState {
         }
     }
 
-    /// Shows the active tab's address in the address bar once it, or its address, changes.
+    /// Records a real active-page visit when its tab or committed URL changes.
     fn show_active_tab(&mut self) {
         let Some(tab) = self.browser.active_tab() else {
             return;
         };
         let now = (tab.id(), tab.url.clone());
         if self.shown.as_ref() != Some(&now) {
-            let url = if now.1 == NEW_TAB_ADDRESS { "" } else { &now.1 };
-            self.address.replace_text(url.to_owned());
+            omnibox::record_visit(&mut self.history, &tab.title, &tab.url);
             self.shown = Some(now);
+        } else {
+            omnibox::update_title(&mut self.history, &tab.title, &tab.url);
         }
     }
 
@@ -213,18 +281,53 @@ pub(crate) fn poll(state: &mut AppState, _clock: f64, tx: &mut Tx) -> bool {
     polled.changed || settling
 }
 
-/// After the address bar opens a page, the page takes the keyboard.
-pub(crate) fn submit_address(state: &mut AppState, tx: &mut Tx) {
-    state.submit_address();
-    if state.address_error.is_none() {
-        tx.focus(VIEWPORT, false);
+/// A query was submitted from the focused omnibox.
+pub(crate) fn submit_omnibox(state: &mut AppState, tx: &mut Tx) {
+    if !state.omnibox.open
+        || (state.omnibox.input.text.trim().is_empty() && !state.omnibox.selection_moved)
+    {
+        return;
+    }
+    let suggestions = state.suggestions();
+    if let Some(suggestion) = suggestions.get(state.omnibox.selected).cloned() {
+        state.choose_suggestion(suggestion, tx);
+    } else {
+        state.submit_omnibox();
+        if state.address_error.is_none() {
+            state.omnibox.close();
+            tx.focus(VIEWPORT, false);
+        }
     }
 }
 
-/// A new tab starts in the address bar, ready to type.
+/// The sidebar launcher edits the current address.
+pub(crate) fn open_from_launcher(state: &mut AppState, tx: &mut Tx) {
+    state.open_omnibox(omnibox::Mode::Current);
+    tx.focus("omnibox-input", false);
+}
+
+/// A new tab starts in the omnibox, ready to type.
 pub(crate) fn new_tab(state: &mut AppState, tx: &mut Tx) {
-    state.new_tab();
-    tx.focus(ADDRESS, false);
+    state.open_omnibox(omnibox::Mode::New);
+    tx.focus("omnibox-input", false);
+}
+
+/// Keyboard input the omnibox uses before the text editor handles it.
+pub(crate) fn omnibox_input_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> bool {
+    match &event.key {
+        Key::Escape => {
+            state.omnibox.close();
+            tx.focus(VIEWPORT, false);
+            true
+        }
+        Key::Up | Key::Down => {
+            let count = state.suggestions().len();
+            let direction = if event.key == Key::Up { -1 } else { 1 };
+            state.omnibox.move_selection(count, direction);
+            true
+        }
+        _ => false,
+    }
 }
 
 pub(crate) fn on_window_focus(state: &mut AppState, focused: bool, _: &mut Tx) {
@@ -238,82 +341,237 @@ pub(crate) fn shut_down(state: &mut AppState, _: &mut Tx) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rune::Mods;
 
     fn active_url(state: &AppState) -> &str {
         &state.browser.active_tab().unwrap().url
     }
 
     #[test]
-    fn opens_one_blank_tab_without_an_address() {
+    fn opens_one_blank_tab_without_opening_the_omnibox() {
         let state = AppState::new(None);
         assert_eq!(state.browser.tabs().len(), 1);
         assert_eq!(active_url(&state), "about:blank");
-        assert_eq!(state.address.text, "");
+        assert!(!state.omnibox.open);
+        assert_eq!(state.omnibox.input.text, "");
         assert_eq!(state.address_error, None);
     }
 
     #[test]
-    fn opens_the_address_it_was_given() {
+    fn opens_a_domain_it_was_given() {
         let state = AppState::new(Some("example.com"));
-        assert_eq!(state.address.text, "https://example.com");
+        assert_eq!(active_url(&state), "https://example.com");
         assert_eq!(state.address_error, None);
     }
 
     #[test]
-    fn reports_a_start_address_it_cannot_open() {
+    fn treats_an_ordinary_start_argument_as_a_search() {
         let state = AppState::new(Some("not an address"));
         assert_eq!(state.browser.tabs().len(), 1);
-        assert_eq!(state.address.text, "");
-        assert!(state.address_error.is_some());
+        assert_eq!(
+            active_url(&state),
+            "https://www.google.com/search?q=not%20an%20address"
+        );
+        assert_eq!(state.address_error, None);
     }
 
     #[test]
-    fn submitting_shows_the_full_url_or_says_what_is_wrong() {
+    fn submitting_navigates_the_current_tab_for_urls_and_searches() {
         let mut state = AppState::new(None);
-        state.address.replace_text("example.com/a".to_owned());
-        state.submit_address();
-        assert_eq!(state.address.text, "https://example.com/a");
+        state.omnibox.input.replace_text("example.com/a".to_owned());
+        state.submit_omnibox();
+        assert_eq!(active_url(&state), "https://example.com/a");
         assert_eq!(state.address_error, None);
 
-        state.address.replace_text("two words".to_owned());
-        state.submit_address();
-        assert_eq!(state.address.text, "two words");
-        assert!(state.address_error.is_some());
-        assert_eq!(active_url(&state), "https://example.com/a");
+        state
+            .omnibox
+            .input
+            .replace_text("best Rust GUI framework".to_owned());
+        state.submit_omnibox();
+        assert_eq!(
+            active_url(&state),
+            "https://www.google.com/search?q=best%20Rust%20GUI%20framework"
+        );
+        assert_eq!(state.browser.tabs().len(), 1);
+        assert_eq!(state.address_error, None);
     }
 
     #[test]
-    fn the_address_bar_follows_the_active_tab() {
+    fn cmd_l_opens_with_the_current_url_selected_even_when_sidebar_is_collapsed() {
         let mut state = AppState::new(Some("example.com"));
-        let first = state.browser.active_tab().unwrap().id();
-        state.new_tab();
-        assert_eq!(state.address.text, "");
-        state.address.replace_text("example.org".to_owned());
-        state.submit_address();
-
-        state.activate(first);
-        assert_eq!(state.address.text, "https://example.com");
-        assert_eq!(state.browser.tabs().len(), 2);
+        state.sidebar.collapsed = true;
+        let mut tx = Tx::default();
+        let event = KeyEvent {
+            key: Key::Command('l'),
+            mods: Mods {
+                cmd: true,
+                ..Mods::default()
+            },
+        };
+        assert!(crate::shortcuts::on_key(&mut state, &event, &mut tx));
+        assert!(state.omnibox.open);
+        assert_eq!(state.omnibox.input.text, "https://example.com");
+        assert_eq!(
+            (state.omnibox.input.anchor, state.omnibox.input.focus),
+            (0, state.omnibox.input.text.len())
+        );
+        assert_eq!(active_url(&state), "https://example.com");
     }
 
     #[test]
-    fn the_status_says_what_went_wrong() {
+    fn escape_closes_without_changing_the_page() {
+        let mut state = AppState::new(Some("example.com"));
+        state.open_omnibox(omnibox::Mode::Current);
+        let mut tx = Tx::default();
+        assert!(omnibox_input_key(
+            &mut state,
+            &KeyEvent {
+                key: Key::Escape,
+                mods: Mods::default(),
+            },
+            &mut tx,
+        ));
+        assert!(!state.omnibox.open);
+        assert_eq!(active_url(&state), "https://example.com");
+    }
+
+    #[test]
+    fn choosing_a_navigation_result_reuses_the_active_tab() {
+        let mut state = AppState::new(Some("example.com"));
+        let active = state.browser.active_tab().unwrap().id();
+        state.open_omnibox(omnibox::Mode::Current);
+        state.omnibox.input.replace_text("example.org".to_owned());
+        let suggestion = state.suggestions().remove(0);
+        state.choose_suggestion(suggestion, &mut Tx::default());
+        assert_eq!(active_url(&state), "https://example.org");
+        assert_eq!(state.browser.active_tab().unwrap().id(), active);
+        assert_eq!(state.browser.tabs().len(), 1);
+        assert!(!state.omnibox.open);
+    }
+
+    #[test]
+    fn new_tab_opens_empty_and_dismisses_without_creating_tabs() {
+        let mut state = AppState::new(Some("example.com"));
+        let mut tx = Tx::default();
+        assert!(crate::shortcuts::on_key(
+            &mut state,
+            &KeyEvent {
+                key: Key::Command('t'),
+                mods: Mods {
+                    cmd: true,
+                    ..Mods::default()
+                },
+            },
+            &mut tx,
+        ));
+        for _ in 0..3 {
+            assert!(state.omnibox.open);
+            submit_omnibox(&mut state, &mut tx);
+            state.omnibox.close();
+            assert_eq!(state.browser.tabs().len(), 1);
+            assert_eq!(active_url(&state), "https://example.com");
+            new_tab(&mut state, &mut tx);
+        }
+        for (query, expected, count) in [
+            ("example.org", "https://example.org", 2),
+            (
+                "two words",
+                "https://www.google.com/search?q=two%20words",
+                3,
+            ),
+        ] {
+            new_tab(&mut state, &mut tx);
+            state.omnibox.input.replace_text(query);
+            submit_omnibox(&mut state, &mut tx);
+            assert_eq!(state.browser.tabs().len(), count);
+            assert_eq!(active_url(&state), expected);
+        }
+    }
+
+    #[test]
+    fn the_status_reports_unsupported_schemes_and_new_tabs_clear_them() {
         let mut state = AppState::new(None);
         assert_eq!(state.status(), None);
-        state.address.replace_text("two words".to_owned());
-        state.submit_address();
+        state
+            .omnibox
+            .input
+            .replace_text("ftp://example.com".to_owned());
+        state.submit_omnibox();
         assert!(state.status().is_some());
         state.new_tab();
         assert_eq!(state.status(), None);
     }
 
     #[test]
-    fn selecting_the_address_selects_all_of_it() {
+    fn launcher_selects_the_current_address() {
         let mut state = AppState::new(Some("example.com"));
-        state.select_address();
-        assert_eq!(
-            (state.address.anchor, state.address.focus),
-            (0, state.address.text.len())
+        open_from_launcher(&mut state, &mut Tx::default());
+        assert!(state.omnibox.open);
+        assert_eq!(state.omnibox.input.text, "https://example.com");
+    }
+
+    #[test]
+    fn selecting_an_open_tab_activates_it_without_opening_a_duplicate() {
+        let mut state = AppState::new(Some("example.com"));
+        let first = state.browser.active_tab().unwrap().id();
+        let second = state.browser.open_tab("github.com").unwrap();
+        state.activate(second);
+        state.open_omnibox(omnibox::Mode::New);
+        state.omnibox.input.replace_text("example.com");
+        let tab_suggestion = state
+            .suggestions()
+            .into_iter()
+            .find(|suggestion| suggestion.action == Action::SwitchTab(first))
+            .unwrap();
+        state.choose_suggestion(tab_suggestion, &mut Tx::default());
+        assert_eq!(state.browser.active_tab().unwrap().id(), first);
+        assert_eq!(state.browser.tabs().len(), 2);
+        assert_eq!(active_url(&state), "https://example.com");
+        assert!(!state.omnibox.open);
+    }
+
+    #[test]
+    fn omnibox_keys_stay_in_the_input_and_escape_restores_page_focus() {
+        use rune::{Env, Runtime};
+
+        let mut runtime = Runtime::new(
+            AppState::new(Some("example.com")),
+            crate::ui::view,
+            (960.0, 640.0),
+            Env::new(false, 1.0),
+        );
+        runtime.frame(0.0);
+        runtime.update(|state, tx| {
+            state.open_omnibox(omnibox::Mode::New);
+            tx.focus("omnibox-input", false);
+        });
+        runtime.frame(0.0);
+        assert!(
+            runtime
+                .elements()
+                .iter()
+                .any(|element| element.focused && element.key.as_deref() == Some("omnibox-input"))
+        );
+
+        runtime.key(KeyEvent {
+            key: Key::Text("x".into()),
+            mods: Mods::default(),
+        });
+        runtime.frame(0.0);
+        assert_eq!(runtime.state.omnibox.input.text, "x");
+        assert_eq!(active_url(&runtime.state), "https://example.com");
+
+        runtime.key(KeyEvent {
+            key: Key::Escape,
+            mods: Mods::default(),
+        });
+        runtime.frame(0.0);
+        assert!(!runtime.state.omnibox.open);
+        assert!(
+            runtime
+                .elements()
+                .iter()
+                .any(|element| element.focused && element.key.as_deref() == Some(VIEWPORT))
         );
     }
 
@@ -324,6 +582,6 @@ mod tests {
         state.close(only);
         assert_eq!(state.browser.tabs().len(), 1);
         assert_ne!(state.browser.active_tab().unwrap().id(), only);
-        assert_eq!(state.address.text, "");
+        assert_eq!(active_url(&state), "about:blank");
     }
 }

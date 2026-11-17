@@ -133,8 +133,7 @@ pub(super) fn context_menu(state: &AppState, kit: &Kit, layer: &mut Vec<El>) {
         menu = menu.item(MenuItem::new("New Tab").on_select_tx(
             |state: &mut AppState, tx: &mut Tx| {
                 state.dismiss_context_menu();
-                state.new_tab();
-                tx.focus(crate::ui::ADDRESS, false);
+                app::new_tab(state, tx);
             },
         ));
     }

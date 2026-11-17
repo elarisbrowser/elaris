@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The sidebar: the header beside the window controls, the address field and status, the open
+//! The sidebar: the header beside the window controls, the search launcher and status, the open
 //! tabs, and the appearance button.
 //!
 //! - `header`: the titlebar row, its sidebar toggle and navigation buttons. The window draws it
@@ -13,12 +13,12 @@ pub(crate) mod resize;
 mod tabs;
 
 use rune::tok::type_;
-use rune::{El, Tx, col, el, icon, text, text_input};
+use rune::{El, Tx, col, icon, text};
 use rune_kit::Kit;
 
 use super::controls::row_button;
+use super::icons;
 use super::theme::{self, Theme};
-use super::{ADDRESS, icons};
 use crate::app::{self, AppState};
 use crate::appearance::Appearance;
 
@@ -81,7 +81,7 @@ fn body(state: &AppState, theme: &Theme) -> El {
         .px(theme::SIDEBAR_PADDING)
         .pb(theme::SIDEBAR_PADDING)
         .gap(theme::SIDEBAR_GAP)
-        .child(address(state, theme));
+        .child(search_launcher(theme));
     if let Some(status) = state.status() {
         body = body.child(
             text(status)
@@ -96,24 +96,20 @@ fn body(state: &AppState, theme: &Theme) -> El {
         .child(appearance(state.appearance, theme))
 }
 
-fn address(state: &AppState, theme: &Theme) -> El {
-    let field = text_input(&state.address, type_::BODY)
-        .key(ADDRESS)
-        .single_line()
-        .w_full()
-        .px(theme::FIELD_PADDING)
-        .color(theme.text)
-        .placeholder("Search or enter address", theme.text_muted)
-        .label("Address")
-        .on_edit(|state: &mut AppState| &mut state.address)
-        .on_submit(app::submit_address);
-    el().key("address-container")
-        .w_full()
-        .h(theme::FIELD_HEIGHT)
-        .center_y()
-        .radius(theme::FIELD_RADIUS)
-        .fill(theme.field)
-        .child(field)
+fn search_launcher(theme: &Theme) -> El {
+    row_button(
+        "omnibox-launcher",
+        icon(&icons::SEARCH, theme::ICON).color(theme.text_muted),
+        "Search or type a URL",
+        theme.text_muted,
+        theme,
+    )
+    .h(theme::FIELD_HEIGHT)
+    .label("Search or type a URL")
+    .help("Open search and address suggestions")
+    .shortcut_hint("cmd+l")
+    .focusable(true)
+    .on_press_tx(app::open_from_launcher)
 }
 
 /// A quiet button at the foot of the sidebar that steps through System, Light and Dark.

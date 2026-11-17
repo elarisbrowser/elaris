@@ -5,6 +5,7 @@
 
 mod controls;
 mod icons;
+mod omnibox;
 mod sidebar;
 mod theme;
 mod viewport;
@@ -20,9 +21,6 @@ use crate::app::AppState;
 
 /// The focus key of the page viewport.
 pub(crate) const VIEWPORT: &str = "viewport";
-/// The focus key of the address field.
-pub(crate) const ADDRESS: &str = "address";
-
 pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     let dark = state.appearance.is_dark(cx.system_dark());
     let theme = theme::palette(dark);
@@ -40,6 +38,14 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         .child(sidebar::header::view(state, &theme, cx));
     if !state.sidebar.collapsed {
         window = window.child(sidebar::resize::handle(state.sidebar.width));
+    }
+    if let Some(overlay) = omnibox::view(
+        state,
+        &theme,
+        cx.layout_size("window")
+            .map_or(WINDOW_MIN_SIZE.1, |size| size[1]),
+    ) {
+        window = window.child(overlay);
     }
     let mut overlays = Vec::new();
     let kit = Kit::from_palette(PaletteSeed {

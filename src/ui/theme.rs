@@ -16,8 +16,6 @@ pub(crate) struct Theme {
     pub(crate) window: Color,
     /// The page's container, seen before a page draws.
     pub(crate) page: Color,
-    /// The hairline around the page's container.
-    pub(crate) page_border: Color,
     pub(crate) text: Color,
     /// Labels that matter less: inactive tabs, the status line, placeholders.
     pub(crate) text_muted: Color,
@@ -25,13 +23,19 @@ pub(crate) struct Theme {
     /// The window controls at rest, before the pointer fades the native ones in.
     pub(crate) window_control: Color,
     /// The address field's well.
-    pub(crate) field: Color,
     /// Overlays on buttons and rows under the pointer, and while pressed.
     pub(crate) hover: Color,
     pub(crate) press: Color,
     /// The active tab, raised above the sidebar.
     pub(crate) tab_active: Color,
     pub(crate) tab_active_shadow: Color,
+    /// The dim layer and raised surface of the omnibox.
+    pub(crate) overlay_scrim: Color,
+    pub(crate) overlay_panel: Color,
+    pub(crate) overlay_border: Color,
+    pub(crate) overlay_shadow: Color,
+    pub(crate) overlay_selected: Color,
+    pub(crate) separator: Color,
     /// How faint a control that can't be used now is.
     pub(crate) disabled_opacity: f32,
 }
@@ -42,32 +46,40 @@ pub(crate) fn palette(dark: bool) -> Theme {
         Theme {
             window: oklch(0.185, 0.004, HUE),
             page: oklch(0.232, 0.005, HUE),
-            page_border: oklcha(1.0, 0.0, 0.0, 0.06),
             text: oklch(0.955, 0.003, HUE),
             text_muted: oklch(0.74, 0.008, HUE),
             icon: oklch(0.82, 0.006, HUE),
             window_control: oklcha(1.0, 0.0, 0.0, 0.16),
-            field: oklcha(1.0, 0.0, 0.0, 0.07),
             hover: oklcha(1.0, 0.0, 0.0, 0.06),
             press: oklcha(1.0, 0.0, 0.0, 0.1),
             tab_active: oklcha(1.0, 0.0, 0.0, 0.15),
             tab_active_shadow: oklcha(0.0, 0.0, 0.0, 0.3),
+            overlay_scrim: oklcha(0.0, 0.0, 0.0, 0.34),
+            overlay_panel: oklch(0.255, 0.006, HUE),
+            overlay_border: oklcha(1.0, 0.0, 0.0, 0.11),
+            overlay_shadow: oklcha(0.0, 0.0, 0.0, 0.55),
+            overlay_selected: oklcha(1.0, 0.0, 0.0, 0.09),
+            separator: oklcha(1.0, 0.0, 0.0, 0.08),
             disabled_opacity: 0.35,
         }
     } else {
         Theme {
             window: oklch(0.935, 0.006, HUE),
             page: oklch(1.0, 0.0, 0.0),
-            page_border: oklcha(0.2, 0.02, HUE, 0.1),
             text: oklch(0.2, 0.008, HUE),
             text_muted: oklch(0.42, 0.012, HUE),
             icon: oklch(0.32, 0.01, HUE),
             window_control: oklcha(0.2, 0.02, HUE, 0.16),
-            field: oklcha(0.2, 0.02, HUE, 0.06),
             hover: oklcha(0.2, 0.02, HUE, 0.06),
             press: oklcha(0.2, 0.02, HUE, 0.1),
             tab_active: oklch(1.0, 0.0, 0.0),
             tab_active_shadow: oklcha(0.2, 0.02, HUE, 0.18),
+            overlay_scrim: oklcha(0.2, 0.02, HUE, 0.23),
+            overlay_panel: oklch(0.995, 0.002, HUE),
+            overlay_border: oklcha(0.2, 0.02, HUE, 0.12),
+            overlay_shadow: oklcha(0.2, 0.02, HUE, 0.2),
+            overlay_selected: oklcha(0.2, 0.02, HUE, 0.07),
+            separator: oklcha(0.2, 0.02, HUE, 0.09),
             disabled_opacity: 0.3,
         }
     }
@@ -118,8 +130,24 @@ pub(crate) const PRESS_SCALE: f32 = 0.97;
 
 /// The address field.
 pub(crate) const FIELD_HEIGHT: f32 = 36.0;
-pub(crate) const FIELD_RADIUS: f32 = radius::LG - 2.0;
 pub(crate) const FIELD_PADDING: f32 = space::S3;
+
+/// The floating search palette and its compact result rows.
+pub(crate) const OMNIBOX_WIDTH: f32 = 700.0;
+pub(crate) const OMNIBOX_RADIUS: f32 = radius::LG + 4.0;
+pub(crate) const OMNIBOX_INPUT_HEIGHT: f32 = 60.0;
+pub(crate) const OMNIBOX_ROW_HEIGHT: f32 = 46.0;
+pub(crate) const OMNIBOX_TOP_INSET: f32 = 72.0;
+pub(crate) const OMNIBOX_INPUT_TEXT: rune::TextStyle = rune::TextStyle::new(18.0, 400.0);
+pub(crate) const OMNIBOX_MAX_RESULTS_HEIGHT: f32 = 340.0;
+pub(crate) const OMNIBOX_SECTION_HEIGHT: f32 = 26.0;
+pub(crate) const OMNIBOX_DIVIDER_HEIGHT: f32 = 1.0;
+pub(crate) const OMNIBOX_BORDER_WIDTH: f32 = 1.0;
+pub(crate) const OMNIBOX_SHADOW_Y: f32 = 16.0;
+pub(crate) const OMNIBOX_SHADOW_BLUR: f32 = 22.0;
+pub(crate) const OMNIBOX_ENTER_OFFSET: f32 = 8.0;
+pub(crate) const OMNIBOX_SEARCH_ICON: f32 = 20.0;
+pub(crate) const OMNIBOX_DETAIL_GAP: f32 = 1.0;
 
 /// Rows in the tab list, and the new-tab and appearance buttons that share their shape.
 pub(crate) const ROW_HEIGHT: f32 = 34.0;
@@ -136,4 +164,3 @@ pub(crate) const SELECTION_MOTION: Spring = motion::SNAPPY;
 /// The web page's container: how far it sits in from the window's edges, and its corners.
 pub(crate) const VIEWPORT_INSET: f32 = space::S1 + space::S1 / 2.0;
 pub(crate) const VIEWPORT_RADIUS: f32 = radius::LG;
-pub(crate) const VIEWPORT_BORDER: f32 = 1.0;

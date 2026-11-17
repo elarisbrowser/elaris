@@ -6,6 +6,7 @@ mod appearance;
 mod browser;
 mod engine;
 mod input;
+mod omnibox;
 mod perf;
 mod shortcuts;
 mod tab;

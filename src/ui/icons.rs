@@ -56,3 +56,11 @@ pub(crate) static SIDEBAR: Icon = icon(
     "sidebar",
     r#"<rect x="2.25" y="3.25" width="11.5" height="9.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M6.25 3.25V12.75" fill="none" stroke="currentColor" stroke-width="1.25"/>"#,
 );
+pub(crate) static SEARCH: Icon = icon(
+    "search",
+    r#"<circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5L14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>"#,
+);
+pub(crate) static HISTORY: Icon = icon(
+    "history",
+    r#"<path d="M3.25 5.25A5.5 5.5 0 1 1 2.5 8" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/><path d="M2.25 2.75V5.5H5M8 4.5V8L10.25 9.5" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>"#,
+);
