@@ -43,10 +43,16 @@ DYLD_LIBRARY_PATH="$PWD/build/cpp-ladybird/lib:$prefix/lib" \
   callback_panics_are_contained_at_the_ffi_boundary
 ```
 
+## Linux GitHub Actions verification
+
+`.github/workflows/ladybird-bridge-linux.yml` runs on pushes, pull requests, and manual dispatch. It checks out the pinned Ladybird submodule and uses Ladybird's `ladybird-ci:2026.11.12` Linux build image, which supplies its documented compiler, Qt and system build dependencies. It verifies the image has Xvfb, Mesa software rendering and ccache, builds Ladybird's vcpkg dependencies and the bridge/helper executables, then runs the C++ and Rust smoke tests under Xvfb. It also runs Rust formatting, package check, Clippy, tests, C++ formatting and clang-tidy, and checks that helper processes have exited after each runtime test. Each costly build/test stage has its own timeout; CMake and vcpkg logs are uploaded when a run fails.
+
+To trigger it manually, open **Actions → Ladybird bridge (Linux) → Run workflow**. For a pull request or push, inspect the **Linux bridge integration** job in the **Ladybird bridge (Linux)** workflow. Dependency setup, C++ compilation, formatting/static analysis, C++ runtime, Rust checks and Rust runtime are separate named steps so the first failing step identifies the failure class. The vcpkg dependency and ccache outputs are cached with a key tied to the Ladybird CI image and dependency manifests.
+
 ## Verified behavior and limitations
 
 - macOS Apple Silicon: configured and compiled against Ladybird `76bef6eee7bffd40c1895a2ee7332405fa1ef83d`; the C++ CTest smoke passed, including helper-process cleanup, and the Rust example linked and ran successfully. The Rust callback-panic boundary regression test also passed.
-- Linux: not tested. Linux configure, compile, helper startup, integration callbacks, shutdown, and Rust dynamic linking remain unverified; this README does not claim Linux support is proven.
+- Linux: the GitHub Actions workflow is configured, but has not yet had a remote run. Linux configure, compile, helper startup, integration callbacks, shutdown, and Rust dynamic linking remain unverified until the workflow passes.
 - `cargo fmt --check`, `cargo check --locked`, `cargo clippy --locked -- -D warnings`, and `cargo test --locked` passed. Feature-enabled Rust check, Clippy and the callback-panic test passed. `clang-format` and the bridge's compiler warning-as-error build passed. `clang-tidy` is not installed in this environment, so static analysis with it remains unrun.
 - Runtime initialization reports that optional site-compatibility data is missing from this checkout's resource package. The local HTML integration test still passes.
 - AppleClang needs one narrow warning exception for the statement-expression expansion inside Ladybird's `WEB_VIEW_APPLICATION` macro. No other Elaris C++ warnings were suppressed.
