@@ -49,14 +49,14 @@ pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
     .shortcut_hint("cmd+s")
     .on_press_tx(super::toggle);
     // Over the sidebar it spans the sidebar, its buttons at the far end. With the sidebar
-    // hidden it is the whole window's titlebar, its buttons following the toggle, so all of it
-    // drags the window and zooms it on a double click.
+    // hidden it spans the window, its buttons following the toggle. It lies in macOS's own
+    // titlebar band, which drags the window and zooms it on a double click wherever no button
+    // takes the press.
     let header = row()
         .key("header")
         .absolute(0.0, 0.0)
         .h(theme::HEADER_HEIGHT)
         .pr(theme::SIDEBAR_PADDING)
-        .window_drag()
         .gap(theme::NAV_GAP)
         .center_y()
         .child(window_controls(cx.titlebar_inset(), theme))

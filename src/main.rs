@@ -13,7 +13,7 @@ mod tab;
 mod titlebar_controls;
 mod ui;
 
-use rune::{App, AppSpec, Titlebar};
+use rune::{App, AppSpec, Chrome};
 
 fn main() {
     let spec = AppSpec {
@@ -29,8 +29,12 @@ fn main() {
         )
     };
     App::new(spec)
-        // The sidebar's header is the titlebar, so the window controls centre on its buttons.
-        .titlebar(Titlebar::new(ui::HEADER_HEIGHT))
+        // macOS drags the titlebar band natively; the window controls sit centred in it, level
+        // with the header's buttons.
+        .chrome(Chrome {
+            traffic_lights: Some(ui::TRAFFIC_LIGHTS),
+            ..Chrome::DEFAULT
+        })
         .on_window(titlebar_controls::install)
         .on_frame_drawn(|_| perf::frame_drawn())
         .on_focus(app::on_window_focus)

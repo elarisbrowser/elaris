@@ -94,9 +94,14 @@ pub(crate) const RUBBER_BAND_REACH: f32 = 44.0;
 pub(crate) const SIDEBAR_SETTLE: Spring = Spring::new(0.32, 0.42);
 pub(crate) const SIDEBAR_PADDING: f32 = space::S2 + space::S1 / 2.0;
 pub(crate) const SIDEBAR_GAP: f32 = space::S2;
-/// The row level with the window controls, holding the navigation buttons. It is the window's
-/// titlebar, so macOS centres the controls in it.
+/// The row level with the window controls, holding the navigation buttons: the height of the
+/// titlebar band macOS drags, since the controls sit centred in it.
 pub(crate) const HEADER_HEIGHT: f32 = 38.0;
+/// Where the window controls sit: centred in the header, as far in from the side as from the top.
+pub(crate) const TRAFFIC_LIGHTS: (f32, f32) = (
+    (HEADER_HEIGHT - rune::Chrome::TRAFFIC_LIGHT) / 2.0,
+    (HEADER_HEIGHT - rune::Chrome::TRAFFIC_LIGHT) / 2.0,
+);
 
 /// Square icon buttons: back, forward, reload, and each tab's close button.
 pub(crate) const ICON_BUTTON: f32 = 28.0;
