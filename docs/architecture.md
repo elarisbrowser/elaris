@@ -28,8 +28,8 @@ pages and their pixels, not the engine or C++; the engine knows nothing of the U
 `src/engine/` is the only code that talks to Ladybird:
 
 - `mod.rs`: the protocol. The page sends `Command`s (load, resize, input, focus, colour scheme,
-  close) and reads `Update`s (navigation, title, loading, error, a frame of a new size). `Engine`
-  is the page's handle on both channels.
+  close) and reads `Update`s (navigation, title, loading, history, favicon and error). `Engine` is
+  the page's handle on both channels.
 - `thread.rs`: starts the thread, runs its loop and finishes it as the process exits.
 - `runtime.rs`: Ladybird and its view. Ladybird requires every call on the thread that started it,
   so only the engine thread holds these; they are neither `Send` nor `Sync`.
@@ -55,12 +55,11 @@ Without the `ladybird-bridge` feature, `Engine::start` returns an error the tool
    and handled after it returns.
 2. On ready to paint, the engine skips frames already shown or laid out at an old scale, then
    copies the displayed frame into a new RGBA buffer (`elaris_ladybird_copy_frame`).
-3. A frame of the size already on show goes straight into the page's `rune::Pixels`, which Rune
-   allows from any thread and which wakes the window. No UI state changes, so the view is not
-   rebuilt.
-4. A frame of a new size, and every other update, goes through the update channel, followed by
-   the waker Rune gave `setup`. The next poll applies them together, so the frame's pixels and its
-   layout size never disagree.
+3. Each new frame goes straight into the page's `rune::Pixels`, which Rune allows from any thread
+   and which wakes the window. Rune scales the latest complete frame to the current viewport, so
+   it stays pinned during a live resize until the next frame arrives.
+4. Navigation, title, loading, history, favicon and error updates go through the update channel,
+   followed by the waker Rune gave `setup`.
 5. While frames keep arriving, `poll` asks Rune for the next display frame, which keeps Rune
    drawing at the display's rate.
 

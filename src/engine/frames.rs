@@ -22,9 +22,8 @@ pub(super) enum Verdict {
 pub(super) struct FrameGate {
     /// The display scale the view was last laid out at.
     scale: Option<f64>,
-    /// The serial and size of the frame on show.
+    /// The serial of the frame on show.
     serial: Option<u64>,
-    size: Option<(u32, u32)>,
 }
 
 // Only the engine thread shows frames, which a build without the bridge lacks.
@@ -50,11 +49,9 @@ impl FrameGate {
         }
     }
 
-    /// Records the frame as on show. True when its size differs from the last one's, so the
-    /// page must lay out for it.
-    pub(super) fn shown(&mut self, serial: u64, size: (u32, u32)) -> bool {
+    /// Records the frame as on show.
+    pub(super) fn shown(&mut self, serial: u64) {
         self.serial = Some(serial);
-        self.size.replace(size) != Some(size)
     }
 }
 
@@ -66,7 +63,7 @@ mod tests {
     fn shows_new_frames_and_counts_those_it_missed() {
         let mut gate = FrameGate::default();
         assert_eq!(gate.check(1, 2.0), Verdict::Show { skipped: 0 });
-        gate.shown(1, (10, 10));
+        gate.shown(1);
         assert_eq!(gate.check(1, 2.0), Verdict::Duplicate);
         assert_eq!(gate.check(4, 2.0), Verdict::Show { skipped: 2 });
     }
@@ -80,10 +77,11 @@ mod tests {
     }
 
     #[test]
-    fn reports_a_frame_of_a_new_size() {
+    fn records_the_newest_frame() {
         let mut gate = FrameGate::default();
-        assert!(gate.shown(1, (10, 10)));
-        assert!(!gate.shown(2, (10, 10)));
-        assert!(gate.shown(3, (20, 10)));
+        gate.shown(1);
+        gate.shown(2);
+        assert_eq!(gate.check(2, 1.0), Verdict::Duplicate);
+        assert_eq!(gate.check(3, 1.0), Verdict::Show { skipped: 0 });
     }
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The active tab's page: its latest frame in a rounded container inset from the window's edges,
-//! and the pointer, wheel and key input it takes.
+//! The active tab's page in a rounded container inset from the window's edges, and the pointer,
+//! wheel and key input it takes.
 
 use elaris::ladybird::MouseKind;
 use rune::{El, Phase, el};
@@ -38,20 +38,12 @@ pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
         .child(page(state, theme))
 }
 
-/// The page's latest frame, drawn one device pixel per pixel from the top-left. During a live
-/// resize the newest frame keeps its own size rather than stretching to the window's, until
-/// Ladybird lays the page out at the new size.
+/// The page's latest frame fills the viewport. During a live resize Rune scales it to the new
+/// bounds until Ladybird presents a frame laid out at that size.
 fn page(state: &AppState, theme: &Theme) -> El {
     let mut page = el().key(VIEWPORT);
-    // Each tab keeps its own frame, so switching shows the page as it was at once.
     if let Some(tab) = state.browser.active_tab() {
-        let [width, height] = tab.frame_size;
-        page = page.child(
-            el().key("page-frame")
-                .w(width)
-                .h(height)
-                .pixels(&tab.surface.pixels),
-        );
+        page = page.pixels(&tab.surface.pixels);
     }
     page.w_full()
         .h_full()

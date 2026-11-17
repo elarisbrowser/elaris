@@ -32,10 +32,8 @@ pub(crate) struct Tab {
     pub(crate) error: Option<String>,
     pub(crate) can_go_back: bool,
     pub(crate) can_go_forward: bool,
-    /// Where the engine shows the page's frames, which the viewport draws at `frame_size`.
+    /// Where the engine shows the page's frames, which the viewport scales to its bounds.
     pub(crate) surface: Surface,
-    /// Points the latest frame covers.
-    pub(crate) frame_size: [f32; 2],
     pub(crate) engine: Applied,
 }
 
@@ -65,7 +63,6 @@ impl Tab {
             can_go_back: false,
             can_go_forward: false,
             surface: Surface::default(),
-            frame_size: [0.0; 2],
             engine: Applied {
                 pending_load: Some(url),
                 ..Applied::default()
@@ -107,15 +104,6 @@ impl Tab {
                 self.can_go_forward = forward;
             }
             TabUpdate::Error(error) => self.error = Some(error),
-            TabUpdate::Resized {
-                width,
-                height,
-                size,
-                rgba,
-            } => {
-                self.surface.pixels.set(width, height, rgba);
-                self.frame_size = size;
-            }
         }
     }
 }
@@ -148,16 +136,9 @@ mod tests {
             back: true,
             forward: false,
         });
-        tab.update(TabUpdate::Resized {
-            width: 4,
-            height: 2,
-            size: [2.0, 1.0],
-            rgba: vec![0; 32],
-        });
         assert!(tab.loading);
         assert_eq!(tab.url, "https://example.com/a");
         assert_eq!(tab.error, None);
         assert!(tab.can_go_back && !tab.can_go_forward);
-        assert_eq!(tab.frame_size, [2.0, 1.0]);
     }
 }

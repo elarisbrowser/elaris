@@ -135,9 +135,8 @@ impl Runtime {
             let Some(view) = self.views.get_mut(&tab) else {
                 continue;
             };
-            match show_frame(view, &mut self.timing) {
-                Ok(update) => updates.extend(update.map(|u| Update::Tab(tab, u))),
-                Err(error) => updates.push(Update::Tab(tab, TabUpdate::Error(error))),
+            if let Err(error) = show_frame(view, &mut self.timing) {
+                updates.push(Update::Tab(tab, TabUpdate::Error(error)));
             }
         }
         updates
@@ -186,41 +185,30 @@ fn apply_to_view(view: &mut View, command: ViewCommand, timing: &mut Timing) -> 
     }
 }
 
-/// Shows the view's newest frame if the gate lets it through. A frame of the size on show goes
-/// straight into the surface; one of a new size goes to the tab as an update instead.
-fn show_frame(view: &mut View, timing: &mut Timing) -> Result<Option<TabUpdate>, String> {
+/// Shows the view's newest frame in its surface if the gate lets it through.
+fn show_frame(view: &mut View, timing: &mut Timing) -> Result<(), String> {
     let Some(frame) = view.view.frame()? else {
-        return Ok(None);
+        return Ok(());
     };
     let skipped = match view.gate.check(frame.serial, frame.scale) {
         Verdict::Show { skipped } => skipped,
         Verdict::Duplicate => {
             perf::count(Count::Duplicate, 1);
-            return Ok(None);
+            return Ok(());
         }
         Verdict::Stale => {
             perf::count(Count::Stale, 1);
-            return Ok(None);
+            return Ok(());
         }
     };
     let rgba = perf::time(Stage::Copy, || view.view.copy_frame(&frame))?;
     view.surface.count_frame();
     timing.shown(&frame, skipped);
-    if !view.gate.shown(frame.serial, (frame.width, frame.height)) {
-        perf::time(Stage::Set, || {
-            view.surface.pixels.set(frame.width, frame.height, rgba)
-        });
-        return Ok(None);
-    }
-    Ok(Some(TabUpdate::Resized {
-        width: frame.width,
-        height: frame.height,
-        size: [
-            (f64::from(frame.width) / frame.scale) as f32,
-            (f64::from(frame.height) / frame.scale) as f32,
-        ],
-        rgba,
-    }))
+    view.gate.shown(frame.serial);
+    perf::time(Stage::Set, || {
+        view.surface.pixels.set(frame.width, frame.height, rgba)
+    });
+    Ok(())
 }
 
 /// Development timing (`ELARIS_PERF`): the last frame shown, the oldest input not yet on screen,

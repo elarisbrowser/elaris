@@ -131,8 +131,8 @@ processes left, five runs out of five.
   is deliberately out of scope.
 - **Copy scales with pixels.** About 1 ms for 2.5 MP; a full-screen 5K-class window would be
   around 4–6 ms, now on the engine thread rather than the UI thread.
-- **A resize shows one frame late.** A frame of a new size travels through the update channel so
-  its pixels and layout change together, which costs up to one UI frame.
+- **A live resize can temporarily scale the last frame.** Rune keeps that frame pinned to the
+  viewport while Ladybird lays out and presents the new size; the next complete frame replaces it.
 
 ## Not verified
 

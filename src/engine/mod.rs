@@ -119,19 +119,8 @@ pub(crate) enum TabUpdate {
     Title(String),
     Loading(bool),
     Favicon(Option<Favicon>),
-    History {
-        back: bool,
-        forward: bool,
-    },
+    History { back: bool, forward: bool },
     Error(String),
-    /// A frame of a size the tab has not shown yet, in device pixels. The tab shows it itself,
-    /// together with the layout for its size in points, so the two never disagree.
-    Resized {
-        width: u32,
-        height: u32,
-        size: [f32; 2],
-        rgba: Vec<u8>,
-    },
 }
 
 /// The browser's handle on the engine thread. Nothing it does blocks.
