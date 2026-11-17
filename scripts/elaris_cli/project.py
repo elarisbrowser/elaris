@@ -39,7 +39,7 @@ def bridge_lib_dir() -> str:
 
 def launch(args: argparse.Namespace) -> None:
     command = ["cargo", "run", "--locked"]
-    if args.engine:
+    if not args.ui:
         os.environ["ELARIS_LADYBIRD_LIB_DIR"] = bridge_lib_dir()
         command += ["--features", "ladybird-bridge"]
     if args.url:
@@ -58,11 +58,11 @@ def register_commands(commands) -> None:
     for name, handler, help_text in (
         ("setup", setup, "Initialise submodules and check development tools"),
         ("build", build, "Build the Elaris Rust application"),
-        ("run", launch, "Build if needed and launch Elaris"),
+        ("run", launch, "Build if needed and launch Elaris with the Ladybird engine"),
         ("check", check, "Run formatting, Clippy, and tests"),
     ):
         subcommand = commands.add_parser(name, help=help_text)
         subcommand.set_defaults(handler=handler)
         if handler is launch:
-            subcommand.add_argument("--engine", action="store_true", help="Render pages with the built Ladybird bridge")
+            subcommand.add_argument("--ui", action="store_true", help="Run the interface alone, without the Ladybird engine")
             subcommand.add_argument("url", nargs="?", help="Address to open, such as example.com")

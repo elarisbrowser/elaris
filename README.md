@@ -9,13 +9,14 @@ Use `./elaris` (Python 3 standard library) for common development tasks:
 ```sh
 ./elaris setup          # Initialise submodules and check tools
 ./elaris build          # Build the Rust application
-./elaris run            # Build if needed and launch Elaris
+./elaris run [URL]      # Build if needed and launch Elaris with Ladybird
+./elaris run --ui       # Launch the interface alone, without Ladybird
 ./elaris check          # Format, lint, and test
 ./elaris engine status  # Inspect the pinned Ladybird checkout
 ./elaris engine build   # Build Ladybird with CMake and Ninja
 ```
 
-Ladybird builds are explicit and are not triggered by `build` or `run`. The engine build directory defaults to `vendor/ladybird/Build/release`; set `LADYBIRD_BUILD_DIR` to override it.
+Ladybird builds are explicit and are not triggered by `build` or `run`; `run` needs a built Ladybird bridge (see `bridge/README.md`) unless given `--ui`. The engine build directory defaults to `vendor/ladybird/Build/release`; set `LADYBIRD_BUILD_DIR` to override it.
 
 Install the stable Rust toolchain before using the Rust commands. Rune supports macOS and Linux. A working desktop session and GPU driver are required to open the native window on Linux.
 
