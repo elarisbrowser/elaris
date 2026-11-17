@@ -15,7 +15,12 @@ fn main() {
     let spec = AppSpec {
         setup: Some(app::setup),
         poll: Some(app::poll),
-        ..AppSpec::new("Elaris", (960.0, 640.0), app::AppState::default, ui::view)
+        ..AppSpec::new(
+            app::APP_NAME,
+            (960.0, 640.0),
+            app::AppState::default,
+            ui::view,
+        )
     };
     App::new(spec)
         .on_frame_drawn(|_| perf::frame_drawn())

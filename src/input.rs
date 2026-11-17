@@ -2,7 +2,7 @@
 
 //! Translates Rune input into Ladybird page input. Rune reports points; pages take device pixels.
 
-use elaris::ladybird::{Key, KeyEvent, MouseEvent, MouseKind, WheelPhase, modifier};
+use elaris::ladybird::{Key, KeyEvent, MouseEvent, MouseKind, WheelPhase, button, modifier};
 use rune::{GesturePhase, Key as RuneKey, KeyEvent as RuneKeyEvent, Mods};
 
 pub(crate) fn modifiers(mods: Mods) -> i32 {
@@ -21,19 +21,27 @@ pub(crate) fn device(points: f32, scale: f32) -> i32 {
     (points * scale).round() as i32
 }
 
-/// A pointer event at `point`, in the viewport's own points.
-pub(crate) fn mouse(kind: MouseKind, point: [f32; 2], scale: f32, mods: Mods) -> MouseEvent {
+/// A pointer event at `point`, in the viewport's own points. Rune reports the primary button
+/// only: `Down` and `Up` change it, and `held` says whether it is down after the event.
+pub(crate) fn pointer(
+    kind: MouseKind,
+    point: [f32; 2],
+    scale: f32,
+    held: bool,
+    clicks: u32,
+) -> MouseEvent {
+    let pressed = |yes| if yes { button::PRIMARY } else { 0 };
     MouseEvent {
         kind,
         x: device(point[0], scale),
         y: device(point[1], scale),
-        button: 0,
-        buttons: 0,
-        modifiers: modifiers(mods),
+        button: pressed(matches!(kind, MouseKind::Down | MouseKind::Up)),
+        buttons: pressed(held),
+        modifiers: 0,
         wheel: (0.0, 0.0),
         precise: false,
         phase: WheelPhase::None,
-        clicks: 0,
+        clicks: clicks.try_into().unwrap_or(i32::MAX),
     }
 }
 
@@ -50,7 +58,7 @@ pub(crate) fn wheel(
         wheel: (-f64::from(delta[0]), -f64::from(delta[1])),
         precise,
         phase,
-        ..mouse(MouseKind::Wheel, point, scale, Mods::default())
+        ..pointer(MouseKind::Wheel, point, scale, false, 0)
     }
 }
 
@@ -110,8 +118,41 @@ mod tests {
 
     #[test]
     fn scales_points_to_device_pixels() {
-        let event = mouse(MouseKind::Move, [10.25, 3.0], 2.0, Mods::default());
+        let event = pointer(MouseKind::Move, [10.25, 3.0], 2.0, false, 0);
         assert_eq!((event.x, event.y), (21, 6));
+    }
+
+    #[test]
+    fn a_click_presses_then_releases_the_primary_button() {
+        let down = pointer(MouseKind::Down, [0.0, 0.0], 1.0, true, 2);
+        assert_eq!(
+            (down.button, down.buttons, down.clicks),
+            (button::PRIMARY, button::PRIMARY, 2)
+        );
+        let drag = pointer(MouseKind::Move, [1.0, 0.0], 1.0, true, 0);
+        assert_eq!((drag.button, drag.buttons), (0, button::PRIMARY));
+        let up = pointer(MouseKind::Up, [1.0, 0.0], 1.0, false, 2);
+        assert_eq!((up.button, up.buttons), (button::PRIMARY, 0));
+        let hover = pointer(MouseKind::Move, [2.0, 0.0], 1.0, false, 0);
+        assert_eq!((hover.button, hover.buttons), (0, 0));
+    }
+
+    #[test]
+    fn named_keys_and_modifiers_reach_the_page() {
+        let event = RuneKeyEvent {
+            key: RuneKey::Enter,
+            mods: Mods {
+                ctrl: true,
+                ..Mods::default()
+            },
+        };
+        let keys = keys(&event);
+        assert_eq!(keys.len(), 2);
+        assert!(
+            keys.iter()
+                .all(|k| k.key == Key::Return && k.modifiers == modifier::CTRL)
+        );
+        assert!(keys[0].pressed && !keys[1].pressed);
     }
 
     #[test]
