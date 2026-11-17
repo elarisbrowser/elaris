@@ -1,0 +1,10 @@
+Checks: >-
+  -*,
+  bugprone-*,
+  performance-*,
+  readability-*,-readability-identifier-length,-readability-magic-numbers,
+  modernize-use-override,
+  modernize-use-nullptr
+WarningsAsErrors: ''
+HeaderFilterRegex: 'bridge/(include|src)/.*'
+FormatStyle: file
