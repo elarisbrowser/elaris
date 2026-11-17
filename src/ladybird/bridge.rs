@@ -51,6 +51,7 @@ struct RawMouseEvent {
     wheel_delta_x: f64,
     wheel_delta_y: f64,
     wheel_precise: i32,
+    wheel_phase: i32,
     click_count: i32,
 }
 
@@ -291,6 +292,7 @@ impl WebView {
             wheel_delta_x: event.wheel.0,
             wheel_delta_y: event.wheel.1,
             wheel_precise: event.precise.into(),
+            wheel_phase: event.phase as i32,
             click_count: event.clicks,
         };
         // SAFETY: The view is live on its owner's thread and `raw` outlives the call.

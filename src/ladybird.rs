@@ -68,7 +68,23 @@ pub struct MouseEvent {
     pub wheel: (f64, f64),
     /// `Wheel` only: touchpad-like pixel deltas rather than wheel notches.
     pub precise: bool,
+    /// `Wheel` only: where a touchpad scroll is in its gesture.
+    pub phase: WheelPhase,
     pub clicks: i32,
+}
+
+/// Where a touchpad scroll is in its gesture, as the C ABI numbers it. Wheel notches have none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[repr(i32)]
+pub enum WheelPhase {
+    #[default]
+    None = 0,
+    /// Fingers on the touchpad.
+    Ongoing = 1,
+    /// Coasting after the fingers lifted.
+    Momentum = 2,
+    /// The fingers lifted, or the momentum stopped.
+    Ended = 3,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

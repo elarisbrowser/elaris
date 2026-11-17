@@ -68,6 +68,14 @@ typedef enum {
 #define ELARIS_LADYBIRD_MOD_SHIFT 4
 #define ELARIS_LADYBIRD_MOD_SUPER 8
 
+/* Where a touchpad scroll is in its gesture. Plain wheel notches have no gesture. */
+typedef enum {
+    ELARIS_LADYBIRD_WHEEL_PHASE_NONE = 0,
+    ELARIS_LADYBIRD_WHEEL_PHASE_ONGOING = 1,  /* Fingers on the touchpad. */
+    ELARIS_LADYBIRD_WHEEL_PHASE_MOMENTUM = 2, /* Coasting after the fingers lifted. */
+    ELARIS_LADYBIRD_WHEEL_PHASE_ENDED = 3,    /* The fingers lifted, or the momentum stopped. */
+} ElarisLadybirdWheelPhase;
+
 typedef struct {
     ElarisLadybirdMouseType type;
     int32_t x; /* Device pixels from the view's top-left. */
@@ -79,6 +87,7 @@ typedef struct {
     double wheel_delta_x;
     double wheel_delta_y;
     int32_t wheel_precise; /* Nonzero for touchpad-like pixel deltas rather than wheel notches. */
+    ElarisLadybirdWheelPhase wheel_phase;
     int32_t click_count;
 } ElarisLadybirdMouseEvent;
 

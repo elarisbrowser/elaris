@@ -5,6 +5,7 @@ use rune::tok::{self, Theme, type_};
 use rune::{Cx, El, Phase, col, el, row, text, text_input};
 
 use crate::app::AppState;
+use crate::input;
 
 /// The focus key of the page viewport.
 pub(crate) const VIEWPORT: &str = "viewport";
@@ -118,9 +119,13 @@ fn viewport(state: &AppState, theme: &Theme) -> El {
             }
         })
         .on_wheel(|state: &mut AppState, wheel, _| {
-            state
-                .page
-                .wheel([wheel.x, wheel.y], [wheel.dx, wheel.dy], wheel.precise);
+            let phase = input::wheel_phase(wheel.precise, wheel.phase, wheel.momentum);
+            state.page.wheel(
+                [wheel.x, wheel.y],
+                [wheel.dx, wheel.dy],
+                wheel.precise,
+                phase,
+            );
             true
         })
         .on_key(|state: &mut AppState, key, _| state.page.key(key))

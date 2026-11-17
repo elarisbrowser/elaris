@@ -6,7 +6,7 @@
 use std::cell::Cell;
 use std::time::{Duration, Instant};
 
-use elaris::ladybird::{Event, MouseEvent, MouseKind, button};
+use elaris::ladybird::{Event, MouseEvent, MouseKind, WheelPhase, button};
 use rune::{KeyEvent, Mods, Pixels};
 
 use crate::engine::Engine;
@@ -136,8 +136,14 @@ impl Page {
         self.send_mouse(event);
     }
 
-    pub(crate) fn wheel(&mut self, point: [f32; 2], delta: [f32; 2], precise: bool) {
-        let event = input::wheel(point, delta, precise, self.scale.get());
+    pub(crate) fn wheel(
+        &mut self,
+        point: [f32; 2],
+        delta: [f32; 2],
+        precise: bool,
+        phase: WheelPhase,
+    ) {
+        let event = input::wheel(point, delta, precise, phase, self.scale.get());
         self.send_mouse(event);
     }
 

@@ -2,8 +2,8 @@
 
 //! Translates Rune input into Ladybird page input. Rune reports points; pages take device pixels.
 
-use elaris::ladybird::{Key, KeyEvent, MouseEvent, MouseKind, modifier};
-use rune::{Key as RuneKey, KeyEvent as RuneKeyEvent, Mods};
+use elaris::ladybird::{Key, KeyEvent, MouseEvent, MouseKind, WheelPhase, modifier};
+use rune::{GesturePhase, Key as RuneKey, KeyEvent as RuneKeyEvent, Mods};
 
 pub(crate) fn modifiers(mods: Mods) -> i32 {
     [
@@ -32,17 +32,36 @@ pub(crate) fn mouse(kind: MouseKind, point: [f32; 2], scale: f32, mods: Mods) ->
         modifiers: modifiers(mods),
         wheel: (0.0, 0.0),
         precise: false,
+        phase: WheelPhase::None,
         clicks: 0,
     }
 }
 
 /// A wheel event. Rune's delta moves content (positive right and down); a page's scrolls
 /// toward its end, so the signs flip.
-pub(crate) fn wheel(point: [f32; 2], delta: [f32; 2], precise: bool, scale: f32) -> MouseEvent {
+pub(crate) fn wheel(
+    point: [f32; 2],
+    delta: [f32; 2],
+    precise: bool,
+    phase: WheelPhase,
+    scale: f32,
+) -> MouseEvent {
     MouseEvent {
         wheel: (-f64::from(delta[0]), -f64::from(delta[1])),
         precise,
+        phase,
         ..mouse(MouseKind::Wheel, point, scale, Mods::default())
+    }
+}
+
+/// Where a Rune scroll is in its touchpad gesture. Notched wheels have no gesture; momentum
+/// keeps its own phase until it ends.
+pub(crate) fn wheel_phase(precise: bool, phase: GesturePhase, momentum: bool) -> WheelPhase {
+    match (precise, phase, momentum) {
+        (false, _, _) => WheelPhase::None,
+        (true, GesturePhase::Ended, _) => WheelPhase::Ended,
+        (true, _, true) => WheelPhase::Momentum,
+        (true, _, false) => WheelPhase::Ongoing,
     }
 }
 
@@ -97,9 +116,21 @@ mod tests {
 
     #[test]
     fn wheel_scrolls_toward_the_page_end_when_content_moves_up() {
-        let event = wheel([0.0, 0.0], [0.0, -30.0], true, 1.0);
+        let event = wheel([0.0, 0.0], [0.0, -30.0], true, WheelPhase::Ongoing, 1.0);
         assert_eq!(event.wheel, (-0.0, 30.0));
         assert!(event.precise);
+        assert_eq!(event.phase, WheelPhase::Ongoing);
+    }
+
+    #[test]
+    fn maps_touchpad_gesture_phases() {
+        use GesturePhase::{Began, Ended, Moved};
+        assert_eq!(wheel_phase(false, Moved, false), WheelPhase::None);
+        assert_eq!(wheel_phase(true, Began, false), WheelPhase::Ongoing);
+        assert_eq!(wheel_phase(true, Moved, false), WheelPhase::Ongoing);
+        assert_eq!(wheel_phase(true, Moved, true), WheelPhase::Momentum);
+        assert_eq!(wheel_phase(true, Ended, false), WheelPhase::Ended);
+        assert_eq!(wheel_phase(true, Ended, true), WheelPhase::Ended);
     }
 
     #[test]

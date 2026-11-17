@@ -342,6 +342,24 @@ extern "C" int32_t elaris_ladybird_mouse_event(ElarisLadybirdView* handle, Elari
         return fail("unknown mouse event type");
     }
 
+    Web::ScrollGesturePhase phase;
+    switch (event->type == ELARIS_LADYBIRD_MOUSE_WHEEL ? event->wheel_phase : ELARIS_LADYBIRD_WHEEL_PHASE_NONE) {
+    case ELARIS_LADYBIRD_WHEEL_PHASE_NONE:
+        phase = Web::ScrollGesturePhase::None;
+        break;
+    case ELARIS_LADYBIRD_WHEEL_PHASE_ONGOING:
+        phase = Web::ScrollGesturePhase::Ongoing;
+        break;
+    case ELARIS_LADYBIRD_WHEEL_PHASE_MOMENTUM:
+        phase = Web::ScrollGesturePhase::Momentum;
+        break;
+    case ELARIS_LADYBIRD_WHEEL_PHASE_ENDED:
+        phase = Web::ScrollGesturePhase::Ended;
+        break;
+    default:
+        return fail("unknown wheel phase");
+    }
+
     auto precision = event->wheel_precise ? Web::WheelDeltaPrecision::Precise : Web::WheelDeltaPrecision::Discrete;
     Web::DevicePixelPoint position{event->x, event->y};
     handle->view->enqueue_input_event(Web::MouseEvent{
@@ -356,7 +374,7 @@ extern "C" int32_t elaris_ladybird_mouse_event(ElarisLadybirdView* handle, Elari
         Web::wheel_tick_120ths_from_pixel_delta(event->wheel_delta_x, precision),
         Web::wheel_tick_120ths_from_pixel_delta(event->wheel_delta_y, precision),
         precision,
-        Web::ScrollGesturePhase::None,
+        phase,
         event->click_count,
         nullptr,
     });
