@@ -129,17 +129,27 @@ int main(int argc, char** argv) {
             frame_ready = frame_ready || frame_matches(view, width, height, device_pixel_ratio);
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
-        // A still page presents nothing more, so waiting for a frame ends at its timeout.
+        // A still page has nothing more to do, so a timed wait ends at its timeout, and an untimed one when woken.
         auto wait_start = std::chrono::steady_clock::now();
-        passed = passed && check(elaris_ladybird_wait_for_frame(view, 2000), "wait for frame");
+        passed = passed && check(elaris_ladybird_wait(bridge, 20000), "timed wait");
         if (passed && std::chrono::steady_clock::now() - wait_start > std::chrono::milliseconds(500)) {
-            std::cerr << "waiting for a frame outlasted its timeout\n";
+            std::cerr << "a timed wait outlasted its timeout\n";
             passed = false;
         }
-        if (passed && elaris_ladybird_wait_for_frame(view, -1) == 0) {
-            std::cerr << "a negative frame wait was accepted\n";
+        auto* waker = elaris_ladybird_create_waker(bridge);
+        if (passed && !waker) {
+            std::cerr << "no waker: " << elaris_ladybird_last_error() << '\n';
             passed = false;
         }
+        if (passed) {
+            std::thread wake_from_another_thread([waker] {
+                std::this_thread::sleep_for(std::chrono::milliseconds(20));
+                elaris_ladybird_wake(waker);
+            });
+            passed = check(elaris_ladybird_wait(bridge, -1), "woken wait");
+            wake_from_another_thread.join();
+        }
+        elaris_ladybird_destroy_waker(waker);
         if (!frame_ready) {
             std::cerr << "expected a " << width << "x" << height << " frame at scale " << device_pixel_ratio
                       << " showing the page background\n";

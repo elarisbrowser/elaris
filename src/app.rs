@@ -42,7 +42,12 @@ impl AppState {
     }
 }
 
-/// Rune's per-frame hook: drives the page engine on the UI thread, which owns it.
+/// Rune's one-time setup: the waker lets the engine thread run `poll` when it has news.
+pub(crate) fn setup(state: &mut AppState, waker: rune::Waker) {
+    state.page.set_notify(waker);
+}
+
+/// Rune's per-frame hook: forwards UI changes to the page engine and shows what it reported.
 pub(crate) fn poll(state: &mut AppState, _clock: f64, tx: &mut Tx) -> bool {
     state
         .page
@@ -51,15 +56,17 @@ pub(crate) fn poll(state: &mut AppState, _clock: f64, tx: &mut Tx) -> bool {
     if let Some(url) = polled.url {
         state.address.replace_text(url);
     }
+    // While the page animates, Rune keeps drawing at the display's rate; a frame's pixels alone
+    // would only wake it, which can miss every other refresh.
+    if polled.animating {
+        tx.wake_after(std::time::Duration::ZERO);
+    }
     if let Some(title) = polled.title {
         tx.set_title(if title.is_empty() {
             "Elaris".to_owned()
         } else {
             title
         });
-    }
-    if let Some(delay) = state.page.next_poll() {
-        tx.wake_after(delay);
     }
     polled.changed
 }

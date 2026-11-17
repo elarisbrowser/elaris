@@ -5,7 +5,7 @@
 #[cfg(feature = "ladybird-bridge")]
 mod bridge;
 #[cfg(feature = "ladybird-bridge")]
-pub use bridge::{Ladybird, WebView};
+pub use bridge::{Ladybird, Waker, WebView};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {

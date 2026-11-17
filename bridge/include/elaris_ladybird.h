@@ -10,6 +10,7 @@ extern "C" {
 
 typedef struct ElarisLadybird ElarisLadybird;
 typedef struct ElarisLadybirdView ElarisLadybirdView;
+typedef struct ElarisLadybirdWaker ElarisLadybirdWaker;
 
 typedef enum {
     ELARIS_LADYBIRD_NAVIGATION = 1,
@@ -139,9 +140,14 @@ int32_t elaris_ladybird_key_event(ElarisLadybirdView* view, const ElarisLadybird
 int32_t elaris_ladybird_set_focus(ElarisLadybirdView* view, int32_t focused);
 /* Polls available Ladybird work without waiting; call regularly from the host event loop. */
 int32_t elaris_ladybird_pump(ElarisLadybird* bridge);
-/* Runs Ladybird work, waiting until view presents a new frame or timeout_us passes, whichever is first. For a host
- * that expects a frame now: it blocks for at most timeout_us. */
-int32_t elaris_ladybird_wait_for_frame(ElarisLadybirdView* view, int32_t timeout_us);
+/* Runs Ladybird work, blocking until there is some or timeout_us passes; a negative timeout waits until woken. For a
+ * host that gives Ladybird a thread of its own. */
+int32_t elaris_ladybird_wait(ElarisLadybird* bridge, int32_t timeout_us);
+/* Wakes elaris_ladybird_wait from any thread. Create it on the bridge's thread; it stays safe to wake and destroy from
+ * any thread, also after the bridge is gone. */
+ElarisLadybirdWaker* elaris_ladybird_create_waker(ElarisLadybird* bridge);
+void elaris_ladybird_wake(ElarisLadybirdWaker* waker);
+void elaris_ladybird_destroy_waker(ElarisLadybirdWaker* waker);
 void elaris_ladybird_destroy_view(ElarisLadybirdView* view);
 void elaris_ladybird_destroy(ElarisLadybird* bridge);
 const char* elaris_ladybird_last_error(void);

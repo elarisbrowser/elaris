@@ -12,10 +12,12 @@ use rune::{App, AppSpec};
 
 fn main() {
     let spec = AppSpec {
+        setup: Some(app::setup),
         poll: Some(app::poll),
         ..AppSpec::new("Elaris", (960.0, 640.0), app::AppState::default, ui::view)
     };
     App::new(spec)
+        .on_frame_drawn(|_| perf::frame_drawn())
         .on_focus(app::on_window_focus)
         .on_close(app::shut_down)
         .on_quit(app::shut_down)

@@ -473,21 +473,46 @@ extern "C" int32_t elaris_ladybird_pump(ElarisLadybird* bridge) {
     return 0;
 }
 
-extern "C" int32_t elaris_ladybird_wait_for_frame(ElarisLadybirdView* handle, int32_t timeout_us) {
-    if (!handle || timeout_us < 0 || !s_application)
-        return fail("view and a non-negative timeout are required");
-    if (handle->bridge->owner_thread != std::this_thread::get_id())
+extern "C" int32_t elaris_ladybird_wait(ElarisLadybird* bridge, int32_t timeout_us) {
+    if (!bridge || !s_application)
+        return fail("Ladybird is not initialized");
+    if (bridge->owner_thread != std::this_thread::get_id())
         return fail("event loop must be pumped on the initialization thread");
-    auto serial = handle->view->serial();
-    auto deadline = MonotonicTime::now() + AK::Duration::from_microseconds(timeout_us);
-    // A timer bounds each blocking pump, so the wait ends by the deadline even with nothing else to do.
-    auto timer = Core::Timer::create_single_shot(AK::Duration::from_microseconds(timeout_us), [] {});
-    timer->start();
-    while (handle->view->serial() == serial && MonotonicTime::now() < deadline)
-        s_event_loop->pump(Core::EventLoop::WaitMode::WaitForEvents);
-    timer->stop();
+    // A timer bounds the blocking pump, so it returns by the timeout even with nothing else to do.
+    RefPtr<Core::Timer> timer;
+    if (timeout_us >= 0) {
+        timer = Core::Timer::create_single_shot(AK::Duration::from_microseconds(timeout_us), [] {});
+        timer->start();
+    }
+    s_event_loop->pump(Core::EventLoop::WaitMode::WaitForEvents);
+    if (timer)
+        timer->stop();
     s_last_error.clear();
     return 0;
+}
+
+struct ElarisLadybirdWaker {
+    NonnullRefPtr<Core::WeakEventLoopReference> event_loop;
+};
+
+extern "C" ElarisLadybirdWaker* elaris_ladybird_create_waker(ElarisLadybird* bridge) {
+    if (!bridge || !s_application || bridge->owner_thread != std::this_thread::get_id()) {
+        fail("a waker must be created on the initialization thread");
+        return nullptr;
+    }
+    return new ElarisLadybirdWaker{Core::EventLoop::current_weak()};
+}
+
+extern "C" void elaris_ladybird_wake(ElarisLadybirdWaker* waker) {
+    if (!waker)
+        return;
+    // The weak reference is revoked when the event loop goes, so this is safe from any thread at any time.
+    if (auto event_loop = waker->event_loop->take(); event_loop.is_alive())
+        event_loop->wake();
+}
+
+extern "C" void elaris_ladybird_destroy_waker(ElarisLadybirdWaker* waker) {
+    delete waker;
 }
 
 extern "C" void elaris_ladybird_destroy_view(ElarisLadybirdView* handle) {

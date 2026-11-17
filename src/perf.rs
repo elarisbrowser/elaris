@@ -2,7 +2,10 @@
 
 //! Development timing for the page pipeline, on only when `ELARIS_PERF` is set. Every few
 //! seconds it prints, per stage, the sample count, mean, median, p95 and worst time to stderr.
-//! Off, each call is a branch on a cached flag.
+//! Off, each call is a branch on a cached flag. Each thread keeps and prints its own timings:
+//! the UI thread's polls, and the engine thread's work and frames.
+// Most stages are timed on the engine thread, which a build without an engine lacks.
+#![cfg_attr(not(feature = "ladybird-bridge"), allow(dead_code))]
 
 use std::cell::RefCell;
 use std::sync::OnceLock;
@@ -13,10 +16,10 @@ const REPORT_EVERY: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub(crate) enum Stage {
-    /// One `Engine::pump`.
+    /// Handling one batch of Ladybird work on the engine thread.
     Pump,
-    /// Waiting for a frame expected now.
-    Wait,
+    /// Between two frames Rune drew: what reaches the screen.
+    Drawn,
     /// Between two polls of the page: Rune's frame cadence while it keeps waking us.
     Poll,
     /// Between two frames Ladybird presented.
@@ -76,6 +79,19 @@ pub(crate) fn record(stage: Stage, duration: Duration) {
     }
 }
 
+/// Rune drew a frame: records the time since the last one.
+pub(crate) fn frame_drawn() {
+    thread_local! {
+        static LAST: std::cell::Cell<Option<Instant>> = const { std::cell::Cell::new(None) };
+    }
+    if enabled() {
+        let now = Instant::now();
+        if let Some(last) = LAST.replace(Some(now)) {
+            record(Stage::Drawn, now - last);
+        }
+    }
+}
+
 pub(crate) fn count(counter: Count, by: u64) {
     if enabled() {
         RECORDER.with_borrow_mut(|r| r.counts[counter as usize] += by);
@@ -99,7 +115,8 @@ fn report_if_due() {
 fn summary(samples: &mut [(Stage, Duration)], counts: &[u64; 4], over: Duration) -> String {
     samples.sort_unstable();
     let mut out = format!(
-        "[perf] {:.1}s  shown {} ({:.1}/s)  duplicate {}  skipped {}  stale {}\n",
+        "[perf {}] {:.1}s  shown {} ({:.1}/s)  duplicate {}  skipped {}  stale {}\n",
+        std::thread::current().name().unwrap_or("?"),
         over.as_secs_f64(),
         counts[Count::Shown as usize],
         counts[Count::Shown as usize] as f64 / over.as_secs_f64(),

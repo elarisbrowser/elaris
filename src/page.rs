@@ -1,30 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! The page shown in the viewport: its engine, its latest frame and what the UI shows about it.
-//! Rune draws the frame from `pixels`; this module never touches rendering.
+//! Rune draws the frame from `pixels`; this module never touches rendering, and never waits on
+//! the engine, which runs on a thread of its own.
 
 use std::cell::Cell;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-use elaris::ladybird::{Event, MouseEvent, MouseKind, WheelPhase, button};
+use elaris::ladybird::{MouseEvent, MouseKind, WheelPhase, button};
 use rune::{KeyEvent, Mods, Pixels};
 
-use crate::engine::Engine;
+use crate::engine::{Command, Engine, Notify, Update};
 use crate::input;
-use crate::perf::{self, Count, Stage};
-
-/// How often Ladybird is pumped while the page is busy, and while it is quiet.
-const ACTIVE_PUMP_INTERVAL: Duration = Duration::from_millis(4);
-const IDLE_PUMP_INTERVAL: Duration = Duration::from_millis(50);
-/// How long a poll waits for a frame Ladybird is about to present, while frames are flowing.
-/// Ladybird presents on the same vsync that Rune polls on, so its frame often lands a moment
-/// after the pump; without the wait, it shows a refresh late, together with the next one, which
-/// replaces it. Waiting blocks the UI thread, so it stays well under a frame.
-const FRAME_WAIT: Duration = Duration::from_millis(2);
-/// How long the page counts as busy after its last event or input.
-const ACTIVE_WINDOW: Duration = Duration::from_millis(750);
-/// Frames laid out at a different display scale than the viewport's are stale.
-const SCALE_TOLERANCE: f64 = 1e-3;
+use crate::perf::{self, Stage};
 
 /// What one poll found that the rest of the UI shows.
 #[derive(Default)]
@@ -32,16 +20,20 @@ pub(crate) struct Polled {
     pub(crate) changed: bool,
     pub(crate) url: Option<String>,
     pub(crate) title: Option<String>,
+    /// The engine showed a frame since the last poll, so the page is likely animating.
+    pub(crate) animating: bool,
 }
 
 pub(crate) struct Page {
-    /// The latest frame, which the viewport draws at `frame_size`.
+    /// The latest frame, which the viewport draws at `frame_size`. The engine thread replaces it.
     pub(crate) pixels: Pixels,
     /// Points the latest frame covers.
     pub(crate) frame_size: [f32; 2],
     pub(crate) loading: bool,
     pub(crate) error: Option<String>,
     engine: Option<Engine>,
+    /// Wakes the UI when the engine has updates; Rune hands it over before the first poll.
+    notify: Option<Notify>,
     started: bool,
     pending_load: Option<String>,
     /// The display scale, as the view last saw it.
@@ -51,14 +43,10 @@ pub(crate) struct Page {
     /// The device-pixel size and scale the engine was last given.
     applied: Option<(i32, i32, f64)>,
     focus: Focus,
-    frame_serial: Option<u64>,
-    /// The last poll showed a new frame, so this one likely has another coming.
-    frames_flowing: bool,
-    last_activity: Instant,
-    /// Development timing: the last poll, the last new frame and the oldest unanswered input.
+    /// The engine's frame count at the last poll.
+    frames: u64,
+    /// Development timing: the last poll.
     last_poll: Option<Instant>,
-    last_frame: Option<Instant>,
-    pending_input: Option<Instant>,
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Eq)]
@@ -76,6 +64,7 @@ impl Page {
             loading: false,
             error: None,
             engine: None,
+            notify: None,
             started: false,
             pending_load: initial_url,
             scale: Cell::new(1.0),
@@ -85,13 +74,14 @@ impl Page {
                 window: true,
                 ..Focus::default()
             },
-            frame_serial: None,
-            frames_flowing: false,
-            last_activity: Instant::now(),
+            frames: 0,
             last_poll: None,
-            last_frame: None,
-            pending_input: None,
         }
+    }
+
+    /// Takes the waker that lets the engine thread run the UI's poll.
+    pub(crate) fn set_notify(&mut self, notify: Notify) {
+        self.notify = Some(notify);
     }
 
     /// Records the display scale. The view calls it as it builds, because only the view knows it.
@@ -105,13 +95,8 @@ impl Page {
 
     pub(crate) fn load(&mut self, url: String) {
         self.error = None;
-        match self.engine.as_mut() {
-            Some(engine) => {
-                if let Err(error) = engine.load(&url) {
-                    self.error = Some(error);
-                }
-                self.last_activity = Instant::now();
-            }
+        match &self.engine {
+            Some(engine) => engine.send(Command::Load(url)),
             None => self.pending_load = Some(url),
         }
     }
@@ -149,36 +134,24 @@ impl Page {
 
     /// Sends a key press to the page; false when the page takes no such key.
     pub(crate) fn key(&mut self, event: &KeyEvent) -> bool {
-        let keys = input::keys(event);
-        let Some(engine) = self.engine.as_mut() else {
+        let Some(engine) = &self.engine else {
             return false;
         };
+        let keys = input::keys(event);
         for key in &keys {
-            if let Err(error) = engine.key(*key) {
-                self.error = Some(error);
-            }
+            engine.send(Command::Key(*key));
         }
-        self.note_input();
         !keys.is_empty()
     }
 
     fn send_mouse(&mut self, event: MouseEvent) {
-        if let Some(engine) = self.engine.as_mut() {
-            if let Err(error) = engine.mouse(event) {
-                self.error = Some(error);
-            }
-            self.note_input();
+        if let Some(engine) = &self.engine {
+            engine.send(Command::Mouse(event));
         }
     }
 
-    fn note_input(&mut self) {
-        let now = Instant::now();
-        self.last_activity = now;
-        self.pending_input.get_or_insert(now);
-    }
-
-    /// Starts the engine on first use, then forwards viewport and focus changes, runs ready
-    /// engine work and takes the newest frame. Call it on the UI thread every pump interval.
+    /// Starts the engine on first use, then forwards viewport and focus changes and reads what
+    /// the engine reported. Rune calls it at the start of every frame; it never blocks.
     pub(crate) fn poll(&mut self) -> Polled {
         if perf::enabled() {
             let now = Instant::now();
@@ -190,173 +163,76 @@ impl Page {
         if !self.started {
             self.started = true;
             polled.changed = true;
-            match Engine::start() {
+            let notify = self
+                .notify
+                .clone()
+                .unwrap_or_else(|| std::sync::Arc::new(|| {}));
+            match Engine::start(self.pixels.clone(), notify) {
                 Ok(engine) => self.engine = Some(engine),
                 Err(error) => self.error = Some(error),
             }
         }
-        if self.engine.is_none() {
+        self.sync_engine();
+        let Some(engine) = &self.engine else {
             return polled;
-        }
-
-        if let Err(error) = self.sync_engine() {
-            self.error = Some(error);
+        };
+        let frames = engine.frames();
+        polled.animating = std::mem::replace(&mut self.frames, frames) != frames;
+        for update in engine.updates() {
             polled.changed = true;
-        }
-
-        let Some(engine) = self.engine.as_mut() else {
-            return polled;
-        };
-        let mut events = perf::time(Stage::Pump, || engine.pump());
-        let has_frame = |events: &Result<Vec<Event>, _>| {
-            events
-                .as_ref()
-                .is_ok_and(|events| events.contains(&Event::ReadyToPaint))
-        };
-        if self.frames_flowing && !has_frame(&events) {
-            let waited = perf::time(Stage::Wait, || engine.wait_for_frame(FRAME_WAIT));
-            if let (Ok(events), Ok(more)) = (&mut events, waited) {
-                events.extend(more);
-            }
-        }
-        let events = match events {
-            Ok(events) => events,
-            Err(error) => {
-                self.error = Some(error);
-                polled.changed = true;
-                return polled;
-            }
-        };
-        let mut frame_ready = false;
-        for event in &events {
-            match event {
-                Event::Navigation(url) => {
-                    polled.url = Some(url.clone());
+            match update {
+                Update::Navigation(url) => {
+                    polled.url = Some(url);
                     self.error = None;
                 }
-                Event::Title(title) => polled.title = Some(title.clone()),
-                Event::Loading(loading) => self.loading = *loading,
-                Event::ReadyToPaint => frame_ready = true,
+                Update::Title(title) => polled.title = Some(title),
+                Update::Loading(loading) => self.loading = loading,
+                Update::Error(error) => self.error = Some(error),
+                Update::Resized {
+                    width,
+                    height,
+                    size,
+                    rgba,
+                } => {
+                    self.pixels.set(width, height, rgba);
+                    self.frame_size = size;
+                }
             }
         }
-        if !events.is_empty() {
-            self.last_activity = Instant::now();
-            polled.changed |= events.iter().any(|e| *e != Event::ReadyToPaint);
-        }
-        let shown = self.frame_serial;
-        if frame_ready {
-            polled.changed |= self.take_frame();
-        }
-        self.frames_flowing = self.frame_serial != shown;
         polled
     }
 
-    /// How long until the next poll: brief while the page is busy, longer while it is quiet.
-    /// `None` once there is no engine to pump.
-    pub(crate) fn next_poll(&self) -> Option<Duration> {
-        if !self.started {
-            return Some(Duration::ZERO);
-        }
-        self.engine.as_ref()?;
-        let busy = self.loading || self.last_activity.elapsed() < ACTIVE_WINDOW;
-        Some(if busy {
-            ACTIVE_PUMP_INTERVAL
-        } else {
-            IDLE_PUMP_INTERVAL
-        })
-    }
-
-    /// Stops the engine and its helper processes.
+    /// Asks the engine to stop with its helper processes, without waiting for it.
     pub(crate) fn shut_down(&mut self) {
-        self.engine = None;
+        if let Some(engine) = &self.engine {
+            engine.close();
+        }
     }
 
-    fn sync_engine(&mut self) -> Result<(), String> {
-        let Some(engine) = self.engine.as_mut() else {
-            return Ok(());
+    fn sync_engine(&mut self) {
+        let Some(engine) = &self.engine else {
+            return;
         };
         let scale = self.scale.get();
         let size = (
             input::device(self.viewport[0], scale),
             input::device(self.viewport[1], scale),
         );
-        if size.0 > 0 && size.1 > 0 && self.applied != Some((size.0, size.1, f64::from(scale))) {
-            engine.resize(size.0, size.1, f64::from(scale))?;
-            self.applied = Some((size.0, size.1, f64::from(scale)));
-            self.last_activity = Instant::now();
+        let wanted = (size.0, size.1, f64::from(scale));
+        if size.0 > 0 && size.1 > 0 && self.applied != Some(wanted) {
+            engine.send(Command::Resize(wanted.0, wanted.1, wanted.2));
+            self.applied = Some(wanted);
         }
         // The first load waits for the first viewport, so the page lays out at its real size.
         if self.applied.is_some()
             && let Some(url) = self.pending_load.take()
         {
-            engine.load(&url)?;
-            self.last_activity = Instant::now();
+            engine.send(Command::Load(url));
         }
-        let wanted = self.focus.window && self.focus.viewport;
-        if wanted != self.focus.applied {
-            engine.set_focus(wanted)?;
-            self.focus.applied = wanted;
-        }
-        Ok(())
-    }
-
-    /// Shows the engine's newest frame unless it is one already shown or one laid out at another
-    /// display scale. True when the frame's size changed, so the layout must too.
-    fn take_frame(&mut self) -> bool {
-        let Some(engine) = self.engine.as_mut() else {
-            return false;
-        };
-        let frame = match engine.frame() {
-            Ok(Some(frame)) => frame,
-            Ok(None) => return false,
-            Err(error) => {
-                self.error = Some(error);
-                return true;
-            }
-        };
-        let current_scale = f64::from(self.scale.get());
-        if self.frame_serial == Some(frame.serial) {
-            perf::count(Count::Duplicate, 1);
-            return false;
-        }
-        if (frame.scale - current_scale).abs() > SCALE_TOLERANCE {
-            perf::count(Count::Stale, 1);
-            return false;
-        }
-        let rgba = match perf::time(Stage::Copy, || engine.copy_frame(&frame)) {
-            Ok(rgba) => rgba,
-            Err(error) => {
-                self.error = Some(error);
-                return true;
-            }
-        };
-        let skipped = self
-            .frame_serial
-            .map_or(0, |s| frame.serial.saturating_sub(s + 1));
-        self.frame_serial = Some(frame.serial);
-        perf::time(Stage::Set, || {
-            self.pixels.set(frame.width, frame.height, rgba)
-        });
-        self.note_frame(skipped);
-        let size = [
-            (f64::from(frame.width) / frame.scale) as f32,
-            (f64::from(frame.height) / frame.scale) as f32,
-        ];
-        std::mem::replace(&mut self.frame_size, size) != size
-    }
-
-    fn note_frame(&mut self, skipped: u64) {
-        if !perf::enabled() {
-            return;
-        }
-        let now = Instant::now();
-        perf::count(Count::Shown, 1);
-        perf::count(Count::Skipped, skipped);
-        if let Some(last) = self.last_frame.replace(now) {
-            perf::record(Stage::FrameInterval, now - last);
-        }
-        if let Some(input) = self.pending_input.take() {
-            perf::record(Stage::InputToFrame, now - input);
+        let focused = self.focus.window && self.focus.viewport;
+        if focused != self.focus.applied {
+            engine.send(Command::Focus(focused));
+            self.focus.applied = focused;
         }
     }
 }

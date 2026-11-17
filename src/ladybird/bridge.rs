@@ -5,6 +5,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
 use std::ptr::NonNull;
 use std::rc::Rc;
+use std::time::Duration;
 
 use super::{Event, Frame, Key, KeyEvent, MouseEvent};
 
@@ -15,6 +16,11 @@ struct RawBridge {
 
 #[repr(C)]
 struct RawView {
+    _private: [u8; 0],
+}
+
+#[repr(C)]
+struct RawWaker {
     _private: [u8; 0],
 }
 
@@ -88,7 +94,10 @@ unsafe extern "C" {
     fn elaris_ladybird_key_event(view: *mut RawView, event: *const RawKeyEvent) -> i32;
     fn elaris_ladybird_set_focus(view: *mut RawView, focused: i32) -> i32;
     fn elaris_ladybird_pump(bridge: *mut RawBridge) -> i32;
-    fn elaris_ladybird_wait_for_frame(view: *mut RawView, timeout_us: i32) -> i32;
+    fn elaris_ladybird_wait(bridge: *mut RawBridge, timeout_us: i32) -> i32;
+    fn elaris_ladybird_create_waker(bridge: *mut RawBridge) -> *mut RawWaker;
+    fn elaris_ladybird_wake(waker: *mut RawWaker);
+    fn elaris_ladybird_destroy_waker(waker: *mut RawWaker);
     fn elaris_ladybird_destroy_view(view: *mut RawView);
     fn elaris_ladybird_destroy(bridge: *mut RawBridge);
     fn elaris_ladybird_last_error() -> *const c_char;
@@ -219,6 +228,49 @@ impl Ladybird {
     pub fn pump(&mut self) -> Result<(), String> {
         self.owner.pump()
     }
+
+    /// Runs Ladybird work, blocking until there is some, a [`Waker`] wakes it, or `timeout`
+    /// passes. `None` waits until there is work or a wake.
+    pub fn wait(&mut self, timeout: Option<Duration>) -> Result<(), String> {
+        let micros = timeout.map_or(-1, |t| i32::try_from(t.as_micros()).unwrap_or(i32::MAX));
+        // SAFETY: `self.owner.raw` is a live bridge owned on this thread.
+        status_result(unsafe { elaris_ladybird_wait(self.owner.raw.as_ptr(), micros) })?;
+        self.owner.check_callback()
+    }
+
+    /// A handle any thread can use to end a [`Self::wait`].
+    pub fn waker(&mut self) -> Result<Waker, String> {
+        // SAFETY: `self.owner.raw` is a live bridge owned on this thread.
+        let raw = unsafe { elaris_ladybird_create_waker(self.owner.raw.as_ptr()) };
+        NonNull::new(raw)
+            .map(|raw| Waker { raw })
+            .ok_or_else(last_error)
+    }
+}
+
+/// Wakes a Ladybird [`Ladybird::wait`] from any thread, for as long as it lives; once the
+/// application's event loop is gone, waking does nothing.
+pub struct Waker {
+    raw: NonNull<RawWaker>,
+}
+
+// SAFETY: The C API makes waking and destroying a waker safe from any thread.
+unsafe impl Send for Waker {}
+// SAFETY: Waking takes no mutable state on the Rust side; C++ synchronises it.
+unsafe impl Sync for Waker {}
+
+impl Waker {
+    pub fn wake(&self) {
+        // SAFETY: The waker is live until this wrapper drops.
+        unsafe { elaris_ladybird_wake(self.raw.as_ptr()) };
+    }
+}
+
+impl Drop for Waker {
+    fn drop(&mut self) {
+        // SAFETY: The waker is uniquely owned by this wrapper.
+        unsafe { elaris_ladybird_destroy_waker(self.raw.as_ptr()) };
+    }
 }
 
 /// One page view. It keeps its application alive and, like it, stays on the initializing thread.
@@ -338,14 +390,6 @@ impl WebView {
 
     pub fn pump(&mut self) -> Result<(), String> {
         self.owner.pump()
-    }
-
-    /// Runs Ladybird work until this view presents a new frame, blocking for at most `timeout`.
-    pub fn wait_for_frame(&mut self, timeout: std::time::Duration) -> Result<(), String> {
-        let micros = i32::try_from(timeout.as_micros()).unwrap_or(i32::MAX);
-        // SAFETY: The view is live on its owner's thread.
-        status_result(unsafe { elaris_ladybird_wait_for_frame(self.raw.as_ptr(), micros) })?;
-        self.owner.check_callback()
     }
 }
 
