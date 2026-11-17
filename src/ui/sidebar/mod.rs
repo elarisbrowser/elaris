@@ -13,7 +13,7 @@ pub(crate) mod resize;
 mod tabs;
 
 use rune::tok::type_;
-use rune::{El, Tx, col, el, text, text_input};
+use rune::{El, Tx, col, el, icon, text, text_input};
 
 use super::controls::row_button;
 use super::theme::{self, Theme};
@@ -121,7 +121,7 @@ fn appearance(current: Appearance, theme: &Theme) -> El {
     let label = format!("Appearance: {}", current.label());
     row_button(
         "appearance",
-        glyph,
+        icon(glyph, theme::ICON).color(theme.text_muted),
         current.label(),
         theme.text_muted,
         theme,

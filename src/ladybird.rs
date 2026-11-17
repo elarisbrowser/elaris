@@ -19,6 +19,19 @@ pub enum Event {
         back: bool,
         forward: bool,
     },
+    /// The page's favicon changed, or was cleared when its active document changed.
+    Favicon(Option<Favicon>),
+}
+
+/// A favicon copied from Ladybird as tightly packed, straight-alpha RGBA8 pixels.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Favicon {
+    /// The favicon's pixel width.
+    pub width: u32,
+    /// The favicon's pixel height.
+    pub height: u32,
+    /// `width * height * 4` RGBA8 bytes, with rows ordered top to bottom.
+    pub rgba: Vec<u8>,
 }
 
 /// The frame a view displays, in device pixels. [`WebView::copy_frame`] returns its pixels as

@@ -30,13 +30,7 @@ pub(crate) fn icon_button(
 
 /// A full-width row with an icon and a label, for a tab or a button shaped like one. Callers
 /// add what follows the label.
-pub(crate) fn row_button(
-    key: &str,
-    glyph: &'static Icon,
-    label: &str,
-    color: Color,
-    theme: &Theme,
-) -> El {
+pub(crate) fn row_button(key: &str, leading: El, label: &str, color: Color, theme: &Theme) -> El {
     row()
         .key(key)
         .w_full()
@@ -51,7 +45,7 @@ pub(crate) fn row_button(
         .press(theme.press)
         .press_scale(theme::PRESS_SCALE)
         .label(label)
-        .child(icon(glyph, theme::ICON).color(color))
+        .child(leading)
         .child(
             text(label)
                 .font(type_::BODY)

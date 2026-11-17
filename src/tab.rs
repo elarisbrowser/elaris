@@ -4,6 +4,7 @@
 //! last told about it. The browser owns every tab and is the only one to change them.
 
 use crate::engine::{Surface, TabUpdate};
+use rune::Pixels;
 
 /// A tab's identity, stable for as long as the tab is open and never reused afterwards, so a
 /// stale id can only miss, never reach another tab.
@@ -27,6 +28,7 @@ pub(crate) struct Tab {
     pub(crate) url: String,
     pub(crate) title: String,
     pub(crate) loading: bool,
+    pub(crate) favicon: Option<Pixels>,
     pub(crate) error: Option<String>,
     pub(crate) can_go_back: bool,
     pub(crate) can_go_forward: bool,
@@ -58,6 +60,7 @@ impl Tab {
             url: url.clone(),
             title: String::new(),
             loading: false,
+            favicon: None,
             error: None,
             can_go_back: false,
             can_go_forward: false,
@@ -92,6 +95,13 @@ impl Tab {
             }
             TabUpdate::Title(title) => self.title = title,
             TabUpdate::Loading(loading) => self.loading = loading,
+            TabUpdate::Favicon(favicon) => {
+                self.favicon = favicon.map(|favicon| {
+                    let pixels = Pixels::new();
+                    pixels.set(favicon.width, favicon.height, favicon.rgba);
+                    pixels
+                });
+            }
             TabUpdate::History { back, forward } => {
                 self.can_go_back = back;
                 self.can_go_forward = forward;

@@ -2,7 +2,7 @@
 
 //! The open tabs, scrolling once they outgrow the sidebar, then the new-tab button.
 
-use rune::{El, ScrollSpec, col};
+use rune::{El, ScrollSpec, col, el, icon};
 
 use crate::app::{self, AppState};
 use crate::tab::Tab;
@@ -17,8 +17,14 @@ pub(super) fn view(state: &AppState, theme: &Theme) -> El {
         list = list.child(tab_row(tab, Some(tab.id()) == active, theme));
     }
     list = list.child(
-        row_button("new-tab", &icons::PLUS, "New Tab", theme.text_muted, theme)
-            .on_press_tx(app::new_tab),
+        row_button(
+            "new-tab",
+            icon(&icons::PLUS, theme::ICON).color(theme.text_muted),
+            "New Tab",
+            theme.text_muted,
+            theme,
+        )
+        .on_press_tx(app::new_tab),
     );
     col()
         .key("tabs-scroll")
@@ -39,6 +45,10 @@ fn tab_row(tab: &Tab, active: bool, theme: &Theme) -> El {
         &icons::PAGE
     };
     let color = if active { theme.text } else { theme.text_muted };
+    let leading = tab.favicon.as_ref().map_or_else(
+        || icon(glyph, theme::ICON).color(color),
+        |favicon| el().size(theme::ICON, theme::ICON).center().pixels(favicon),
+    );
     let close = icon_button(
         &format!("close-{}", id.raw()),
         "Close tab",
@@ -55,7 +65,7 @@ fn tab_row(tab: &Tab, active: bool, theme: &Theme) -> El {
     };
     let row = row_button(
         &format!("tab-{}", id.raw()),
-        glyph,
+        leading,
         tab.label(),
         color,
         theme,

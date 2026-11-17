@@ -120,6 +120,7 @@ impl Runtime {
                 Event::Navigation(url) => TabUpdate::Navigation(url),
                 Event::Title(title) => TabUpdate::Title(title),
                 Event::Loading(loading) => TabUpdate::Loading(loading),
+                Event::Favicon(favicon) => TabUpdate::Favicon(favicon),
                 Event::History { back, forward } => TabUpdate::History { back, forward },
                 Event::ReadyToPaint => {
                     if !painted.contains(&tab) {

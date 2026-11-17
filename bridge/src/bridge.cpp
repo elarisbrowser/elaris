@@ -144,7 +144,48 @@ static void emit(ElarisLadybirdView const* view, ElarisLadybirdEventKind kind, s
                  int32_t value = 0) {
     if (!view->bridge->callback)
         return;
-    ElarisLadybirdEvent event{kind, view->id, text.c_str(), value};
+    ElarisLadybirdEvent event{kind, view->id, text.c_str(), value, nullptr, 0, 0, 0};
+    view->bridge->callback(view->bridge->context, &event);
+}
+
+static void emit_favicon(ElarisLadybirdView const* view, Optional<Gfx::Bitmap const&> favicon) {
+    if (!view->bridge->callback)
+        return;
+
+    std::vector<uint8_t> rgba;
+    ElarisLadybirdEvent event{ELARIS_LADYBIRD_FAVICON, view->id, "", 0, nullptr, 0, 0, 0};
+    if (favicon.has_value()) {
+        auto const& bitmap = *favicon;
+        auto const width = bitmap.width();
+        auto const height = bitmap.height();
+        if (width > 0 && height > 0) {
+            auto const row_bytes = static_cast<size_t>(width) * 4;
+            rgba.resize(row_bytes * static_cast<size_t>(height));
+            for (int y = 0; y < height; ++y) {
+                for (int x = 0; x < width; ++x) {
+                    auto color = bitmap.get_pixel(x, y);
+                    auto alpha = color.alpha();
+                    auto straight_alpha = [alpha, premultiplied = bitmap.alpha_type() ==
+                                                                  Gfx::AlphaType::Premultiplied](uint8_t channel) {
+                        if (alpha == 0)
+                            return uint8_t{0};
+                        if (!premultiplied)
+                            return channel;
+                        return static_cast<uint8_t>(std::min(255, (channel * 255 + alpha / 2) / alpha));
+                    };
+                    auto offset = static_cast<size_t>(y) * row_bytes + static_cast<size_t>(x) * 4;
+                    rgba[offset] = straight_alpha(color.red());
+                    rgba[offset + 1] = straight_alpha(color.green());
+                    rgba[offset + 2] = straight_alpha(color.blue());
+                    rgba[offset + 3] = alpha;
+                }
+            }
+            event.favicon_rgba = rgba.data();
+            event.favicon_width = width;
+            event.favicon_height = height;
+            event.favicon_stride = static_cast<int32_t>(row_bytes);
+        }
+    }
     view->bridge->callback(view->bridge->context, &event);
 }
 
@@ -226,6 +267,7 @@ extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t 
     handle->view->on_loading_state_change = [handle](bool loading) {
         emit(handle, ELARIS_LADYBIRD_LOADING, {}, loading ? 1 : 0);
     };
+    handle->view->on_favicon_change = [handle](Optional<Gfx::Bitmap const&> favicon) { emit_favicon(handle, favicon); };
     handle->view->on_ready_to_paint = [handle] { emit(handle, ELARIS_LADYBIRD_FRAME); };
     handle->view->on_navigation_state_change = [handle] {
         auto const& view = *handle->view;

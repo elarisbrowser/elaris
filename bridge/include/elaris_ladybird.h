@@ -18,6 +18,7 @@ typedef enum {
     ELARIS_LADYBIRD_LOADING = 3,
     ELARIS_LADYBIRD_FRAME = 4,
     ELARIS_LADYBIRD_HISTORY = 5, /* Whether the view can go back or forward changed. */
+    ELARIS_LADYBIRD_FAVICON = 6,
 } ElarisLadybirdEventKind;
 
 /* Bit flags for HISTORY events' value. */
@@ -29,6 +30,10 @@ typedef struct {
     uint64_t view_id; /* The id the host gave the view that raised the event. */
     const char* text; /* Borrowed until the callback returns; empty when unused. */
     int32_t value;    /* Loading state for LOADING, HISTORY_* flags for HISTORY; zero otherwise. */
+    const uint8_t* favicon_rgba; /* Borrowed RGBA8 pixels for FAVICON, null when cleared. */
+    int32_t favicon_width;
+    int32_t favicon_height;
+    int32_t favicon_stride;
 } ElarisLadybirdEvent;
 
 typedef void (*ElarisLadybirdEventCallback)(void* context, const ElarisLadybirdEvent* event);

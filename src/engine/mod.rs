@@ -22,7 +22,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::sync::{Arc, OnceLock};
 
-use elaris::ladybird::{KeyEvent, MouseEvent};
+use elaris::ladybird::{Favicon, KeyEvent, MouseEvent};
 use rune::Pixels;
 
 use crate::tab::TabId;
@@ -118,6 +118,7 @@ pub(crate) enum TabUpdate {
     Navigation(String),
     Title(String),
     Loading(bool),
+    Favicon(Option<Favicon>),
     History {
         back: bool,
         forward: bool,

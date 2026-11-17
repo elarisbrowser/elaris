@@ -7,7 +7,7 @@ use std::ptr::NonNull;
 use std::rc::Rc;
 use std::time::Duration;
 
-use super::{Event, Frame, Key, KeyEvent, MouseEvent};
+use super::{Event, Favicon, Frame, Key, KeyEvent, MouseEvent};
 
 #[repr(C)]
 struct RawBridge {
@@ -30,6 +30,10 @@ struct RawEvent {
     view_id: u64,
     text: *const c_char,
     value: i32,
+    favicon_rgba: *const u8,
+    favicon_width: i32,
+    favicon_height: i32,
+    favicon_stride: i32,
 }
 
 #[repr(C)]
@@ -147,11 +151,42 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
                 back: raw.value & HISTORY_BACK != 0,
                 forward: raw.value & HISTORY_FORWARD != 0,
             },
+            6 => Event::Favicon(copy_favicon(raw)),
             _ => return,
         };
         (state.callback)(raw.view_id, event);
     }));
     state.panicked |= result.is_err();
+}
+
+fn copy_favicon(raw: &RawEvent) -> Option<Favicon> {
+    let width = u32::try_from(raw.favicon_width).ok()?;
+    let height = u32::try_from(raw.favicon_height).ok()?;
+    let stride = usize::try_from(raw.favicon_stride).ok()?;
+    if width == 0 || height == 0 || raw.favicon_rgba.is_null() {
+        return None;
+    }
+    let row_bytes = usize::try_from(width).ok()?.checked_mul(4)?;
+    if stride < row_bytes {
+        return None;
+    }
+    let byte_len = row_bytes.checked_mul(usize::try_from(height).ok()?)?;
+    let height_usize = usize::try_from(height).ok()?;
+    let source_len = stride.checked_mul(height_usize)?;
+    if source_len > isize::MAX as usize {
+        return None;
+    }
+    // SAFETY: The C bridge keeps favicon bytes alive through this callback and supplies `source_len` bytes.
+    let rows = unsafe { std::slice::from_raw_parts(raw.favicon_rgba, source_len) };
+    let mut rgba = Vec::with_capacity(byte_len);
+    for row in rows.chunks_exact(stride).take(height_usize) {
+        rgba.extend_from_slice(&row[..row_bytes]);
+    }
+    Some(Favicon {
+        width,
+        height,
+        rgba,
+    })
 }
 
 /// The bridge and its callback state, shared by the application handle and its views so the
