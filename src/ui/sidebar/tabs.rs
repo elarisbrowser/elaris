@@ -34,6 +34,18 @@ pub(super) fn view(state: &AppState, theme: &Theme) -> El {
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
+        .on_secondary_press(|_: &mut AppState, press, tx: &mut Tx| {
+            tx.popup_menu(
+                PopupMenu::new().item(PopupItem::new("new-tab", "New Tab")),
+                press,
+                |state: &mut AppState, picked, tx| {
+                    if picked == Some("new-tab") {
+                        state.new_tab();
+                        tx.focus(crate::ui::ADDRESS, false);
+                    }
+                },
+            );
+        })
         .child(list)
 }
 
