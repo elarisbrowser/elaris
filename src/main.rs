@@ -7,6 +7,8 @@ mod engine;
 mod input;
 mod page;
 mod perf;
+#[cfg(target_os = "macos")]
+mod titlebar_controls;
 mod ui;
 
 use rune::{App, AppSpec};
@@ -23,6 +25,7 @@ fn main() {
         )
     };
     App::new(spec)
+        .on_window(titlebar_controls::install)
         .on_frame_drawn(|_| perf::frame_drawn())
         .on_focus(app::on_window_focus)
         .on_close(app::shut_down)
