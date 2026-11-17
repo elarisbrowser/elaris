@@ -1,0 +1,20 @@
+<!doctype html>
+<!-- Shows which colour scheme the page sees: it should follow Elaris's appearance picker. -->
+<title>Colour scheme</title>
+<meta name="color-scheme" content="light dark">
+<style>
+  body { margin: 0; padding: 32px; font: 24px sans-serif; background: #fff; color: #111; }
+  .scheme::after { content: "light"; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #111; color: #eee; }
+    .scheme::after { content: "dark"; }
+  }
+</style>
+<p>CSS sees: <b class="scheme"></b></p>
+<p>Script sees: <b id="script"></b></p>
+<script>
+  const query = matchMedia("(prefers-color-scheme: dark)");
+  const show = () => (script.textContent = query.matches ? "dark" : "light");
+  query.addEventListener("change", show);
+  show();
+</script>

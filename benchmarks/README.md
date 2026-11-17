@@ -16,6 +16,7 @@ and for past results.
 | `js-animation.html` | A `requestAnimationFrame` animation driven by script | Same as above |
 | `scroll.html` | The page scrolling itself every frame | Same as above |
 | `idle.html` | Nothing moving | Almost no lines: both threads sleep |
+| `color-scheme.html` | `prefers-color-scheme`, by CSS and by script | Both lines match the appearance picker, and change with it |
 
 Real sites are worth checking too, by scrolling them with a touchpad. `https://slaterlabs.dev` (a
 Next.js site) was used for the measurements in the performance notes.
