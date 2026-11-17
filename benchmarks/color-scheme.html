@@ -14,7 +14,10 @@
 <p>Script sees: <b id="script"></b></p>
 <script>
   const query = matchMedia("(prefers-color-scheme: dark)");
-  const show = () => (script.textContent = query.matches ? "dark" : "light");
+  const show = () => {
+    script.textContent = query.matches ? "dark" : "light";
+    document.title = `Colour scheme: ${script.textContent}`;
+  };
   query.addEventListener("change", show);
   show();
 </script>
