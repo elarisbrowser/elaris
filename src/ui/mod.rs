@@ -29,7 +29,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         .key("window")
         .w_full()
         .h_full()
-        .fill(theme.bg)
+        .fill(theme.window)
         .child(sidebar::view(state, &theme, cx))
         .child(viewport::view(state, &theme))
 }

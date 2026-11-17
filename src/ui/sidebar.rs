@@ -4,7 +4,7 @@
 //! the new-tab and appearance buttons.
 
 use rune::tok::type_;
-use rune::{Cx, El, Icon, ScrollSpec, col, el, icon, row, spacer, text, text_input};
+use rune::{Color, Cx, El, Icon, ScrollSpec, col, el, icon, row, spacer, text, text_input};
 
 use super::theme::{self, Theme};
 use super::{ADDRESS, icons};
@@ -28,7 +28,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
             text(status)
                 .key("status")
                 .font(type_::LABEL)
-                .color(theme.text_secondary)
+                .color(theme.text_muted)
                 .px(theme::FIELD_PADDING)
                 .truncate(),
         );
@@ -90,24 +90,21 @@ fn nav_button(
     if enabled {
         button.on_press(move |state: &mut AppState| state.with_active_tab(operation))
     } else {
-        button.opacity(DISABLED_OPACITY)
+        button.opacity(theme.disabled_opacity)
     }
 }
-
-/// How faint a control that can't be used now is.
-const DISABLED_OPACITY: f32 = 0.35;
 
 fn icon_button(key: &str, label: &str, glyph: &'static Icon, size: f32, theme: &Theme) -> El {
     el().key(key)
         .size(size, size)
         .center()
         .radius(theme::ICON_BUTTON_RADIUS)
-        .hover(theme.control_off)
+        .hover(theme.hover)
         .press(theme.press)
         .press_scale(theme::PRESS_SCALE)
         .label(label)
         .help(label)
-        .child(icon(glyph, theme::ICON).color(theme.text_secondary))
+        .child(icon(glyph, theme::ICON).color(theme.icon))
 }
 
 fn address(state: &AppState, theme: &Theme) -> El {
@@ -117,7 +114,7 @@ fn address(state: &AppState, theme: &Theme) -> El {
         .w_full()
         .px(theme::FIELD_PADDING)
         .color(theme.text)
-        .placeholder("Search or enter address", theme.text_secondary)
+        .placeholder("Search or enter address", theme.text_muted)
         .label("Address")
         .on_edit(|state: &mut AppState| &mut state.address)
         .on_submit(app::submit_address);
@@ -126,7 +123,7 @@ fn address(state: &AppState, theme: &Theme) -> El {
         .h(theme::FIELD_HEIGHT)
         .center_y()
         .radius(theme::FIELD_RADIUS)
-        .fill(theme.control_track)
+        .fill(theme.field)
         .child(field)
 }
 
@@ -157,8 +154,8 @@ fn tabs(state: &AppState, theme: &Theme) -> El {
         row_shell("new-tab", theme)
             .label("New tab")
             .on_press_tx(app::new_tab)
-            .child(icon(&icons::PLUS, theme::ICON).color(theme.text_secondary))
-            .child(row_text("New Tab", theme.text_secondary)),
+            .child(icon(&icons::PLUS, theme::ICON).color(theme.text_muted))
+            .child(row_text("New Tab", theme.text_muted)),
     );
     col()
         .key("tabs-scroll")
@@ -186,11 +183,7 @@ fn tab_row(tab: &Tab, active: bool, theme: &Theme) -> El {
         theme,
     )
     .on_press(move |state: &mut AppState| state.close(id));
-    let color = if active {
-        theme.text
-    } else {
-        theme.text_secondary
-    };
+    let color = if active { theme.text } else { theme.text_muted };
     let row = row_shell(&format!("tab-{}", id.raw()), theme)
         .label(tab.label())
         .help_when_truncated(tab.label())
@@ -200,10 +193,10 @@ fn tab_row(tab: &Tab, active: bool, theme: &Theme) -> El {
         .child(row_text(tab.label(), color))
         .child(close);
     if active {
-        row.fill(theme.card).shadow(
+        row.fill(theme.tab_active).shadow(
             theme::ACTIVE_SHADOW_Y,
             theme::ACTIVE_SHADOW_BLUR,
-            theme.edge,
+            theme.tab_active_shadow,
         )
     } else {
         row
@@ -222,12 +215,12 @@ fn row_shell(key: &str, theme: &Theme) -> El {
         .center_y()
         .radius(theme::ROW_RADIUS)
         .continuous_corners()
-        .hover(theme.control_off)
+        .hover(theme.hover)
         .press(theme.press)
         .press_scale(theme::PRESS_SCALE)
 }
 
-fn row_text(content: &str, color: rune::Color) -> El {
+fn row_text(content: &str, color: Color) -> El {
     text(content)
         .font(type_::BODY)
         .color(color)
@@ -248,6 +241,6 @@ fn appearance(current: Appearance, theme: &Theme) -> El {
         .label(label.clone())
         .help(format!("{label}. Click to change."))
         .on_press(|state: &mut AppState| state.appearance = state.appearance.next())
-        .child(icon(glyph, theme::ICON).color(theme.text_secondary))
-        .child(row_text(current.label(), theme.text_secondary))
+        .child(icon(glyph, theme::ICON).color(theme.text_muted))
+        .child(row_text(current.label(), theme.text_muted))
 }

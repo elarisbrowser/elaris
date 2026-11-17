@@ -1,15 +1,71 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The interface's colours and measurements, in one place. Colours come from Rune's light and
-//! dark token palettes; sizes build on its spacing and radius scales.
+//! The interface's colours and measurements, in one place. Every colour the interface draws is
+//! a token of [`Theme`], named for what it is for, with a light and a dark value here; sizes
+//! build on Rune's spacing and radius scales.
 
-use rune::tok::{self, radius, space};
+use rune::tok::{radius, space};
+use rune::{Color, oklch, oklcha};
 
-pub(crate) use rune::tok::Theme;
+/// The hue every neutral leans toward, a cool grey.
+const HUE: f32 = 265.0;
+
+pub(crate) struct Theme {
+    /// The window behind the sidebar and around the page.
+    pub(crate) window: Color,
+    /// The page's container, seen before a page draws.
+    pub(crate) page: Color,
+    /// The hairline around the page's container.
+    pub(crate) page_border: Color,
+    pub(crate) text: Color,
+    /// Labels that matter less: inactive tabs, the status line, placeholders.
+    pub(crate) text_muted: Color,
+    pub(crate) icon: Color,
+    /// The address field's well.
+    pub(crate) field: Color,
+    /// Overlays on buttons and rows under the pointer, and while pressed.
+    pub(crate) hover: Color,
+    pub(crate) press: Color,
+    /// The active tab, raised above the sidebar.
+    pub(crate) tab_active: Color,
+    pub(crate) tab_active_shadow: Color,
+    /// How faint a control that can't be used now is.
+    pub(crate) disabled_opacity: f32,
+}
 
 /// The palette for a dark or light interface.
 pub(crate) fn palette(dark: bool) -> Theme {
-    tok::theme(dark)
+    if dark {
+        Theme {
+            window: oklch(0.185, 0.004, HUE),
+            page: oklch(0.232, 0.005, HUE),
+            page_border: oklcha(1.0, 0.0, 0.0, 0.06),
+            text: oklch(0.955, 0.003, HUE),
+            text_muted: oklch(0.74, 0.008, HUE),
+            icon: oklch(0.82, 0.006, HUE),
+            field: oklcha(1.0, 0.0, 0.0, 0.07),
+            hover: oklcha(1.0, 0.0, 0.0, 0.06),
+            press: oklcha(1.0, 0.0, 0.0, 0.1),
+            tab_active: oklcha(1.0, 0.0, 0.0, 0.1),
+            tab_active_shadow: oklcha(0.0, 0.0, 0.0, 0.3),
+            disabled_opacity: 0.35,
+        }
+    } else {
+        Theme {
+            window: oklch(0.935, 0.006, HUE),
+            page: oklch(1.0, 0.0, 0.0),
+            page_border: oklcha(0.2, 0.02, HUE, 0.1),
+            text: oklch(0.2, 0.008, HUE),
+            text_muted: oklch(0.42, 0.012, HUE),
+            icon: oklch(0.32, 0.01, HUE),
+            field: oklcha(0.2, 0.02, HUE, 0.06),
+            hover: oklcha(0.2, 0.02, HUE, 0.06),
+            press: oklcha(0.2, 0.02, HUE, 0.1),
+            tab_active: oklch(1.0, 0.0, 0.0),
+            tab_active_shadow: oklcha(0.2, 0.02, HUE, 0.18),
+            disabled_opacity: 0.3,
+        }
+    }
 }
 
 /// The sidebar left of the page.
@@ -49,3 +105,4 @@ pub(crate) const ACTIVE_SHADOW_BLUR: f32 = 1.5;
 /// The web page's container: how far it sits in from the window's edges, and its corners.
 pub(crate) const VIEWPORT_INSET: f32 = space::S1 + space::S1 / 2.0;
 pub(crate) const VIEWPORT_RADIUS: f32 = radius::LG;
+pub(crate) const VIEWPORT_BORDER: f32 = 1.0;

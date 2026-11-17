@@ -45,7 +45,8 @@ fn page(state: &AppState, theme: &Theme) -> El {
     }
     page.w_full()
         .h_full()
-        .fill(theme.card)
+        .fill(theme.page)
+        .border(theme::VIEWPORT_BORDER, theme.page_border)
         .continuous_corners()
         .clip_rounded(theme::VIEWPORT_RADIUS)
         .focusable(true)
