@@ -260,10 +260,11 @@ extern "C" int32_t elaris_ladybird_frame(ElarisLadybirdView* handle, ElarisLadyb
         return ELARIS_LADYBIRD_NO_FRAME;
     }
     auto damage = size == handle->copied_size ? handle->view->damage().intersected({{}, size}) : Gfx::IntRect{{}, size};
-    *out_frame = {size.width(),         size.height(),   size.width() * 4,
-                  ELARIS_LADYBIRD_PIXEL_FORMAT_RGBA8,
-                  device_pixel_ratio,   damage.x(),      damage.y(),
-                  damage.width(),       damage.height(), handle->view->serial()};
+    *out_frame = {size.width(),       size.height(),
+                  size.width() * 4,   ELARIS_LADYBIRD_PIXEL_FORMAT_RGBA8,
+                  device_pixel_ratio, damage.x(),
+                  damage.y(),         damage.width(),
+                  damage.height(),    handle->view->serial()};
     s_last_error.clear();
     return 0;
 }

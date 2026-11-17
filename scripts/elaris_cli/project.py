@@ -5,7 +5,7 @@ import os
 import platform
 import sys
 
-from .common import CPP_BUILD_DIR, ENGINE, ROOT, require, run
+from .common import CPP_BUILD_DIR, ENGINE, ROOT, bridge_files, require, run
 
 # Build directories that may hold the compiled bridge, most preferred first.
 BRIDGE_LIB_DIRS = (CPP_BUILD_DIR / "lib", ROOT / "build" / "ladybird-integrated" / "lib")
@@ -26,6 +26,14 @@ def setup(_args: argparse.Namespace) -> None:
 
 def build(_args: argparse.Namespace) -> None:
     run("cargo", "build", "--locked")
+
+
+def format_sources(_args: argparse.Namespace) -> None:
+    require("cargo", "clang-format")
+    run("cargo", "fmt")
+    files = [str(path) for path in bridge_files()]
+    if files:
+        run("clang-format", "-i", *files)
 
 
 def bridge_lib_dir() -> str:
@@ -80,6 +88,7 @@ def check(_args: argparse.Namespace) -> None:
 def register_commands(commands) -> None:
     for name, handler, help_text in (
         ("setup", setup, "Initialise submodules and check development tools"),
+        ("format", format_sources, "Format Elaris Rust and C++ source files"),
         ("build", build, "Build the Elaris Rust application"),
         ("run", launch, "Build if needed and launch Elaris with the Ladybird engine"),
         ("check", check, "Run formatting, Clippy, and tests"),
