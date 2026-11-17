@@ -5,7 +5,7 @@ import os
 import platform
 import sys
 
-from .common import CPP_BUILD_DIR, ROOT, require, run
+from .common import CPP_BUILD_DIR, ENGINE, ROOT, require, run
 
 # Build directories that may hold the compiled bridge, most preferred first.
 BRIDGE_LIB_DIRS = (CPP_BUILD_DIR / "lib", ROOT / "build" / "ladybird-integrated" / "lib")
