@@ -11,6 +11,13 @@ rev = "cca5df6fafb4721d96fe105f126ebfd2ec351bb6"
 default-features = false
 features = ["accessibility", "embedded-fonts", "metal-backend"]
 
+[features]
+ladybird-bridge = []
+
+[[example]]
+name = "ladybird_smoke"
+required-features = ["ladybird-bridge"]
+
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
 
