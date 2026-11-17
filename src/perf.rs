@@ -30,6 +30,8 @@ pub(crate) enum Stage {
     Set,
     /// From an input event to the first new frame after it.
     InputToFrame,
+    /// From a new viewport size to the first frame at that size.
+    ResizeToFrame,
 }
 
 /// Counters that are not durations.

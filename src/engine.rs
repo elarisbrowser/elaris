@@ -194,16 +194,25 @@ mod bridged {
             Err(error) => return report(Update::Error(error)),
         }
         loop {
+            // A live resize sends a size every UI frame; laying out only the newest keeps
+            // Ladybird on the size the window has now rather than working through old ones.
+            let mut resize = None;
             loop {
-                match commands.try_recv() {
+                let result = match commands.try_recv() {
                     Ok(Command::Close) | Err(TryRecvError::Disconnected) => return engine.close(),
-                    Ok(command) => {
-                        if let Err(error) = engine.apply(command) {
-                            report(Update::Error(error));
-                        }
+                    Ok(Command::Resize(width, height, scale)) => {
+                        resize = Some(Command::Resize(width, height, scale));
+                        continue;
                     }
+                    Ok(command) => engine.apply(command),
                     Err(TryRecvError::Empty) => break,
+                };
+                if let Err(error) = result {
+                    report(Update::Error(error));
                 }
+            }
+            if let Some(Err(error)) = resize.map(|resize| engine.apply(resize)) {
+                report(Update::Error(error));
             }
             if let Err(error) = engine.ladybird.wait(None) {
                 return report(Update::Error(error));
@@ -229,6 +238,7 @@ mod bridged {
         /// Development timing: the last frame shown and the oldest input not yet on screen.
         last_frame: Option<Instant>,
         pending_input: Option<Instant>,
+        pending_resize: Option<((u32, u32), Instant)>,
     }
 
     impl Thread {
@@ -253,6 +263,7 @@ mod bridged {
                 shown_size: None,
                 last_frame: None,
                 pending_input: None,
+                pending_resize: None,
             })
         }
 
@@ -267,6 +278,10 @@ mod bridged {
                 Command::Load(url) => self.view().load(&url),
                 Command::Resize(width, height, scale) => {
                     self.scale = Some(scale);
+                    if perf::enabled() {
+                        let size = (width as u32, height as u32);
+                        self.pending_resize = Some((size, Instant::now()));
+                    }
                     self.view().resize(width, height, scale)
                 }
                 Command::Mouse(event) => {
@@ -329,6 +344,12 @@ mod bridged {
             self.frames.fetch_add(1, Ordering::Relaxed);
             self.note_frame(skipped);
             let dimensions = (frame.width, frame.height);
+            if let Some((size, since)) = self.pending_resize
+                && size == dimensions
+            {
+                perf::record(Stage::ResizeToFrame, since.elapsed());
+                self.pending_resize = None;
+            }
             if self.shown_size.replace(dimensions) == Some(dimensions) {
                 perf::time(Stage::Set, || {
                     self.pixels.set(frame.width, frame.height, rgba)
