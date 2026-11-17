@@ -40,38 +40,46 @@ frame in one display frame (p50 16.6 ms). The pump interval was left as is.
 frame, growing with window size. The bridge now converts a pixel per word store instead of a byte
 at a time, and Rust no longer zero-fills a frame-sized buffer before the copy overwrites it.
 
-**Steady-state results** (Elaris release build; "before" is the unoptimised Ladybird build with the
-old copy):
+**Steady-state results** (Elaris release build, 5 s windows after startup; "before" is the
+unoptimised Ladybird build with the old copy, "optimised" adds the `RelWithDebInfo` build and the
+faster copy, "final" adds the frame wait below):
 
-| Workload | Frames/s before → after | Interval p95 before → after | Copy p50 before → after | Skipped / 5 s after |
+| Workload | Frames/s before → optimised → final | Interval p95 (ms) | Copy p50 (ms) | Skipped / 5 s |
 |---|---|---|---|---|
-| CSS animation | 59.9 → 60.0 | 16.9 → 17.5 ms | 4.27 → 1.54 ms | 0 |
-| JS animation | ~60 → 57.0 | 17.4 → 32.4 ms | 6.06 → 1.42 ms | 11 |
-| Scrolling | ~60 → 52.6 | 17.0 → 33.4 ms | 6.05 → 0.95 ms | 37 |
-| Idle | ~0 frames, 50 ms polls | unchanged | — | 0 |
+| CSS animation | 59.9 → 60.0 → 60.0 | 16.9 → 17.5 → 17.7 | 4.27 → 1.54 → 0.95 | 0 → 0 → 0 |
+| JS animation | ~60 → 57.0 → 58.4–59.2 | 17.4 → 32.4 → 17.8 | 6.06 → 1.42 → 0.81 | — → 11 → 0–4 |
+| Scrolling | ~60 → 52.6 → 60.0 | 17.0 → 33.4 → 17.7 | 6.05 → 0.95 → 1.54 | — → 37 → 0 |
+| Idle | 0 frames, 50 ms polls throughout | — | — | 0 |
 
 `Pixels::set` is free (< 0.02 ms): it only swaps the buffer. Debug and release Elaris builds
-measured the same; the cost was on the C++ side.
+measured the same; the cost was on the C++ side. Copy times vary with how much of the page the
+bitmap's memory has warm in cache, not with the workload's damage.
 
-## Remaining bottleneck: present/poll phase
+## Present/poll phase
 
-With Ladybird fast, scrolling and JS animation skip frames, which shows as 33 ms gaps. Both
-Ladybird's Compositor and Rune tick from the same display, so Ladybird's "presented" IPC message
-arrives at about the moment Rune polls. When it lands just after the pump, that refresh shows
-nothing new and the next pump finds two frames, so one is dropped. The skipped counter and
-interval p95 measure this directly. The simple pages above never miss Ladybird's own deadline,
-so this is about timing, not render cost.
+With Ladybird optimised, scrolling and JS animation skipped frames, showing as 33 ms gaps. Ladybird's
+Compositor presents on a display link (`Services/Compositor/VSyncScheduler.cpp`) tied to the same
+display Rune polls on, so its "presented" IPC message arrives at about the moment Elaris pumps. A
+frame that lands just after the pump waits a whole refresh and arrives with the next one, which
+replaces it.
 
-Candidate fixes, none done yet:
+**Fix:** while frames are flowing (the previous poll showed a new one) and the pump found none,
+`Page::poll` calls `elaris_ladybird_wait_for_frame`, which pumps Ladybird, blocking, until the view
+presents or 2 ms pass. That moves the boundary away from vsync. Measured cost: mean 0.5–0.7 ms per
+poll that waits, p95 1.2–2.1 ms, worst about 3 ms; it never runs on still or idle pages.
 
-- **Wake on IPC.** A small thread waits on Ladybird's event-loop file descriptors and calls Rune's
-  `AppHandle::wake`, so the UI thread pumps as soon as a frame is presented instead of at the next
-  vsync. Lowest latency; needs the descriptors exposed through the bridge and one thread.
-- **One-frame queue.** Copy every presented frame (in the bridge's ready-to-paint callback, before
-  its backing store is reused) and show one per poll. Even pacing at the cost of one frame of
-  latency, which matters for scrolling.
-- **Host-driven ticks.** Have Ladybird render on Elaris's vsync rather than its own display link.
-  Ladybird has no embedder API for this; it would need upstream discussion.
+**Rejected:**
+
+- *Pumping between vsyncs from a timer thread* via Rune's `AppHandle::wake`. Rune also paces
+  those wakes to the display, so polls stayed on vsync and the extra wakes made it worse
+  (35 frames/s, 62 skipped per 5 s).
+- *Waking on Ladybird's IPC file descriptors.* `EventLoopImplementationUnix::pump` downcasts the
+  installed manager to the `final` `EventLoopManagerUnix`, so a host cannot wrap it to learn the
+  notifier descriptors, and the Mach port transport keeps its notify pipe private.
+
+**Remaining:** the JS animation still skips 0–4 frames per 5 s, where Ladybird itself presents
+late. The clean fix is a host-driven tick (Ladybird rendering on Elaris's frame clock), which has no
+embedder API; it would need upstream discussion.
 
 ## Other limits
 
@@ -79,6 +87,8 @@ Candidate fixes, none done yet:
   uploads it whole. Converting only Ladybird's damage rect would still need a full memory copy to
   hand Rune an owned buffer, so damage is not used. GPU texture sharing would remove the copies but
   is deliberately out of scope.
+- **Waiting assumes 60 Hz-ish refresh.** The 2 ms bound is a fraction of any common refresh
+  interval, but on a 120 Hz display it is a quarter of the frame; it was only measured at 60 Hz.
 - **Copy scales with pixels.** At 1 ms for 2.5 MP, a full-screen 5K-class window is around 4–6 ms
   on the UI thread.
 
