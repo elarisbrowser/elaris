@@ -18,6 +18,10 @@ pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
     el().key("viewport-container")
         .h_full()
         .grow(1.0)
+        // Its size comes from the window, never from the frame inside: otherwise the last
+        // frame holds it open and a narrower window never reaches the page.
+        .min_w(0.0)
+        .min_h(0.0)
         .pt(theme::VIEWPORT_INSET)
         .pr(theme::VIEWPORT_INSET)
         .pb(theme::VIEWPORT_INSET)
