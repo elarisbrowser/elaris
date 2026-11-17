@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut saw_pixels = false;
     let deadline = Instant::now() + Duration::from_secs(30);
     while !saw_title.get() || !saw_pixels {
-        view.pump()?;
+        browser.pump()?;
         if saw_frame.take()
             && let Some(frame) = view.frame()?
             && (frame.width, frame.height, frame.scale) == (900, 650, 2.0)

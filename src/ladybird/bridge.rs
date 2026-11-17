@@ -222,7 +222,7 @@ impl Ladybird {
         let raw = NonNull::new(raw).ok_or_else(|| "Ladybird returned a null view".to_owned())?;
         Ok(WebView {
             raw,
-            owner: Rc::clone(&self.owner),
+            _owner: Rc::clone(&self.owner),
         })
     }
 
@@ -285,7 +285,8 @@ impl Drop for Waker {
 /// One page view. It keeps its application alive and, like it, stays on the initializing thread.
 pub struct WebView {
     raw: NonNull<RawView>,
-    owner: Rc<Owner>,
+    /// Keeps the bridge alive until after this view is destroyed.
+    _owner: Rc<Owner>,
 }
 
 impl WebView {
@@ -310,7 +311,12 @@ impl WebView {
             NO_FRAME => return Ok(None),
             _ => return Err(last_error()),
         }
-        if raw.format != PIXEL_FORMAT_RGBA8 || raw.width <= 0 || raw.height <= 0 {
+        // Copying sizes its buffer from these, so anything but the documented layout is refused.
+        if raw.format != PIXEL_FORMAT_RGBA8
+            || raw.width <= 0
+            || raw.height <= 0
+            || i64::from(raw.stride) != i64::from(raw.width) * 4
+        {
             return Err("Ladybird described an unsupported frame".to_owned());
         }
         Ok(Some(Frame {
@@ -395,10 +401,6 @@ impl WebView {
     pub fn set_focus(&mut self, focused: bool) -> Result<(), String> {
         // SAFETY: The view is live on its owner's thread.
         status_result(unsafe { elaris_ladybird_set_focus(self.raw.as_ptr(), focused.into()) })
-    }
-
-    pub fn pump(&mut self) -> Result<(), String> {
-        self.owner.pump()
     }
 }
 
