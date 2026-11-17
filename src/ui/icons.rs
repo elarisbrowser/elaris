@@ -52,3 +52,7 @@ pub(crate) static DARK: Icon = icon(
     "dark",
     r#"<path d="M13 9.6A5.25 5.25 0 1 1 6.4 3A4.25 4.25 0 0 0 13 9.6Z" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/>"#,
 );
+pub(crate) static SIDEBAR: Icon = icon(
+    "sidebar",
+    r#"<rect x="2.25" y="3.25" width="11.5" height="9.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M6.25 3.25V12.75" fill="none" stroke="currentColor" stroke-width="1.25"/>"#,
+);

@@ -3,16 +3,17 @@
 //! The sidebar: the header beside the window controls, the address field and status, the open
 //! tabs, and the appearance button.
 //!
-//! - `header`: the titlebar row and its navigation buttons.
+//! - `header`: the titlebar row, its sidebar toggle and navigation buttons. The window draws it
+//!   over the sidebar, so it stays when the sidebar collapses.
 //! - `tabs`: the tab list and the new-tab button.
 //! - `resize`: dragging the sidebar's edge.
 
-mod header;
+pub(crate) mod header;
 pub(crate) mod resize;
 mod tabs;
 
 use rune::tok::type_;
-use rune::{Cx, El, col, el, text, text_input};
+use rune::{El, col, el, text, text_input};
 
 use super::controls::row_button;
 use super::theme::{self, Theme};
@@ -20,20 +21,29 @@ use super::{ADDRESS, icons};
 use crate::app::{self, AppState};
 use crate::appearance::Appearance;
 
-pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El {
-    col()
+/// The sidebar below the header's room. Collapsing springs its width to zero; its contents
+/// keep their width meanwhile, clipped, so they slide away rather than reflow.
+pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
+    let collapsed = state.sidebar_collapsed;
+    let sidebar = col()
         .key("sidebar")
-        .w(state.sidebar_width)
+        .w(if collapsed { 0.0 } else { state.sidebar_width })
         .h_full()
-        .child(header::view(state, theme, cx))
-        .child(body(state, theme))
+        .clip_soft(0.0)
+        .pt(theme::HEADER_HEIGHT)
+        .child(body(state, theme));
+    if collapsed {
+        sidebar.a11y_hidden()
+    } else {
+        sidebar
+    }
 }
 
 /// Everything below the header, inset from the sidebar's edges.
 fn body(state: &AppState, theme: &Theme) -> El {
     let mut body = col()
         .key("sidebar-body")
-        .w_full()
+        .w(state.sidebar_width)
         .grow(1.0)
         .min_h(0.0)
         .px(theme::SIDEBAR_PADDING)

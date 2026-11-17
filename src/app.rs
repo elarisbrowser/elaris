@@ -8,7 +8,8 @@ use rune::{TextEdit, Tx};
 use crate::appearance::Appearance;
 use crate::browser::Browser;
 use crate::engine::Engine;
-use crate::tab::TabId;
+use crate::shortcuts::{Shortcut, shortcut};
+use crate::tab::{Tab, TabId};
 use crate::ui::{ADDRESS, VIEWPORT};
 
 /// The window's title when the page has none.
@@ -27,6 +28,8 @@ pub(crate) struct AppState {
     pub(crate) sidebar_width: f32,
     /// Released past its limits, and yet to spring back.
     pub(crate) sidebar_settling: bool,
+    /// Hidden, leaving the page the window's width.
+    pub(crate) sidebar_collapsed: bool,
     /// The tab and address the address bar shows, so it changes only when the active tab's do.
     shown: Option<(TabId, String)>,
     /// The page title the window shows.
@@ -50,6 +53,7 @@ impl AppState {
             appearance: Appearance::default(),
             sidebar_width: crate::ui::SIDEBAR_WIDTH,
             sidebar_settling: false,
+            sidebar_collapsed: false,
             shown: None,
             window_title: None,
         };
@@ -91,6 +95,49 @@ impl AppState {
         self.browser.close_tab(tab);
         self.ensure_a_tab();
         self.show_active_tab();
+    }
+
+    /// Activates the tab `offset` places from the active one, wrapping around the list.
+    pub(crate) fn activate_relative(&mut self, offset: isize) {
+        let tabs = self.browser.tabs();
+        let Some(index) = self.active_index() else {
+            return;
+        };
+        let next = (index as isize + offset).rem_euclid(tabs.len() as isize) as usize;
+        self.activate(tabs[next].id());
+    }
+
+    /// Activates the tab at `index`, if there is one.
+    pub(crate) fn activate_index(&mut self, index: usize) {
+        if let Some(tab) = self.browser.tabs().get(index).map(Tab::id) {
+            self.activate(tab);
+        }
+    }
+
+    pub(crate) fn activate_last(&mut self) {
+        if let Some(tab) = self.browser.tabs().last().map(Tab::id) {
+            self.activate(tab);
+        }
+    }
+
+    pub(crate) fn close_active(&mut self) {
+        if let Some(tab) = self.browser.active_tab().map(Tab::id) {
+            self.close(tab);
+        }
+    }
+
+    /// Selects everything in the address field, ready to replace.
+    pub(crate) fn select_address(&mut self) {
+        self.address.anchor = 0;
+        self.address.focus = self.address.text.len();
+    }
+
+    fn active_index(&self) -> Option<usize> {
+        let active = self.browser.active_tab()?.id();
+        self.browser
+            .tabs()
+            .iter()
+            .position(|tab| tab.id() == active)
     }
 
     /// Runs `operation` on the active tab, if there is one.
@@ -174,6 +221,41 @@ pub(crate) fn poll(state: &mut AppState, _clock: f64, tx: &mut Tx) -> bool {
         });
     }
     polled.changed || settling
+}
+
+/// Keys nothing focused took: the browser's shortcuts.
+pub(crate) fn on_key(state: &mut AppState, event: &rune::KeyEvent, tx: &mut Tx) -> bool {
+    let Some(shortcut) = shortcut(event) else {
+        return false;
+    };
+    match shortcut {
+        Shortcut::NewTab => new_tab(state, tx),
+        Shortcut::CloseTab => state.close_active(),
+        Shortcut::FocusAddress => focus_address(state, tx),
+        Shortcut::Reload => state.with_active_tab(Browser::reload),
+        Shortcut::PreviousTab => state.activate_relative(-1),
+        Shortcut::NextTab => state.activate_relative(1),
+        Shortcut::SelectTab(index) => state.activate_index(index),
+        Shortcut::SelectLastTab => state.activate_last(),
+        Shortcut::ToggleSidebar => toggle_sidebar(state, tx),
+    }
+    true
+}
+
+/// Shows or hides the sidebar, springing the page to its new width.
+pub(crate) fn toggle_sidebar(state: &mut AppState, tx: &mut Tx) {
+    state.sidebar_collapsed = !state.sidebar_collapsed;
+    tx.animated();
+    tx.motion(crate::ui::SIDEBAR_TOGGLE);
+}
+
+/// Focuses the address field with its text selected, showing the sidebar if it is hidden.
+fn focus_address(state: &mut AppState, tx: &mut Tx) {
+    if state.sidebar_collapsed {
+        toggle_sidebar(state, tx);
+    }
+    state.select_address();
+    tx.focus(ADDRESS, true);
 }
 
 /// After the address bar opens a page, the page takes the keyboard.
@@ -268,6 +350,39 @@ mod tests {
         assert!(state.status().is_some());
         state.new_tab();
         assert_eq!(state.status(), None);
+    }
+
+    #[test]
+    fn moves_between_tabs_by_position_wrapping_around() {
+        let mut state = AppState::new(Some("a.com"));
+        state.new_tab();
+        state.new_tab();
+        let ids: Vec<TabId> = state.browser.tabs().iter().map(Tab::id).collect();
+        let active = |state: &AppState| state.browser.active_tab().unwrap().id();
+        assert_eq!(active(&state), ids[2]);
+        state.activate_relative(1);
+        assert_eq!(active(&state), ids[0]);
+        state.activate_relative(-1);
+        assert_eq!(active(&state), ids[2]);
+        state.activate_index(1);
+        assert_eq!(active(&state), ids[1]);
+        state.activate_index(7);
+        assert_eq!(active(&state), ids[1]);
+        state.activate_last();
+        assert_eq!(active(&state), ids[2]);
+        state.close_active();
+        assert_eq!(state.browser.tabs().len(), 2);
+        assert_eq!(active(&state), ids[1]);
+    }
+
+    #[test]
+    fn selecting_the_address_selects_all_of_it() {
+        let mut state = AppState::new(Some("example.com"));
+        state.select_address();
+        assert_eq!(
+            (state.address.anchor, state.address.focus),
+            (0, state.address.text.len())
+        );
     }
 
     #[test]

@@ -75,9 +75,13 @@ pub(crate) fn palette(dark: bool) -> Theme {
 
 /// The sidebar left of the page: its width at launch, and the range dragging its edge keeps it
 /// in.
-pub(crate) const SIDEBAR_WIDTH: f32 = 250.0;
+pub(crate) const SIDEBAR_WIDTH: f32 = 260.0;
 pub(crate) const SIDEBAR_MIN_WIDTH: f32 = 200.0;
 pub(crate) const SIDEBAR_MAX_WIDTH: f32 = 400.0;
+/// How the sidebar slides away and back: short, without bounce, so the page settles quickly.
+pub(crate) const SIDEBAR_TOGGLE: Spring = Spring::new(0.3, 0.0);
+/// The header's width while the sidebar is hidden: the window controls and its buttons.
+pub(crate) const COLLAPSED_HEADER_WIDTH: f32 = 220.0;
 /// The invisible strip over the sidebar's edge that drags it.
 pub(crate) const RESIZE_HANDLE: f32 = 8.0;
 /// How far past its limits the edge can be pulled, however hard.

@@ -7,6 +7,7 @@ mod browser;
 mod engine;
 mod input;
 mod perf;
+mod shortcuts;
 mod tab;
 #[cfg(target_os = "macos")]
 mod titlebar_controls;
@@ -18,6 +19,7 @@ fn main() {
     let spec = AppSpec {
         setup: Some(app::setup),
         poll: Some(app::poll),
+        on_key: Some(app::on_key),
         ..AppSpec::new(
             app::APP_NAME,
             (960.0, 640.0),

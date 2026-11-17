@@ -22,7 +22,17 @@ pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
         // frame holds it open and a narrower window never reaches the page.
         .min_w(0.0)
         .min_h(0.0)
-        .pt(theme::VIEWPORT_INSET)
+        // With the sidebar hidden, the page sits below the header and in from the left edge too.
+        .pt(if state.sidebar_collapsed {
+            theme::HEADER_HEIGHT
+        } else {
+            theme::VIEWPORT_INSET
+        })
+        .pl(if state.sidebar_collapsed {
+            theme::VIEWPORT_INSET
+        } else {
+            0.0
+        })
         .pr(theme::VIEWPORT_INSET)
         .pb(theme::VIEWPORT_INSET)
         .child(page(state, theme))

@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! The sidebar's header, which is the window's titlebar: resting marks for the window controls,
-//! then back, forward and reload for the active tab.
+//! the sidebar toggle, then back, forward and reload for the active tab. It spans the sidebar,
+//! or just its own buttons while the sidebar is hidden.
 
 use rune::{Chrome, Cx, El, Icon, el, row, spacer};
 
-use crate::app::AppState;
+use crate::app::{self, AppState};
 use crate::browser::Browser;
 use crate::tab::TabId;
 use crate::ui::controls::icon_button;
@@ -15,7 +16,7 @@ use crate::ui::theme::{self, Theme};
 /// What a navigation button does to the active tab.
 type Navigate = fn(&mut Browser, TabId);
 
-pub(super) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El {
+pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El {
     let tab = state.browser.active_tab();
     let buttons: [(&str, &'static Icon, bool, Navigate); 3] = [
         (
@@ -32,15 +33,31 @@ pub(super) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
         ),
         ("Reload", &icons::RELOAD, tab.is_some(), Browser::reload),
     ];
+    let (width, toggle_label) = if state.sidebar_collapsed {
+        (theme::COLLAPSED_HEADER_WIDTH, "Show sidebar")
+    } else {
+        (state.sidebar_width, "Hide sidebar")
+    };
+    let toggle = icon_button(
+        "toggle-sidebar",
+        toggle_label,
+        &icons::SIDEBAR,
+        theme::ICON_BUTTON,
+        theme,
+    )
+    .shortcut_hint("cmd+s")
+    .on_press_tx(app::toggle_sidebar);
     let mut header = row()
         .key("header")
-        .w_full()
+        .absolute(0.0, 0.0)
+        .w(width)
         .h(theme::HEADER_HEIGHT)
         .pr(theme::SIDEBAR_PADDING)
         .window_drag()
         .gap(theme::NAV_GAP)
         .center_y()
         .child(window_controls(cx.titlebar_inset(), theme))
+        .child(toggle)
         .child(spacer());
     for (label, glyph, enabled, navigate) in buttons {
         header = header.child(nav_button(label, glyph, enabled, navigate, theme));
