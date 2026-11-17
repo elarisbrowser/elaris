@@ -136,6 +136,8 @@ int main(int argc, char** argv) {
             std::cerr << "a timed wait outlasted its timeout\n";
             passed = false;
         }
+        passed = passed && check(elaris_ladybird_set_color_scheme(view, 1), "dark colour scheme") &&
+                 check(elaris_ladybird_set_color_scheme(view, 0), "light colour scheme");
         auto* waker = elaris_ladybird_create_waker(bridge);
         if (passed && !waker) {
             std::cerr << "no waker: " << elaris_ladybird_last_error() << '\n';

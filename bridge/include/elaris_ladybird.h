@@ -138,6 +138,8 @@ int32_t elaris_ladybird_copy_frame(ElarisLadybirdView* view, uint8_t* rgba, size
 int32_t elaris_ladybird_mouse_event(ElarisLadybirdView* view, const ElarisLadybirdMouseEvent* event);
 int32_t elaris_ladybird_key_event(ElarisLadybirdView* view, const ElarisLadybirdKeyEvent* event);
 int32_t elaris_ladybird_set_focus(ElarisLadybirdView* view, int32_t focused);
+/* Sets the colour scheme pages see through prefers-color-scheme: nonzero for dark, zero for light. */
+int32_t elaris_ladybird_set_color_scheme(ElarisLadybirdView* view, int32_t dark);
 /* Polls available Ladybird work without waiting; call regularly from the host event loop. */
 int32_t elaris_ladybird_pump(ElarisLadybird* bridge);
 /* Runs Ladybird work, blocking until there is some or timeout_us passes; a negative timeout waits until woken. For a

@@ -5,13 +5,11 @@
 
 use rune::tok::{self, radius, space};
 
-use crate::appearance::Appearance;
-
 pub(crate) use rune::tok::Theme;
 
-/// The palette for `appearance`, given whether the system is dark.
-pub(crate) fn palette(appearance: Appearance, system_dark: bool) -> Theme {
-    tok::theme(appearance.is_dark(system_dark))
+/// The palette for a dark or light interface.
+pub(crate) fn palette(dark: bool) -> Theme {
+    tok::theme(dark)
 }
 
 /// The toolbar above the page.

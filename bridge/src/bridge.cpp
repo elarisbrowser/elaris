@@ -13,6 +13,7 @@
 #include <LibGfx/SystemTheme.h>
 #include <LibURL/Parser.h>
 #include <LibURL/URL.h>
+#include <LibWebCommon/CSS/PreferredColorScheme.h>
 #include <LibWebCommon/Page/InputEvent.h>
 #include <LibWebCommon/PixelUnits.h>
 #include <LibWebCommon/UIEvents/KeyCode.h>
@@ -469,6 +470,17 @@ extern "C" int32_t elaris_ladybird_set_focus(ElarisLadybirdView* handle, int32_t
     if (handle->bridge->owner_thread != std::this_thread::get_id())
         return fail("focus must change on the initialization thread");
     handle->view->set_has_system_focus(focused != 0);
+    s_last_error.clear();
+    return 0;
+}
+
+extern "C" int32_t elaris_ladybird_set_color_scheme(ElarisLadybirdView* handle, int32_t dark) {
+    if (!handle)
+        return fail("view is required");
+    if (handle->bridge->owner_thread != std::this_thread::get_id())
+        return fail("the colour scheme must change on the initialization thread");
+    handle->view->set_preferred_color_scheme(dark ? Web::CSS::PreferredColorScheme::Dark
+                                                  : Web::CSS::PreferredColorScheme::Light);
     s_last_error.clear();
     return 0;
 }

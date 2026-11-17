@@ -16,8 +16,10 @@ use crate::app::AppState;
 pub(crate) const VIEWPORT: &str = "viewport";
 
 pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
-    let theme = theme::palette(state.appearance, cx.system_dark());
+    let dark = state.appearance.is_dark(cx.system_dark());
+    let theme = theme::palette(dark);
     state.page.note_scale(cx.env().scale);
+    state.page.note_dark(dark);
 
     col()
         .key("window")
