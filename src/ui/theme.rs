@@ -21,6 +21,8 @@ pub(crate) struct Theme {
     /// Labels that matter less: inactive tabs, the status line, placeholders.
     pub(crate) text_muted: Color,
     pub(crate) icon: Color,
+    /// The window controls at rest, before the pointer fades the native ones in.
+    pub(crate) window_control: Color,
     /// The address field's well.
     pub(crate) field: Color,
     /// Overlays on buttons and rows under the pointer, and while pressed.
@@ -43,6 +45,7 @@ pub(crate) fn palette(dark: bool) -> Theme {
             text: oklch(0.955, 0.003, HUE),
             text_muted: oklch(0.74, 0.008, HUE),
             icon: oklch(0.82, 0.006, HUE),
+            window_control: oklcha(1.0, 0.0, 0.0, 0.16),
             field: oklcha(1.0, 0.0, 0.0, 0.07),
             hover: oklcha(1.0, 0.0, 0.0, 0.06),
             press: oklcha(1.0, 0.0, 0.0, 0.1),
@@ -58,6 +61,7 @@ pub(crate) fn palette(dark: bool) -> Theme {
             text: oklch(0.2, 0.008, HUE),
             text_muted: oklch(0.42, 0.012, HUE),
             icon: oklch(0.32, 0.01, HUE),
+            window_control: oklcha(0.2, 0.02, HUE, 0.16),
             field: oklcha(0.2, 0.02, HUE, 0.06),
             hover: oklcha(0.2, 0.02, HUE, 0.06),
             press: oklcha(0.2, 0.02, HUE, 0.1),

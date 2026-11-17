@@ -4,7 +4,7 @@
 //! the new-tab and appearance buttons.
 
 use rune::tok::type_;
-use rune::{Color, Cx, El, Icon, ScrollSpec, col, el, icon, row, spacer, text, text_input};
+use rune::{Chrome, Color, Cx, El, Icon, ScrollSpec, col, el, icon, row, spacer, text, text_input};
 
 use super::theme::{self, Theme};
 use super::{ADDRESS, icons};
@@ -14,17 +14,27 @@ use crate::browser::Browser;
 use crate::tab::Tab;
 
 pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El {
-    let mut sidebar = col()
+    col()
         .key("sidebar")
         .w(theme::SIDEBAR_WIDTH)
         .h_full()
+        .child(header(state, theme, cx))
+        .child(body(state, theme))
+}
+
+/// Everything below the header, inset from the sidebar's edges.
+fn body(state: &AppState, theme: &Theme) -> El {
+    let mut body = col()
+        .key("sidebar-body")
+        .w_full()
+        .grow(1.0)
+        .min_h(0.0)
         .px(theme::SIDEBAR_PADDING)
         .pb(theme::SIDEBAR_PADDING)
         .gap(theme::SIDEBAR_GAP)
-        .child(header(state, theme, cx))
         .child(address(state, theme));
     if let Some(status) = status(state) {
-        sidebar = sidebar.child(
+        body = body.child(
             text(status)
                 .key("status")
                 .font(type_::LABEL)
@@ -33,12 +43,12 @@ pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
                 .truncate(),
         );
     }
-    sidebar
-        .child(tabs(state, theme))
+    body.child(tabs(state, theme))
         .child(appearance(state.appearance, theme))
 }
 
-/// Level with the window controls: back, forward and reload for the active tab.
+/// The window's titlebar: resting marks for the window controls, then back, forward and reload
+/// for the active tab.
 fn header(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El {
     let tab = state.browser.active_tab();
     let can_go_back = tab.is_some_and(|tab| tab.can_go_back);
@@ -47,10 +57,11 @@ fn header(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El {
         .key("header")
         .w_full()
         .h(theme::HEADER_HEIGHT)
-        .pl(cx.titlebar_inset())
+        .pr(theme::SIDEBAR_PADDING)
         .window_drag()
         .gap(theme::NAV_GAP)
         .center_y()
+        .child(window_controls(cx.titlebar_inset(), theme))
         .child(spacer())
         .child(nav_button(
             "back",
@@ -76,6 +87,30 @@ fn header(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El {
             theme,
             Browser::reload,
         ))
+}
+
+/// Plain circles under the native window controls, which stay transparent until the pointer
+/// reaches them (`titlebar_controls`). `inset` is where the zoom button ends; with no controls
+/// over the content, as in full screen, it is zero and nothing is drawn.
+fn window_controls(inset: f32, theme: &Theme) -> El {
+    let size = Chrome::TRAFFIC_LIGHT;
+    let gap = Chrome::TRAFFIC_PITCH - size;
+    let width = 3.0 * size + 2.0 * gap;
+    let mut marks = row()
+        .key("window-controls")
+        .gap(gap)
+        .pl((inset - width).max(0.0))
+        .a11y_hidden();
+    if inset > 0.0 {
+        for _ in 0..3 {
+            marks = marks.child(
+                el().size(size, size)
+                    .radius(size / 2.0)
+                    .fill(theme.window_control),
+            );
+        }
+    }
+    marks
 }
 
 fn nav_button(

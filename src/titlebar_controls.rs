@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Fade the native macOS traffic lights in only while the pointer is over them.
+//! Fade the native macOS traffic lights in only while the pointer is over them. At rest they are
+//! transparent, over the plain circles the sidebar draws in their place.
 
 use objc2_05::runtime::{AnyClass, AnyObject, ClassBuilder, Sel};
 use objc2_05::{ClassType, msg_send, sel};
@@ -13,7 +14,8 @@ use rune::WindowHandle as RuneWindowHandle;
 use rune::raw_window_handle::RawWindowHandle;
 
 const FADE_DURATION: f64 = 0.18;
-const RESTING_ALPHA: f64 = 0.65;
+/// Fully transparent: the sidebar's circles show through.
+const RESTING_ALPHA: f64 = 0.0;
 
 /// Installs hover tracking on the native window controls when Rune creates the window.
 pub(crate) fn install(window: &RuneWindowHandle) {
@@ -67,10 +69,10 @@ pub(crate) fn install(window: &RuneWindowHandle) {
             };
             // SAFETY: the button is a live AppKit view, and the subclass adds no ivars.
             unsafe { AnyObject::set_class(&button, button_class) };
-            // Disabled native titlebar buttons render as grey markers while retaining their
-            // original size and position. The tracking area below enables them on hover.
+            // Disabled at rest so a click on the hidden buttons does nothing; the tracking
+            // area below enables them, and fades them in, on hover.
             button.setEnabled(false);
-            // SAFETY: alphaValue is animatable; keep the resting markers visible.
+            // SAFETY: alphaValue is animatable; the buttons rest hidden over the sidebar's circles.
             unsafe { button.setAlphaValue(RESTING_ALPHA) };
             let owner = unsafe { &*(std::ptr::from_ref(&*button).cast::<AnyObject>()) };
             // SAFETY: AppKit creates and owns the tracking area on its main thread.
@@ -137,7 +139,7 @@ unsafe extern "C" fn mouse_exited(button: &AnyObject, _: Sel, event: &NSEvent) {
     unsafe {
         let _: () = msg_send![super(button, base), mouseExited: event];
     }
-    // SAFETY: keep the native button grey and visible when the pointer leaves the cluster.
+    // SAFETY: disable the native button again as it fades out when the pointer leaves.
     unsafe { (&*(std::ptr::from_ref(button).cast::<NSButton>())).setEnabled(false) };
     animate_opacity(button, RESTING_ALPHA);
 }
