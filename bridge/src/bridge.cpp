@@ -121,6 +121,16 @@ static int32_t fail(char const* message) {
     return -1;
 }
 
+static int32_t succeed() {
+    s_last_error.clear();
+    return 0;
+}
+
+// Ladybird's event loop and views belong to the thread that initialized the bridge; only waking is safe elsewhere.
+static bool on_owner_thread(ElarisLadybird const* bridge) {
+    return bridge->owner_thread == std::this_thread::get_id();
+}
+
 static void emit(ElarisLadybird* bridge, ElarisLadybirdEventKind kind, std::string text = {}, int32_t value = 0) {
     if (!bridge || !bridge->callback)
         return;
@@ -174,12 +184,12 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
     }
 
     s_application = application.release_value();
+    // Ladybird's platform initialization during create() resets the root from its own search, so set it again.
     WebView::s_ladybird_resource_root = resource_dir;
     s_event_loop = &Core::EventLoop::current();
     s_event_loop_thread = std::this_thread::get_id();
     *out_bridge = new ElarisLadybird{callback, context, std::this_thread::get_id(), {}};
-    s_last_error.clear();
-    return 0;
+    return succeed();
 }
 
 extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, ElarisLadybirdView** out_view) {
@@ -187,7 +197,7 @@ extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, ElarisLad
         *out_view = nullptr;
     if (!bridge || !out_view || !s_application)
         return fail("invalid bridge or output pointer");
-    if (bridge->owner_thread != std::this_thread::get_id())
+    if (!on_owner_thread(bridge))
         return fail("view creation must run on the initialization thread");
     auto theme_path = AK::LexicalPath::join(WebView::s_ladybird_resource_root, "themes"sv, "Default.ini"sv);
     auto theme = Gfx::load_system_theme(theme_path.string());
@@ -206,32 +216,29 @@ extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, ElarisLad
     };
     handle->view->on_ready_to_paint = [bridge] { emit(bridge, ELARIS_LADYBIRD_FRAME); };
     *out_view = handle;
-    s_last_error.clear();
-    return 0;
+    return succeed();
 }
 
 extern "C" int32_t elaris_ladybird_load(ElarisLadybirdView* handle, char const* url) {
     if (!handle || !url)
         return fail("view and URL are required");
-    if (handle->bridge->owner_thread != std::this_thread::get_id())
+    if (!on_owner_thread(handle->bridge))
         return fail("navigation must run on the initialization thread");
     auto parsed = URL::Parser::basic_parse(AK::StringView(url, std::char_traits<char>::length(url)));
     if (!parsed.has_value())
         return fail("invalid URL");
     handle->view->load(parsed.release_value());
-    s_last_error.clear();
-    return 0;
+    return succeed();
 }
 
 extern "C" int32_t elaris_ladybird_resize(ElarisLadybirdView* handle, int32_t width, int32_t height,
                                           double device_pixel_ratio) {
     if (!handle || width <= 0 || height <= 0 || !(device_pixel_ratio > 0))
         return fail("view, positive dimensions and a positive device pixel ratio are required");
-    if (handle->bridge->owner_thread != std::this_thread::get_id())
+    if (!on_owner_thread(handle->bridge))
         return fail("resize must run on the initialization thread");
     handle->view->set_viewport({width, height}, device_pixel_ratio);
-    s_last_error.clear();
-    return 0;
+    return succeed();
 }
 
 // The displayed frame's CPU bitmap. Backing stores are reused, so the bitmap can be larger than the frame.
@@ -251,7 +258,7 @@ static RefPtr<Gfx::Bitmap> displayed_bitmap(ElarisLadybirdView const& handle, Gf
 extern "C" int32_t elaris_ladybird_frame(ElarisLadybirdView* handle, ElarisLadybirdFrame* out_frame) {
     if (!handle || !out_frame)
         return fail("view and output frame are required");
-    if (handle->bridge->owner_thread != std::this_thread::get_id())
+    if (!on_owner_thread(handle->bridge))
         return fail("frames must be read on the initialization thread");
     Gfx::IntSize size;
     double device_pixel_ratio = 1;
@@ -265,14 +272,13 @@ extern "C" int32_t elaris_ladybird_frame(ElarisLadybirdView* handle, ElarisLadyb
                   device_pixel_ratio, damage.x(),
                   damage.y(),         damage.width(),
                   damage.height(),    handle->view->serial()};
-    s_last_error.clear();
-    return 0;
+    return succeed();
 }
 
 extern "C" int32_t elaris_ladybird_copy_frame(ElarisLadybirdView* handle, uint8_t* rgba, size_t length) {
     if (!handle || !rgba)
         return fail("view and pixel buffer are required");
-    if (handle->bridge->owner_thread != std::this_thread::get_id())
+    if (!on_owner_thread(handle->bridge))
         return fail("frames must be read on the initialization thread");
     Gfx::IntSize size;
     double device_pixel_ratio = 1;
@@ -299,8 +305,7 @@ extern "C" int32_t elaris_ladybird_copy_frame(ElarisLadybirdView* handle, uint8_
     }
     handle->copied_size = size;
     handle->view->clear_damage();
-    s_last_error.clear();
-    return 0;
+    return succeed();
 }
 
 static Web::UIEvents::KeyModifier to_modifiers(int32_t modifiers) {
@@ -330,7 +335,7 @@ static Web::UIEvents::MouseButton to_buttons(int32_t buttons) {
 extern "C" int32_t elaris_ladybird_mouse_event(ElarisLadybirdView* handle, ElarisLadybirdMouseEvent const* event) {
     if (!handle || !event)
         return fail("view and mouse event are required");
-    if (handle->bridge->owner_thread != std::this_thread::get_id())
+    if (!on_owner_thread(handle->bridge))
         return fail("input must be sent on the initialization thread");
 
     Web::MouseEvent::Type type;
@@ -390,14 +395,13 @@ extern "C" int32_t elaris_ladybird_mouse_event(ElarisLadybirdView* handle, Elari
         event->click_count,
         nullptr,
     });
-    s_last_error.clear();
-    return 0;
+    return succeed();
 }
 
 extern "C" int32_t elaris_ladybird_key_event(ElarisLadybirdView* handle, ElarisLadybirdKeyEvent const* event) {
     if (!handle || !event)
         return fail("view and key event are required");
-    if (handle->bridge->owner_thread != std::this_thread::get_id())
+    if (!on_owner_thread(handle->bridge))
         return fail("input must be sent on the initialization thread");
     if (event->type != ELARIS_LADYBIRD_KEY_PRESS && event->type != ELARIS_LADYBIRD_KEY_RELEASE)
         return fail("unknown key event type");
@@ -461,24 +465,22 @@ extern "C" int32_t elaris_ladybird_key_event(ElarisLadybirdView* handle, ElarisL
     auto should_insert_text = type == Web::KeyEvent::Type::KeyDown && code_point != 0 && !is_shortcut;
     handle->view->enqueue_input_event(
         Web::KeyEvent{type, key, modifiers, code_point, event->repeat != 0, should_insert_text, nullptr});
-    s_last_error.clear();
-    return 0;
+    return succeed();
 }
 
 extern "C" int32_t elaris_ladybird_set_focus(ElarisLadybirdView* handle, int32_t focused) {
     if (!handle)
         return fail("view is required");
-    if (handle->bridge->owner_thread != std::this_thread::get_id())
+    if (!on_owner_thread(handle->bridge))
         return fail("focus must change on the initialization thread");
     handle->view->set_has_system_focus(focused != 0);
-    s_last_error.clear();
-    return 0;
+    return succeed();
 }
 
 extern "C" int32_t elaris_ladybird_set_color_scheme(ElarisLadybird* bridge, int32_t dark) {
     if (!bridge || !s_application)
         return fail("Ladybird is not initialized");
-    if (bridge->owner_thread != std::this_thread::get_id())
+    if (!on_owner_thread(bridge))
         return fail("the colour scheme must change on the initialization thread");
     // A view's own scheme is replaced by this setting whenever a page attaches to it, so the setting is what lasts.
     auto& settings = WebView::Application::settings();
@@ -488,24 +490,22 @@ extern "C" int32_t elaris_ladybird_set_color_scheme(ElarisLadybird* bridge, int3
         appearance.website_color_scheme = scheme;
         settings.set_appearance(appearance);
     }
-    s_last_error.clear();
-    return 0;
+    return succeed();
 }
 
 extern "C" int32_t elaris_ladybird_pump(ElarisLadybird* bridge) {
     if (!bridge || !s_application)
         return fail("Ladybird is not initialized");
-    if (bridge->owner_thread != std::this_thread::get_id())
+    if (!on_owner_thread(bridge))
         return fail("event loop must be pumped on the initialization thread");
     s_event_loop->pump(Core::EventLoop::WaitMode::PollForEvents);
-    s_last_error.clear();
-    return 0;
+    return succeed();
 }
 
 extern "C" int32_t elaris_ladybird_wait(ElarisLadybird* bridge, int32_t timeout_us) {
     if (!bridge || !s_application)
         return fail("Ladybird is not initialized");
-    if (bridge->owner_thread != std::this_thread::get_id())
+    if (!on_owner_thread(bridge))
         return fail("event loop must be pumped on the initialization thread");
     // A timer bounds the blocking pump, so it returns by the timeout even with nothing else to do.
     RefPtr<Core::Timer> timer;
@@ -516,8 +516,7 @@ extern "C" int32_t elaris_ladybird_wait(ElarisLadybird* bridge, int32_t timeout_
     s_event_loop->pump(Core::EventLoop::WaitMode::WaitForEvents);
     if (timer)
         timer->stop();
-    s_last_error.clear();
-    return 0;
+    return succeed();
 }
 
 struct ElarisLadybirdWaker {
@@ -525,7 +524,7 @@ struct ElarisLadybirdWaker {
 };
 
 extern "C" ElarisLadybirdWaker* elaris_ladybird_create_waker(ElarisLadybird* bridge) {
-    if (!bridge || !s_application || bridge->owner_thread != std::this_thread::get_id()) {
+    if (!bridge || !s_application || !on_owner_thread(bridge)) {
         fail("a waker must be created on the initialization thread");
         return nullptr;
     }
@@ -547,7 +546,7 @@ extern "C" void elaris_ladybird_destroy_waker(ElarisLadybirdWaker* waker) {
 extern "C" void elaris_ladybird_destroy_view(ElarisLadybirdView* handle) {
     if (!handle)
         return;
-    if (handle->bridge->owner_thread != std::this_thread::get_id()) {
+    if (!on_owner_thread(handle->bridge)) {
         fail("view destruction must run on the initialization thread");
         return;
     }
@@ -560,7 +559,7 @@ extern "C" void elaris_ladybird_destroy_view(ElarisLadybirdView* handle) {
 extern "C" void elaris_ladybird_destroy(ElarisLadybird* bridge) {
     if (!bridge)
         return;
-    if (bridge->owner_thread != std::this_thread::get_id()) {
+    if (!on_owner_thread(bridge)) {
         fail("shutdown must run on the initialization thread");
         return;
     }
