@@ -30,6 +30,7 @@ int32_t elaris_ladybird_create(const char* resource_dir, const char* profile_dir
                                void* context, ElarisLadybird** out_bridge);
 int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, ElarisLadybirdView** out_view);
 int32_t elaris_ladybird_load(ElarisLadybirdView* view, const char* url);
+int32_t elaris_ladybird_resize(ElarisLadybirdView* view, int32_t width, int32_t height);
 /* Polls available Ladybird work without waiting; call regularly from the host event loop. */
 int32_t elaris_ladybird_pump(ElarisLadybird* bridge);
 void elaris_ladybird_destroy_view(ElarisLadybirdView* view);
