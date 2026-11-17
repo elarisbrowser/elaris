@@ -54,6 +54,8 @@ def cpp_configure(_args: argparse.Namespace) -> None:
         raise SystemExit(f"elaris: HarfBuzz libraries are missing from {prefix}")
     run(
         "cmake", "-S", str(ENGINE), "-B", str(CPP_BUILD_DIR), "-G", "Ninja",
+        # Ladybird's own Release preset; without a build type everything compiles unoptimised.
+        "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON", "-DENABLE_GUI_TARGETS=ON",
         "-DELARIS_BUILD_SMOKE_TESTS=ON",
         f"-DELARIS_VCPKG_PREFIX={prefix}",
