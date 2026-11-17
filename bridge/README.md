@@ -1,25 +1,54 @@
 # Ladybird bridge
 
-This opt-in bridge builds against the pinned `vendor/ladybird` checkout. It owns no Ladybird code and adds no files to that submodule. The bridge keeps the existing Rust/Rune binary independent; it is built separately with CMake.
+The bridge is an opt-in C ABI over the pinned `vendor/ladybird` checkout. It does not add files to or patch that submodule. Ladybird must remain the top-level CMake project because its Rust rules use `CMAKE_SOURCE_DIR`; Elaris injects its target after Ladybird declares its libraries. Normal `cargo run` does not build or link Ladybird.
+
+## Configure, build and test
+
+On macOS, after Ladybird's vcpkg dependencies have been installed and built for the host architecture:
 
 ```sh
-cmake -S bridge -B build/ladybird-bridge -G Ninja -DENABLE_GUI_TARGETS=OFF
-cmake --build build/ladybird-bridge --target elaris_ladybird
+./elaris cpp-configure
+cmake --build build/cpp-ladybird --target elaris_ladybird_smoke \
+  WebContent RequestServer Hub ImageDecoder Compositor SystemProbe \
+  AudioServer MediaServer VideoDecoderServer ProcessReaper -j 8
+ctest --test-dir build/cpp-ladybird --output-on-failure -R elaris_ladybird_smoke
 ```
 
-The developer CLI provides `./elaris cpp-format`, `./elaris cpp-configure`, and
-`./elaris cpp-tidy`. The configuration exports `compile_commands.json` under
-`build/cpp`; clangd reads that database through the root `.clangd` config. CMake
-supplies Ladybird's target include paths, generated-header directories, and
-compiler definitions to clangd. The database and build directory are ignored by
-git. Formatting and tidy inputs are limited to files under `bridge/`.
+`cpp-configure` selects the local vcpkg triplet and Ladybird's pinned Rust toolchain. The smoke test needs Ladybird's resources and helper executables. CMake wires the helper runtime paths to the build libraries and the installed vcpkg libraries.
 
-Ladybird's full native build prerequisites and resource packaging still apply. The runtime `resource_dir` must point to Ladybird's installed resource directory (the one containing `themes/Default.ini`), and the profile path must be absolute. Ladybird launches its own helper processes using the configured install/build paths. Build and package those helpers with Ladybird; the bridge does not spawn them itself.
+The smoke executable checks invalid arguments and a failed profile initialization, then creates three views in one application. Each view loads the deterministic `tests/smoke.html`, observes navigation, title, loading start/finish and ready-to-paint callbacks, pumps without blocking, resizes, and is closed and destroyed. It also destroys and reinitializes the application. The test verifies invalid dimensions and rejects a resize from a non-owner thread. CTest passes resource, profile and page paths to the executable.
 
-The C API requires one owner thread for initialization, view operations, event callbacks, pumping, and shutdown. `elaris_ladybird_pump` polls without waiting and should be called from the host event loop so Rune remains responsive. Destroying the bridge also destroys any views still owned by it. The event text is borrowed only for the callback duration. Call `elaris_ladybird_last_error` immediately after a failing function.
+## Rust boundary
 
-## Current boundary
+The Rust wrapper and executable smoke example are behind the `ladybird-bridge` feature. After building the C++ bridge, link and run them on macOS with:
 
-This milestone exposes initialization, one or more headless views, navigation, title/loading notifications, a ready-to-paint notification, polling, and orderly view/application teardown. It does not copy or expose frame pixels, connect the library to Rust's build, or render into Rune. The `FRAME` event means Ladybird reports the view ready to paint; it does not provide a presentable frame buffer. These boundaries keep normal `cargo run` independent while the C++ host seams are validated against the pinned revision.
+```sh
+prefix="$PWD/vendor/ladybird/Build/release/vcpkg_installed/arm64-osx-dynamic"
+ELARIS_LADYBIRD_LIB_DIR="$PWD/build/cpp-ladybird/lib" \
+DYLD_LIBRARY_PATH="$PWD/build/cpp-ladybird/lib:$prefix/lib" \
+  cargo run --locked --features ladybird-bridge --example ladybird_smoke -- \
+  "$PWD/vendor/ladybird/Base/res" \
+  "$PWD/build/cpp-ladybird/elaris-rust-profile" \
+  "$PWD/bridge/tests/smoke.html"
+```
 
-The bridge has not yet been verified end to end. On the current macOS checkout, CMake configuration reaches Ladybird's dependency checks but stops because the `mimalloc` CMake package is missing. Linux and runtime process lifecycle verification remain outstanding.
+The C ABI unsafe code is isolated in `src/ladybird.rs`. Its owner is neither `Send` nor `Sync`, views borrow that owner, and Rust callback panics are caught before returning through C. The example tests navigation/title/frame delivery, resize and an application reinitialization. Normal Cargo builds remain independent of the bridge.
+
+The callback panic boundary regression test can be run with:
+
+```sh
+ELARIS_LADYBIRD_LIB_DIR="$PWD/build/cpp-ladybird/lib" \
+DYLD_LIBRARY_PATH="$PWD/build/cpp-ladybird/lib:$prefix/lib" \
+  cargo test --locked --features ladybird-bridge --lib \
+  callback_panics_are_contained_at_the_ffi_boundary
+```
+
+## Verified behavior and limitations
+
+- macOS Apple Silicon: configured and compiled against Ladybird `76bef6eee7bffd40c1895a2ee7332405fa1ef83d`; the C++ CTest smoke passed, including helper-process cleanup, and the Rust example linked and ran successfully. The Rust callback-panic boundary regression test also passed.
+- Linux: not tested. Linux configure, compile, helper startup, integration callbacks, shutdown, and Rust dynamic linking remain unverified; this README does not claim Linux support is proven.
+- `cargo fmt --check`, `cargo check --locked`, `cargo clippy --locked -- -D warnings`, and `cargo test --locked` passed. Feature-enabled Rust check, Clippy and the callback-panic test passed. `clang-format` and the bridge's compiler warning-as-error build passed. `clang-tidy` is not installed in this environment, so static analysis with it remains unrun.
+- Runtime initialization reports that optional site-compatibility data is missing from this checkout's resource package. The local HTML integration test still passes.
+- AppleClang needs one narrow warning exception for the statement-expression expansion inside Ladybird's `WEB_VIEW_APPLICATION` macro. No other Elaris C++ warnings were suppressed.
+
+The bridge reports ready-to-paint only; it does not transfer pixels or connect to Rune rendering. It remains an opt-in integration.

@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ENGINE = ROOT / "vendor" / "ladybird"
-CPP_BUILD_DIR = ROOT / "build" / "cpp"
+CPP_BUILD_DIR = ROOT / "build" / "cpp-ladybird"
 
 
 def run(*command: str, cwd: Path = ROOT) -> None:
@@ -25,6 +25,6 @@ def require(*commands: str) -> None:
 
 
 def bridge_files() -> list[Path]:
-    directories = (ROOT / "bridge" / "src", ROOT / "bridge" / "include")
+    directories = (ROOT / "bridge" / "src", ROOT / "bridge" / "include", ROOT / "bridge" / "tests")
     extensions = {".c", ".cc", ".cpp", ".h", ".hh", ".hpp"}
     return sorted(path for directory in directories for path in directory.rglob("*") if path.suffix in extensions)

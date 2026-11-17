@@ -1,6 +1,9 @@
 """C++ bridge formatting, configuration, and analysis commands."""
 
 import argparse
+import platform
+import re
+import subprocess
 
 from .common import CPP_BUILD_DIR, ENGINE, ROOT, bridge_files, require, run
 
@@ -15,11 +18,51 @@ def cpp_format(_args: argparse.Namespace) -> None:
 def cpp_configure(_args: argparse.Namespace) -> None:
     if not ENGINE.is_dir():
         raise SystemExit("elaris: Ladybird submodule is missing; run ./elaris setup")
-    require("cmake", "ninja")
+    require("cmake", "ninja", "rustup")
     CPP_BUILD_DIR.parent.mkdir(parents=True, exist_ok=True)
+    system = platform.system()
+    machine = platform.machine().lower()
+    if system == "Darwin":
+        triplet = "arm64-osx-dynamic" if machine in {"arm64", "aarch64"} else "x64-osx-dynamic"
+        library_suffix = "dylib"
+    elif system == "Linux":
+        triplet = "arm64-linux-dynamic" if machine in {"arm64", "aarch64"} else "x64-linux-dynamic"
+        library_suffix = "so"
+    else:
+        raise SystemExit(f"elaris: unsupported Ladybird bridge host: {system}/{machine}")
+
+    prefix = ENGINE / "Build" / "release" / "vcpkg_installed" / triplet
+    if not prefix.is_dir():
+        raise SystemExit(f"elaris: Ladybird vcpkg dependencies are not installed at {prefix}")
+    toolchain_file = (ENGINE / "rust-toolchain.toml").read_text()
+    toolchain_match = re.search(r'^channel\s*=\s*"([^"]+)"', toolchain_file, re.MULTILINE)
+    if not toolchain_match:
+        raise SystemExit(f"elaris: could not read Ladybird's Rust toolchain from {ENGINE / 'rust-toolchain.toml'}")
+    rust_toolchain = toolchain_match.group(1)
+    rustc = subprocess.run(
+        ["rustup", "which", "--toolchain", rust_toolchain, "rustc"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if rustc.returncode:
+        raise SystemExit(f"elaris: install Ladybird's pinned Rust toolchain {rust_toolchain}")
+
+    harfbuzz = prefix / "lib" / f"libharfbuzz.{library_suffix}"
+    harfbuzz_subset = prefix / "lib" / f"libharfbuzz-subset.{library_suffix}"
+    if not harfbuzz.is_file() or not harfbuzz_subset.is_file():
+        raise SystemExit(f"elaris: HarfBuzz libraries are missing from {prefix}")
     run(
-        "cmake", "-S", str(ROOT / "bridge"), "-B", str(CPP_BUILD_DIR), "-G", "Ninja",
-        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON", "-DENABLE_GUI_TARGETS=OFF",
+        "cmake", "-S", str(ENGINE), "-B", str(CPP_BUILD_DIR), "-G", "Ninja",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON", "-DENABLE_GUI_TARGETS=ON",
+        "-DELARIS_BUILD_SMOKE_TESTS=ON",
+        f"-DELARIS_VCPKG_PREFIX={prefix}",
+        f"-DCMAKE_PREFIX_PATH={prefix}",
+        f"-DCMAKE_PROJECT_ladybird_INCLUDE={ROOT / 'bridge' / 'CMakeLists.txt'}",
+        f"-DRUST_RUSTC={rustc.stdout.strip()}",
+        f"-DHARFBUZZ_INCLUDE_DIR={prefix / 'include' / 'harfbuzz'}",
+        f"-DHARFBUZZ_LIBRARY_RELEASE={harfbuzz}",
+        f"-DHARFBUZZ_SUBSET_LIBRARY_RELEASE={harfbuzz_subset}",
     )
 
 
