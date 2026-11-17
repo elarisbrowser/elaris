@@ -1,0 +1,68 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENGINE="$ROOT/vendor/ladybird"
+BUILD_DIR="${LADYBIRD_BUILD_DIR:-$ENGINE/Build/release}"
+
+usage() {
+  cat <<'EOF'
+Usage: ./elaris <command>
+
+Commands:
+  setup          Initialise submodules and check development tools
+  build          Build the Elaris Rust application
+  run            Build if needed and launch Elaris
+  check          Run formatting, Clippy, and tests
+  engine build   Build Ladybird with its CMake/Ninja tooling
+  engine status  Show the pinned revision, checkout, and build artifacts
+  --help         Show this help
+EOF
+}
+
+die() { echo "elaris: $*" >&2; exit 1; }
+require() { command -v "$1" >/dev/null 2>&1 || die "required command '$1' was not found"; }
+
+setup() {
+  require git
+  git -C "$ROOT" submodule update --init --recursive
+  for tool in cargo rustc; do require "$tool"; done
+  case "$(uname -s)" in
+    Darwin) for tool in cmake ninja; do require "$tool"; done ;;
+    Linux) for tool in cmake ninja pkg-config; do require "$tool"; done ;;
+    *) die "unsupported operating system: $(uname -s) (supported: macOS, Linux)" ;;
+  esac
+  echo "Development tools are available. See SETUP.md for platform packages."
+}
+
+case "${1:-}" in
+  --help|-h|'') usage ;;
+  setup) setup ;;
+  build) (cd "$ROOT" && cargo build --locked) ;;
+  run) (cd "$ROOT" && cargo run --locked) ;;
+  check)
+    (cd "$ROOT" && cargo fmt --check && cargo clippy --locked -- -D warnings && cargo test --locked)
+    ;;
+  engine)
+    case "${2:-}" in
+      build)
+        [[ -d "$ENGINE" ]] || die "Ladybird submodule is missing; run ./elaris setup"
+        require cmake; require ninja
+        cmake --preset Release -B "$BUILD_DIR" -S "$ENGINE"
+        cmake --build "$BUILD_DIR" --parallel
+        ;;
+      status)
+        [[ -d "$ENGINE/.git" || -f "$ENGINE/.git" ]] || die "Ladybird submodule is missing; run ./elaris setup"
+        pinned="$(git -C "$ROOT" ls-tree HEAD vendor/ladybird | awk '{print $3}')"
+        checked="$(git -C "$ENGINE" rev-parse HEAD)"
+        echo "Pinned revision: ${pinned:-unknown}"
+        echo "Checked out:     $checked"
+        if [[ "$pinned" == "$checked" ]]; then echo "Revision status: matches pin"; else echo "Revision status: differs from pin"; fi
+        if [[ -d "$BUILD_DIR" ]]; then echo "Build artifacts: present ($BUILD_DIR)"; else echo "Build artifacts: absent ($BUILD_DIR)"; fi
+        [[ -z "$(git -C "$ENGINE" status --porcelain)" ]] && echo "Checkout status: clean" || echo "Checkout status: modified"
+        ;;
+      *) usage >&2; die "expected 'engine build' or 'engine status'" ;;
+    esac
+    ;;
+  *) usage >&2; die "unknown command '$1'" ;;
+esac
