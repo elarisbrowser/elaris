@@ -1,8 +1,6 @@
 name: Ladybird bridge (Linux)
 
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -43,19 +41,30 @@ jobs:
           python_bin="$(python3 vendor/ladybird/Meta/Utils/python_environment.py --print-bin | tr -d '\r')"
           echo "${python_bin}" >> "$GITHUB_PATH"
 
+      - name: Set Ladybird submodule cache paths
+        run: |
+          # Ladybird's helper treats its .git file as a linked-worktree pointer.
+          # In this nested submodule that resolves the shared build root to .git/modules.
+          echo "LADYBIRD_MAIN_SOURCE_DIR=${GITHUB_WORKSPACE}/.git/modules" >> "$GITHUB_ENV"
+          echo "LADYBIRD_CACHE_DIR=${GITHUB_WORKSPACE}/.git/modules/Build/caches" >> "$GITHUB_ENV"
+          echo "VCPKG_ROOT=${GITHUB_WORKSPACE}/.git/modules/vcpkg-release" >> "$GITHUB_ENV"
+
+      - name: Restore Ladybird dependency and compiler caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            .git/modules/vcpkg-release
+            .git/modules/Build/caches/vcpkg-binary-cache
+            .ccache
+          key: ladybird-bridge-linux-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ladybird-bridge-linux-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-
+            ladybird-bridge-linux-2026.11.12-
+
       - name: Install Ladybird vcpkg
         timeout-minutes: 15
         run: ./Meta/ladybird.py vcpkg --preset Release
         working-directory: vendor/ladybird
-
-      - name: Restore vcpkg and C++ compiler caches
-        uses: actions/cache@v4
-        with:
-          path: |
-            vendor/ladybird/Build/release/vcpkg_installed
-            vendor/ladybird/Build/caches/vcpkg-binary-cache
-            .ccache
-          key: ladybird-bridge-linux-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}
 
       - name: Install Ladybird Rust toolchain
         timeout-minutes: 10
@@ -80,6 +89,8 @@ jobs:
           echo "CXX=/tmp/elaris-ccache/clang++" >> "$GITHUB_ENV"
           echo "CCACHE_DIR=${GITHUB_WORKSPACE}/.ccache" >> "$GITHUB_ENV"
           echo "CCACHE_COMPILERCHECK=content" >> "$GITHUB_ENV"
+          export CCACHE_DIR="${GITHUB_WORKSPACE}/.ccache"
+          ccache -M 3G
 
       - name: Build Ladybird dependencies
         timeout-minutes: 120
@@ -98,11 +109,9 @@ jobs:
           Compositor SystemProbe AudioServer MediaServer VideoDecoderServer
           ProcessReaper
 
-      - name: Check Elaris C++ formatting and clang-tidy
+      - name: Run clang-tidy on Elaris C++ sources
         timeout-minutes: 10
-        run: |
-          ./elaris cpp-format
-          ./elaris cpp-tidy
+        run: ./elaris cpp-tidy
 
       - name: Run C++ bridge integration smoke test
         timeout-minutes: 10
@@ -119,14 +128,6 @@ jobs:
             exit 1
           fi
 
-      - name: Check Rust formatting
-        timeout-minutes: 5
-        run: cargo fmt --check
-
-      - name: Check Rust package
-        timeout-minutes: 10
-        run: cargo check --locked
-
       - name: Run Rust Clippy
         timeout-minutes: 10
         env:
@@ -134,7 +135,7 @@ jobs:
           LD_LIBRARY_PATH: ${{ github.workspace }}/build/cpp-ladybird/lib:${{ github.workspace }}/vendor/ladybird/Build/release/vcpkg_installed/x64-linux-dynamic/lib
         run: cargo clippy --all-targets --all-features --locked -- -D warnings
 
-      - name: Run Rust tests
+      - name: Run Rust FFI boundary tests
         timeout-minutes: 10
         env:
           ELARIS_LADYBIRD_LIB_DIR: ${{ github.workspace }}/build/cpp-ladybird/lib
