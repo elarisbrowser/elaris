@@ -8,6 +8,8 @@ mod sidebar;
 mod theme;
 mod viewport;
 
+pub(crate) use theme::HEADER_HEIGHT;
+
 use rune::{Cx, El, row};
 
 use crate::app::AppState;

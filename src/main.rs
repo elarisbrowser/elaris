@@ -12,7 +12,7 @@ mod tab;
 mod titlebar_controls;
 mod ui;
 
-use rune::{App, AppSpec};
+use rune::{App, AppSpec, Titlebar};
 
 fn main() {
     let spec = AppSpec {
@@ -26,6 +26,8 @@ fn main() {
         )
     };
     App::new(spec)
+        // The sidebar's header is the titlebar, so the window controls centre on its buttons.
+        .titlebar(Titlebar::new(ui::HEADER_HEIGHT))
         .on_window(titlebar_controls::install)
         .on_frame_drawn(|_| perf::frame_drawn())
         .on_focus(app::on_window_focus)

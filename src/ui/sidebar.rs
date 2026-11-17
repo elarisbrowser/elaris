@@ -48,6 +48,7 @@ fn header(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El {
         .w_full()
         .h(theme::HEADER_HEIGHT)
         .pl(cx.titlebar_inset())
+        .window_drag()
         .center_y()
         .child(spacer())
         .child(nav_button(

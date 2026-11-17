@@ -16,7 +16,8 @@ pub(crate) fn palette(dark: bool) -> Theme {
 pub(crate) const SIDEBAR_WIDTH: f32 = 250.0;
 pub(crate) const SIDEBAR_PADDING: f32 = space::S2 + space::S1 / 2.0;
 pub(crate) const SIDEBAR_GAP: f32 = space::S2;
-/// The row level with the window controls, holding the navigation buttons.
+/// The row level with the window controls, holding the navigation buttons. It is the window's
+/// titlebar, so macOS centres the controls in it.
 pub(crate) const HEADER_HEIGHT: f32 = 38.0;
 
 /// Square icon buttons: back, forward, reload, and each tab's close button.
