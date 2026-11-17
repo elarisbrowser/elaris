@@ -6,7 +6,7 @@ device pixels).
 
 ## Pipeline
 
-Ladybird runs on an engine thread of its own (`src/engine.rs`); the UI thread never calls it and
+Ladybird runs on an engine thread of its own (`src/engine/`); the UI thread never calls it and
 never waits on it.
 
 1. WebContent renders; Ladybird's Compositor presents into a shared CPU backing store, paced by

@@ -24,7 +24,7 @@ Rune supports macOS and Linux. A working desktop session and GPU driver are requ
 
 ## Development setup
 
-See [SETUP.md](SETUP.md) for Ladybird prerequisites, submodule setup, and build commands for macOS and Linux.
+See [SETUP.md](SETUP.md) for Ladybird prerequisites, submodule setup, and build commands for macOS and Linux. [docs/architecture.md](docs/architecture.md) explains how the code is organised and how pages reach the screen.
 
 ## Licensing
 
