@@ -3,10 +3,11 @@
 mod address;
 mod app;
 mod appearance;
+mod browser;
 mod engine;
 mod input;
-mod page;
 mod perf;
+mod tab;
 #[cfg(target_os = "macos")]
 mod titlebar_controls;
 mod ui;

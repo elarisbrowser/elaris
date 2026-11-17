@@ -2,12 +2,9 @@
 
 //! The engine thread: starting it, its loop, and finishing it as the process exits.
 
-use std::sync::atomic::AtomicU64;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex, Once};
 use std::thread::JoinHandle;
-
-use rune::Pixels;
 
 use super::runtime::Runtime;
 use super::{Command, Engine, Notify, Update, Wake, drain};
@@ -29,14 +26,14 @@ unsafe extern "C" {
     fn atexit(callback: extern "C" fn()) -> i32;
 }
 
-/// Closes the engine if the page has not, and waits for it, so its helper processes exit and no
+/// Stops the engine if the browser has not, and waits for it, so its helper processes exit and no
 /// Ladybird code is running when the process tears down Ladybird's statics. Exit handlers run in
 /// reverse order of registration, so this runs before those, which Ladybird registered as it
 /// started, earlier than this.
 extern "C" fn finish_at_exit() {
     let running = RUNNING.lock().unwrap_or_else(|e| e.into_inner()).take();
     if let Some(running) = running {
-        let _ = running.commands.send(Command::Close);
+        let _ = running.commands.send(Command::Shutdown);
         if let Some(wake) = running.wake.get() {
             wake();
         }
@@ -44,17 +41,15 @@ extern "C" fn finish_at_exit() {
     }
 }
 
-pub(super) fn start(pixels: Pixels, notify: Notify) -> Result<Engine, String> {
+pub(super) fn start(notify: Notify) -> Result<Engine, String> {
     let (commands, received) = channel();
     let (sender, updates) = channel();
     let wake = Wake::default();
-    let frames = Arc::new(AtomicU64::new(0));
     let thread = {
         let wake = Arc::clone(&wake);
-        let frames = Arc::clone(&frames);
         std::thread::Builder::new()
             .name("elaris-engine".to_owned())
-            .spawn(move || run(pixels, frames, &received, &sender, &wake, &*notify))
+            .spawn(move || run(&received, &sender, &wake, &*notify))
             .map_err(|e| format!("cannot start the engine thread: {e}"))?
     };
     *RUNNING.lock().unwrap_or_else(|e| e.into_inner()) = Some(Running {
@@ -70,16 +65,13 @@ pub(super) fn start(pixels: Pixels, notify: Notify) -> Result<Engine, String> {
     Ok(Engine {
         commands,
         updates,
-        frames,
         wake,
     })
 }
 
 /// The engine thread: starts Ladybird, runs its work as it comes, between commands, and closes
-/// the view gracefully however it stops.
+/// every view gracefully however it stops.
 fn run(
-    pixels: Pixels,
-    frames: Arc<AtomicU64>,
     commands: &Receiver<Command>,
     updates: &Sender<Update>,
     wake: &Wake,
@@ -90,17 +82,17 @@ fn run(
             notify();
         }
     };
-    let mut runtime = match Runtime::start(pixels, frames) {
+    let mut runtime = match Runtime::start() {
         Ok(runtime) => runtime,
-        Err(error) => return report(Update::Error(error)),
+        Err(error) => return report(Update::Failed(error)),
     };
     if let Err(error) = serve(&mut runtime, commands, wake, &report) {
-        report(Update::Error(error));
+        report(Update::Failed(error));
     }
     runtime.close();
 }
 
-/// Applies commands and runs Ladybird until the page closes or Ladybird fails.
+/// Applies commands and runs Ladybird until the browser shuts it down or Ladybird fails.
 fn serve(
     runtime: &mut Runtime,
     commands: &Receiver<Command>,
@@ -111,8 +103,8 @@ fn serve(
     let _ = wake.set(Box::new(move || waker.wake()));
     loop {
         let open = drain(commands, |command| {
-            if let Err(error) = runtime.apply(command) {
-                report(Update::Error(error));
+            if let Some(error) = runtime.apply(command) {
+                report(error);
             }
         });
         if !open {
