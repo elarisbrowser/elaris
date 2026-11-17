@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 use rune::tok::{self, type_};
 use rune::{Cx, El, col, el, row, text_input};
 

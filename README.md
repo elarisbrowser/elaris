@@ -24,3 +24,7 @@ Rune supports macOS and Linux. A working desktop session and GPU driver are requ
 ## Development setup
 
 See [SETUP.md](SETUP.md) for Ladybird prerequisites, submodule setup, and build commands for macOS and Linux.
+
+## Licensing
+
+Elaris is licensed under [GPL-3.0-only](LICENSE). Contributions are accepted on the understanding that they are provided under the same license; no CLA or copyright assignment is required. Third-party components retain their own licenses, including Rune's MIT license and Ladybird's BSD-2-Clause license. See [TRADEMARKS.md](TRADEMARKS.md) for the separate branding policy.
