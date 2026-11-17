@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The open tabs, scrolling once they outgrow the sidebar, then the new-tab button, then empty
-//! space that opens a tab when double-clicked.
+//! The open tabs, scrolling once they outgrow the sidebar, then the new-tab button.
 
-use rune::{El, ScrollSpec, col, el};
+use rune::{El, ScrollSpec, col};
 
 use crate::app::{self, AppState};
 use crate::tab::Tab;
@@ -21,29 +20,15 @@ pub(super) fn view(state: &AppState, theme: &Theme) -> El {
         row_button("new-tab", &icons::PLUS, "New Tab", theme.text_muted, theme)
             .on_press_tx(app::new_tab),
     );
-    // The list takes the height it needs, down to none once it overflows; the empty space below
-    // takes the rest.
-    let scroll = col()
+    col()
         .key("tabs-scroll")
         .w_full()
+        .grow(1.0)
         .min_h(0.0)
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
-        .child(list);
-    let empty = el()
-        .key("tabs-empty")
-        .w_full()
-        .grow(1.0)
-        .a11y_hidden()
-        .on_double_press_tx(app::new_tab);
-    col()
-        .key("tabs-area")
-        .w_full()
-        .grow(1.0)
-        .min_h(0.0)
-        .child(scroll)
-        .child(empty)
+        .child(list)
 }
 
 fn tab_row(tab: &Tab, active: bool, theme: &Theme) -> El {

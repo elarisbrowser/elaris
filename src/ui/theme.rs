@@ -82,7 +82,7 @@ pub(crate) const SIDEBAR_MAX_WIDTH: f32 = 400.0;
 /// How the sidebar slides away and back: short, without bounce, so the page settles quickly.
 pub(crate) const SIDEBAR_TOGGLE: Spring = Spring::new(0.3, 0.0);
 /// The header's narrowest: room for the window controls, the sidebar toggle and the navigation
-/// buttons. The width it keeps while the sidebar is hidden.
+/// buttons.
 pub(crate) const HEADER_MIN_WIDTH: f32 = 220.0;
 /// The window's smallest size: the widest sidebar beside a page still worth reading.
 pub(crate) const WINDOW_MIN_SIZE: (f32, f32) = (SIDEBAR_MAX_WIDTH + 320.0, 360.0);
@@ -103,8 +103,10 @@ pub(crate) const ICON_BUTTON: f32 = 28.0;
 pub(crate) const ICON_BUTTON_RADIUS: f32 = radius::SM;
 pub(crate) const ICON: f32 = 16.0;
 pub(crate) const CLOSE_BUTTON: f32 = 22.0;
-/// The space between the navigation buttons.
+/// The space between the navigation buttons, and between them and the sidebar toggle while the
+/// sidebar is hidden.
 pub(crate) const NAV_GAP: f32 = space::S1;
+pub(crate) const HEADER_GROUP_GAP: f32 = space::S3;
 
 /// How far buttons and rows shrink while pressed, springing back on release.
 pub(crate) const PRESS_SCALE: f32 = 0.97;

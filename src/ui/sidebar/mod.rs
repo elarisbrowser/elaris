@@ -29,6 +29,9 @@ pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
         .key("sidebar")
         .w(if collapsed { 0.0 } else { state.sidebar_width })
         .h_full()
+        // Its empty space moves the window and zooms it on a double click, as a titlebar does;
+        // its controls keep their presses.
+        .window_drag()
         .clip_soft(0.0)
         .pt(theme::HEADER_HEIGHT)
         .child(body(state, theme));

@@ -33,10 +33,11 @@ pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
         ),
         ("Reload", &icons::RELOAD, tab.is_some(), Browser::reload),
     ];
-    let (width, toggle_label) = if state.sidebar_collapsed {
-        (theme::HEADER_MIN_WIDTH, "Show sidebar")
+    let collapsed = state.sidebar_collapsed;
+    let toggle_label = if collapsed {
+        "Show sidebar"
     } else {
-        (state.sidebar_width, "Hide sidebar")
+        "Hide sidebar"
     };
     let toggle = icon_button(
         "toggle-sidebar",
@@ -47,20 +48,30 @@ pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
     )
     .shortcut_hint("cmd+s")
     .on_press_tx(app::toggle_sidebar);
-    let mut header = row()
+    // Over the sidebar it spans the sidebar, its buttons at the far end. With the sidebar
+    // hidden it is the whole window's titlebar, its buttons following the toggle, so all of it
+    // drags the window and zooms it on a double click.
+    let header = row()
         .key("header")
         .absolute(0.0, 0.0)
-        .w(width)
         .h(theme::HEADER_HEIGHT)
         .pr(theme::SIDEBAR_PADDING)
         .window_drag()
         .gap(theme::NAV_GAP)
         .center_y()
         .child(window_controls(cx.titlebar_inset(), theme))
-        .child(toggle)
-        .child(spacer());
+        .child(toggle);
+    let (mut header, gap) = if collapsed {
+        (header.w_full(), el().w(theme::HEADER_GROUP_GAP))
+    } else {
+        (header.w(state.sidebar_width), spacer())
+    };
+    header = header.child(gap);
     for (label, glyph, enabled, navigate) in buttons {
         header = header.child(nav_button(label, glyph, enabled, navigate, theme));
+    }
+    if collapsed {
+        header = header.child(spacer());
     }
     header
 }
