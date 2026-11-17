@@ -22,6 +22,14 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Install clang-tidy
+        timeout-minutes: 5
+        run: |
+          if ! command -v clang-tidy-22 >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes clang-tidy-22
+          fi
+
       - name: Verify headless display and compiler-cache tools
         timeout-minutes: 5
         run: |
