@@ -81,9 +81,9 @@ pub(crate) const SIDEBAR_MAX_WIDTH: f32 = 400.0;
 /// The invisible strip over the sidebar's edge that drags it.
 pub(crate) const RESIZE_HANDLE: f32 = 8.0;
 /// How far past its limits the edge can be pulled, however hard.
-pub(crate) const RUBBER_BAND_REACH: f32 = 80.0;
-/// How the edge springs back once released: quick, with a little overshoot.
-pub(crate) const SIDEBAR_SETTLE: Spring = Spring::new(0.45, 0.25);
+pub(crate) const RUBBER_BAND_REACH: f32 = 44.0;
+/// How the edge springs back once released: quick, with a lively overshoot.
+pub(crate) const SIDEBAR_SETTLE: Spring = Spring::new(0.32, 0.42);
 pub(crate) const SIDEBAR_PADDING: f32 = space::S2 + space::S1 / 2.0;
 pub(crate) const SIDEBAR_GAP: f32 = space::S2;
 /// The row level with the window controls, holding the navigation buttons. It is the window's
