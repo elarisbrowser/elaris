@@ -37,10 +37,33 @@ def bridge_lib_dir() -> str:
     raise SystemExit("elaris: no built Ladybird bridge found; build it as bridge/README.md describes")
 
 
+def runtime_library_dirs(bridge_dir: str) -> list[str]:
+    directories = [bridge_dir]
+    system = platform.system()
+    machine = platform.machine().lower()
+    if system == "Darwin":
+        triplet = "arm64-osx-dynamic" if machine in {"arm64", "aarch64"} else "x64-osx-dynamic"
+    elif system == "Linux":
+        triplet = "arm64-linux-dynamic" if machine in {"arm64", "aarch64"} else "x64-linux-dynamic"
+    else:
+        return directories
+
+    vcpkg_lib = ENGINE / "Build" / "release" / "vcpkg_installed" / triplet / "lib"
+    if vcpkg_lib.is_dir():
+        directories.append(str(vcpkg_lib))
+    return directories
+
+
 def launch(args: argparse.Namespace) -> None:
     command = ["cargo", "run", "--locked"]
     if not args.ui:
-        os.environ["ELARIS_LADYBIRD_LIB_DIR"] = bridge_lib_dir()
+        bridge_dir = bridge_lib_dir()
+        os.environ["ELARIS_LADYBIRD_LIB_DIR"] = bridge_dir
+        loader_variable = "DYLD_LIBRARY_PATH" if sys.platform == "darwin" else "LD_LIBRARY_PATH"
+        runtime_dirs = runtime_library_dirs(bridge_dir)
+        if existing := os.environ.get(loader_variable):
+            runtime_dirs.append(existing)
+        os.environ[loader_variable] = os.pathsep.join(runtime_dirs)
         command += ["--features", "ladybird-bridge"]
     if args.url:
         command += ["--", args.url]
