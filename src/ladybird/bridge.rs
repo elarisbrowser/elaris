@@ -263,11 +263,16 @@ impl WebView {
 
     /// Copies the frame `frame` described into a new RGBA buffer and clears its damage.
     pub fn copy_frame(&mut self, frame: &Frame) -> Result<Vec<u8>, String> {
-        let mut rgba = vec![0; frame.stride * frame.height as usize];
-        // SAFETY: The buffer is valid for its whole length; C++ checks it matches the frame.
+        // Left uninitialised: zeroing a frame-sized buffer costs as much as a fast copy.
+        let length = frame.stride * frame.height as usize;
+        let mut rgba = Vec::<u8>::with_capacity(length);
+        // SAFETY: The buffer has room for `length` bytes; C++ checks it matches the frame.
         let status =
-            unsafe { elaris_ladybird_copy_frame(self.raw.as_ptr(), rgba.as_mut_ptr(), rgba.len()) };
-        status_result(status).map(|()| rgba)
+            unsafe { elaris_ladybird_copy_frame(self.raw.as_ptr(), rgba.as_mut_ptr(), length) };
+        status_result(status)?;
+        // SAFETY: A successful copy wrote every byte of the frame.
+        unsafe { rgba.set_len(length) };
+        Ok(rgba)
     }
 
     pub fn mouse_event(&mut self, event: MouseEvent) -> Result<(), String> {

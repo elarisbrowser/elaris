@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <string>
 #include <thread>
 #include <vector>
@@ -269,6 +270,7 @@ extern "C" int32_t elaris_ladybird_copy_frame(ElarisLadybirdView* handle, uint8_
     if (length != row_length * static_cast<size_t>(size.height()))
         return fail("pixel buffer does not match the displayed frame");
 
+    // Whole pixels at a time: the source is BGRx or RGBx in native order; the host wants RGBA bytes.
     auto red_is_low_byte =
         bitmap->format() == Gfx::BitmapFormat::RGBA8888 || bitmap->format() == Gfx::BitmapFormat::RGBx8888;
     for (int y = 0; y < size.height(); ++y) {
@@ -276,13 +278,10 @@ extern "C" int32_t elaris_ladybird_copy_frame(ElarisLadybirdView* handle, uint8_
         auto* destination = rgba + static_cast<size_t>(y) * row_length;
         for (int x = 0; x < size.width(); ++x) {
             auto pixel = source[x];
-            uint8_t low = pixel & 0xff;
-            uint8_t high = (pixel >> 16) & 0xff;
-            destination[0] = red_is_low_byte ? low : high;
-            destination[1] = (pixel >> 8) & 0xff;
-            destination[2] = red_is_low_byte ? high : low;
-            destination[3] = 0xff;
-            destination += 4;
+            if (!red_is_low_byte)
+                pixel = (pixel & 0x0000ff00U) | ((pixel >> 16) & 0xffU) | ((pixel & 0xffU) << 16);
+            pixel |= 0xff000000U;
+            std::memcpy(destination + static_cast<size_t>(x) * 4, &pixel, sizeof(pixel));
         }
     }
     handle->copied_size = size;
