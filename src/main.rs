@@ -2,6 +2,7 @@
 
 mod address;
 mod app;
+mod appearance;
 mod engine;
 mod input;
 mod page;

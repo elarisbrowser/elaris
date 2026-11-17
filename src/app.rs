@@ -3,12 +3,14 @@
 use rune::{TextEdit, Tx};
 
 use crate::address::url_for_address;
+use crate::appearance::Appearance;
 use crate::page::Page;
 use crate::ui::VIEWPORT;
 
 pub(crate) struct AppState {
     pub(crate) address: TextEdit,
     pub(crate) page: Page,
+    pub(crate) appearance: Appearance,
 }
 
 impl Default for AppState {
@@ -25,6 +27,7 @@ impl Default for AppState {
         Self {
             address: TextEdit::new(address),
             page,
+            appearance: Appearance::default(),
         }
     }
 }
