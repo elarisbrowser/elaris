@@ -120,12 +120,12 @@ unsafe extern "C" fn mouse_entered(button: &AnyObject, _: Sel, event: &NSEvent) 
     let Some(base) = button.class().superclass() else {
         return;
     };
-    // SAFETY: forward native hover handling, then animate the still-native button into view.
+    // SAFETY: each tracking area is owned by one of the window's native NSButtons.
+    unsafe { (&*(std::ptr::from_ref(button).cast::<NSButton>())).setEnabled(true) };
+    // SAFETY: forward native hover handling after enabling the button.
     unsafe {
         let _: () = msg_send![super(button, base), mouseEntered: event];
     }
-    // SAFETY: each tracking area is owned by one of the window's native NSButtons.
-    unsafe { (&*(std::ptr::from_ref(button).cast::<NSButton>())).setEnabled(true) };
     animate_opacity(button, 1.0);
 }
 
