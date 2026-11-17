@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The web page: its latest frame in a rounded container inset from the window's edges, and the
-//! pointer, wheel and key input it takes.
+//! The active tab's page: its latest frame in a rounded container inset from the window's edges,
+//! and the pointer, wheel and key input it takes.
 
 use elaris::ladybird::MouseKind;
 use rune::{El, Phase, el};
@@ -11,13 +11,15 @@ use super::theme::{self, Theme};
 use crate::app::AppState;
 use crate::input;
 
-/// The container's padding holds the page in from the window's edges; the page's own element
-/// clips to rounded corners and takes input in the page's coordinates.
+/// The container's padding holds the page in from the window's edges, the sidebar being its
+/// left; the page's own element clips to rounded corners and takes input in the page's
+/// coordinates.
 pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
     el().key("viewport-container")
-        .w_full()
+        .h_full()
         .grow(1.0)
-        .px(theme::VIEWPORT_INSET)
+        .pt(theme::VIEWPORT_INSET)
+        .pr(theme::VIEWPORT_INSET)
         .pb(theme::VIEWPORT_INSET)
         .child(page(state, theme))
 }
@@ -26,15 +28,18 @@ pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
 /// resize the newest frame keeps its own size rather than stretching to the window's, until
 /// Ladybird lays the page out at the new size.
 fn page(state: &AppState, theme: &Theme) -> El {
-    let [width, height] = state.page.frame_size;
-    let frame = el()
-        .key("page-frame")
-        .w(width)
-        .h(height)
-        .pixels(&state.page.pixels);
-
-    el().key(VIEWPORT)
-        .w_full()
+    let mut page = el().key(VIEWPORT);
+    // Each tab keeps its own frame, so switching shows the page as it was at once.
+    if let Some(tab) = state.browser.active_tab() {
+        let [width, height] = tab.frame_size;
+        page = page.child(
+            el().key("page-frame")
+                .w(width)
+                .h(height)
+                .pixels(&tab.surface.pixels),
+        );
+    }
+    page.w_full()
         .h_full()
         .fill(theme.card)
         .continuous_corners()
@@ -42,7 +47,7 @@ fn page(state: &AppState, theme: &Theme) -> El {
         .focusable(true)
         .no_focus_ring()
         .label("Web page")
-        .on_layout(|state: &mut AppState, [_, _, w, h]| state.page.set_viewport([w, h]))
+        .on_layout(|state: &mut AppState, [_, _, w, h]| state.browser.set_viewport([w, h]))
         .on_drag(|state: &mut AppState, drag, tx| {
             let kind = match drag.phase {
                 Phase::Down => {
@@ -54,22 +59,24 @@ fn page(state: &AppState, theme: &Theme) -> El {
             };
             let held = drag.phase != Phase::Up;
             state
-                .page
+                .browser
                 .pointer(kind, [drag.x, drag.y], held, drag.clicks);
         })
         .on_pointer_move_local(|state: &mut AppState, pointer, _| {
             state
-                .page
+                .browser
                 .pointer(MouseKind::Move, [pointer.x, pointer.y], false, 0);
         })
         .on_hover_change(|state: &mut AppState, inside, _| {
             if !inside {
-                state.page.pointer(MouseKind::Leave, [0.0, 0.0], false, 0);
+                state
+                    .browser
+                    .pointer(MouseKind::Leave, [0.0, 0.0], false, 0);
             }
         })
         .on_wheel(|state: &mut AppState, wheel, _| {
             let phase = input::wheel_phase(wheel.precise, wheel.phase, wheel.momentum);
-            state.page.wheel(
+            state.browser.wheel(
                 [wheel.x, wheel.y],
                 [wheel.dx, wheel.dy],
                 wheel.precise,
@@ -77,6 +84,5 @@ fn page(state: &AppState, theme: &Theme) -> El {
             );
             true
         })
-        .on_key(|state: &mut AppState, key, _| state.page.key(key))
-        .child(frame)
+        .on_key(|state: &mut AppState, key, _| state.browser.key(key))
 }

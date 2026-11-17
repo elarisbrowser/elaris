@@ -12,7 +12,14 @@ pub(crate) enum Appearance {
 
 impl Appearance {
     /// Every choice, in the order the picker shows them.
-    pub(crate) const ALL: [Self; 3] = [Self::System, Self::Light, Self::Dark];
+    /// The appearance after this one, for a control that cycles through them.
+    pub(crate) fn next(self) -> Self {
+        match self {
+            Self::System => Self::Light,
+            Self::Light => Self::Dark,
+            Self::Dark => Self::System,
+        }
+    }
 
     pub(crate) fn label(self) -> &'static str {
         match self {
@@ -35,6 +42,23 @@ impl Appearance {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cycles_through_every_appearance() {
+        let mut seen = vec![Appearance::System];
+        while seen.len() < 4 {
+            seen.push(seen.last().unwrap().next());
+        }
+        assert_eq!(
+            seen,
+            [
+                Appearance::System,
+                Appearance::Light,
+                Appearance::Dark,
+                Appearance::System
+            ]
+        );
+    }
 
     #[test]
     fn system_follows_the_system_and_the_others_do_not() {
