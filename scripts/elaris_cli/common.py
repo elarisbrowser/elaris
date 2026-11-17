@@ -1,12 +1,24 @@
 """Shared paths and process helpers for CLI commands."""
 
+import platform
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Optional
 
 ROOT = Path(__file__).resolve().parents[2]
 ENGINE = ROOT / "vendor" / "ladybird"
 CPP_BUILD_DIR = ROOT / "build" / "cpp-ladybird"
+VCPKG_INSTALLED = ENGINE / "Build" / "release" / "vcpkg_installed"
+
+
+def vcpkg_triplet() -> Optional[str]:
+    """Ladybird's vcpkg triplet for this host, or None on a host the bridge does not support."""
+    os_name = {"Darwin": "osx", "Linux": "linux"}.get(platform.system())
+    if os_name is None:
+        return None
+    arch = "arm64" if platform.machine().lower() in {"arm64", "aarch64"} else "x64"
+    return f"{arch}-{os_name}-dynamic"
 
 
 def run(*command: str, cwd: Path = ROOT) -> None:

@@ -5,7 +5,7 @@ import platform
 import re
 import subprocess
 
-from .common import CPP_BUILD_DIR, ENGINE, ROOT, bridge_files, require, run
+from .common import CPP_BUILD_DIR, ENGINE, ROOT, VCPKG_INSTALLED, bridge_files, require, run, vcpkg_triplet
 
 
 def cpp_format(_args: argparse.Namespace) -> None:
@@ -20,18 +20,12 @@ def cpp_configure(_args: argparse.Namespace) -> None:
         raise SystemExit("elaris: Ladybird submodule is missing; run ./elaris setup")
     require("cmake", "ninja", "rustup")
     CPP_BUILD_DIR.parent.mkdir(parents=True, exist_ok=True)
-    system = platform.system()
-    machine = platform.machine().lower()
-    if system == "Darwin":
-        triplet = "arm64-osx-dynamic" if machine in {"arm64", "aarch64"} else "x64-osx-dynamic"
-        library_suffix = "dylib"
-    elif system == "Linux":
-        triplet = "arm64-linux-dynamic" if machine in {"arm64", "aarch64"} else "x64-linux-dynamic"
-        library_suffix = "so"
-    else:
-        raise SystemExit(f"elaris: unsupported Ladybird bridge host: {system}/{machine}")
+    triplet = vcpkg_triplet()
+    if triplet is None:
+        raise SystemExit(f"elaris: unsupported Ladybird bridge host: {platform.system()}/{platform.machine()}")
+    library_suffix = "dylib" if platform.system() == "Darwin" else "so"
 
-    prefix = ENGINE / "Build" / "release" / "vcpkg_installed" / triplet
+    prefix = VCPKG_INSTALLED / triplet
     if not prefix.is_dir():
         raise SystemExit(f"elaris: Ladybird vcpkg dependencies are not installed at {prefix}")
     toolchain_file = (ENGINE / "rust-toolchain.toml").read_text()

@@ -5,7 +5,7 @@ import os
 import platform
 import sys
 
-from .common import CPP_BUILD_DIR, ENGINE, ROOT, bridge_files, require, run
+from .common import CPP_BUILD_DIR, ROOT, VCPKG_INSTALLED, bridge_files, require, run, vcpkg_triplet
 
 # Build directories that may hold the compiled bridge, most preferred first.
 BRIDGE_LIB_DIRS = (CPP_BUILD_DIR / "lib", ROOT / "build" / "ladybird-integrated" / "lib")
@@ -47,17 +47,7 @@ def bridge_lib_dir() -> str:
 
 def runtime_library_dirs(bridge_dir: str) -> list[str]:
     directories = [bridge_dir]
-    system = platform.system()
-    machine = platform.machine().lower()
-    if system == "Darwin":
-        triplet = "arm64-osx-dynamic" if machine in {"arm64", "aarch64"} else "x64-osx-dynamic"
-    elif system == "Linux":
-        triplet = "arm64-linux-dynamic" if machine in {"arm64", "aarch64"} else "x64-linux-dynamic"
-    else:
-        return directories
-
-    vcpkg_lib = ENGINE / "Build" / "release" / "vcpkg_installed" / triplet / "lib"
-    if vcpkg_lib.is_dir():
+    if (triplet := vcpkg_triplet()) and (vcpkg_lib := VCPKG_INSTALLED / triplet / "lib").is_dir():
         directories.append(str(vcpkg_lib))
     return directories
 
