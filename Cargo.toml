@@ -5,13 +5,11 @@ edition = "2024"
 license = "MIT"
 rust-version = "1.88"
 
-[dependencies]
-rune = {
-    git = "https://github.com/anomalyco/rune",
-    rev = "cca5df6fafb4721d96fe105f126ebfd2ec351bb6",
-    default-features = false,
-    features = ["accessibility", "embedded-fonts", "metal-backend"],
-}
+[dependencies.rune]
+git = "https://github.com/anomalyco/rune"
+rev = "cca5df6fafb4721d96fe105f126ebfd2ec351bb6"
+default-features = false
+features = ["accessibility", "embedded-fonts", "metal-backend"]
 
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
@@ -20,14 +18,12 @@ unsafe_op_in_unsafe_fn = "deny"
 all = "warn"
 
 # Rune needs its matching patched platform and text crates when used outside its workspace.
-[patch.crates-io]
-parley_engine = {
-    git = "https://github.com/anomalyco/rune",
-    rev = "cca5df6fafb4721d96fe105f126ebfd2ec351bb6",
-    package = "parley_engine",
-}
-winit = {
-    git = "https://github.com/anomalyco/rune",
-    rev = "cca5df6fafb4721d96fe105f126ebfd2ec351bb6",
-    package = "winit",
-}
+[patch.crates-io.parley_engine]
+git = "https://github.com/anomalyco/rune"
+rev = "cca5df6fafb4721d96fe105f126ebfd2ec351bb6"
+package = "parley_engine"
+
+[patch.crates-io.winit]
+git = "https://github.com/anomalyco/rune"
+rev = "cca5df6fafb4721d96fe105f126ebfd2ec351bb6"
+package = "winit"
