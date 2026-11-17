@@ -15,6 +15,8 @@ const REPORT_EVERY: Duration = Duration::from_secs(5);
 pub(crate) enum Stage {
     /// One `Engine::pump`.
     Pump,
+    /// Waiting for a frame expected now.
+    Wait,
     /// Between two polls of the page: Rune's frame cadence while it keeps waking us.
     Poll,
     /// Between two frames Ladybird presented.

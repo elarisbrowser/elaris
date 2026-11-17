@@ -78,6 +78,13 @@ mod bridged {
             Ok(std::mem::take(&mut *self.events.borrow_mut()))
         }
 
+        /// Runs Ladybird work until a new frame is presented or `timeout` passes, and returns the
+        /// events it raised.
+        pub(crate) fn wait_for_frame(&mut self, timeout: Duration) -> Result<Vec<Event>, String> {
+            self.view().wait_for_frame(timeout)?;
+            Ok(std::mem::take(&mut *self.events.borrow_mut()))
+        }
+
         /// The frame on display, if any.
         pub(crate) fn frame(&mut self) -> Result<Option<Frame>, String> {
             self.view().frame()
@@ -111,6 +118,8 @@ mod bridged {
 
 #[cfg(not(feature = "ladybird-bridge"))]
 mod unavailable {
+    use std::time::Duration;
+
     use elaris::ladybird::{Event, Frame, KeyEvent, MouseEvent};
 
     /// Never constructed: this build has no engine.
@@ -142,6 +151,10 @@ mod unavailable {
         }
 
         pub(crate) fn pump(&mut self) -> Result<Vec<Event>, String> {
+            match *self {}
+        }
+
+        pub(crate) fn wait_for_frame(&mut self, _: Duration) -> Result<Vec<Event>, String> {
             match *self {}
         }
 

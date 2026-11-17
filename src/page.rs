@@ -16,6 +16,11 @@ use crate::perf::{self, Count, Stage};
 /// How often Ladybird is pumped while the page is busy, and while it is quiet.
 const ACTIVE_PUMP_INTERVAL: Duration = Duration::from_millis(4);
 const IDLE_PUMP_INTERVAL: Duration = Duration::from_millis(50);
+/// How long a poll waits for a frame Ladybird is about to present, while frames are flowing.
+/// Ladybird presents on the same vsync that Rune polls on, so its frame often lands a moment
+/// after the pump; without the wait, it shows a refresh late, together with the next one, which
+/// replaces it. Waiting blocks the UI thread, so it stays well under a frame.
+const FRAME_WAIT: Duration = Duration::from_millis(2);
 /// How long the page counts as busy after its last event or input.
 const ACTIVE_WINDOW: Duration = Duration::from_millis(750);
 /// Frames laid out at a different display scale than the viewport's are stale.
@@ -47,6 +52,8 @@ pub(crate) struct Page {
     applied: Option<(i32, i32, f64)>,
     focus: Focus,
     frame_serial: Option<u64>,
+    /// The last poll showed a new frame, so this one likely has another coming.
+    frames_flowing: bool,
     last_activity: Instant,
     /// Development timing: the last poll, the last new frame and the oldest unanswered input.
     last_poll: Option<Instant>,
@@ -79,6 +86,7 @@ impl Page {
                 ..Focus::default()
             },
             frame_serial: None,
+            frames_flowing: false,
             last_activity: Instant::now(),
             last_poll: None,
             last_frame: None,
@@ -193,7 +201,19 @@ impl Page {
         let Some(engine) = self.engine.as_mut() else {
             return polled;
         };
-        let events = match perf::time(Stage::Pump, || engine.pump()) {
+        let mut events = perf::time(Stage::Pump, || engine.pump());
+        let has_frame = |events: &Result<Vec<Event>, _>| {
+            events
+                .as_ref()
+                .is_ok_and(|events| events.contains(&Event::ReadyToPaint))
+        };
+        if self.frames_flowing && !has_frame(&events) {
+            let waited = perf::time(Stage::Wait, || engine.wait_for_frame(FRAME_WAIT));
+            if let (Ok(events), Ok(more)) = (&mut events, waited) {
+                events.extend(more);
+            }
+        }
+        let events = match events {
             Ok(events) => events,
             Err(error) => {
                 self.error = Some(error);
@@ -217,9 +237,11 @@ impl Page {
             self.last_activity = Instant::now();
             polled.changed |= events.iter().any(|e| *e != Event::ReadyToPaint);
         }
+        let shown = self.frame_serial;
         if frame_ready {
             polled.changed |= self.take_frame();
         }
+        self.frames_flowing = self.frame_serial != shown;
         polled
     }
 
