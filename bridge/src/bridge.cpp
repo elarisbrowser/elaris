@@ -7,13 +7,18 @@
 #include <AK/Utf16String.h>
 
 #include <LibCore/EventLoop.h>
+#include <LibGfx/Bitmap.h>
+#include <LibGfx/SharedImageBuffer.h>
 #include <LibGfx/SystemTheme.h>
 #include <LibURL/Parser.h>
 #include <LibURL/URL.h>
+#include <LibWebCommon/Page/InputEvent.h>
 #include <LibWebCommon/PixelUnits.h>
+#include <LibWebCommon/UIEvents/KeyCode.h>
 #include <LibWebCommon/WebView/Utilities.h>
 #include <LibWebView/Application.h>
 #include <LibWebView/HeadlessWebView.h>
+#include <LibWebView/PageBackingStores.h>
 
 #include <algorithm>
 #include <array>
@@ -39,6 +44,43 @@ class ElarisApplication final : public WebView::Application {
     }
 };
 
+// A headless view whose frames the host reads from CPU memory, as Ladybird's TerminalWebView does.
+class ElarisWebView final : public WebView::HeadlessWebView {
+  public:
+    static AK::NonnullOwnPtr<ElarisWebView> create(Core::AnonymousBuffer theme, Web::DevicePixelSize size) {
+        auto view = AK::adopt_own(*new ElarisWebView(AK::move(theme), size));
+        view->initialize_tab(Web::HTML::VisibilityState::Visible);
+        view->set_presents_from_cpu_memory(true);
+        return view;
+    }
+
+    void set_viewport(Web::DevicePixelSize size, double device_pixel_ratio) {
+        m_device_pixel_ratio = device_pixel_ratio;
+        reset_viewport_size(size);
+    }
+
+    Gfx::IntRect damage() const {
+        return m_damage;
+    }
+    void clear_damage() {
+        m_damage = {};
+    }
+    uint64_t serial() const {
+        return m_serial;
+    }
+
+  private:
+    ElarisWebView(Core::AnonymousBuffer theme, Web::DevicePixelSize size) : HeadlessWebView(AK::move(theme), size) {}
+
+    void did_accept_presented_backing_store(i32, Gfx::IntRect damage_rect) override {
+        m_damage = m_damage.is_empty() ? damage_rect : m_damage.united(damage_rect);
+        ++m_serial;
+    }
+
+    Gfx::IntRect m_damage;
+    uint64_t m_serial{};
+};
+
 struct ElarisLadybird {
     ElarisLadybirdEventCallback callback{};
     void* context{};
@@ -48,7 +90,8 @@ struct ElarisLadybird {
 
 struct ElarisLadybirdView {
     ElarisLadybird* bridge{};
-    AK::NonnullOwnPtr<WebView::HeadlessWebView> view;
+    AK::NonnullOwnPtr<ElarisWebView> view;
+    Gfx::IntSize copied_size;
 };
 
 static AK::OwnPtr<ElarisApplication> s_application;
@@ -138,8 +181,8 @@ extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, ElarisLad
     if (theme.is_error())
         return fail("could not load Ladybird's Default.ini theme");
 
-    auto view = WebView::HeadlessWebView::create(theme.release_value(), {1024, 768});
-    auto* handle = new ElarisLadybirdView{bridge, AK::move(view)};
+    auto view = ElarisWebView::create(theme.release_value(), {1024, 768});
+    auto* handle = new ElarisLadybirdView{bridge, AK::move(view), {}};
     bridge->views.push_back(handle);
     handle->view->on_url_change = [bridge](auto const& url) { emit(bridge, ELARIS_LADYBIRD_NAVIGATION, to_utf8(url)); };
     handle->view->on_title_change = [bridge](auto const& title) {
@@ -167,12 +210,237 @@ extern "C" int32_t elaris_ladybird_load(ElarisLadybirdView* handle, char const* 
     return 0;
 }
 
-extern "C" int32_t elaris_ladybird_resize(ElarisLadybirdView* handle, int32_t width, int32_t height) {
-    if (!handle || width <= 0 || height <= 0)
-        return fail("view and positive dimensions are required");
+extern "C" int32_t elaris_ladybird_resize(ElarisLadybirdView* handle, int32_t width, int32_t height,
+                                          double device_pixel_ratio) {
+    if (!handle || width <= 0 || height <= 0 || !(device_pixel_ratio > 0))
+        return fail("view, positive dimensions and a positive device pixel ratio are required");
     if (handle->bridge->owner_thread != std::this_thread::get_id())
         return fail("resize must run on the initialization thread");
-    handle->view->reset_viewport_size({width, height});
+    handle->view->set_viewport({width, height}, device_pixel_ratio);
+    s_last_error.clear();
+    return 0;
+}
+
+// The displayed frame's CPU bitmap. Backing stores are reused, so the bitmap can be larger than the frame.
+static RefPtr<Gfx::Bitmap> displayed_bitmap(ElarisLadybirdView const& handle, Gfx::IntSize& size,
+                                            double& device_pixel_ratio) {
+    auto frame = handle.view->backing_stores().displayed_frame();
+    if (!frame.has_value() || !frame->shared_image_buffer || frame->size.is_empty())
+        return nullptr;
+    auto bitmap = frame->shared_image_buffer->bitmap_if_present();
+    if (!bitmap)
+        return nullptr;
+    size = {std::min(frame->size.width(), bitmap->width()), std::min(frame->size.height(), bitmap->height())};
+    device_pixel_ratio = frame->device_pixel_ratio;
+    return bitmap;
+}
+
+extern "C" int32_t elaris_ladybird_frame(ElarisLadybirdView* handle, ElarisLadybirdFrame* out_frame) {
+    if (!handle || !out_frame)
+        return fail("view and output frame are required");
+    if (handle->bridge->owner_thread != std::this_thread::get_id())
+        return fail("frames must be read on the initialization thread");
+    Gfx::IntSize size;
+    double device_pixel_ratio = 1;
+    if (!displayed_bitmap(*handle, size, device_pixel_ratio)) {
+        s_last_error.clear();
+        return ELARIS_LADYBIRD_NO_FRAME;
+    }
+    auto damage = size == handle->copied_size ? handle->view->damage().intersected({{}, size}) : Gfx::IntRect{{}, size};
+    *out_frame = {size.width(),         size.height(),   size.width() * 4,
+                  ELARIS_LADYBIRD_PIXEL_FORMAT_RGBA8,
+                  device_pixel_ratio,   damage.x(),      damage.y(),
+                  damage.width(),       damage.height(), handle->view->serial()};
+    s_last_error.clear();
+    return 0;
+}
+
+extern "C" int32_t elaris_ladybird_copy_frame(ElarisLadybirdView* handle, uint8_t* rgba, size_t length) {
+    if (!handle || !rgba)
+        return fail("view and pixel buffer are required");
+    if (handle->bridge->owner_thread != std::this_thread::get_id())
+        return fail("frames must be read on the initialization thread");
+    Gfx::IntSize size;
+    double device_pixel_ratio = 1;
+    auto bitmap = displayed_bitmap(*handle, size, device_pixel_ratio);
+    if (!bitmap)
+        return fail("the view has no frame to copy");
+    auto row_length = static_cast<size_t>(size.width()) * 4;
+    if (length != row_length * static_cast<size_t>(size.height()))
+        return fail("pixel buffer does not match the displayed frame");
+
+    auto red_is_low_byte =
+        bitmap->format() == Gfx::BitmapFormat::RGBA8888 || bitmap->format() == Gfx::BitmapFormat::RGBx8888;
+    for (int y = 0; y < size.height(); ++y) {
+        auto const* source = bitmap->scanline(y);
+        auto* destination = rgba + static_cast<size_t>(y) * row_length;
+        for (int x = 0; x < size.width(); ++x) {
+            auto pixel = source[x];
+            uint8_t low = pixel & 0xff;
+            uint8_t high = (pixel >> 16) & 0xff;
+            destination[0] = red_is_low_byte ? low : high;
+            destination[1] = (pixel >> 8) & 0xff;
+            destination[2] = red_is_low_byte ? high : low;
+            destination[3] = 0xff;
+            destination += 4;
+        }
+    }
+    handle->copied_size = size;
+    handle->view->clear_damage();
+    s_last_error.clear();
+    return 0;
+}
+
+static Web::UIEvents::KeyModifier to_modifiers(int32_t modifiers) {
+    auto result = Web::UIEvents::KeyModifier::Mod_None;
+    if (modifiers & ELARIS_LADYBIRD_MOD_ALT)
+        result |= Web::UIEvents::KeyModifier::Mod_Alt;
+    if (modifiers & ELARIS_LADYBIRD_MOD_CTRL)
+        result |= Web::UIEvents::KeyModifier::Mod_Ctrl;
+    if (modifiers & ELARIS_LADYBIRD_MOD_SHIFT)
+        result |= Web::UIEvents::KeyModifier::Mod_Shift;
+    if (modifiers & ELARIS_LADYBIRD_MOD_SUPER)
+        result |= Web::UIEvents::KeyModifier::Mod_Super;
+    return result;
+}
+
+static Web::UIEvents::MouseButton to_buttons(int32_t buttons) {
+    auto result = Web::UIEvents::MouseButton::None;
+    if (buttons & ELARIS_LADYBIRD_BUTTON_PRIMARY)
+        result |= Web::UIEvents::MouseButton::Primary;
+    if (buttons & ELARIS_LADYBIRD_BUTTON_SECONDARY)
+        result |= Web::UIEvents::MouseButton::Secondary;
+    if (buttons & ELARIS_LADYBIRD_BUTTON_MIDDLE)
+        result |= Web::UIEvents::MouseButton::Middle;
+    return result;
+}
+
+extern "C" int32_t elaris_ladybird_mouse_event(ElarisLadybirdView* handle, ElarisLadybirdMouseEvent const* event) {
+    if (!handle || !event)
+        return fail("view and mouse event are required");
+    if (handle->bridge->owner_thread != std::this_thread::get_id())
+        return fail("input must be sent on the initialization thread");
+
+    Web::MouseEvent::Type type;
+    switch (event->type) {
+    case ELARIS_LADYBIRD_MOUSE_DOWN:
+        type = Web::MouseEvent::Type::MouseDown;
+        break;
+    case ELARIS_LADYBIRD_MOUSE_UP:
+        type = Web::MouseEvent::Type::MouseUp;
+        break;
+    case ELARIS_LADYBIRD_MOUSE_MOVE:
+        type = Web::MouseEvent::Type::MouseMove;
+        break;
+    case ELARIS_LADYBIRD_MOUSE_LEAVE:
+        type = Web::MouseEvent::Type::MouseLeave;
+        break;
+    case ELARIS_LADYBIRD_MOUSE_WHEEL:
+        type = Web::MouseEvent::Type::MouseWheel;
+        break;
+    default:
+        return fail("unknown mouse event type");
+    }
+
+    auto precision = event->wheel_precise ? Web::WheelDeltaPrecision::Precise : Web::WheelDeltaPrecision::Discrete;
+    Web::DevicePixelPoint position{event->x, event->y};
+    handle->view->enqueue_input_event(Web::MouseEvent{
+        type,
+        position,
+        position,
+        to_buttons(event->button),
+        to_buttons(event->buttons),
+        to_modifiers(event->modifiers),
+        event->wheel_delta_x,
+        event->wheel_delta_y,
+        Web::wheel_tick_120ths_from_pixel_delta(event->wheel_delta_x, precision),
+        Web::wheel_tick_120ths_from_pixel_delta(event->wheel_delta_y, precision),
+        precision,
+        Web::ScrollGesturePhase::None,
+        event->click_count,
+        nullptr,
+    });
+    s_last_error.clear();
+    return 0;
+}
+
+extern "C" int32_t elaris_ladybird_key_event(ElarisLadybirdView* handle, ElarisLadybirdKeyEvent const* event) {
+    if (!handle || !event)
+        return fail("view and key event are required");
+    if (handle->bridge->owner_thread != std::this_thread::get_id())
+        return fail("input must be sent on the initialization thread");
+    if (event->type != ELARIS_LADYBIRD_KEY_PRESS && event->type != ELARIS_LADYBIRD_KEY_RELEASE)
+        return fail("unknown key event type");
+
+    auto key = Web::UIEvents::KeyCode::Key_Invalid;
+    u32 code_point = 0;
+    switch (event->key) {
+    case ELARIS_LADYBIRD_KEY_CHARACTER:
+        key = Web::UIEvents::code_point_to_key_code(event->code_point);
+        code_point = event->code_point;
+        break;
+    case ELARIS_LADYBIRD_KEY_RETURN:
+        key = Web::UIEvents::KeyCode::Key_Return;
+        code_point = '\n';
+        break;
+    case ELARIS_LADYBIRD_KEY_BACKSPACE:
+        key = Web::UIEvents::KeyCode::Key_Backspace;
+        break;
+    case ELARIS_LADYBIRD_KEY_DELETE:
+        key = Web::UIEvents::KeyCode::Key_Delete;
+        break;
+    case ELARIS_LADYBIRD_KEY_TAB:
+        key = Web::UIEvents::KeyCode::Key_Tab;
+        code_point = '\t';
+        break;
+    case ELARIS_LADYBIRD_KEY_ESCAPE:
+        key = Web::UIEvents::KeyCode::Key_Escape;
+        break;
+    case ELARIS_LADYBIRD_KEY_LEFT:
+        key = Web::UIEvents::KeyCode::Key_Left;
+        break;
+    case ELARIS_LADYBIRD_KEY_RIGHT:
+        key = Web::UIEvents::KeyCode::Key_Right;
+        break;
+    case ELARIS_LADYBIRD_KEY_UP:
+        key = Web::UIEvents::KeyCode::Key_Up;
+        break;
+    case ELARIS_LADYBIRD_KEY_DOWN:
+        key = Web::UIEvents::KeyCode::Key_Down;
+        break;
+    case ELARIS_LADYBIRD_KEY_HOME:
+        key = Web::UIEvents::KeyCode::Key_Home;
+        break;
+    case ELARIS_LADYBIRD_KEY_END:
+        key = Web::UIEvents::KeyCode::Key_End;
+        break;
+    case ELARIS_LADYBIRD_KEY_PAGE_UP:
+        key = Web::UIEvents::KeyCode::Key_PageUp;
+        break;
+    case ELARIS_LADYBIRD_KEY_PAGE_DOWN:
+        key = Web::UIEvents::KeyCode::Key_PageDown;
+        break;
+    default:
+        return fail("unknown key");
+    }
+
+    auto type = event->type == ELARIS_LADYBIRD_KEY_PRESS ? Web::KeyEvent::Type::KeyDown : Web::KeyEvent::Type::KeyUp;
+    auto modifiers = to_modifiers(event->modifiers);
+    // Shortcut chords (Ctrl or Command held) do not type their character.
+    auto is_shortcut = (event->modifiers & (ELARIS_LADYBIRD_MOD_CTRL | ELARIS_LADYBIRD_MOD_SUPER)) != 0;
+    auto should_insert_text = type == Web::KeyEvent::Type::KeyDown && code_point != 0 && !is_shortcut;
+    handle->view->enqueue_input_event(
+        Web::KeyEvent{type, key, modifiers, code_point, event->repeat != 0, should_insert_text, nullptr});
+    s_last_error.clear();
+    return 0;
+}
+
+extern "C" int32_t elaris_ladybird_set_focus(ElarisLadybirdView* handle, int32_t focused) {
+    if (!handle)
+        return fail("view is required");
+    if (handle->bridge->owner_thread != std::this_thread::get_id())
+        return fail("focus must change on the initialization thread");
+    handle->view->set_has_system_focus(focused != 0);
     s_last_error.clear();
     return 0;
 }

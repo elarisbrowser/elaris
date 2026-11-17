@@ -6,6 +6,7 @@
 #include <iostream>
 #include <string>
 #include <thread>
+#include <vector>
 
 struct Events {
     unsigned navigation{};
@@ -33,6 +34,23 @@ static void on_event(void* context, ElarisLadybirdEvent const* event) {
         ++events.frames;
         break;
     }
+}
+
+// Whether the displayed frame has the requested size and scale, and the page's background color.
+static bool frame_matches(ElarisLadybirdView* view, int32_t width, int32_t height, double device_pixel_ratio) {
+    ElarisLadybirdFrame frame{};
+    if (elaris_ladybird_frame(view, &frame) != 0 || frame.width != width || frame.height != height ||
+        frame.device_pixel_ratio != device_pixel_ratio)
+        return false;
+    if (frame.format != ELARIS_LADYBIRD_PIXEL_FORMAT_RGBA8 || frame.stride != width * 4 || frame.damage_width <= 0)
+        return false;
+    std::vector<uint8_t> rgba(static_cast<size_t>(frame.stride) * frame.height);
+    if (elaris_ladybird_copy_frame(view, rgba.data(), rgba.size() - 1) == 0)
+        return false;
+    if (elaris_ladybird_copy_frame(view, rgba.data(), rgba.size()) != 0)
+        return false;
+    auto const* corner = &rgba[(static_cast<size_t>(height - 1) * width + width - 1) * 4];
+    return corner[0] == 0 && corner[1] == 128 && corner[2] == 255 && corner[3] == 255;
 }
 
 static bool check(int32_t result, char const* operation) {
@@ -76,12 +94,17 @@ int main(int argc, char** argv) {
         if (!passed)
             break;
 
-        if (elaris_ladybird_resize(view, 0, 600) == 0) {
-            std::cerr << "zero-width resize unexpectedly succeeded\n";
+        ElarisLadybirdFrame no_frame{};
+        if (elaris_ladybird_frame(view, &no_frame) != ELARIS_LADYBIRD_NO_FRAME) {
+            std::cerr << "a new view unexpectedly reported a frame\n";
+            passed = false;
+        }
+        if (elaris_ladybird_resize(view, 0, 600, 1) == 0 || elaris_ladybird_resize(view, 800, 600, 0) == 0) {
+            std::cerr << "invalid resize unexpectedly succeeded\n";
             passed = false;
         }
         int32_t cross_thread_resize = 0;
-        std::thread other_thread([&] { cross_thread_resize = elaris_ladybird_resize(view, 801, 601); });
+        std::thread other_thread([&] { cross_thread_resize = elaris_ladybird_resize(view, 801, 601, 1); });
         other_thread.join();
         if (cross_thread_resize == 0) {
             std::cerr << "cross-thread resize unexpectedly succeeded\n";
@@ -90,16 +113,26 @@ int main(int argc, char** argv) {
 
         auto file = std::filesystem::absolute(argv[3]).string();
         auto url = "file://" + file;
+        int32_t width = 800 + cycle;
+        int32_t height = 600 + cycle;
+        double device_pixel_ratio = cycle == 1 ? 2 : 1;
         passed = check(elaris_ladybird_load(view, url.c_str()), "navigate") &&
-                 check(elaris_ladybird_resize(view, 800 + cycle, 600 + cycle), "resize");
+                 check(elaris_ladybird_resize(view, width, height, device_pixel_ratio), "resize");
 
+        bool frame_ready = false;
         auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
         while (passed &&
                (events.navigation == 0 || events.title == 0 || events.loading_started == 0 ||
-                events.loading_finished == 0 || events.frames == 0) &&
+                events.loading_finished == 0 || events.frames == 0 || !frame_ready) &&
                std::chrono::steady_clock::now() < deadline) {
             passed = check(elaris_ladybird_pump(bridge), "pump");
+            frame_ready = frame_ready || frame_matches(view, width, height, device_pixel_ratio);
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        if (!frame_ready) {
+            std::cerr << "expected a " << width << "x" << height << " frame at scale " << device_pixel_ratio
+                      << " showing the page background\n";
+            passed = false;
         }
         if (events.navigation == 0 || events.title == 0 || events.loading_started == 0 ||
             events.loading_finished == 0 || events.frames == 0 || events.last_title != "Elaris Bridge Smoke") {
