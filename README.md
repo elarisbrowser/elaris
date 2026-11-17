@@ -7,7 +7,7 @@ Elaris is a small cross-platform browser shell built with Rust and [Rune](https:
 Install the stable Rust toolchain, then run:
 
 ```sh
-cargo run -p elaris-app
+cargo run
 ```
 
 Rune supports macOS and Linux. On Linux, a working desktop session and GPU driver are required to open the native window.

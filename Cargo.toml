@@ -1,13 +1,11 @@
-[workspace]
-resolver = "3"
-members = ["crates/elaris-app"]
-
-[workspace.package]
+[package]
+name = "elaris"
+version = "0.1.0"
 edition = "2024"
 license = "MIT"
 rust-version = "1.88"
 
-[workspace.dependencies]
+[dependencies]
 rune = {
     git = "https://github.com/anomalyco/rune",
     rev = "cca5df6fafb4721d96fe105f126ebfd2ec351bb6",
@@ -15,10 +13,10 @@ rune = {
     features = ["accessibility", "embedded-fonts", "metal-backend"],
 }
 
-[workspace.lints.rust]
+[lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
 
-[workspace.lints.clippy]
+[lints.clippy]
 all = "warn"
 
 # Rune needs its matching patched platform and text crates when used outside its workspace.

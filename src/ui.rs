@@ -1,7 +1,7 @@
 use rune::tok::{self, type_};
 use rune::{Cx, El, col, el, row, text_input};
 
-use crate::app_state::AppState;
+use crate::app::AppState;
 
 pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     let theme = tok::theme(true);
