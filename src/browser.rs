@@ -187,6 +187,12 @@ impl Browser {
         self.send(id, ViewCommand::Reload);
     }
 
+    /// Opens another tab at the same address as `id`.
+    pub(crate) fn duplicate_tab(&mut self, id: TabId) -> Option<TabId> {
+        let url = self.tab(id)?.url.clone();
+        self.open_tab(&url).ok()
+    }
+
     pub(crate) fn go_back(&mut self, id: TabId) {
         self.send(id, ViewCommand::Traverse(-1));
     }
@@ -212,6 +218,26 @@ impl Browser {
                 .or_else(|| self.tabs.last())
                 .map(Tab::id);
         }
+    }
+
+    /// Closes every tab except `id` and leaves it active.
+    pub(crate) fn close_other_tabs(&mut self, id: TabId) {
+        if self.tab(id).is_none() {
+            return;
+        }
+        let closed: Vec<TabId> = self
+            .tabs
+            .iter()
+            .map(Tab::id)
+            .filter(|tab| *tab != id)
+            .collect();
+        self.tabs.retain(|tab| tab.id() == id);
+        if let Some(engine) = &self.engine {
+            for tab in closed {
+                engine.send(Command::Close(tab));
+            }
+        }
+        self.active = Some(id);
     }
 
     /// Records the display scale. The view calls it as it builds, because only the view knows it.

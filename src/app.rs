@@ -89,6 +89,21 @@ impl AppState {
         self.show_active_tab();
     }
 
+    pub(crate) fn duplicate(&mut self, tab: TabId) {
+        if let Some(tab) = self.browser.duplicate_tab(tab) {
+            self.activate(tab);
+        }
+    }
+
+    pub(crate) fn close_others(&mut self, tab: TabId) {
+        self.browser.close_other_tabs(tab);
+        self.show_active_tab();
+    }
+
+    pub(crate) fn reload(&mut self, tab: TabId) {
+        self.browser.reload(tab);
+    }
+
     pub(crate) fn close_active(&mut self) {
         if let Some(tab) = self.browser.active_tab().map(Tab::id) {
             self.close(tab);
