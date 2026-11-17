@@ -94,6 +94,21 @@ impl AppState {
         }
     }
 
+    /// Why the address or the active page failed, or that the page is loading.
+    pub(crate) fn status(&self) -> Option<String> {
+        let tab = self.browser.active_tab();
+        let error = self
+            .address_error
+            .as_ref()
+            .or_else(|| tab.and_then(|tab| tab.error.as_ref()));
+        match error {
+            Some(error) => Some(error.clone()),
+            None => tab
+                .is_some_and(|tab| tab.loading)
+                .then(|| "Loading…".to_owned()),
+        }
+    }
+
     fn ensure_a_tab(&mut self) {
         if self.browser.tabs().is_empty() {
             self.new_tab();
@@ -235,6 +250,17 @@ mod tests {
         state.activate(first);
         assert_eq!(state.address.text, "https://example.com");
         assert_eq!(state.browser.tabs().len(), 2);
+    }
+
+    #[test]
+    fn the_status_says_what_went_wrong() {
+        let mut state = AppState::new(None);
+        assert_eq!(state.status(), None);
+        state.address.replace_text("two words".to_owned());
+        state.submit_address();
+        assert!(state.status().is_some());
+        state.new_tab();
+        assert_eq!(state.status(), None);
     }
 
     #[test]

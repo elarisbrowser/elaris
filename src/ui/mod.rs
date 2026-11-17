@@ -3,6 +3,7 @@
 //! The window's interface: a sidebar beside the active tab's page. Each part is its own module;
 //! colours and measurements live in `theme`.
 
+mod controls;
 mod icons;
 mod sidebar;
 mod theme;
