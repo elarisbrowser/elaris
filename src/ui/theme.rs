@@ -4,7 +4,8 @@
 //! a token of [`Theme`], named for what it is for, with a light and a dark value here; sizes
 //! build on Rune's spacing and radius scales.
 
-use rune::tok::{radius, space};
+use rune::Spring;
+use rune::tok::{motion, radius, space};
 use rune::{Color, oklch, oklcha};
 
 /// The hue every neutral leans toward, a cool grey.
@@ -49,7 +50,7 @@ pub(crate) fn palette(dark: bool) -> Theme {
             field: oklcha(1.0, 0.0, 0.0, 0.07),
             hover: oklcha(1.0, 0.0, 0.0, 0.06),
             press: oklcha(1.0, 0.0, 0.0, 0.1),
-            tab_active: oklcha(1.0, 0.0, 0.0, 0.1),
+            tab_active: oklcha(1.0, 0.0, 0.0, 0.15),
             tab_active_shadow: oklcha(0.0, 0.0, 0.0, 0.3),
             disabled_opacity: 0.35,
         }
@@ -105,6 +106,8 @@ pub(crate) const TAB_GAP: f32 = 2.0;
 /// The raised look of the active tab.
 pub(crate) const ACTIVE_SHADOW_Y: f32 = 0.5;
 pub(crate) const ACTIVE_SHADOW_BLUR: f32 = 1.5;
+/// How the active tab's highlight moves to the tab pressed.
+pub(crate) const SELECTION_MOTION: Spring = motion::SNAPPY;
 
 /// The web page's container: how far it sits in from the window's edges, and its corners.
 pub(crate) const VIEWPORT_INSET: f32 = space::S1 + space::S1 / 2.0;

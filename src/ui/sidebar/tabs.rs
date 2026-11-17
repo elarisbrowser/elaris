@@ -47,6 +47,12 @@ fn tab_row(tab: &Tab, active: bool, theme: &Theme) -> El {
         theme,
     )
     .on_press(move |state: &mut AppState| state.close(id));
+    // Only the active tab shows its close button at rest; the others show it under the pointer.
+    let close = if active {
+        close
+    } else {
+        close.group_opacity(0.0, 1.0)
+    };
     let row = row_button(
         &format!("tab-{}", id.raw()),
         glyph,
@@ -55,7 +61,11 @@ fn tab_row(tab: &Tab, active: bool, theme: &Theme) -> El {
         theme,
     )
     .help_when_truncated(tab.label())
-    .on_press(move |state: &mut AppState| state.activate(id))
+    .hover_group()
+    .on_press_tx(move |state: &mut AppState, tx| {
+        tx.color_motion(theme::SELECTION_MOTION);
+        state.activate(id);
+    })
     .on_middle_press(move |state: &mut AppState, _| state.close(id))
     .child(close);
     if active {
