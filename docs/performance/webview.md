@@ -33,11 +33,12 @@ The view is not rebuilt for a new frame unless its size changed, so animation co
 - **main** (UI): `Drawn`, the interval between frames Rune drew, and `Poll`, between polls.
 - **elaris-engine**: frames shown per second; duplicate, skipped (presented but replaced before
   the engine took them) and stale frames; and n/mean/p50/p95/max for handling one batch of
-  Ladybird work (`Pump`), frame interval, copy, `Pixels::set`, and input to the next new frame.
+  Ladybird work (`Pump`), frame interval, copy, `Pixels::set`, input to the next new frame, and
+  a new viewport size to the first frame at it (`ResizeToFrame`).
 
-Off, it costs a cached branch. Workloads: a CSS `left` animation, a `requestAnimationFrame`
-animation, a 3000-row page scrolled by `scrollBy` each animation frame, an idle page, and
-slaterlabs.dev (a Next.js site) with trackpad scrolling.
+Off, it costs a cached branch. The workload pages are in [`benchmarks/`](../../benchmarks): a CSS
+animation, a `requestAnimationFrame` animation, a 3000-row page that scrolls itself every frame,
+and an idle page. slaterlabs.dev (a Next.js site) was used with trackpad scrolling.
 
 ## Findings, in order
 
@@ -63,7 +64,13 @@ reported these blocks in debug builds; with the engine thread it reports none.
 
 **5. Touchpad scrolls had no gesture phase.** Elaris now passes Rune's phase and momentum to
 Ladybird as ongoing, momentum or ended, as Ladybird's Qt frontend does, so a gesture stays on
-one scroller and momentum is told apart from finger scrolling.
+one scroller and momentum is told apart from finger scrolling. With phases reported, the bridge
+also turns on Ladybird's elastic overscroll on macOS (`platform_scrolls_elastically`), which needs
+to know when the fingers lift.
+
+**6. Live resizing.** The UI sends the viewport size every frame of a live resize. The engine
+thread now applies only the newest size from each batch of commands, so Ladybird lays out the
+size the window has now instead of working through stale ones.
 
 ## Results
 
@@ -79,6 +86,13 @@ wait, "engine thread" is the current design.
 | Scrolling, debug Elaris | ~60 → — → 60.0 | — → — → 0 | 17.0 → — → 19.0 | 300 |
 | slaterlabs.dev | — → 53.6–60.0 → 56.0–60.2 | — → 0–12 → 0 | — → 17.7–32.5 → 18.8 | 300 |
 | Idle | no frames; UI polled every 50 ms → UI sleeps until something changes | 0 | — | — |
+
+Continuous resizing (the window grown and shrunk through 82 sizes, four times, by script):
+
+| Build, page | Rune drawn / 5 s | Drawn p95 / max (ms) | New size on screen p50 / p95 / max (ms) |
+|---|---|---|---|
+| Release, `scroll.html` | 299 | 17.5 / 36.5 | 12.3 / 15.7 / 17.7 |
+| Debug, slaterlabs.dev | 300 | 18.8 / 19.9 | 10.7 / 16.2 / 21.2 |
 
 On the UI thread a poll now does no engine work, and copy (0.5–1.3 ms) and `Pixels::set`
 (< 0.1 ms) run on the engine thread. Input reaches a new frame in about 4–13 ms, measured from
@@ -124,6 +138,8 @@ processes left, five runs out of five.
 
 - Visual smoothness of real trackpad scrolling beyond the user's report on slaterlabs.dev; the
   test pages are driven by script and were measured, not watched.
-- Rapid resizing while scrolling, display-scale changes, and displays above 60 Hz.
+- Resizing by dragging the window edge (measured resizes were scripted), display-scale changes,
+  and displays above 60 Hz.
+- Elastic overscroll: it needs a real touchpad, so it is enabled but unmeasured.
 - Comparison with Ladybird's own browser.
 - Linux.

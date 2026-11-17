@@ -1,0 +1,22 @@
+<!doctype html>
+<!-- A long page that scrolls itself 4 px every animation frame, end to end: continuous scrolling
+     without a touchpad. Remove the script to scroll it by hand. -->
+<title>Scrolling</title>
+<style>
+  body { margin: 0; font: 16px sans-serif; }
+  .row { height: 60px; padding: 8px; border-bottom: 1px solid #ccc; }
+  .row:nth-child(odd) { background: #eef; }
+</style>
+<script>
+  for (let i = 0; i < 3000; i++)
+    document.write(`<div class="row">Row ${i} — the quick brown fox jumps over the lazy dog</div>`);
+  let step = 4;
+  function scroll() {
+    window.scrollBy(0, step);
+    const atEnd = scrollY + innerHeight >= document.body.scrollHeight - 2;
+    if (atEnd || (scrollY <= 0 && step < 0))
+      step = -step;
+    requestAnimationFrame(scroll);
+  }
+  requestAnimationFrame(scroll);
+</script>

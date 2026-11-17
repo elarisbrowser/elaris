@@ -1,0 +1,17 @@
+<!doctype html>
+<!-- A box sliding back and forth on a CSS animation: steady compositor-driven frames. -->
+<title>CSS animation</title>
+<style>
+  body { margin: 0; font: 16px sans-serif; }
+  .box {
+    position: absolute;
+    top: 100px;
+    width: 120px;
+    height: 120px;
+    background: #36c;
+    animation: slide 2s linear infinite alternate;
+  }
+  @keyframes slide { from { left: 0; } to { left: 600px; } }
+</style>
+<p>CSS animation</p>
+<div class="box"></div>
