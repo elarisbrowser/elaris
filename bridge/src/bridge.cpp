@@ -44,6 +44,16 @@ class ElarisApplication final : public WebView::Application {
     bool should_coordinate_browser_process() const override {
         return false;
     }
+
+    // Pulling past a scroller's edge and springing back needs to know when the fingers lift, which the host reports
+    // with each scroll's gesture phase. Hosts report it from macOS touchpads.
+    bool platform_scrolls_elastically() const override {
+#if defined(AK_OS_MACOS)
+        return true;
+#else
+        return false;
+#endif
+    }
 };
 
 // A headless view whose frames the host reads from CPU memory, as Ladybird's TerminalWebView does.
