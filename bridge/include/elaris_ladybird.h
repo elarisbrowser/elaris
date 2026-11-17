@@ -26,8 +26,8 @@ typedef struct {
 typedef void (*ElarisLadybirdEventCallback)(void* context, const ElarisLadybirdEvent* event);
 
 /* All calls, including callbacks, run on the thread that initializes the bridge. */
-int32_t elaris_ladybird_create(const char* resource_dir, const char* profile_dir,
-    ElarisLadybirdEventCallback callback, void* context, ElarisLadybird** out_bridge);
+int32_t elaris_ladybird_create(const char* resource_dir, const char* profile_dir, ElarisLadybirdEventCallback callback,
+                               void* context, ElarisLadybird** out_bridge);
 int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, ElarisLadybirdView** out_view);
 int32_t elaris_ladybird_load(ElarisLadybirdView* view, const char* url);
 /* Polls available Ladybird work without waiting; call regularly from the host event loop. */
