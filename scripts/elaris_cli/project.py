@@ -65,6 +65,10 @@ def launch(args: argparse.Namespace) -> None:
         command += ["--features", "ladybird-bridge"]
     if args.url:
         command += ["--", args.url]
+    if args.rune_args:
+        if not args.url:
+            command.append("--")
+        command.extend(args.rune_args)
     run(*command)
 
 
@@ -88,3 +92,8 @@ def register_commands(commands) -> None:
         if handler is launch:
             subcommand.add_argument("--ui", action="store_true", help="Run the interface alone, without the Ladybird engine")
             subcommand.add_argument("url", nargs="?", help="Address to open, such as example.com")
+            subcommand.add_argument(
+                "rune_args",
+                nargs=argparse.REMAINDER,
+                help="Rune options after --, such as --snap /tmp/elaris.png",
+            )
