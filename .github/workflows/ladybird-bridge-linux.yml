@@ -1,6 +1,32 @@
 name: Ladybird bridge (Linux)
 
 on:
+  push:
+    paths:
+      - '.github/workflows/ladybird-bridge-linux.yml'
+      - 'bridge/**'
+      - 'vendor/ladybird'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'build.rs'
+      - 'src/lib.rs'
+      - 'src/ladybird.rs'
+      - 'src/ladybird/**'
+      - 'examples/ladybird_smoke.rs'
+      - 'scripts/elaris_cli/**'
+  pull_request:
+    paths:
+      - '.github/workflows/ladybird-bridge-linux.yml'
+      - 'bridge/**'
+      - 'vendor/ladybird'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'build.rs'
+      - 'src/lib.rs'
+      - 'src/ladybird.rs'
+      - 'src/ladybird/**'
+      - 'examples/ladybird_smoke.rs'
+      - 'scripts/elaris_cli/**'
   workflow_dispatch:
 
 concurrency:
