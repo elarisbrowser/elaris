@@ -23,7 +23,7 @@ jobs:
           echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
       - name: Install C++ tooling (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y clang-format clang-tidy clangd
+        run: sudo apt-get update && sudo apt-get install -y clang-format clang-tidy clangd libxkbcommon-dev
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy

@@ -9,6 +9,11 @@ cargo run
 ```
 
 This app runs independently of Ladybird. It does not require, link, or launch the web engine.
+On Linux, install `libxkbcommon-dev` first so Rune's native backend can link:
+
+```sh
+sudo apt install libxkbcommon-dev
+```
 
 ## Ladybird
 
@@ -51,7 +56,7 @@ Ladybird can use Xcode's compiler. Homebrew LLVM 22 is an alternative.
 Ladybird requires a C++23-capable compiler, CMake 3.30 or newer, and Qt 6.10 or newer. This package list is for Debian or Ubuntu:
 
 ```sh
-sudo apt install autoconf autoconf-archive automake build-essential ccache cmake curl fonts-liberation2 git glslang-tools libdrm-dev libgl1-mesa-dev libncurses-dev libpulse-dev libtool libwayland-dev libxcb-icccm4-dev nasm ninja-build pkg-config python3-venv qt6-base-private-dev qt6-positioning-dev qt6-tools-dev-tools qt6-wayland tar unzip zip
+sudo apt install autoconf autoconf-archive automake build-essential ccache cmake curl fonts-liberation2 git glslang-tools libdrm-dev libgl1-mesa-dev libncurses-dev libpulse-dev libtool libwayland-dev libxkbcommon-dev libxcb-icccm4-dev nasm ninja-build pkg-config python3-venv qt6-base-private-dev qt6-positioning-dev qt6-tools-dev-tools qt6-wayland tar unzip zip
 ```
 
 Some distributions provide CMake or Qt versions below Ladybird's minimum; install newer versions before building when needed. For other distributions, use the matching package list in [Ladybird's official build instructions](https://github.com/LadybirdBrowser/ladybird/blob/master/Documentation/BuildInstructionsLadybird.md).
