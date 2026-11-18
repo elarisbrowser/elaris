@@ -4,7 +4,7 @@
 
 use rune::TextEdit;
 
-use crate::address::{self, Destination};
+use crate::address::{self, Destination, SearchEngine};
 use crate::tab::{Tab, TabId};
 
 const MAX_TAB_SUGGESTIONS: usize = 4;
@@ -24,6 +24,7 @@ pub(crate) struct State {
     pub(crate) input: TextEdit,
     pub(crate) selected: usize,
     pub(crate) selection_moved: bool,
+    pub(crate) search_engine_menu_open: bool,
 }
 
 impl State {
@@ -40,6 +41,7 @@ impl State {
 
     pub(crate) fn close(&mut self) {
         self.open = false;
+        self.search_engine_menu_open = false;
     }
 
     pub(crate) fn move_selection(&mut self, count: usize, direction: isize) {
@@ -142,6 +144,7 @@ pub(crate) fn suggestions(
     tabs: &[Tab],
     history: &[HistoryEntry],
     sidebar_collapsed: bool,
+    search_engine: SearchEngine,
 ) -> Vec<Suggestion> {
     let query = query.trim();
     let mut suggestions = Vec::new();
@@ -160,7 +163,7 @@ pub(crate) fn suggestions(
             Destination::Search(query) => suggestions.push(Suggestion {
                 section: Section::Navigate,
                 title: query.clone(),
-                detail: "Google".to_owned(),
+                detail: search_engine.label().to_owned(),
                 glyph: Glyph::Search,
                 action: Action::Search(query),
             }),
@@ -326,7 +329,7 @@ mod tests {
             ),
             tab(3, "Rust blog", "https://blog.example.org"),
         ];
-        let suggestions = suggestions("rust", &tabs, &[], false);
+        let suggestions = suggestions("rust", &tabs, &[], false, SearchEngine::default());
         let tabs: Vec<_> = suggestions
             .iter()
             .filter(|suggestion| suggestion.section == Section::OpenTabs)
@@ -339,7 +342,7 @@ mod tests {
     #[test]
     fn matches_open_tabs_by_domain_and_url_and_selects_the_existing_tab() {
         let tabs = [tab(7, "Elaris", "https://github.com/theo/elaris/issues")];
-        let suggestions = suggestions("github.com", &tabs, &[], false);
+        let suggestions = suggestions("github.com", &tabs, &[], false, SearchEngine::default());
         assert!(suggestions.iter().any(|suggestion| {
             suggestion.title == "Elaris"
                 && suggestion.action == Action::SwitchTab(TabId::from_raw(7))
@@ -358,7 +361,7 @@ mod tests {
                 url: "https://example.com/".into(),
             },
         ];
-        let suggestions = suggestions("rust", &[], &history, false);
+        let suggestions = suggestions("rust", &[], &history, false, SearchEngine::default());
         let recent: Vec<_> = suggestions
             .iter()
             .filter(|suggestion| suggestion.section == Section::Recent)

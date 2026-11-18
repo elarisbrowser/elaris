@@ -3,8 +3,10 @@
 //! Rune's native, window-centred presentation for the omnibox.
 
 use rune::tok::type_;
-use rune::{El, ScrollSpec, Transition, col, el, icon, row, text, text_input};
+use rune::{El, ScrollSpec, Transition, Tx, col, el, icon, row, text, text_input};
+use rune_kit::{Kit, Menu, MenuItem, PaletteSeed};
 
+use crate::address::SearchEngine;
 use crate::app::{self, AppState};
 use crate::omnibox::{Action, Glyph, Section, Suggestion};
 use crate::ui::theme::{self, Theme};
@@ -14,6 +16,7 @@ pub(crate) fn view(
     theme: &Theme,
     height: f32,
     reduced_motion: bool,
+    overlays: &mut Vec<El>,
 ) -> Option<El> {
     if !state.omnibox.open {
         return None;
@@ -24,6 +27,7 @@ pub(crate) fn view(
     if !suggestions.is_empty() {
         field = field.active_descendant(format!("omnibox-result-{}", state.omnibox.selected));
     }
+    let selector = search_engine_selector(state, theme, overlays);
     let input = row()
         .key("omnibox-input-row")
         .w_full()
@@ -31,7 +35,7 @@ pub(crate) fn view(
         .px(theme::FIELD_PADDING + 4.0)
         .gap(theme::ROW_GAP + 4.0)
         .center_y()
-        .child(icon(&super::icons::SEARCH, theme::OMNIBOX_SEARCH_ICON).color(theme.icon))
+        .child(selector)
         .child(
             field
                 .key("omnibox-input")
@@ -151,6 +155,53 @@ pub(crate) fn view(
             .fill(theme.overlay_scrim)
             .child(panel),
     )
+}
+
+fn search_engine_selector(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
+    let engine = state.search_engine;
+    let label = format!("Search engine: {}", engine.label());
+    let trigger = el()
+        .key("search-engine-button")
+        .size(theme::OMNIBOX_SEARCH_BUTTON, theme::OMNIBOX_SEARCH_BUTTON)
+        .center()
+        .radius(theme::ICON_BUTTON_RADIUS)
+        .hover(theme.hover)
+        .press(theme.press)
+        .press_scale(theme::PRESS_SCALE)
+        .label(label.clone())
+        .help(format!("{label}. Click to change."))
+        .role("button")
+        .focusable(true)
+        .on_press(|state: &mut AppState| {
+            state.omnibox.search_engine_menu_open = !state.omnibox.search_engine_menu_open;
+        })
+        .child(icon(
+            super::icons::search_engine(engine),
+            theme::OMNIBOX_SEARCH_ICON,
+        ));
+    let kit = Kit::from_palette(PaletteSeed {
+        bg: theme.window,
+        fg: theme.text,
+        accent: theme.icon,
+    });
+    let mut menu = Menu::new("search-engine-menu")
+        .trigger(trigger)
+        .group_label("Search with");
+    for option in SearchEngine::ALL {
+        menu = menu.item(
+            MenuItem::new(option.label())
+                .lead(icon(super::icons::search_engine(option), theme::ICON))
+                .checked(option == engine)
+                .on_select_tx(move |state: &mut AppState, tx: &mut Tx| {
+                    state.search_engine = option;
+                    state.omnibox.search_engine_menu_open = false;
+                    tx.focus("omnibox-input", false);
+                }),
+        );
+    }
+    menu.open(state.omnibox.search_engine_menu_open)
+        .on_close(|state: &mut AppState| state.omnibox.search_engine_menu_open = false)
+        .build(&kit, overlays)
 }
 
 fn result_row(state: &AppState, suggestion: &Suggestion, index: usize, theme: &Theme) -> El {

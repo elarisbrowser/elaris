@@ -4,8 +4,38 @@
 
 use std::net::IpAddr;
 
-/// The default search provider. Change this constant to choose another provider.
-const SEARCH_URL: &str = "https://www.google.com/search?q=";
+/// A provider used for text that is not an address.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum SearchEngine {
+    #[default]
+    Google,
+    Bing,
+    DuckDuckGo,
+    Brave,
+}
+
+impl SearchEngine {
+    /// The providers shown in the omnibox menu.
+    pub(crate) const ALL: [Self; 4] = [Self::Google, Self::Bing, Self::DuckDuckGo, Self::Brave];
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Google => "Google",
+            Self::Bing => "Bing",
+            Self::DuckDuckGo => "DuckDuckGo",
+            Self::Brave => "Brave Search",
+        }
+    }
+
+    fn search_prefix(self) -> &'static str {
+        match self {
+            Self::Google => "https://www.google.com/search?q=",
+            Self::Bing => "https://www.bing.com/search?q=",
+            Self::DuckDuckGo => "https://duckduckgo.com/?q=",
+            Self::Brave => "https://search.brave.com/search?q=",
+        }
+    }
+}
 
 /// What the omnibox should do with its input.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -50,14 +80,15 @@ pub(crate) fn destination_for_input(input: &str) -> Result<Destination, &'static
 pub(crate) fn url_for_address(input: &str) -> Result<String, &'static str> {
     match destination_for_input(input)? {
         Destination::Url(url) => Ok(url),
-        Destination::Search(query) => Ok(search_url(&query)),
+        Destination::Search(query) => Ok(search_url(SearchEngine::default(), &query)),
     }
 }
 
 /// Builds a URL for a search without sending the query until it is submitted.
-pub(crate) fn search_url(query: &str) -> String {
-    let mut url = String::with_capacity(SEARCH_URL.len() + query.len() * 3);
-    url.push_str(SEARCH_URL);
+pub(crate) fn search_url(engine: SearchEngine, query: &str) -> String {
+    let prefix = engine.search_prefix();
+    let mut url = String::with_capacity(prefix.len() + query.len() * 3);
+    url.push_str(prefix);
     for byte in query.bytes() {
         if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
             url.push(char::from(byte));
@@ -121,7 +152,7 @@ fn is_local_host(host: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{Destination, destination_for_input, search_url, url_for_address};
+    use super::{Destination, SearchEngine, destination_for_input, search_url, url_for_address};
 
     #[test]
     fn sidebar_addresses_keep_the_site_and_port() {
@@ -169,7 +200,7 @@ mod tests {
     #[test]
     fn encodes_search_queries_as_utf8_url_components() {
         assert_eq!(
-            search_url("best Rust GUI / framework?"),
+            search_url(SearchEngine::Google, "best Rust GUI / framework?"),
             "https://www.google.com/search?q=best%20Rust%20GUI%20%2F%20framework%3F"
         );
         assert_eq!(

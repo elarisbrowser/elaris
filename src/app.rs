@@ -5,7 +5,7 @@
 
 use rune::{Key, KeyEvent, PointerPress, Tx};
 
-use crate::address;
+use crate::address::{self, Destination, SearchEngine};
 use crate::appearance::Appearance;
 use crate::browser::Browser;
 use crate::engine::Engine;
@@ -18,6 +18,7 @@ pub(crate) const APP_NAME: &str = "Elaris";
 
 pub(crate) struct AppState {
     pub(crate) omnibox: omnibox::State,
+    pub(crate) search_engine: SearchEngine,
     /// Why the last submitted query could not be opened, until the next is.
     pub(crate) address_error: Option<String>,
     pub(crate) browser: Browser,
@@ -44,6 +45,7 @@ impl AppState {
     fn new(start: Option<&str>) -> Self {
         let mut state = Self {
             omnibox: omnibox::State::default(),
+            search_engine: SearchEngine::default(),
             address_error: None,
             browser: Browser::default(),
             page_menu: Default::default(),
@@ -71,7 +73,13 @@ impl AppState {
     /// Loads what the omnibox holds in the active tab.
     pub(crate) fn submit_omnibox(&mut self) {
         let address = self.omnibox.input.text.clone();
-        let result = self.navigate_destination(&address);
+        let result = match address::destination_for_input(&address) {
+            Ok(Destination::Url(url)) => self.navigate_destination(&url),
+            Ok(Destination::Search(query)) => {
+                self.navigate_destination(&address::search_url(self.search_engine, &query))
+            }
+            Err(error) => Err(crate::browser::Error::Address(error)),
+        };
         self.address_error = result.err().map(|error| error.to_string());
         self.show_active_tab();
     }
@@ -100,13 +108,16 @@ impl AppState {
             self.browser.tabs(),
             &self.history,
             self.sidebar.collapsed,
+            self.search_engine,
         )
     }
 
     pub(crate) fn choose_suggestion(&mut self, suggestion: Suggestion, tx: &mut Tx) {
         let result = match suggestion.action {
             Action::Navigate(url) => self.navigate_destination(&url),
-            Action::Search(query) => self.navigate_destination(&address::search_url(&query)),
+            Action::Search(query) => {
+                self.navigate_destination(&address::search_url(self.search_engine, &query))
+            }
             Action::VisitRecent(url) => self.navigate_destination(&url),
             Action::SwitchTab(tab) => {
                 self.activate(tab);

@@ -104,7 +104,7 @@ fn search_launcher(state: &AppState, theme: &Theme) -> El {
     row_button(
         "omnibox-launcher",
         address.is_none().then(|| {
-            icon(&icons::SEARCH, theme::ICON)
+            icon(icons::search_engine(state.search_engine), theme::ICON)
                 .key("search-icon")
                 .color(theme.text_muted)
         }),

@@ -39,16 +39,17 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     if !state.sidebar.collapsed {
         window = window.child(sidebar::resize::handle(state.sidebar.width));
     }
+    let mut overlays = Vec::new();
     if let Some(overlay) = omnibox::view(
         state,
         &theme,
         cx.layout_size("window")
             .map_or(WINDOW_MIN_SIZE.1, |size| size[1]),
         cx.is_reduced_motion(),
+        &mut overlays,
     ) {
         window = window.child(overlay);
     }
-    let mut overlays = Vec::new();
     viewport::menu::view(state, &theme, &mut overlays);
     sidebar::context_menu(state, &theme, &mut overlays);
     rune_kit::root(window, overlays)
