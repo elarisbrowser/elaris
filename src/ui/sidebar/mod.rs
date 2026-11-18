@@ -145,6 +145,8 @@ fn search_launcher(state: &AppState, theme: &Theme) -> El {
     .radius(theme::FIELD_RADIUS)
     .continuous_corners()
     .fill(theme.address_field)
+    .border(1.0, theme.control_border)
+    .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
     .label("Search or type a URL")
     .help(address.unwrap_or("Open search and address suggestions"))
     .shortcut_hint("cmd+l")

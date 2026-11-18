@@ -23,7 +23,7 @@ pub(crate) use theme::{TAB_REORDER_MOTION, TRAFFIC_LIGHTS, WINDOW_MIN_SIZE};
 
 #[cfg(target_os = "linux")]
 use rune::col;
-use rune::{Cx, El, SystemMaterial, el, row};
+use rune::{Cx, El, row};
 
 use crate::app::AppState;
 
@@ -51,13 +51,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         if !state.sidebar.collapsed {
             content = content.child(sidebar::resize::handle(state.sidebar.width));
         }
-        let window = col()
-            .key("window")
-            .w_full()
-            .h_full()
-            .fill(theme.window)
-            .system_material(SystemMaterial::Glass)
-            .child(window_glass_tint(&theme));
+        let window = col().key("window").w_full().h_full().fill(theme.window);
         window
             .child(sidebar::header::view(state, &theme, cx))
             .child(content)
@@ -65,13 +59,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     #[cfg(not(target_os = "linux"))]
     let mut window = {
         // The header and resize handle sit over the sidebar and page on macOS.
-        let mut window = row()
-            .key("window")
-            .w_full()
-            .h_full()
-            .fill(theme.window)
-            .system_material(SystemMaterial::Glass)
-            .child(window_glass_tint(&theme));
+        let mut window = row().key("window").w_full().h_full().fill(theme.window);
         window = window
             .child(sidebar::view(state, &theme, &mut overlays, reduced_motion))
             .child(viewport::view(state, &theme, &mut overlays))
@@ -106,12 +94,4 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         .map_or(WINDOW_MIN_SIZE.1, |size| size[1]);
     overlays.extend(tab_switcher::view(state, &theme, height, reduced_motion));
     rune_kit::root(window, overlays)
-}
-
-fn window_glass_tint(theme: &theme::Theme) -> El {
-    el().key("window-glass-tint")
-        .absolute(0.0, 0.0)
-        .w_full()
-        .h_full()
-        .fill(theme.window_glass_tint)
 }

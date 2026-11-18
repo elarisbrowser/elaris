@@ -89,8 +89,8 @@ pub(crate) fn view(
             .grow(1.0)
             .min_w(0.0)
             .color(theme.text)
-            .caret(theme.icon, theme.overlay_selected)
-            .focus_ring(1.0, 1.0, theme.icon)
+            .caret(theme.text, theme.selection)
+            .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
             .placeholder("Search this page", theme.text_muted)
             .label("Find in page")
             .autofocus()
@@ -101,7 +101,7 @@ pub(crate) fn view(
             })
             .on_input_key(find_input_key);
         if no_matches {
-            field = field.caret(theme.text_muted, theme.overlay_selected);
+            field = field.caret(theme.text_muted, theme.selection);
         }
         bar = bar
             .child(field)

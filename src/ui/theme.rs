@@ -14,8 +14,6 @@ const HUE: f32 = 265.0;
 pub(crate) struct Theme {
     /// The window behind the sidebar and around the page.
     pub(crate) window: Color,
-    /// The translucent cool tint layered over the native window material.
-    pub(crate) window_glass_tint: Color,
     /// The page's container, seen before a page draws.
     pub(crate) page: Color,
     /// Soft surface behind cohesive settings groups.
@@ -29,6 +27,9 @@ pub(crate) struct Theme {
     pub(crate) window_control: Color,
     /// Background of the sidebar address field.
     pub(crate) address_field: Color,
+    pub(crate) control_border: Color,
+    pub(crate) focus: Color,
+    pub(crate) selection: Color,
     /// Overlays on buttons and rows under the pointer, and while pressed.
     pub(crate) hover: Color,
     pub(crate) press: Color,
@@ -54,46 +55,50 @@ pub(crate) fn palette(dark: bool) -> Theme {
     if dark {
         Theme {
             window: oklch(0.185, 0.004, HUE),
-            window_glass_tint: oklcha(0.20, 0.016, HUE, 0.18),
             page: oklch(0.232, 0.005, HUE),
             settings_surface: oklch(0.255, 0.006, HUE),
             text: oklch(0.955, 0.003, HUE),
-            text_muted: oklch(0.74, 0.008, HUE),
+            text_muted: oklch(0.81, 0.008, HUE),
             icon: oklch(0.82, 0.006, HUE),
             #[cfg(not(target_os = "linux"))]
             window_control: oklcha(1.0, 0.0, 0.0, 0.16),
-            address_field: oklcha(1.0, 0.0, 0.0, 0.05),
-            hover: oklcha(1.0, 0.0, 0.0, 0.06),
-            press: oklcha(1.0, 0.0, 0.0, 0.1),
-            tab_active: oklcha(1.0, 0.0, 0.0, 0.15),
+            address_field: oklch(0.24, 0.006, HUE),
+            control_border: oklch(0.53, 0.015, HUE),
+            focus: oklch(0.80, 0.09, HUE),
+            selection: oklch(0.43, 0.065, HUE),
+            hover: oklcha(0.66, 0.008, HUE, 0.08),
+            press: oklcha(0.66, 0.008, HUE, 0.13),
+            tab_active: oklch(0.36, 0.009, HUE),
             tab_active_shadow: oklcha(0.0, 0.0, 0.0, 0.3),
-            tab_drag: oklcha(1.0, 0.0, 0.0, 0.1),
-            tab_drop_indicator: oklcha(0.74, 0.04, HUE, 0.55),
+            tab_drag: oklch(0.32, 0.009, HUE),
+            tab_drop_indicator: oklch(0.74, 0.04, HUE),
             overlay_scrim: oklcha(0.0, 0.0, 0.0, 0.16),
             overlay_panel: oklch(0.255, 0.006, HUE),
             overlay_border: oklcha(1.0, 0.0, 0.0, 0.11),
             overlay_shadow: oklcha(0.0, 0.0, 0.0, 0.55),
-            overlay_selected: oklcha(1.0, 0.0, 0.0, 0.09),
+            overlay_selected: oklch(0.33, 0.016, HUE),
             disabled_opacity: 0.35,
         }
     } else {
         Theme {
-            window: oklch(0.935, 0.006, HUE),
-            window_glass_tint: oklcha(0.90, 0.035, HUE, 0.30),
+            window: oklch(0.947, 0.008, HUE),
             page: oklch(1.0, 0.0, 0.0),
             settings_surface: oklch(0.975, 0.004, HUE),
             text: oklch(0.2, 0.008, HUE),
-            text_muted: oklch(0.42, 0.012, HUE),
+            text_muted: oklch(0.38, 0.016, HUE),
             icon: oklch(0.32, 0.01, HUE),
             #[cfg(not(target_os = "linux"))]
             window_control: oklcha(0.2, 0.02, HUE, 0.16),
-            address_field: oklcha(0.2, 0.02, HUE, 0.05),
+            address_field: oklch(0.985, 0.004, HUE),
+            control_border: oklch(0.55, 0.015, HUE),
+            focus: oklch(0.48, 0.11, HUE),
+            selection: oklch(0.84, 0.045, HUE),
             hover: oklcha(0.2, 0.02, HUE, 0.06),
             press: oklcha(0.2, 0.02, HUE, 0.1),
             tab_active: oklch(1.0, 0.0, 0.0),
             tab_active_shadow: oklcha(0.2, 0.02, HUE, 0.18),
-            tab_drag: oklcha(0.2, 0.02, HUE, 0.07),
-            tab_drop_indicator: oklcha(0.42, 0.055, HUE, 0.52),
+            tab_drag: oklch(0.968, 0.009, HUE),
+            tab_drop_indicator: oklch(0.48, 0.055, HUE),
             overlay_scrim: oklcha(0.2, 0.02, HUE, 0.12),
             overlay_panel: oklch(0.995, 0.002, HUE),
             overlay_border: oklcha(0.2, 0.02, HUE, 0.12),
@@ -155,6 +160,7 @@ pub(crate) const HEADER_GROUP_GAP: f32 = space::S3;
 pub(crate) const PRESS_SCALE: f32 = 0.97;
 
 /// The address field.
+pub(crate) const FOCUS_WIDTH: f32 = 2.0;
 pub(crate) const FIELD_HEIGHT: f32 = 36.0;
 pub(crate) const FIELD_PADDING: f32 = space::S3;
 pub(crate) const FIELD_RADIUS: f32 = radius::LG;
@@ -222,3 +228,61 @@ pub(crate) const VIEWPORT_RADIUS: f32 = radius::LG;
 /// The status badge's inset from the web page container's lower-right corner.
 #[cfg(not(feature = "ladybird-bridge"))]
 pub(crate) const VIEWPORT_BADGE_INSET: f32 = space::S3;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    pub(super) fn contrast(foreground: Color, background: Color) -> f32 {
+        let foreground = paint(foreground, background).luminance();
+        let background = background.luminance();
+        (foreground.max(background) + 0.05) / (foreground.min(background) + 0.05)
+    }
+
+    // Rune colours are linear sRGB. Model source-over against an opaque surface.
+    fn paint(foreground: Color, background: Color) -> Color {
+        background.mix(foreground.alpha(1.0), foreground.a)
+    }
+
+    #[test]
+    fn chrome_contrast_in_both_appearances() {
+        for dark in [false, true] {
+            let t = palette(dark);
+            for (role, base) in [
+                ("sidebar and inactive tabs", t.window),
+                ("active tabs", t.tab_active),
+                ("dragged tabs", t.tab_drag),
+                ("address launcher", t.address_field),
+                ("native pages", t.page),
+                ("settings groups", t.settings_surface),
+                ("overlay input and status", t.overlay_panel),
+                (
+                    "selected overlay row",
+                    paint(t.overlay_selected, t.overlay_panel),
+                ),
+            ] {
+                assert_eq!(base.a, 1.0, "{role} must have a stable backdrop");
+                for treatment in [Color::TRANSPARENT, t.hover, t.press] {
+                    let background = paint(treatment, base);
+                    for (foreground, minimum) in [
+                        (t.text, 4.5),
+                        (t.text_muted, 4.5),
+                        (t.icon, 3.0),
+                        (t.focus, 3.0),
+                    ] {
+                        let ratio = contrast(foreground, background);
+                        assert!(
+                            ratio >= minimum,
+                            "{role} (dark={dark}): {ratio:.2} < {minimum}"
+                        );
+                    }
+                }
+            }
+            assert!(contrast(t.text, t.selection) >= 4.5);
+            assert!(contrast(t.tab_drop_indicator, t.window) >= 3.0);
+            for background in [t.address_field, t.window] {
+                assert!(contrast(t.control_border, background) >= 3.0);
+            }
+        }
+    }
+}

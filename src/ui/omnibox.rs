@@ -43,6 +43,8 @@ pub(crate) fn view(
                 .grow(1.0)
                 .min_w(0.0)
                 .color(theme.text)
+                .caret(theme.text, theme.selection)
+                .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
                 .placeholder("Search or type a URL", theme.text_muted)
                 .label("Search or type a URL")
                 .autofocus()
