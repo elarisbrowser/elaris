@@ -6,7 +6,7 @@ use rune::tok::type_;
 use rune::{El, ScrollSpec, Transition, col, el, icon, row, text, text_input};
 
 use crate::app::{self, AppState};
-use crate::omnibox::{Action, Glyph, Suggestion};
+use crate::omnibox::{Action, Glyph, Section, Suggestion};
 use crate::ui::theme::{self, Theme};
 
 pub(crate) fn view(state: &AppState, theme: &Theme, height: f32) -> Option<El> {
@@ -15,7 +15,10 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32) -> Option<El> {
     }
 
     let suggestions = state.suggestions();
-    let selected_key = format!("omnibox-result-{}", state.omnibox.selected);
+    let mut field = text_input(&state.omnibox.input, theme::OMNIBOX_INPUT_TEXT);
+    if !suggestions.is_empty() {
+        field = field.active_descendant(format!("omnibox-result-{}", state.omnibox.selected));
+    }
     let input = row()
         .key("omnibox-input-row")
         .w_full()
@@ -25,7 +28,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32) -> Option<El> {
         .center_y()
         .child(icon(&super::icons::SEARCH, theme::OMNIBOX_SEARCH_ICON).color(theme.icon))
         .child(
-            text_input(&state.omnibox.input, theme::OMNIBOX_INPUT_TEXT)
+            field
                 .key("omnibox-input")
                 .single_line()
                 .grow(1.0)
@@ -33,7 +36,6 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32) -> Option<El> {
                 .color(theme.text)
                 .placeholder("Search or type a URL", theme.text_muted)
                 .label("Search or type a URL")
-                .active_descendant(selected_key)
                 .autofocus()
                 .on_edit(|state: &mut AppState| &mut state.omnibox.input)
                 .on_input_change(|state: &mut AppState, _| {
@@ -44,72 +46,59 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32) -> Option<El> {
                 .on_submit(app::submit_omnibox),
         );
 
+    let top = (height * 0.12).min(theme::OMNIBOX_TOP_MAX);
+    let available = (height - top - theme::FIELD_PADDING).min(theme::OMNIBOX_MAX_HEIGHT);
+    let results_limit = available - theme::OMNIBOX_INPUT_HEIGHT - theme::OMNIBOX_FOOTER_HEIGHT;
     let mut results = col()
         .key("omnibox-results")
         .w_full()
-        .grow(1.0)
-        .min_h(0.0)
+        .max_h(results_limit.max(0.0))
         .px(theme::ROW_PADDING)
-        .py(theme::ROW_PADDING / 2.0)
         .gap(theme::TAB_GAP)
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
         .role("listbox")
         .label("Suggestions");
+    let mut previous = None;
     for (index, suggestion) in suggestions.iter().enumerate() {
+        if previous != Some(suggestion.section) && suggestions.len() > 1 {
+            let label = match suggestion.section {
+                Section::OpenTabs => Some("Open tabs"),
+                Section::Recent => Some("Recent"),
+                Section::QuickActions => Some("Actions"),
+                Section::Navigate => None,
+            };
+            if let Some(label) = label {
+                results = results.child(
+                    row()
+                        .h(theme::OMNIBOX_LABEL_HEIGHT)
+                        .pl(theme::ROW_PADDING)
+                        .center_y()
+                        .child(text(label).font(type_::LABEL).color(theme.text_muted)),
+                );
+            }
+        }
+        previous = Some(suggestion.section);
         results = results.child(result_row(state, suggestion, index, theme));
     }
-    if suggestions.is_empty() {
-        let message = state
-            .address_error
-            .as_deref()
-            .unwrap_or("No local suggestions");
-        results = results.child(
-            el().key("omnibox-empty")
-                .w_full()
-                .h(theme::OMNIBOX_ROW_HEIGHT * 2.0)
-                .center()
-                .label(message)
-                .child(text(message).font(type_::BODY).color(theme.text_muted)),
-        );
-    }
-
+    let hints = match suggestions.len() {
+        0 => state.address_error.as_deref().unwrap_or("Esc  Close"),
+        1 => "↵  Open     Esc  Close",
+        _ => "↑↓  Navigate     ↵  Open     Esc  Close",
+    };
     let footer = row()
         .key("omnibox-hints")
         .w_full()
-        .h(theme::ROW_HEIGHT)
+        .h(theme::OMNIBOX_FOOTER_HEIGHT)
         .px(theme::FIELD_PADDING + 4.0)
-        .gap(theme::ROW_GAP + 4.0)
         .center_y()
-        .child(el().grow(1.0))
-        .child(
-            row()
-                .center_y()
-                .gap(theme::ROW_GAP)
-                .px(theme::FIELD_PADDING)
-                .h(theme::ICON_BUTTON)
-                .radius(theme::ICON_BUTTON / 2.0)
-                .fill(theme.hover)
-                .child(
-                    text("↑ ↓  Navigate")
-                        .font(type_::LABEL)
-                        .color(theme.text_muted),
-                )
-                .child(text("↵  Open").font(type_::LABEL).color(theme.text_muted))
-                .child(
-                    text("esc  Close")
-                        .font(type_::LABEL)
-                        .color(theme.text_muted),
-                ),
-        );
+        .child(text(hints).font(type_::LABEL).color(theme.text_muted));
 
     let panel = col()
         .key("omnibox-panel")
         .w_full()
         .max_w(theme::OMNIBOX_WIDTH)
-        .h((height - 2.0 * theme::FIELD_PADDING).clamp(0.0, theme::OMNIBOX_HEIGHT))
-        .pb(theme::ROW_PADDING)
         .radius(theme::OMNIBOX_RADIUS)
         .continuous_corners()
         .fill(theme.overlay_panel)
@@ -141,7 +130,8 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32) -> Option<El> {
             .w_full()
             .h_full()
             .px(theme::FIELD_PADDING + 4.0)
-            .center()
+            .pt(top)
+            .items_center()
             .fill(theme.overlay_scrim)
             .child(panel),
     )

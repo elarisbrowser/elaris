@@ -53,7 +53,7 @@ pub(crate) fn palette(dark: bool) -> Theme {
             press: oklcha(1.0, 0.0, 0.0, 0.1),
             tab_active: oklcha(1.0, 0.0, 0.0, 0.15),
             tab_active_shadow: oklcha(0.0, 0.0, 0.0, 0.3),
-            overlay_scrim: oklcha(0.0, 0.0, 0.0, 0.34),
+            overlay_scrim: oklcha(0.0, 0.0, 0.0, 0.16),
             overlay_panel: oklch(0.255, 0.006, HUE),
             overlay_border: oklcha(1.0, 0.0, 0.0, 0.11),
             overlay_shadow: oklcha(0.0, 0.0, 0.0, 0.55),
@@ -72,7 +72,7 @@ pub(crate) fn palette(dark: bool) -> Theme {
             press: oklcha(0.2, 0.02, HUE, 0.1),
             tab_active: oklch(1.0, 0.0, 0.0),
             tab_active_shadow: oklcha(0.2, 0.02, HUE, 0.18),
-            overlay_scrim: oklcha(0.2, 0.02, HUE, 0.23),
+            overlay_scrim: oklcha(0.2, 0.02, HUE, 0.12),
             overlay_panel: oklch(0.995, 0.002, HUE),
             overlay_border: oklcha(0.2, 0.02, HUE, 0.12),
             overlay_shadow: oklcha(0.2, 0.02, HUE, 0.2),
@@ -130,12 +130,15 @@ pub(crate) const FIELD_HEIGHT: f32 = 36.0;
 pub(crate) const FIELD_PADDING: f32 = space::S3;
 
 /// The floating search palette and its compact result rows.
-pub(crate) const OMNIBOX_WIDTH: f32 = 750.0;
-pub(crate) const OMNIBOX_HEIGHT: f32 = 474.0;
+pub(crate) const OMNIBOX_WIDTH: f32 = 680.0;
+pub(crate) const OMNIBOX_MAX_HEIGHT: f32 = 500.0;
+pub(crate) const OMNIBOX_TOP_MAX: f32 = 80.0;
+pub(crate) const OMNIBOX_FOOTER_HEIGHT: f32 = 32.0;
+pub(crate) const OMNIBOX_LABEL_HEIGHT: f32 = 22.0;
 pub(crate) const OMNIBOX_RADIUS: f32 = radius::LG + 4.0;
 pub(crate) const OMNIBOX_INPUT_HEIGHT: f32 = 60.0;
-pub(crate) const OMNIBOX_ROW_HEIGHT: f32 = 38.0;
-pub(crate) const OMNIBOX_INPUT_TEXT: rune::TextStyle = rune::TextStyle::new(20.0, 400.0);
+pub(crate) const OMNIBOX_ROW_HEIGHT: f32 = 46.0;
+pub(crate) const OMNIBOX_INPUT_TEXT: rune::TextStyle = rune::TextStyle::new(18.0, 400.0);
 pub(crate) const OMNIBOX_BORDER_WIDTH: f32 = 1.0;
 pub(crate) const OMNIBOX_SHADOW_Y: f32 = 16.0;
 pub(crate) const OMNIBOX_SHADOW_BLUR: f32 = 22.0;

@@ -16,9 +16,6 @@ use crate::ui::{SidebarState, VIEWPORT};
 /// The window's title when the page has none.
 pub(crate) const APP_NAME: &str = "Elaris";
 
-/// What a new tab opens.
-const NEW_TAB_ADDRESS: &str = "about:blank";
-
 pub(crate) struct AppState {
     pub(crate) omnibox: omnibox::State,
     /// Why the last submitted query could not be opened, until the next is.
@@ -77,13 +74,6 @@ impl AppState {
         self.show_active_tab();
     }
 
-    /// Opens a blank tab and makes it active.
-    pub(crate) fn new_tab(&mut self) {
-        if let Ok(tab) = self.browser.open_tab(NEW_TAB_ADDRESS) {
-            self.activate(tab);
-        }
-    }
-
     pub(crate) fn open_omnibox(&mut self, mode: omnibox::Mode) {
         self.omnibox.mode = mode;
         let use_active_url = mode == omnibox::Mode::Current;
@@ -91,7 +81,7 @@ impl AppState {
             self.browser
                 .active_tab()
                 .map(|tab| tab.url.clone())
-                .filter(|url| *url != NEW_TAB_ADDRESS)
+                .filter(|url| url != "about:blank")
                 .unwrap_or_default()
         } else {
             String::new()
@@ -120,8 +110,8 @@ impl AppState {
                 Ok(())
             }
             Action::NewTab => {
-                self.new_tab();
-                Ok(())
+                new_tab(self, tx);
+                return;
             }
             Action::ReloadPage => {
                 self.with_active_tab(Browser::reload);
@@ -335,6 +325,9 @@ pub(crate) fn omnibox_input_key(state: &mut AppState, event: &KeyEvent, tx: &mut
             let count = state.suggestions().len();
             let direction = if event.key == Key::Up { -1 } else { 1 };
             state.omnibox.move_selection(count, direction);
+            if count > 0 {
+                tx.scroll_into_view(format!("omnibox-result-{}", state.omnibox.selected));
+            }
             true
         }
         _ => false,
@@ -365,6 +358,28 @@ mod tests {
         assert!(state.omnibox.open);
         assert_eq!(state.omnibox.input.text, "");
         assert_eq!(state.address_error, None);
+    }
+
+    #[test]
+    fn two_suggestions_fit_a_compact_panel() {
+        let mut state = AppState::new(None);
+        for address in ["example.org", "example.com"] {
+            state.browser.open_tab(address).unwrap();
+        }
+        assert_eq!(state.suggestions().len(), 2);
+        let mut runtime = rune::Runtime::new(
+            state,
+            crate::ui::view,
+            (960.0, 640.0),
+            rune::Env::new(false, 1.0),
+        );
+        runtime.frame(0.0);
+        let elements = runtime.elements();
+        let panel = elements
+            .iter()
+            .find(|el| el.key.as_deref() == Some("omnibox-panel"))
+            .unwrap();
+        assert!((190.0..=240.0).contains(&panel.target[3]));
     }
 
     #[test]
@@ -533,7 +548,7 @@ mod tests {
             .replace_text("ftp://example.com".to_owned());
         state.submit_omnibox();
         assert!(state.status().is_some());
-        state.new_tab();
+        new_tab(&mut state, &mut Tx::default());
         assert_eq!(state.status(), None);
     }
 

@@ -213,7 +213,12 @@ pub(crate) fn suggestions(
     );
 
     let actions = [
-        ("New Tab", "Open a blank tab", Glyph::NewTab, Action::NewTab),
+        (
+            "New Tab",
+            "Search or type a URL",
+            Glyph::NewTab,
+            Action::NewTab,
+        ),
         (
             "Reload Page",
             "Reload the active page",
@@ -241,11 +246,10 @@ pub(crate) fn suggestions(
         actions
             .into_iter()
             .filter(|(title, _, _, action)| {
-                if query.is_empty() {
-                    matches!(action, Action::ToggleSidebar)
-                } else {
-                    action_matches(query, title)
-                }
+                !query.is_empty()
+                    && action_matches(query, title)
+                    && (!tabs.is_empty()
+                        || !matches!(action, Action::CloseTab | Action::ReloadPage))
             })
             .map(|(title, detail, glyph, action)| Suggestion {
                 section: Section::QuickActions,
@@ -284,12 +288,11 @@ fn match_score(query: &str, title: &str, url: &str) -> Option<u8> {
 }
 
 fn action_matches(query: &str, label: &str) -> bool {
-    query.is_empty()
-        || query.split_whitespace().any(|word| {
-            label
-                .to_ascii_lowercase()
-                .contains(&word.to_ascii_lowercase())
-        })
+    let label = label.to_ascii_lowercase();
+    query
+        .to_ascii_lowercase()
+        .split_whitespace()
+        .all(|part| label.split_whitespace().any(|word| word.starts_with(part)))
 }
 
 #[cfg(test)]
