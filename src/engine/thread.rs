@@ -31,13 +31,29 @@ unsafe extern "C" {
 /// reverse order of registration, so this runs before those, which Ladybird registered as it
 /// started, earlier than this.
 extern "C" fn finish_at_exit() {
-    let running = RUNNING.lock().unwrap_or_else(|e| e.into_inner()).take();
+    let running = RUNNING
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .take();
     if let Some(running) = running {
-        let _ = running.commands.send(Command::Shutdown);
-        if let Some(wake) = running.wake.get() {
-            wake();
-        }
+        // Rune's quit hook can queue shutdown before this exit handler runs. Repeating it is
+        // safe, and covers OS exits that did not run the hook.
+        request_shutdown(&running.commands, &running.wake);
         let _ = running.thread.join();
+    }
+}
+
+/// Wake Ladybird if startup has installed its waker. Otherwise the queued command is seen
+/// before the engine's first wait.
+fn wake(wake_handle: &Wake) {
+    if let Some(wake) = wake_handle.get() {
+        wake();
+    }
+}
+
+fn request_shutdown(commands: &Sender<Command>, wake_handle: &Wake) {
+    if commands.send(Command::Shutdown).is_ok() {
+        wake(wake_handle);
     }
 }
 
@@ -67,6 +83,39 @@ pub(super) fn start(notify: Notify) -> Result<Engine, String> {
         updates,
         wake,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::Duration;
+
+    #[test]
+    fn shutdown_wakes_a_waiting_engine_and_joins_cleanly() {
+        let (commands, received) = channel();
+        let wake: Wake = Arc::new(std::sync::OnceLock::new());
+        let woke = Arc::new(AtomicBool::new(false));
+        let wake_flag = Arc::clone(&woke);
+        wake.set(Box::new(move || wake_flag.store(true, Ordering::SeqCst)))
+            .unwrap();
+
+        let thread = std::thread::spawn(move || {
+            received.recv_timeout(Duration::from_secs(1)).unwrap();
+            !drain(&received, |_| {})
+        });
+        request_shutdown(&commands, &wake);
+        assert!(woke.load(Ordering::SeqCst));
+        assert!(thread.join().unwrap());
+    }
+
+    #[test]
+    fn shutdown_before_waker_installation_stays_queued() {
+        let (commands, received) = channel();
+        let wake: Wake = Arc::new(std::sync::OnceLock::new());
+        request_shutdown(&commands, &wake);
+        assert!(matches!(received.try_recv(), Ok(Command::Shutdown)));
+    }
 }
 
 /// The engine thread: starts Ladybird, runs its work as it comes, between commands, and closes
