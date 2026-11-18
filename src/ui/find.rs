@@ -104,7 +104,6 @@ pub(crate) fn view(
             field = field.caret(theme.text_muted, theme.overlay_selected);
         }
         bar = bar
-            .child(icon(&crate::ui::icons::SEARCH, theme::ICON).color(theme.text_muted))
             .child(field)
             .child(
                 text(counter)
