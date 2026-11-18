@@ -12,7 +12,7 @@ Read [Development setup](SETUP.md), then use the root command wrapper:
 ./elaris run
 ```
 
-To work in a consistent Linux environment, open the repository in the optional [Linux devcontainer](.devcontainer/devcontainer.json). It runs the normal setup command when first created and keeps Rust downloads between rebuilds.
+To work in a consistent Linux environment, open the repository in the optional [Linux devcontainer](.devcontainer/devcontainer.json) or run `./elaris linux-build` from the host terminal. The CLI command streams the container build output and keeps Linux artifacts separate from host builds.
 
 `setup` installs supported system packages, Rust toolchains, and the repository-pinned Ladybird submodule. Linux package installation uses `sudo` and may ask for your password. The first `build` compiles Ladybird's dependencies and can take a while. `./elaris run --ui` and `./elaris build --ui` let you work on the Rune shell without building the engine.
 

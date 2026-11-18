@@ -29,7 +29,7 @@ For shell-only work, use `./elaris run --ui`. See [Development setup](SETUP.md) 
 
 ## Development
 
-Run `./elaris check` before opening a pull request. Use `./elaris format` to format Rust and bridge C++ code.
+Run `./elaris check` before opening a pull request. Use `./elaris format` to format Rust and bridge C++ code. Run `./elaris linux-build` to build in Docker and stream Linux build output in the terminal.
 
 ## Guides
 

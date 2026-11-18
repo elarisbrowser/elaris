@@ -6,10 +6,16 @@
   },
   "remoteUser": "vscode",
   "updateRemoteUserUID": true,
-  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "initializeCommand": "git submodule update --init --recursive",
+  "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind",
+  "workspaceFolder": "${localWorkspaceFolder}",
   "mounts": [
-    "source=elaris-cargo,target=/home/vscode/.cargo,type=volume",
-    "source=elaris-rustup,target=/home/vscode/.rustup,type=volume"
+    "source=elaris-cargo,target=/home/vscode/.cargo,type=volume,volume-nocopy",
+    "source=elaris-rustup,target=/home/vscode/.rustup,type=volume,volume-nocopy",
+    "source=elaris-linux-build,target=${localWorkspaceFolder}/build,type=volume,volume-nocopy",
+    "source=elaris-linux-target,target=${localWorkspaceFolder}/target,type=volume,volume-nocopy",
+    "source=elaris-ladybird-build,target=${localWorkspaceFolder}/vendor/ladybird/Build,type=volume,volume-nocopy",
+    "source=elaris-ladybird-vcpkg,target=${localWorkspaceFolder}/.git/modules/Build,type=volume,volume-nocopy"
   ],
   "containerEnv": {
     "ELARIS_JOBS": "4"
