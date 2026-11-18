@@ -28,8 +28,6 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     let theme = theme::palette(dark);
     state.browser.note_scale(cx.env().scale);
     state.browser.note_dark(dark);
-    let warm_backdrop_blur =
-        state.backdrop_blur_warmup && state.browser.active_tab().is_some() && !state.omnibox.open;
 
     #[cfg(target_os = "linux")]
     let mut window = {
@@ -50,9 +48,6 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
             .fill(theme.window)
             .system_material(SystemMaterial::Glass)
             .child(window_glass_tint(&theme));
-        if warm_backdrop_blur {
-            window = window.child(backdrop_blur_warmup());
-        }
         window
             .child(sidebar::header::view(state, &theme, cx))
             .child(content)
@@ -67,9 +62,6 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
             .fill(theme.window)
             .system_material(SystemMaterial::Glass)
             .child(window_glass_tint(&theme));
-        if warm_backdrop_blur {
-            window = window.child(backdrop_blur_warmup());
-        }
         window = window
             .child(sidebar::view(state, &theme))
             .child(viewport::view(state, &theme))
@@ -95,22 +87,6 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     #[cfg(target_os = "linux")]
     overlays.push(sidebar::header::hover_zone());
     rune_kit::root(window, overlays)
-}
-
-fn backdrop_blur_warmup() -> El {
-    // Build the blur pyramid at the panel's maximum size before the omnibox opens.
-    el().key("backdrop-blur-warmup")
-        .absolute(0.0, 0.0)
-        .w_full()
-        .h_full()
-        .center()
-        .child(
-            el().size(theme::OMNIBOX_WIDTH, theme::OMNIBOX_MAX_HEIGHT)
-                .radius(theme::OMNIBOX_RADIUS)
-                .continuous_corners()
-                .opacity(theme::MODAL_BLUR_WARMUP_OPACITY)
-                .backdrop_blur(theme::MODAL_BACKDROP_BLUR),
-        )
 }
 
 fn window_glass_tint(theme: &theme::Theme) -> El {

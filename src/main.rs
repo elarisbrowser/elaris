@@ -62,7 +62,6 @@ fn main() {
             app_handle.update(move |state, _| state.titlebar.set_x11_window(x11_window));
         })
     };
-    let warmup_handle = app.handle();
     let app_handle = app.handle();
     let mut engine_started = false;
     let app = app.on_ready(move |_| {
@@ -81,25 +80,7 @@ fn main() {
     #[cfg(target_os = "macos")]
     let app = app.on_window(titlebar_controls::install);
     app.modifier_keys()
-        .on_frame_drawn(move |runtime| {
-            perf::frame_drawn();
-            if runtime.state.backdrop_blur_warmup
-                && runtime.state.browser.active_tab().is_some()
-                && !runtime.state.omnibox.open
-            {
-                warmup_handle.update_if(|state, _| {
-                    if state.backdrop_blur_warmup
-                        && state.browser.active_tab().is_some()
-                        && !state.omnibox.open
-                    {
-                        state.backdrop_blur_warmup = false;
-                        true
-                    } else {
-                        false
-                    }
-                });
-            }
-        })
+        .on_frame_drawn(|_| perf::frame_drawn())
         .on_ime(ui::viewport::ime)
         .on_focus(app::on_window_focus)
         .on_close(app::shut_down)
