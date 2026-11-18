@@ -6,7 +6,17 @@ import platform
 import re
 import subprocess
 
-from .common import CPP_BUILD_DIR, ENGINE, ROOT, VCPKG_INSTALLED, bridge_files, require, run, vcpkg_triplet
+from .common import (
+    CPP_BUILD_DIR,
+    ENGINE,
+    ROOT,
+    VCPKG_INSTALLED,
+    bridge_files,
+    prepare_ladybird_paths,
+    require,
+    run,
+    vcpkg_triplet,
+)
 
 
 def cpp_format(_args: argparse.Namespace) -> None:
@@ -19,6 +29,7 @@ def cpp_format(_args: argparse.Namespace) -> None:
 def cpp_configure(_args: argparse.Namespace) -> None:
     if not ENGINE.is_dir():
         raise SystemExit("elaris: Ladybird submodule is missing; run ./elaris setup")
+    prepare_ladybird_paths()
     require("cmake", "ninja", "rustup")
     CPP_BUILD_DIR.parent.mkdir(parents=True, exist_ok=True)
     triplet = vcpkg_triplet()

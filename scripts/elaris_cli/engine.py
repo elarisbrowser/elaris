@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from . import cpp, dependencies
-from .common import CPP_BUILD_DIR, ENGINE, ROOT, require, run
+from .common import CPP_BUILD_DIR, ENGINE, ROOT, prepare_ladybird_paths, require, run
 
 BUILD_DIR = Path(os.environ.get("LADYBIRD_BUILD_DIR", ENGINE / "Build" / "release"))
 BUILD_TARGETS = (
@@ -30,6 +30,7 @@ def build_for_elaris(jobs: Optional[str] = None) -> None:
     """Build Ladybird's dependencies, Elaris bridge, and runtime helper processes."""
     if not (ENGINE / ".git").exists():
         raise SystemExit("elaris: Ladybird submodule is missing; run ./elaris setup")
+    prepare_ladybird_paths()
     require("cmake", "ninja", "rustup")
     jobs = _jobs(jobs)
 

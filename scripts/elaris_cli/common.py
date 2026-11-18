@@ -39,6 +39,36 @@ def require(*commands: str) -> None:
         raise SystemExit(f"elaris: required command(s) not found: {', '.join(missing)}")
 
 
+def prepare_ladybird_paths() -> None:
+    """Use absolute submodule paths for Ladybird's shared vcpkg build tree."""
+    git_pointer = ENGINE / ".git"
+    if not git_pointer.exists():
+        raise SystemExit("elaris: Ladybird submodule is missing; run ./elaris setup")
+
+    git_dir = subprocess.run(
+        ["git", "rev-parse", "--absolute-git-dir"],
+        cwd=ENGINE,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if git_dir.returncode:
+        raise SystemExit(f"elaris: could not locate the Ladybird Git directory: {git_dir.stderr.strip()}")
+
+    git_dir_path = Path(git_dir.stdout.strip())
+    if git_pointer.is_file() and not git_pointer.is_symlink():
+        expected_pointer = f"gitdir: {git_dir_path}\n"
+        if git_pointer.read_text() != expected_pointer:
+            git_pointer.write_text(expected_pointer)
+        main_source_dir = git_dir_path.parent.parent
+    else:
+        main_source_dir = ENGINE
+
+    os.environ["LADYBIRD_MAIN_SOURCE_DIR"] = str(main_source_dir)
+    os.environ["LADYBIRD_CACHE_DIR"] = str(main_source_dir / "Build" / "caches")
+    os.environ["VCPKG_ROOT"] = str(main_source_dir / "Build" / "vcpkg-release")
+
+
 def command_path(command: str) -> Optional[str]:
     """Find a command, including versioned LLVM tools and Homebrew's keg-only LLVM tools."""
     if command not in {"clang-format", "clang-tidy", "clangd"}:

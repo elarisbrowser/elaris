@@ -5,7 +5,16 @@ import os
 import sys
 
 from . import dependencies, engine
-from .common import CPP_BUILD_DIR, ROOT, VCPKG_INSTALLED, bridge_files, require, run, vcpkg_triplet
+from .common import (
+    CPP_BUILD_DIR,
+    ROOT,
+    VCPKG_INSTALLED,
+    bridge_files,
+    prepare_ladybird_paths,
+    require,
+    run,
+    vcpkg_triplet,
+)
 
 # Build directories that may hold the compiled bridge, most preferred first.
 BRIDGE_LIB_DIRS = (CPP_BUILD_DIR / "lib", ROOT / "build" / "ladybird-integrated" / "lib")
@@ -17,6 +26,7 @@ def setup(args: argparse.Namespace) -> None:
     dependencies.verify_system_dependencies()
     dependencies.install_rust_toolchain()
     run("git", "submodule", "update", "--init", "--recursive")
+    prepare_ladybird_paths()
     dependencies.verify_ladybird_compiler()
     dependencies.install_ladybird_toolchain()
     print("\nSetup is complete.")

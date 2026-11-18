@@ -28,7 +28,7 @@ Run this from the repository root:
 ./elaris setup
 ```
 
-Setup installs the Ladybird system build packages through Homebrew or the detected Linux package manager, installs rustup and the stable plus pinned Ladybird Rust toolchains, and checks out the exact Ladybird revision recorded by this repository. On Linux, `sudo` prompts for your password when it needs permission to install packages. The password is handled by `sudo`; Elaris does not read or save it.
+Setup installs the Ladybird system build packages through Homebrew or the detected Linux package manager, installs rustup and the stable plus pinned Ladybird Rust toolchains, and checks out the exact Ladybird revision recorded by this repository. It also makes the submodule's local Git pointer absolute so Ladybird can find its shared vcpkg cache when building from a submodule checkout. This only changes ignored Git metadata, not Ladybird source or the pinned revision. On Linux, `sudo` prompts for your password when it needs permission to install packages. The password is handled by `sudo`; Elaris does not read or save it.
 
 The automatic package install supports macOS with Homebrew, Debian or Ubuntu with apt, Fedora with dnf, Arch or Manjaro with pacman, and openSUSE with zypper. Other distributions can install prerequisites from [Ladybird's build instructions](https://github.com/LadybirdBrowser/ladybird/blob/master/Documentation/BuildInstructionsLadybird.md), then run:
 
