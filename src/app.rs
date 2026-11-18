@@ -129,6 +129,10 @@ impl AppState {
             }
             Action::CloseTab => {
                 self.close_active();
+                if self.browser.tabs().is_empty() {
+                    tx.focus("omnibox-input", false);
+                    return;
+                }
                 Ok(())
             }
             Action::ToggleSidebar => {
@@ -162,11 +166,15 @@ impl AppState {
         self.show_active_tab();
     }
 
-    /// Closes the tab; closing the last one leaves a blank tab in its place.
+    /// Closes the tab and opens the omnibox when the window becomes empty.
     pub(crate) fn close(&mut self, tab: TabId) {
         self.browser.close_tab(tab);
-        self.ensure_a_tab();
-        self.show_active_tab();
+        if self.browser.tabs().is_empty() {
+            self.shown = None;
+            self.open_omnibox(omnibox::Mode::New);
+        } else {
+            self.show_active_tab();
+        }
     }
 
     pub(crate) fn duplicate(&mut self, tab: TabId) {
@@ -224,12 +232,6 @@ impl AppState {
         }
     }
 
-    fn ensure_a_tab(&mut self) {
-        if self.browser.tabs().is_empty() {
-            self.new_tab();
-        }
-    }
-
     /// Records a real active-page visit when its tab or committed URL changes.
     fn show_active_tab(&mut self) {
         let Some(tab) = self.browser.active_tab() else {
@@ -246,7 +248,11 @@ impl AppState {
 
     /// The active tab's title, when it differs from what the window shows.
     fn new_window_title(&mut self) -> Option<String> {
-        let title = self.browser.active_tab().map(|tab| tab.title.clone())?;
+        let title = self
+            .browser
+            .active_tab()
+            .map(|tab| tab.title.clone())
+            .unwrap_or_default();
         (self.window_title.as_ref() != Some(&title)).then(|| {
             self.window_title = Some(title.clone());
             title
@@ -605,12 +611,12 @@ mod tests {
     }
 
     #[test]
-    fn closing_the_last_tab_leaves_a_blank_one() {
+    fn closing_the_last_tab_returns_to_the_empty_omnibox() {
         let mut state = AppState::new(Some("example.com"));
         let only = state.browser.active_tab().unwrap().id();
         state.close(only);
-        assert_eq!(state.browser.tabs().len(), 1);
-        assert_ne!(state.browser.active_tab().unwrap().id(), only);
-        assert_eq!(active_url(&state), "about:blank");
+        assert!(state.browser.tabs().is_empty());
+        assert!(state.omnibox.open);
+        assert!(state.omnibox.input.text.is_empty());
     }
 }
