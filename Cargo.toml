@@ -47,6 +47,10 @@ unsafe_op_in_unsafe_fn = "deny"
 [lints.clippy]
 all = "warn"
 
+# Keep Elaris easy to debug while reducing the cold-start cost of its large UI dependencies.
+[profile.dev.package."*"]
+opt-level = 1
+
 # Rune needs its matching patched platform and text crates when used outside its workspace.
 [patch.crates-io.parley_engine]
 git = "https://github.com/anomalyco/rune"
