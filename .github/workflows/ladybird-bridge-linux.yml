@@ -114,7 +114,7 @@ jobs:
             useradd --create-home --shell /bin/bash elaris-builder
           fi
           mkdir -p vendor/ladybird/Build/release .git/modules/Build/caches .ccache build target .cargo
-          chown -R elaris-builder:elaris-builder vendor/ladybird/Build .git/modules/Build .ccache build target .cargo vendor/ladybird/Meta/CMake/vcpkg
+          chown -R elaris-builder:elaris-builder /opt/rustup vendor/ladybird/Build .git/modules/Build .ccache build target .cargo vendor/ladybird/Meta/CMake/vcpkg
           echo "CARGO_HOME=${GITHUB_WORKSPACE}/.cargo" >> "$GITHUB_ENV"
           runuser -u elaris-builder -- git config --global --add safe.directory "${GITHUB_WORKSPACE}"
           runuser -u elaris-builder -- git config --global --add safe.directory "${GITHUB_WORKSPACE}/vendor/ladybird"
