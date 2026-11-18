@@ -131,7 +131,6 @@ jobs:
           cmake --build build/cpp-ladybird --parallel 4 --target
           elaris_ladybird_smoke WebContent RequestServer Hub ImageDecoder
           Compositor SystemProbe AudioServer MediaServer VideoDecoderServer
-          ProcessReaper
 
       - name: Run clang-tidy on Elaris C++ sources
         timeout-minutes: 10
