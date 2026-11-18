@@ -70,6 +70,8 @@ jobs:
             .git/modules/Build/vcpkg-release
             .git/modules/Build/caches/vcpkg-binary-cache
             .ccache
+            .cargo/registry
+            .cargo/git
           key: ladybird-bridge-linux-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
             ladybird-bridge-linux-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-
@@ -111,8 +113,9 @@ jobs:
           if ! id elaris-builder >/dev/null 2>&1; then
             useradd --create-home --shell /bin/bash elaris-builder
           fi
-          mkdir -p vendor/ladybird/Build/release .git/modules/Build/caches .ccache
-          chown -R elaris-builder:elaris-builder vendor/ladybird/Build .git/modules/Build .ccache vendor/ladybird/Meta/CMake/vcpkg
+          mkdir -p vendor/ladybird/Build/release .git/modules/Build/caches .ccache build target .cargo
+          chown -R elaris-builder:elaris-builder vendor/ladybird/Build .git/modules/Build .ccache build target .cargo vendor/ladybird/Meta/CMake/vcpkg
+          echo "CARGO_HOME=${GITHUB_WORKSPACE}/.cargo" >> "$GITHUB_ENV"
           runuser -u elaris-builder -- git config --global --add safe.directory "${GITHUB_WORKSPACE}"
           runuser -u elaris-builder -- git config --global --add safe.directory "${GITHUB_WORKSPACE}/vendor/ladybird"
 
@@ -121,16 +124,9 @@ jobs:
         working-directory: vendor/ladybird
         run: runuser -u elaris-builder -- ./Meta/ladybird.py deps --preset Release --jobs 4 --cc /tmp/elaris-ccache/clang --cxx /tmp/elaris-ccache/clang++
 
-      - name: Configure Elaris bridge against pinned Ladybird
-        timeout-minutes: 15
-        run: ./elaris cpp-configure
-
-      - name: Build bridge and Ladybird helper processes
+      - name: Build Elaris, bridge, and Ladybird helpers
         timeout-minutes: 120
-        run: >-
-          cmake --build build/cpp-ladybird --parallel 4 --target
-          elaris_ladybird_smoke WebContent RequestServer Hub ImageDecoder
-          Compositor SystemProbe AudioServer MediaServer VideoDecoderServer WebRTCClient
+        run: runuser -u elaris-builder -- ./elaris build --jobs 4
 
       - name: Run clang-tidy on Elaris C++ sources
         timeout-minutes: 10
