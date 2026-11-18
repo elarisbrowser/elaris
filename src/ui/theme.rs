@@ -20,7 +20,8 @@ pub(crate) struct Theme {
     /// Labels that matter less: inactive tabs, the status line, placeholders.
     pub(crate) text_muted: Color,
     pub(crate) icon: Color,
-    /// The window controls at rest, before the pointer fades the native ones in.
+    /// The window controls at rest, before the pointer fades the native ones in on macOS.
+    #[cfg(not(target_os = "linux"))]
     pub(crate) window_control: Color,
     /// Background of the sidebar address field.
     pub(crate) address_field: Color,
@@ -49,6 +50,7 @@ pub(crate) fn palette(dark: bool) -> Theme {
             text: oklch(0.955, 0.003, HUE),
             text_muted: oklch(0.74, 0.008, HUE),
             icon: oklch(0.82, 0.006, HUE),
+            #[cfg(not(target_os = "linux"))]
             window_control: oklcha(1.0, 0.0, 0.0, 0.16),
             address_field: oklcha(1.0, 0.0, 0.0, 0.05),
             hover: oklcha(1.0, 0.0, 0.0, 0.06),
@@ -69,6 +71,7 @@ pub(crate) fn palette(dark: bool) -> Theme {
             text: oklch(0.2, 0.008, HUE),
             text_muted: oklch(0.42, 0.012, HUE),
             icon: oklch(0.32, 0.01, HUE),
+            #[cfg(not(target_os = "linux"))]
             window_control: oklcha(0.2, 0.02, HUE, 0.16),
             address_field: oklcha(0.2, 0.02, HUE, 0.05),
             hover: oklcha(0.2, 0.02, HUE, 0.06),
@@ -111,6 +114,12 @@ pub(crate) const SIDEBAR_GAP: f32 = space::S2;
 /// The row level with the window controls, holding the navigation buttons: the height of the
 /// titlebar band macOS drags, since the controls sit centred in it.
 pub(crate) const HEADER_HEIGHT: f32 = 38.0;
+/// The top-edge target that reveals the Linux toolbar while it is hidden.
+#[cfg(target_os = "linux")]
+pub(crate) const TITLEBAR_HOT_ZONE: f32 = 4.0;
+/// The Linux toolbar and the content beneath it settle with a short, quiet spring.
+#[cfg(target_os = "linux")]
+pub(crate) const TITLEBAR_REVEAL: Spring = Spring::new(0.28, 0.0);
 /// Where the window controls sit: centred in the header, as far in from the side as from the top.
 pub(crate) const TRAFFIC_LIGHTS: (f32, f32) = (
     (HEADER_HEIGHT - rune::Chrome::TRAFFIC_LIGHT) / 2.0,

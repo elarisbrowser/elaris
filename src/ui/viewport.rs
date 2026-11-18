@@ -18,6 +18,14 @@ use rune::PointerButton;
 /// left; the page's own element clips to rounded corners and takes input in the page's
 /// coordinates.
 pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
+    #[cfg(target_os = "linux")]
+    let top_padding = theme::VIEWPORT_INSET;
+    #[cfg(not(target_os = "linux"))]
+    let top_padding = if state.sidebar.collapsed {
+        theme::HEADER_HEIGHT
+    } else {
+        theme::VIEWPORT_INSET
+    };
     el().key("viewport-container")
         .h_full()
         .grow(1.0)
@@ -26,11 +34,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
         .min_w(0.0)
         .min_h(0.0)
         // With the sidebar hidden, the page sits below the header and in from the left edge too.
-        .pt(if state.sidebar.collapsed {
-            theme::HEADER_HEIGHT
-        } else {
-            theme::VIEWPORT_INSET
-        })
+        .pt(top_padding)
         .pl(if state.sidebar.collapsed {
             theme::VIEWPORT_INSET
         } else {

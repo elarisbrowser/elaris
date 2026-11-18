@@ -27,8 +27,8 @@ Setup installs system packages and Rust toolchains, then initializes Ladybird. L
 
 For shell-only work, use `./elaris run --ui`. See [Development setup](SETUP.md) for details.
 
-On Linux, the browser toolbar appears when the pointer reaches the top of the app. Set
-`ELARIS_LINUX_TITLEBAR=always` to keep it visible.
+On Linux, the browser toolbar slides down and pushes the page when the pointer reaches the top of
+the app. Set `ELARIS_LINUX_TITLEBAR=always` to keep it visible.
 
 ## Development
 

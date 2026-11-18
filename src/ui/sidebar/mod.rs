@@ -53,12 +53,16 @@ pub(crate) fn toggle(state: &mut AppState, tx: &mut Tx) {
 /// keep their width meanwhile, clipped, so they slide away rather than reflow.
 pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
     let collapsed = state.sidebar.collapsed;
+    #[cfg(target_os = "linux")]
+    let header_clearance = 0.0;
+    #[cfg(not(target_os = "linux"))]
+    let header_clearance = theme::HEADER_HEIGHT;
     let sidebar = col()
         .key("sidebar")
         .w(if collapsed { 0.0 } else { state.sidebar.width })
         .h_full()
         .clip_soft(0.0)
-        .pt(theme::HEADER_HEIGHT)
+        .pt(header_clearance)
         .child(body(state, theme));
     if collapsed {
         sidebar.a11y_hidden()

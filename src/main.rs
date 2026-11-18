@@ -16,6 +16,8 @@ mod ui;
 
 use std::sync::Arc;
 
+#[cfg(target_os = "linux")]
+use rune::raw_window_handle::RawWindowHandle;
 use rune::{App, AppSpec, Chrome, WindowOptions};
 
 fn main() {
@@ -35,6 +37,8 @@ fn main() {
     let app = App::new(spec)
         .window_options(WindowOptions {
             transparent: true,
+            #[cfg(target_os = "linux")]
+            borderless: true,
             ..WindowOptions::default()
         })
         // macOS drags the titlebar band natively; the window controls sit centred in it, level
@@ -43,6 +47,20 @@ fn main() {
             traffic_lights: Some(ui::TRAFFIC_LIGHTS),
             ..Chrome::DEFAULT
         });
+    #[cfg(target_os = "linux")]
+    let app = {
+        let app_handle = app.handle();
+        app.on_window(move |window| {
+            let x11_window = window
+                .with_raw_handle(|handle| match handle.as_raw() {
+                    RawWindowHandle::Xlib(handle) => Some(handle.window),
+                    _ => None,
+                })
+                .ok()
+                .flatten();
+            app_handle.update(move |state, _| state.titlebar.set_x11_window(x11_window));
+        })
+    };
     let app_handle = app.handle();
     let mut engine_started = false;
     let app = app.on_ready(move |_| {

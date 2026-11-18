@@ -36,6 +36,16 @@ pub(crate) static CLOSE: Icon = icon(
     "close",
     r#"<path d="M5 5L11 11M11 5L5 11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>"#,
 );
+#[cfg(target_os = "linux")]
+pub(crate) static MINIMIZE: Icon = icon(
+    "minimize",
+    r#"<path d="M3 8H13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>"#,
+);
+#[cfg(target_os = "linux")]
+pub(crate) static MAXIMIZE: Icon = icon(
+    "maximize",
+    r#"<rect x="3.25" y="3.25" width="9.5" height="9.5" rx="1.25" fill="none" stroke="currentColor" stroke-width="1.25"/>"#,
+);
 pub(crate) static PAGE: Icon = icon(
     "page",
     r#"<circle cx="8" cy="8" r="5.75" fill="none" stroke="currentColor" stroke-width="1.25"/><ellipse cx="8" cy="8" rx="2.5" ry="5.75" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M2.25 8H13.75" fill="none" stroke="currentColor" stroke-width="1.25"/>"#,

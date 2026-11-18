@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The sidebar's header, which is the window's titlebar: resting marks for the window controls,
-//! the sidebar toggle, then back, forward and reload for the active tab. It spans the sidebar,
-//! or just its own buttons while the sidebar is hidden.
+//! The toolbar above the sidebar and page: the sidebar toggle, navigation buttons, and platform
+//! window controls. On Linux it slides into the layout from a narrow top-edge hover target.
 
-#[cfg(target_os = "linux")]
-use rune::Transition;
+#[cfg(not(target_os = "linux"))]
+use rune::Chrome;
 #[cfg(target_os = "linux")]
 use rune::tok::motion;
-use rune::{Chrome, Cx, El, Icon, el, row, spacer};
+use rune::{Cx, El, Icon, el, row, spacer};
+#[cfg(target_os = "linux")]
+use rune::{Spring, Transition};
 
 use crate::app::AppState;
 use crate::browser::Browser;
@@ -23,39 +24,66 @@ type Navigate = fn(&mut Browser, TabId);
 pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El {
     #[cfg(target_os = "linux")]
     {
-        let mut titlebar = el()
-            .key("header-hover-zone")
-            .absolute(0.0, 0.0)
+        let visible = state.titlebar.is_visible();
+        let reduced_motion = cx.is_reduced_motion();
+        let mut slot = el()
+            .key("linux-titlebar-slot")
             .w_full()
-            .h(theme::HEADER_HEIGHT)
-            .on_hover_change(|state: &mut AppState, inside, tx| {
-                if state.titlebar.set_hovered(inside) {
-                    tx.animated();
-                }
+            .h(if visible { theme::HEADER_HEIGHT } else { 0.0 })
+            .clip_soft(0.0)
+            .motion(if reduced_motion {
+                Spring::NONE
+            } else {
+                theme::TITLEBAR_REVEAL
             });
-        if state.titlebar.is_visible() {
-            let transition = if cx.is_reduced_motion() {
+        if visible {
+            let transition = if reduced_motion {
                 Transition::opacity()
             } else {
-                Transition::offset(0.0, -8.0)
+                Transition::offset(0.0, -6.0)
                     .combined(Transition::opacity())
                     .springs(motion::pair::SNAP)
             };
-            titlebar = titlebar.child(
-                header_content(state, theme, cx)
+            slot = slot.child(
+                header_content(state, theme, cx, true)
                     .fill(theme.window)
+                    .on_hover_change(|state: &mut AppState, inside, tx| {
+                        if state.titlebar.set_toolbar_hovered(inside) {
+                            titlebar_visibility_changed(tx);
+                        }
+                    })
                     .transition(transition),
             );
         }
-        titlebar
+        slot
     }
     #[cfg(not(target_os = "linux"))]
     {
-        header_content(state, theme, cx)
+        header_content(state, theme, cx, false)
     }
 }
 
-fn header_content(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El {
+/// A passive hit target that sits at the window's top edge while the toolbar is closed.
+#[cfg(target_os = "linux")]
+pub(crate) fn hover_zone() -> El {
+    el().key("linux-titlebar-hover-zone")
+        .absolute(0.0, 0.0)
+        .w_full()
+        .h(theme::TITLEBAR_HOT_ZONE)
+        .on_hover_change(|state: &mut AppState, inside, tx| {
+            if state.titlebar.set_top_hovered(inside) {
+                titlebar_visibility_changed(tx);
+            }
+        })
+}
+
+#[cfg(target_os = "linux")]
+fn titlebar_visibility_changed(tx: &mut rune::Tx) {
+    tx.animated();
+    tx.motion(theme::TITLEBAR_REVEAL);
+}
+
+fn header_content(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>, in_flow: bool) -> El {
     let tab = state.browser.active_tab();
     let buttons: [(&str, &'static Icon, bool, Navigate); 3] = [
         (
@@ -91,20 +119,26 @@ fn header_content(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El 
     )
     .shortcut_hint("cmd+s")
     .on_press_tx(super::toggle);
-    // Over the sidebar it spans the sidebar, its buttons at the far end. With the sidebar
-    // hidden it spans the window, its buttons following the toggle. It lies in macOS's own
-    // titlebar band, which drags the window and zooms it on a double click wherever no button
-    // takes the press.
-    let header = row()
+    // Linux draws this row in normal layout and makes its blank area draggable. Other platforms
+    // keep the existing overlay aligned with their native titlebar behavior.
+    let mut header = row()
         .key("header")
-        .absolute(0.0, 0.0)
         .h(theme::HEADER_HEIGHT)
         .pr(theme::SIDEBAR_PADDING)
         .gap(theme::NAV_GAP)
-        .center_y()
-        .child(window_controls(cx.titlebar_inset(), theme))
-        .child(toggle);
-    let (mut header, gap) = if collapsed {
+        .center_y();
+    if in_flow {
+        header = header.w_full().window_drag().raise();
+    } else {
+        header = header.absolute(0.0, 0.0);
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        header = header.child(window_controls(_cx.titlebar_inset(), theme));
+    }
+    header = header.child(toggle);
+
+    let (mut header, gap) = if collapsed || in_flow {
         (header.w_full(), el().w(theme::HEADER_GROUP_GAP))
     } else {
         (header.w(state.sidebar.width), spacer())
@@ -113,8 +147,44 @@ fn header_content(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El 
     for (label, glyph, enabled, navigate) in buttons {
         header = header.child(nav_button(label, glyph, enabled, navigate, theme));
     }
-    if collapsed {
+    if collapsed || in_flow {
         header = header.child(spacer());
+    }
+    #[cfg(target_os = "linux")]
+    if in_flow {
+        if state.titlebar.can_minimize() {
+            header = header.child(
+                icon_button(
+                    "minimize-window",
+                    "Minimize window",
+                    &icons::MINIMIZE,
+                    theme::ICON_BUTTON,
+                    theme,
+                )
+                .on_press(|state: &mut AppState| state.titlebar.minimize()),
+            );
+        }
+        header = header
+            .child(
+                icon_button(
+                    "maximize-window",
+                    "Maximize or restore window",
+                    &icons::MAXIMIZE,
+                    theme::ICON_BUTTON,
+                    theme,
+                )
+                .on_press_tx(|_: &mut AppState, tx| tx.toggle_maximized()),
+            )
+            .child(
+                icon_button(
+                    "close-window",
+                    "Close window",
+                    &icons::CLOSE,
+                    theme::ICON_BUTTON,
+                    theme,
+                )
+                .on_press_tx(|_: &mut AppState, tx| tx.close_window()),
+            );
     }
     header
 }
@@ -122,6 +192,7 @@ fn header_content(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El 
 /// Plain circles under the native window controls, which stay transparent until the pointer
 /// reaches them (`titlebar_controls`). `inset` is where the zoom button ends; with no controls
 /// over the content, as in full screen, it is zero and nothing is drawn.
+#[cfg(not(target_os = "linux"))]
 fn window_controls(inset: f32, theme: &Theme) -> El {
     let size = Chrome::TRAFFIC_LIGHT;
     let gap = Chrome::TRAFFIC_PITCH - size;

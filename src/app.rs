@@ -38,7 +38,9 @@ impl LinuxTitlebarMode {
 #[cfg(target_os = "linux")]
 pub(crate) struct LinuxTitlebar {
     mode: LinuxTitlebarMode,
-    hovered: bool,
+    top_hovered: bool,
+    toolbar_hovered: bool,
+    x11_window: Option<std::ffi::c_ulong>,
 }
 
 #[cfg(target_os = "linux")]
@@ -46,7 +48,9 @@ impl Default for LinuxTitlebar {
     fn default() -> Self {
         Self {
             mode: LinuxTitlebarMode::from_environment(),
-            hovered: false,
+            top_hovered: false,
+            toolbar_hovered: false,
+            x11_window: None,
         }
     }
 }
@@ -55,16 +59,56 @@ impl Default for LinuxTitlebar {
 impl LinuxTitlebar {
     /// Whether the toolbar should be drawn now.
     pub(crate) fn is_visible(&self) -> bool {
-        self.mode == LinuxTitlebarMode::Always || self.hovered
+        self.mode == LinuxTitlebarMode::Always || self.top_hovered || self.toolbar_hovered
     }
 
     /// Updates hover visibility and reports whether the view needs an animated commit.
-    pub(crate) fn set_hovered(&mut self, hovered: bool) -> bool {
-        if self.mode == LinuxTitlebarMode::Always || self.hovered == hovered {
+    pub(crate) fn set_top_hovered(&mut self, hovered: bool) -> bool {
+        if self.mode == LinuxTitlebarMode::Always || self.top_hovered == hovered {
             return false;
         }
-        self.hovered = hovered;
+        self.top_hovered = hovered;
         true
+    }
+
+    /// Keeps the toolbar open while the pointer moves from the top reveal strip into the row.
+    pub(crate) fn set_toolbar_hovered(&mut self, hovered: bool) -> bool {
+        if self.mode == LinuxTitlebarMode::Always || self.toolbar_hovered == hovered {
+            return false;
+        }
+        self.toolbar_hovered = hovered;
+        true
+    }
+
+    /// Records the X11 window ID for the custom minimize control. Wayland has no minimize
+    /// request in Rune for borderless windows, so the control is omitted there.
+    pub(crate) fn set_x11_window(&mut self, window: Option<std::ffi::c_ulong>) {
+        self.x11_window = window;
+    }
+
+    pub(crate) fn can_minimize(&self) -> bool {
+        self.x11_window.is_some()
+    }
+
+    /// Minimizes an X11 window using a separate, short-lived Xlib connection.
+    pub(crate) fn minimize(&self) {
+        let Some(window) = self.x11_window else {
+            return;
+        };
+        let Ok(xlib) = x11_dl::xlib::Xlib::open() else {
+            return;
+        };
+        // SAFETY: the Xlib display is opened here and used only for these calls, then closed.
+        unsafe {
+            let display = (xlib.XOpenDisplay)(std::ptr::null());
+            if display.is_null() {
+                return;
+            }
+            let screen = (xlib.XDefaultScreen)(display);
+            (xlib.XIconifyWindow)(display, window, screen);
+            (xlib.XFlush)(display);
+            (xlib.XCloseDisplay)(display);
+        }
     }
 }
 
