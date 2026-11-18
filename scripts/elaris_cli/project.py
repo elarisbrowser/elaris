@@ -45,7 +45,7 @@ def build(args: argparse.Namespace) -> None:
         run("cargo", "+stable", "build", "--locked")
         return
     engine.build_for_elaris(args.jobs)
-    os.environ["ELARIS_LADYBIRD_LIB_DIR"] = bridge_lib_dir()
+    _configure_bridge_environment(bridge_lib_dir())
     run("cargo", "+stable", "build", "--locked", "--features", "ladybird-bridge")
 
 
@@ -73,17 +73,20 @@ def runtime_library_dirs(bridge_dir: str) -> list[str]:
     return directories
 
 
+def _configure_bridge_environment(bridge_dir: str) -> None:
+    os.environ["ELARIS_LADYBIRD_LIB_DIR"] = bridge_dir
+    loader_variable = "DYLD_LIBRARY_PATH" if sys.platform == "darwin" else "LD_LIBRARY_PATH"
+    directories = runtime_library_dirs(bridge_dir)
+    if existing := os.environ.get(loader_variable):
+        directories.append(existing)
+    os.environ[loader_variable] = os.pathsep.join(directories)
+
+
 def launch(args: argparse.Namespace) -> None:
     command = ["cargo", "+stable", "run", "--locked"]
     if not args.ui:
         engine.build_for_elaris(args.jobs)
-        bridge_dir = bridge_lib_dir()
-        os.environ["ELARIS_LADYBIRD_LIB_DIR"] = bridge_dir
-        loader_variable = "DYLD_LIBRARY_PATH" if sys.platform == "darwin" else "LD_LIBRARY_PATH"
-        runtime_dirs = runtime_library_dirs(bridge_dir)
-        if existing := os.environ.get(loader_variable):
-            runtime_dirs.append(existing)
-        os.environ[loader_variable] = os.pathsep.join(runtime_dirs)
+        _configure_bridge_environment(bridge_lib_dir())
         command += ["--features", "ladybird-bridge"]
     if args.url:
         command += ["--", args.url]
