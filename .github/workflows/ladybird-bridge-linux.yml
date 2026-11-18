@@ -55,11 +55,13 @@ jobs:
 
       - name: Set Ladybird submodule cache paths
         run: |
-          # Ladybird's helper treats its .git file as a linked-worktree pointer.
-          # In this nested submodule that resolves the shared build root to .git/modules.
+          # Ladybird's helper misreads checkout's relative submodule gitdir as a worktree path.
+          # Making that pointer absolute gives it a stable shared build root under .git/modules.
+          git_dir="$(git -C vendor/ladybird rev-parse --absolute-git-dir)"
+          printf 'gitdir: %s\n' "${git_dir}" > vendor/ladybird/.git
           echo "LADYBIRD_MAIN_SOURCE_DIR=${GITHUB_WORKSPACE}/.git/modules" >> "$GITHUB_ENV"
           echo "LADYBIRD_CACHE_DIR=${GITHUB_WORKSPACE}/.git/modules/Build/caches" >> "$GITHUB_ENV"
-          echo "VCPKG_ROOT=${GITHUB_WORKSPACE}/.git/modules/vcpkg-release" >> "$GITHUB_ENV"
+          echo "VCPKG_ROOT=${GITHUB_WORKSPACE}/.git/modules/Build/vcpkg-release" >> "$GITHUB_ENV"
 
       - name: Restore Ladybird dependency and compiler caches
         uses: actions/cache@v4
