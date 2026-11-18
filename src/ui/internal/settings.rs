@@ -14,10 +14,11 @@ use crate::appearance::Appearance;
 use crate::settings::{DownloadDirectory, StartupMode};
 use crate::ui::theme::Theme;
 
-const CONTENT_WIDTH: f32 = 740.0;
-const CONTENT_INSET: f32 = 36.0;
+const CONTENT_WIDTH: f32 = 720.0;
+const CONTENT_INSET: f32 = 32.0;
 const SECTION_GAP: f32 = 28.0;
 const ROW_GAP: f32 = 14.0;
+const CONTROL_WIDTH: f32 = 240.0;
 
 pub(super) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
     let kit = Kit::from_palette(PaletteSeed {
@@ -84,7 +85,7 @@ fn appearance_section(state: &AppState, theme: &Theme, kit: &Kit) -> El {
                 Appearance::Dark => 2,
             }),
         )
-        .width(Some(228.0))
+        .width(Some(CONTROL_WIDTH))
         .label("Appearance")
         .on_pick(|state: &mut AppState, index, _| {
             let appearance = match index {
@@ -105,7 +106,7 @@ fn search_section(state: &AppState, theme: &Theme, kit: &Kit, overlays: &mut Vec
         .current(Some(current))
         .label("Search engine")
         .appearance(SelectAppearance::Field)
-        .width(220.0)
+        .width(CONTROL_WIDTH)
         .open(state.settings_picker_open)
         .on_toggle(|state: &mut AppState| {
             state.settings_picker_open = !state.settings_picker_open;
@@ -186,7 +187,7 @@ fn startup_section(state: &AppState, theme: &Theme, kit: &Kit, overlays: &mut Ve
         .current(Some(current))
         .label("Startup behavior")
         .appearance(SelectAppearance::Field)
-        .width(250.0)
+        .width(CONTROL_WIDTH)
         .open(state.startup_picker_open)
         .on_toggle(|state: &mut AppState| {
             state.startup_picker_open = !state.startup_picker_open;
