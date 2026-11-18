@@ -69,9 +69,12 @@ To work on Rune UI without compiling Ladybird:
 ```sh
 ./elaris build --ui
 ./elaris run --ui
+./elaris hot
 ```
 
-Direct `cargo run` also remains a UI-only build and does not require the Ladybird submodule or bridge.
+`./elaris hot` uses Rune's guarded live-edit launcher and keeps the UI process and app state alive for compatible function-body edits under `src/ui/`. Add `--patch 'src/app.rs'` or another glob to include more source files. It requires Dioxus CLI 0.7.10 (`dx`).
+
+Direct `cargo run` also remains a UI-only build and does not require the Ladybird submodule or bridge. The hot-reload feature is enabled only by `./elaris hot`.
 
 ## Contributor commands
 

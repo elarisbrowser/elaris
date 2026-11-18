@@ -34,6 +34,7 @@ objc2_app_kit_02 = {
 objc2_foundation_02 = { package = "objc2-foundation", version = "0.2.2" }
 
 [features]
+hot = ["rune/hot"]
 ladybird-bridge = []
 
 [[example]]

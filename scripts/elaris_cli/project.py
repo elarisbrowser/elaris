@@ -1,8 +1,11 @@
 """Rust application and general development commands."""
 
 import argparse
+import json
 import os
+import subprocess
 import sys
+from pathlib import Path
 
 from . import dependencies, engine
 from .common import (
@@ -89,6 +92,56 @@ def launch(args: argparse.Namespace) -> None:
     run(*command)
 
 
+def rune_dev_launcher() -> Path:
+    try:
+        metadata = subprocess.run(
+            ["cargo", "+stable", "metadata", "--locked", "--format-version", "1"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError as error:
+        raise SystemExit("elaris: cargo is required to locate Rune's hot-reload launcher") from error
+    except subprocess.CalledProcessError as error:
+        detail = error.stderr.strip() or str(error)
+        raise SystemExit(f"elaris: could not resolve Rune's hot-reload launcher: {detail}") from error
+
+    packages = json.loads(metadata.stdout)["packages"]
+    rune = next(
+        (
+            package
+            for package in packages
+            if package["name"] == "rune"
+            and (package.get("source") or "").startswith("git+https://github.com/anomalyco/rune?")
+        ),
+        None,
+    )
+    if rune is None:
+        raise SystemExit("elaris: the pinned anomalyco/rune dependency was not found")
+
+    rune_dir = Path(rune["manifest_path"]).parent
+    launcher = rune_dir.parent.parent / "scripts" / "rune-dev"
+    if not launcher.is_file():
+        raise SystemExit(f"elaris: Rune's hot-reload launcher is missing: {launcher}")
+    return launcher
+
+
+def hot_reload(args: argparse.Namespace) -> None:
+    command = [
+        "python3",
+        str(rune_dev_launcher()),
+        "--local",
+        "--manifest-path",
+        str(ROOT / "Cargo.toml"),
+        "--patch",
+        "src/ui/**/*.rs",
+    ]
+    for pattern in args.patch:
+        command.extend(("--patch", pattern))
+    run(*command)
+
+
 def check(_args: argparse.Namespace) -> None:
     run("cargo", "+stable", "fmt", "--check")
     run("cargo", "+stable", "check", "--locked")
@@ -102,6 +155,7 @@ def register_commands(commands) -> None:
         ("format", format_sources, "Format Elaris Rust and C++ source files"),
         ("build", build, "Build Ladybird, its Elaris bridge, and the browser"),
         ("run", launch, "Build if needed and launch Elaris with Ladybird"),
+        ("hot", hot_reload, "Run Rune's guarded UI hot-reload workflow"),
         ("check", check, "Run formatting, Clippy, and tests"),
     ):
         subcommand = commands.add_parser(name, help=help_text)
@@ -125,4 +179,12 @@ def register_commands(commands) -> None:
                 "rune_args",
                 nargs=argparse.REMAINDER,
                 help="Rune options after --, such as --snap /tmp/elaris.png",
+            )
+        if handler is hot_reload:
+            subcommand.add_argument(
+                "--patch",
+                action="append",
+                default=[],
+                metavar="GLOB",
+                help="Additional Rust source glob to live patch (default: src/ui/**/*.rs)",
             )
