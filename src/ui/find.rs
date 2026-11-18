@@ -3,7 +3,7 @@
 //! The compact Find in Page bar anchored to the active webpage.
 
 use rune::tok::type_;
-use rune::{El, Key, KeyEvent, Spring, Transition, Tx, icon, row, text, text_input};
+use rune::{El, Key, KeyEvent, Spring, Transition, Tx, row, text, text_input};
 
 use crate::app::AppState;
 use crate::tab::{FindState, Tab};
@@ -180,26 +180,17 @@ fn button(
     disabled: bool,
     on_press: impl Fn(&mut AppState, &mut Tx) + 'static,
 ) -> El {
-    row()
-        .key(key)
-        .size(theme::FIND_BUTTON, theme::FIND_BUTTON)
-        .center()
-        .radius(theme::ICON_BUTTON_RADIUS)
-        .hover(theme.hover)
-        .press(theme.press)
-        .press_scale(theme::PRESS_SCALE)
-        .label(label)
-        .help(label)
+    super::controls::icon_button(key, label, glyph, theme::FIND_BUTTON, theme)
         .role("button")
-        .focusable(true)
+        .focusable(!disabled)
         .disabled(disabled)
+        .opacity(if disabled {
+            theme.disabled_opacity
+        } else {
+            1.0
+        })
         .preserve_focus_on_press(true)
         .on_press_tx(on_press)
-        .child(icon(glyph, theme::ICON).color(if disabled {
-            theme.text_muted.alpha(theme.disabled_opacity)
-        } else {
-            theme.icon
-        }))
 }
 
 fn result_label(find: &FindState) -> String {

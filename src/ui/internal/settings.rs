@@ -6,9 +6,7 @@ use std::path::{Path, PathBuf};
 
 use rune::tok::type_;
 use rune::{El, ScrollSpec, TextStyle, col, row, text};
-use rune_kit::{
-    Button, ButtonVariant, Kit, PaletteSeed, SegmentedControl, Select, SelectAppearance,
-};
+use rune_kit::{Button, ButtonVariant, Kit, SegmentedControl, Select, SelectAppearance};
 
 use crate::address::SearchEngine;
 use crate::app::AppState;
@@ -25,11 +23,7 @@ const CONTROL_WIDTH: f32 = 220.0;
 const COMPACT_BREAKPOINT: f32 = 560.0;
 
 pub(super) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
-    let kit = Kit::from_palette(PaletteSeed {
-        bg: theme.page,
-        fg: theme.text,
-        accent: theme.icon,
-    });
+    let kit = theme.kit(theme.settings_surface);
     let viewport_width = state.browser.viewport_width();
     let compact = viewport_width > 0.0 && viewport_width < COMPACT_BREAKPOINT;
     let content = col()

@@ -2,7 +2,7 @@
 
 use elaris::ladybird::{Edit, PageMenu};
 use rune::{El, PointerPress, Tx, el};
-use rune_kit::{Kit, MenuItem, PaletteSeed, context_menu};
+use rune_kit::{MenuItem, context_menu};
 
 use crate::{
     app::AppState,
@@ -115,10 +115,6 @@ pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
             s.browser.send(id, ViewCommand::Edit(Edit::SelectAll))
         }));
     }
-    let kit = Kit::from_palette(PaletteSeed {
-        bg: theme.window,
-        fg: theme.text,
-        accent: theme.icon,
-    });
+    let kit = theme.kit(theme.overlay_panel);
     menu.build(&kit, layer);
 }

@@ -7,6 +7,7 @@
 use rune::Spring;
 use rune::tok::{motion, radius, space};
 use rune::{Color, oklch, oklcha};
+use rune_kit::{Kit, PaletteFocus, PaletteSeed};
 
 /// The hue every neutral leans toward, a cool grey.
 const HUE: f32 = 265.0;
@@ -48,6 +49,28 @@ pub(crate) struct Theme {
     pub(crate) overlay_selected: Color,
     /// How faint a control that can't be used now is.
     pub(crate) disabled_opacity: f32,
+}
+
+impl Theme {
+    pub(crate) fn kit(&self, surface: Color) -> Kit {
+        let mut kit = Kit::from_palette_focus(
+            PaletteSeed {
+                bg: surface,
+                fg: self.text,
+                accent: self.icon,
+            },
+            PaletteFocus::Custom(self.focus),
+        );
+        // Kit uses faint text for informational labels and shortcuts as well as disabled items.
+        kit.c.text_faint = self.text_muted;
+        kit.c.text_muted = self.text_muted;
+        kit.c.text_weak = self.text_muted;
+        kit.c.icon_muted = self.icon;
+        kit.c.icon_faint = self.icon;
+        kit.c.hover = self.hover;
+        kit.c.pressed = self.press;
+        kit
+    }
 }
 
 /// The palette for a dark or light interface.
@@ -233,7 +256,7 @@ pub(crate) const VIEWPORT_BADGE_INSET: f32 = space::S3;
 mod tests {
     use super::*;
 
-    pub(super) fn contrast(foreground: Color, background: Color) -> f32 {
+    fn contrast(foreground: Color, background: Color) -> f32 {
         let foreground = paint(foreground, background).luminance();
         let background = background.luminance();
         (foreground.max(background) + 0.05) / (foreground.min(background) + 0.05)
@@ -242,6 +265,25 @@ mod tests {
     // Rune colours are linear sRGB. Model source-over against an opaque surface.
     fn paint(foreground: Color, background: Color) -> Color {
         background.mix(foreground.alpha(1.0), foreground.a)
+    }
+
+    #[test]
+    fn kit_labels_and_focus_are_readable_on_derived_surfaces() {
+        for dark in [false, true] {
+            let theme = palette(dark);
+            for base in [theme.settings_surface, theme.overlay_panel] {
+                let kit = theme.kit(base);
+                for surface in [kit.c.bg_base, kit.c.surface_raised, kit.c.bg_button_neutral] {
+                    for state in [Color::TRANSPARENT, kit.c.hover, kit.c.pressed] {
+                        let background = paint(state, surface);
+                        assert!(contrast(kit.c.text_base, background) >= 4.5);
+                        assert!(contrast(kit.c.text_faint, background) >= 4.5);
+                        assert!(contrast(kit.c.icon_muted, background) >= 3.0);
+                        assert!(contrast(kit.c.border_focus, background) >= 3.0);
+                    }
+                }
+            }
+        }
     }
 
     #[test]

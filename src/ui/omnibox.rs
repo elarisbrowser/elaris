@@ -4,7 +4,7 @@
 
 use rune::tok::type_;
 use rune::{El, ScrollSpec, Transition, Tx, col, el, icon, row, text, text_input};
-use rune_kit::{Kit, Menu, MenuItem, PaletteSeed};
+use rune_kit::{Menu, MenuItem};
 
 use crate::address::SearchEngine;
 use crate::app::{self, AppState};
@@ -186,11 +186,7 @@ fn search_engine_selector(state: &AppState, theme: &Theme, overlays: &mut Vec<El
             theme::OMNIBOX_SEARCH_ICON,
         ))
         .child(icon(&super::icons::CHEVRON_DOWN, theme::OMNIBOX_SEARCH_CHEVRON).color(theme.icon));
-    let kit = Kit::from_palette(PaletteSeed {
-        bg: theme.window,
-        fg: theme.text,
-        accent: theme.icon,
-    });
+    let kit = theme.kit(theme.overlay_panel);
     let mut menu = Menu::new("search-engine-menu")
         .trigger(trigger)
         .group_label("Search with");

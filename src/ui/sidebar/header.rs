@@ -25,7 +25,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
     #[cfg(target_os = "linux")]
     {
         let visible = state.titlebar.is_visible();
-        let reduced_motion = cx.is_reduced_motion();
+        let reduced_motion = cx.system_reduced_motion() || cx.is_reduced_motion();
         let mut slot = el()
             .key("linux-titlebar-slot")
             .w_full()

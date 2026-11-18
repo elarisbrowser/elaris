@@ -4,7 +4,7 @@
 
 use rune::tok::type_;
 use rune::{El, GrowthSpec, ScrollSpec, Spring, Tx, col, el, icon, row, text};
-use rune_kit::{Kit, MenuItem, PaletteSeed, context_menu as menu_at};
+use rune_kit::{MenuItem, context_menu as menu_at};
 
 use super::drag::{PreviewItem, favourite_columns, favourite_row_ranges, favourite_tile_width};
 use crate::app::{self, AppState};
@@ -767,10 +767,6 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
                 app::open_settings(state, tx);
             }),
         );
-    let kit = Kit::from_palette(PaletteSeed {
-        bg: theme.window,
-        fg: theme.text,
-        accent: theme.icon,
-    });
+    let kit = theme.kit(theme.overlay_panel);
     menu.build(&kit, layer);
 }

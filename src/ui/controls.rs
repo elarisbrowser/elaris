@@ -23,6 +23,7 @@ pub(crate) fn icon_button(
         .hover(theme.hover)
         .press(theme.press)
         .press_scale(theme::PRESS_SCALE)
+        .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
         .label(label)
         .help(label)
         .child(icon(glyph, theme::ICON).color(theme.icon))
@@ -50,6 +51,7 @@ pub(crate) fn row_button(
         .hover(theme.hover)
         .press(theme.press)
         .press_scale(theme::PRESS_SCALE)
+        .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
         .label(label)
         .children(leading.into())
         .child(

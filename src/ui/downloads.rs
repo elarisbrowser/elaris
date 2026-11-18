@@ -4,7 +4,7 @@
 
 use rune::tok::type_;
 use rune::{El, LoopSpec, ScrollSpec, col, el, row, text};
-use rune_kit::{Kit, PaletteSeed, Placement, Popover};
+use rune_kit::{Placement, Popover};
 
 use crate::app::AppState;
 use crate::ui::controls::icon_button;
@@ -46,11 +46,7 @@ pub(crate) fn trigger(state: &AppState, theme: &Theme, layer: &mut Vec<El>) -> E
                 .child(text(count).font(type_::LABEL).color(theme.window)),
         );
     }
-    let kit = Kit::from_palette(PaletteSeed {
-        bg: theme.window,
-        fg: theme.text,
-        accent: theme.icon,
-    });
+    let kit = theme.kit(theme.overlay_panel);
     Popover::new("downloads-popover")
         .trigger(button)
         .title("Downloads")
