@@ -13,6 +13,61 @@ use crate::omnibox::{self, Action, HistoryEntry, Suggestion};
 use crate::tab::{Tab, TabId};
 use crate::ui::{SidebarState, VIEWPORT};
 
+/// How the Linux toolbar stays visible while browsing.
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum LinuxTitlebarMode {
+    /// Reveal the toolbar while the pointer is in the window's top band.
+    #[default]
+    Hover,
+    /// Keep the toolbar visible regardless of pointer position.
+    Always,
+}
+
+#[cfg(target_os = "linux")]
+impl LinuxTitlebarMode {
+    fn from_environment() -> Self {
+        match std::env::var("ELARIS_LINUX_TITLEBAR") {
+            Ok(mode) if mode.eq_ignore_ascii_case("always") => Self::Always,
+            _ => Self::Hover,
+        }
+    }
+}
+
+/// Linux titlebar visibility and its current pointer state.
+#[cfg(target_os = "linux")]
+pub(crate) struct LinuxTitlebar {
+    mode: LinuxTitlebarMode,
+    hovered: bool,
+}
+
+#[cfg(target_os = "linux")]
+impl Default for LinuxTitlebar {
+    fn default() -> Self {
+        Self {
+            mode: LinuxTitlebarMode::from_environment(),
+            hovered: false,
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl LinuxTitlebar {
+    /// Whether the toolbar should be drawn now.
+    pub(crate) fn is_visible(&self) -> bool {
+        self.mode == LinuxTitlebarMode::Always || self.hovered
+    }
+
+    /// Updates hover visibility and reports whether the view needs an animated commit.
+    pub(crate) fn set_hovered(&mut self, hovered: bool) -> bool {
+        if self.mode == LinuxTitlebarMode::Always || self.hovered == hovered {
+            return false;
+        }
+        self.hovered = hovered;
+        true
+    }
+}
+
 /// The window's title when the page has none.
 pub(crate) const APP_NAME: &str = "Elaris";
 
@@ -25,6 +80,8 @@ pub(crate) struct AppState {
     pub(crate) page_menu: crate::ui::PageMenuState,
     pub(crate) appearance: Appearance,
     pub(crate) sidebar: SidebarState,
+    #[cfg(target_os = "linux")]
+    pub(crate) titlebar: LinuxTitlebar,
     /// The tab and URL last recorded in local recent history.
     shown: Option<(TabId, String)>,
     history: Vec<HistoryEntry>,
@@ -51,6 +108,8 @@ impl AppState {
             page_menu: Default::default(),
             appearance: Appearance::default(),
             sidebar: SidebarState::default(),
+            #[cfg(target_os = "linux")]
+            titlebar: LinuxTitlebar::default(),
             shown: None,
             history: Vec::new(),
             window_title: None,

@@ -27,6 +27,9 @@ Setup installs system packages and Rust toolchains, then initializes Ladybird. L
 
 For shell-only work, use `./elaris run --ui`. See [Development setup](SETUP.md) for details.
 
+On Linux, the browser toolbar appears when the pointer reaches the top of the app. Set
+`ELARIS_LINUX_TITLEBAR=always` to keep it visible.
+
 ## Development
 
 Run `./elaris check` before opening a pull request. Use `./elaris format` to format Rust and bridge C++ code. Run `./elaris linux-build` to build in Docker and stream Linux build output in the terminal.

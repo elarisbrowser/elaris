@@ -4,6 +4,10 @@
 //! the sidebar toggle, then back, forward and reload for the active tab. It spans the sidebar,
 //! or just its own buttons while the sidebar is hidden.
 
+#[cfg(target_os = "linux")]
+use rune::Transition;
+#[cfg(target_os = "linux")]
+use rune::tok::motion;
 use rune::{Chrome, Cx, El, Icon, el, row, spacer};
 
 use crate::app::AppState;
@@ -17,6 +21,41 @@ use crate::ui::theme::{self, Theme};
 type Navigate = fn(&mut Browser, TabId);
 
 pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El {
+    #[cfg(target_os = "linux")]
+    {
+        let mut titlebar = el()
+            .key("header-hover-zone")
+            .absolute(0.0, 0.0)
+            .w_full()
+            .h(theme::HEADER_HEIGHT)
+            .on_hover_change(|state: &mut AppState, inside, tx| {
+                if state.titlebar.set_hovered(inside) {
+                    tx.animated();
+                }
+            });
+        if state.titlebar.is_visible() {
+            let transition = if cx.is_reduced_motion() {
+                Transition::opacity()
+            } else {
+                Transition::offset(0.0, -8.0)
+                    .combined(Transition::opacity())
+                    .springs(motion::pair::SNAP)
+            };
+            titlebar = titlebar.child(
+                header_content(state, theme, cx)
+                    .fill(theme.window)
+                    .transition(transition),
+            );
+        }
+        titlebar
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        header_content(state, theme, cx)
+    }
+}
+
+fn header_content(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El {
     let tab = state.browser.active_tab();
     let buttons: [(&str, &'static Icon, bool, Navigate); 3] = [
         (
