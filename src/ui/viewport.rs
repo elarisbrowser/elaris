@@ -46,8 +46,8 @@ pub(crate) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> E
     viewport.child(page(state, theme, overlays))
 }
 
-/// The page's latest frame fills the viewport. With no active page, it stays transparent so the
-/// window's native material shows through. During a live resize Rune scales a frame to new bounds.
+/// The page's latest frame fills the viewport over its appearance-aware background. During a live
+/// resize Rune scales a frame to new bounds.
 fn page(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
     let mut page = el().key(VIEWPORT);
     let mut internal = false;
@@ -74,12 +74,8 @@ fn page(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
         }
     }
     let page = page.w_full().h_full();
-    let page = if state.browser.active_tab().is_some() {
-        page.fill(theme.page)
-    } else {
-        page
-    };
-    page.continuous_corners()
+    page.fill(theme.page)
+        .continuous_corners()
         .clip_rounded(theme::VIEWPORT_RADIUS)
         .focusable(true)
         .no_focus_ring()
