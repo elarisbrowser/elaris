@@ -28,6 +28,7 @@ pub(crate) struct Tab {
     pub(crate) url: String,
     pub(crate) title: String,
     pub(crate) loading: bool,
+    pub(crate) ime_caret: Option<[i32; 4]>,
     pub(crate) favicon: Option<Pixels>,
     pub(crate) error: Option<String>,
     pub(crate) can_go_back: bool,
@@ -58,6 +59,7 @@ impl Tab {
             url: url.clone(),
             title: String::new(),
             loading: false,
+            ime_caret: None,
             favicon: None,
             error: None,
             can_go_back: false,
@@ -86,6 +88,7 @@ impl Tab {
     /// Takes in what the engine reported about the tab.
     pub(crate) fn update(&mut self, update: TabUpdate) {
         match update {
+            TabUpdate::ImeCaret(rect) => self.ime_caret = rect,
             TabUpdate::Navigation(url) => {
                 self.url = url;
                 self.error = None;

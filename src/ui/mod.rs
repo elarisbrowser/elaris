@@ -8,7 +8,8 @@ mod icons;
 mod omnibox;
 mod sidebar;
 mod theme;
-mod viewport;
+pub(crate) mod viewport;
+pub(crate) use viewport::menu::PageMenuState;
 
 pub(crate) use sidebar::resize::settle as settle_sidebar;
 pub(crate) use sidebar::{SidebarState, toggle as toggle_sidebar};
@@ -48,6 +49,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         window = window.child(overlay);
     }
     let mut overlays = Vec::new();
+    viewport::menu::view(state, &theme, &mut overlays);
     sidebar::context_menu(state, &theme, &mut overlays);
     rune_kit::root(window, overlays)
 }

@@ -97,6 +97,15 @@ pub(crate) enum ViewCommand {
     },
     Mouse(MouseEvent),
     Key(KeyEvent),
+    Edit(elaris::ladybird::Edit),
+    LoadPrepared {
+        source: TabId,
+        request: u64,
+    },
+    OpenContext {
+        request: u64,
+        new_tab: bool,
+    },
     Focus(bool),
     /// Whether the view is on screen; hidden ones stop painting.
     Visible(bool),
@@ -108,6 +117,9 @@ pub(crate) enum ViewCommand {
 #[cfg_attr(not(feature = "ladybird-bridge"), allow(dead_code))]
 pub(crate) enum Update {
     Tab(TabId, TabUpdate),
+    NewTab(TabId, String, u64, bool),
+    ContextMenu(TabId, elaris::ladybird::PageMenu),
+    Clipboard(TabId, String),
     /// The engine could not start or stopped; no tab will hear from it again.
     Failed(String),
 }
@@ -117,6 +129,7 @@ pub(crate) enum Update {
 #[cfg_attr(not(feature = "ladybird-bridge"), allow(dead_code))]
 pub(crate) enum TabUpdate {
     Navigation(String),
+    ImeCaret(Option<[i32; 4]>),
     Title(String),
     Loading(bool),
     Favicon(Option<Favicon>),

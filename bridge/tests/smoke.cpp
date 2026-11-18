@@ -11,6 +11,11 @@
 
 struct Events {
     unsigned navigation{};
+    unsigned new_tabs{};
+    bool foreground{};
+    std::string link_menu;
+    std::string clipboard;
+    bool editing{};
     unsigned title{};
     unsigned loading_started{};
     unsigned loading_finished{};
@@ -28,6 +33,19 @@ using EventsByView = std::map<uint64_t, Events>;
 static void on_event(void* context, ElarisLadybirdEvent const* event) {
     auto& events = (*static_cast<EventsByView*>(context))[event->view_id];
     switch (event->kind) {
+    case ELARIS_LADYBIRD_NEW_TAB:
+        ++events.new_tabs;
+        events.foreground = event->value;
+        break;
+    case ELARIS_LADYBIRD_CONTEXT_MENU:
+        events.link_menu = event->text;
+        break;
+    case ELARIS_LADYBIRD_CLIPBOARD:
+        events.clipboard = event->text;
+        break;
+    case ELARIS_LADYBIRD_IME_CARET:
+        events.editing = event->value;
+        break;
     case ELARIS_LADYBIRD_NAVIGATION:
         ++events.navigation;
         break;
@@ -88,6 +106,60 @@ template <typename Done> static bool pump_until(ElarisLadybird* bridge, Done don
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
     return true;
+}
+
+// Drive the fixed-position link and input in smoke.html at scale one.
+static bool page_input(ElarisLadybird* bridge, ElarisLadybirdView* view, Events& events) {
+    auto click = [&](int button, int mods, int y) {
+        ElarisLadybirdMouseEvent event{};
+        event.x = 30;
+        event.y = y;
+        event.button = button;
+        event.buttons = button;
+        event.click_count = 1;
+        event.modifiers = mods;
+        event.type = ELARIS_LADYBIRD_MOUSE_DOWN;
+        if (!check(elaris_ladybird_mouse_event(view, &event), "mouse down"))
+            return false;
+        event.buttons = 0;
+        event.type = ELARIS_LADYBIRD_MOUSE_UP;
+        return check(elaris_ladybird_mouse_event(view, &event), "mouse up");
+    };
+    auto edit = [&](ElarisEdit command, std::string const& text = {}) {
+        return check(elaris_ladybird_edit(view, command, reinterpret_cast<uint8_t const*>(text.data()), text.size()),
+                     "edit");
+    };
+    auto expect = [&](auto predicate, char const* name) {
+        if (pump_until(bridge, predicate))
+            return true;
+        std::cerr << "page input failed: " << name << "; title=" << events.last_title << "\n";
+        return false;
+    };
+#ifdef __APPLE__
+    constexpr int new_tab_mod = ELARIS_LADYBIRD_MOD_SUPER;
+#else
+    constexpr int new_tab_mod = ELARIS_LADYBIRD_MOD_CTRL;
+#endif
+    if (!check(elaris_ladybird_set_focus(view, 1), "focus") || !click(ELARIS_LADYBIRD_BUTTON_SECONDARY, 0, 20) ||
+        !expect([&] { return events.link_menu.ends_with("smoke.html#target"); }, "link menu") ||
+        !click(ELARIS_LADYBIRD_BUTTON_PRIMARY, new_tab_mod, 20) ||
+        !expect([&] { return events.new_tabs == 1 && !events.foreground; }, "modified link") ||
+        !click(ELARIS_LADYBIRD_BUTTON_MIDDLE, 0, 20) ||
+        !expect([&] { return events.new_tabs == 2 && !events.foreground; }, "middle link") ||
+        !click(ELARIS_LADYBIRD_BUTTON_PRIMARY, 0, 52) || !expect([&] { return events.editing; }, "editable caret"))
+        return false;
+    ElarisLadybirdKeyEvent key{ELARIS_LADYBIRD_KEY_PRESS, ELARIS_LADYBIRD_KEY_CHARACTER, 0, 'a', 0};
+    if (!check(elaris_ladybird_key_event(view, &key), "key down"))
+        return false;
+    key.type = ELARIS_LADYBIRD_KEY_RELEASE;
+    return check(elaris_ladybird_key_event(view, &key), "key up") &&
+           expect([&] { return events.last_title == "input:a"; }, "typing") && edit(ELARIS_EDIT_MARK, "k") &&
+           edit(ELARIS_EDIT_COMMIT, "界") &&
+           expect([&] { return events.last_title == "input:a界"; }, "composition commit") &&
+           edit(ELARIS_EDIT_SELECT_ALL) && edit(ELARIS_EDIT_COPY) &&
+           expect([&] { return events.clipboard == "a界"; }, "copy selection") && edit(ELARIS_EDIT_CUT) &&
+           expect([&] { return events.last_title == "input:"; }, "cut") && edit(ELARIS_EDIT_PASTE, "pasted") &&
+           expect([&] { return events.last_title == "input:pasted"; }, "paste");
 }
 
 // Two views at once: each one's events carry its own id, a hidden one keeps its page, and history moves back and
@@ -243,6 +315,8 @@ int main(int argc, char** argv) {
             std::cerr << "events arrived for a view other than view " << view_id << '\n';
             passed = false;
         }
+        if (passed && cycle == 0)
+            passed = page_input(bridge, view, events);
         elaris_ladybird_destroy_view(view);
         auto close_deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
         while (std::chrono::steady_clock::now() < close_deadline) {

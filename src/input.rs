@@ -21,23 +21,31 @@ pub(crate) fn device(points: f32, scale: f32) -> i32 {
     (points * scale).round() as i32
 }
 
-/// A pointer event at `point`, in the viewport's own points. Rune reports the primary button
-/// only: `Down` and `Up` change it, and `held` says whether it is down after the event.
+pub(crate) fn button_bit(button: rune::PointerButton) -> i32 {
+    match button {
+        rune::PointerButton::Primary => button::PRIMARY,
+        rune::PointerButton::Secondary => button::SECONDARY,
+        rune::PointerButton::Middle => button::MIDDLE,
+        _ => 0,
+    }
+}
+
 pub(crate) fn pointer(
     kind: MouseKind,
     point: [f32; 2],
     scale: f32,
-    held: bool,
+    button: i32,
+    buttons: i32,
+    mods: Mods,
     clicks: u32,
 ) -> MouseEvent {
-    let pressed = |yes| if yes { button::PRIMARY } else { 0 };
     MouseEvent {
         kind,
         x: device(point[0], scale),
         y: device(point[1], scale),
-        button: pressed(matches!(kind, MouseKind::Down | MouseKind::Up)),
-        buttons: pressed(held),
-        modifiers: 0,
+        button,
+        buttons,
+        modifiers: modifiers(mods),
         wheel: (0.0, 0.0),
         precise: false,
         phase: WheelPhase::None,
@@ -58,7 +66,7 @@ pub(crate) fn wheel(
         wheel: (-f64::from(delta[0]), -f64::from(delta[1])),
         precise,
         phase,
-        ..pointer(MouseKind::Wheel, point, scale, false, 0)
+        ..pointer(MouseKind::Wheel, point, scale, 0, 0, Mods::default(), 0)
     }
 }
 
@@ -73,15 +81,16 @@ pub(crate) fn wheel_phase(precise: bool, phase: GesturePhase, momentum: bool) ->
     }
 }
 
-/// The page keys a Rune key press types, each pressed and released: Rune reports presses only.
-/// Shortcuts (Rune's `Command` keys) stay with the app.
-pub(crate) fn keys(event: &RuneKeyEvent) -> Vec<KeyEvent> {
+/// A single logical transition. Committed input-method strings travel separately.
+pub(crate) fn key(event: &RuneKeyEvent, pressed: bool, repeat: bool) -> Option<KeyEvent> {
     let named = match &event.key {
         RuneKey::Text(text) => {
-            return text
-                .chars()
-                .flat_map(|c| tap(Key::Character(c), event.mods))
-                .collect();
+            let mut chars = text.chars();
+            let ch = chars.next()?;
+            if chars.next().is_some() {
+                return None;
+            }
+            Key::Character(ch)
         }
         RuneKey::Enter => Key::Return,
         RuneKey::Backspace => Key::Backspace,
@@ -96,20 +105,30 @@ pub(crate) fn keys(event: &RuneKeyEvent) -> Vec<KeyEvent> {
         RuneKey::End => Key::End,
         RuneKey::PageUp => Key::PageUp,
         RuneKey::PageDown => Key::PageDown,
-        _ => return Vec::new(),
+        RuneKey::Function(n @ 1..=12) => Key::Function(*n),
+        RuneKey::Insert => Key::Insert,
+        RuneKey::PrintScreen => Key::PrintScreen,
+        RuneKey::ScrollLock => Key::ScrollLock,
+        RuneKey::Pause => Key::Pause,
+        RuneKey::Modifier { modifier, .. } => match modifier {
+            rune::Modifier::ShiftLeft => Key::ShiftLeft,
+            rune::Modifier::ShiftRight => Key::ShiftRight,
+            rune::Modifier::ControlLeft => Key::ControlLeft,
+            rune::Modifier::ControlRight => Key::ControlRight,
+            rune::Modifier::AltLeft => Key::AltLeft,
+            rune::Modifier::AltRight => Key::AltRight,
+            rune::Modifier::SuperLeft => Key::SuperLeft,
+            rune::Modifier::SuperRight => Key::SuperRight,
+            _ => return None,
+        },
+        _ => return None,
     };
-    tap(named, event.mods).to_vec()
-}
-
-fn tap(key: Key, mods: Mods) -> [KeyEvent; 2] {
-    let modifiers = modifiers(mods);
-    let event = |pressed| KeyEvent {
-        key,
+    Some(KeyEvent {
+        key: named,
         pressed,
-        modifiers,
-        repeat: false,
-    };
-    [event(true), event(false)]
+        modifiers: modifiers(event.mods),
+        repeat: pressed && repeat,
+    })
 }
 
 #[cfg(test)]
@@ -118,22 +137,22 @@ mod tests {
 
     #[test]
     fn scales_points_to_device_pixels() {
-        let event = pointer(MouseKind::Move, [10.25, 3.0], 2.0, false, 0);
+        let event = pointer(MouseKind::Move, [10.25, 3.0], 2.0, 0, 0, Mods::default(), 0);
         assert_eq!((event.x, event.y), (21, 6));
     }
 
     #[test]
     fn a_click_presses_then_releases_the_primary_button() {
-        let down = pointer(MouseKind::Down, [0.0, 0.0], 1.0, true, 2);
+        let down = pointer(MouseKind::Down, [0.0, 0.0], 1.0, 1, 1, Mods::default(), 2);
         assert_eq!(
             (down.button, down.buttons, down.clicks),
             (button::PRIMARY, button::PRIMARY, 2)
         );
-        let drag = pointer(MouseKind::Move, [1.0, 0.0], 1.0, true, 0);
+        let drag = pointer(MouseKind::Move, [1.0, 0.0], 1.0, 0, 1, Mods::default(), 0);
         assert_eq!((drag.button, drag.buttons), (0, button::PRIMARY));
-        let up = pointer(MouseKind::Up, [1.0, 0.0], 1.0, false, 2);
+        let up = pointer(MouseKind::Up, [1.0, 0.0], 1.0, 1, 0, Mods::default(), 2);
         assert_eq!((up.button, up.buttons), (button::PRIMARY, 0));
-        let hover = pointer(MouseKind::Move, [2.0, 0.0], 1.0, false, 0);
+        let hover = pointer(MouseKind::Move, [2.0, 0.0], 1.0, 0, 0, Mods::default(), 0);
         assert_eq!((hover.button, hover.buttons), (0, 0));
     }
 
@@ -146,13 +165,11 @@ mod tests {
                 ..Mods::default()
             },
         };
-        let keys = keys(&event);
-        assert_eq!(keys.len(), 2);
-        assert!(
-            keys.iter()
-                .all(|k| k.key == Key::Return && k.modifiers == modifier::CTRL)
-        );
-        assert!(keys[0].pressed && !keys[1].pressed);
+        let down = key(&event, true, true).unwrap();
+        let up = key(&event, false, false).unwrap();
+        assert_eq!(down.key, Key::Return);
+        assert_eq!(down.modifiers, modifier::CTRL);
+        assert!(down.pressed && down.repeat && !up.pressed && !up.repeat);
     }
 
     #[test]
@@ -185,21 +202,12 @@ mod tests {
     }
 
     #[test]
-    fn text_presses_and_releases_each_character() {
+    fn composed_strings_are_not_split_into_keystrokes() {
         let event = RuneKeyEvent {
             key: RuneKey::Text("hé".into()),
             mods: Mods::default(),
         };
-        let keys: Vec<_> = keys(&event).iter().map(|k| (k.key, k.pressed)).collect();
-        assert_eq!(
-            keys,
-            [
-                (Key::Character('h'), true),
-                (Key::Character('h'), false),
-                (Key::Character('é'), true),
-                (Key::Character('é'), false),
-            ]
-        );
+        assert!(key(&event, true, false).is_none());
     }
 
     #[test]
@@ -208,6 +216,6 @@ mod tests {
             key: RuneKey::Command('q'),
             mods: Mods::default(),
         };
-        assert!(keys(&event).is_empty());
+        assert!(key(&event, true, false).is_none());
     }
 }

@@ -38,7 +38,9 @@ fn main() {
         });
     #[cfg(target_os = "macos")]
     let app = app.on_window(titlebar_controls::install);
-    app.on_frame_drawn(|_| perf::frame_drawn())
+    app.modifier_keys()
+        .on_frame_drawn(|_| perf::frame_drawn())
+        .on_ime(ui::viewport::ime)
         .on_focus(app::on_window_focus)
         .on_close(app::shut_down)
         .on_quit(app::shut_down)

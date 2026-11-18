@@ -34,6 +34,9 @@ struct RawEvent {
     favicon_width: i32,
     favicon_height: i32,
     favicon_stride: i32,
+    request_id: u64,
+    selection: *const c_char,
+    caret: [i32; 4],
 }
 
 #[repr(C)]
@@ -106,6 +109,9 @@ unsafe extern "C" {
     fn elaris_ladybird_frame(view: *mut RawView, out_frame: *mut RawFrame) -> i32;
     fn elaris_ladybird_copy_frame(view: *mut RawView, rgba: *mut u8, length: usize) -> i32;
     fn elaris_ladybird_mouse_event(view: *mut RawView, event: *const RawMouseEvent) -> i32;
+    fn elaris_ladybird_load_prepared(view: *mut RawView, source: u64, request: u64) -> i32;
+    fn elaris_ladybird_open_context_target(view: *mut RawView, request: u64, new_tab: i32) -> i32;
+    fn elaris_ladybird_edit(view: *mut RawView, command: i32, bytes: *const u8, len: usize) -> i32;
     fn elaris_ladybird_key_event(view: *mut RawView, event: *const RawKeyEvent) -> i32;
     fn elaris_ladybird_set_focus(view: *mut RawView, focused: i32) -> i32;
     fn elaris_ladybird_set_color_scheme(bridge: *mut RawBridge, dark: i32) -> i32;
@@ -153,6 +159,27 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
                 forward: raw.value & HISTORY_FORWARD != 0,
             },
             6 => Event::Favicon(copy_favicon(raw)),
+            7 => Event::NewTab {
+                url: text,
+                request: raw.request_id,
+                activate: raw.value != 0,
+            },
+            8 => Event::ContextMenu(super::PageMenu {
+                request: raw.request_id,
+                url: text,
+                image: raw.value & 1 != 0,
+                editable: raw.value & 2 != 0,
+                selection: if raw.selection.is_null() {
+                    String::new()
+                } else {
+                    // SAFETY: The bridge lends this string for the duration of the callback.
+                    unsafe { CStr::from_ptr(raw.selection) }
+                        .to_string_lossy()
+                        .into_owned()
+                },
+            }),
+            9 => Event::Clipboard(text),
+            10 => Event::ImeCaret((raw.value != 0).then_some(raw.caret)),
             _ => return,
         };
         (state.callback)(raw.view_id, event);
@@ -423,6 +450,34 @@ impl WebView {
         Ok(rgba)
     }
 
+    pub fn edit(&mut self, edit: &super::Edit) -> Result<(), String> {
+        use super::Edit::*;
+        let (command, text): (i32, &str) = match edit {
+            Copy => (0, ""),
+            Cut => (1, ""),
+            Paste(s) => (2, s),
+            SelectAll => (3, ""),
+            Mark(s) => (4, s),
+            Commit(s) => (5, s),
+        };
+        // SAFETY: Text is borrowed only during this call on the view's owner thread.
+        status_result(unsafe {
+            elaris_ladybird_edit(self.raw.as_ptr(), command, text.as_ptr(), text.len())
+        })
+    }
+
+    pub fn load_prepared(&mut self, source: u64, request: u64) -> Result<(), String> {
+        // SAFETY: The bridge resolves both identifiers on the owner thread.
+        status_result(unsafe { elaris_ladybird_load_prepared(self.raw.as_ptr(), source, request) })
+    }
+
+    pub fn open_context_target(&mut self, request: u64, new_tab: bool) -> Result<(), String> {
+        // SAFETY: The bridge checks that this request is still current.
+        status_result(unsafe {
+            elaris_ladybird_open_context_target(self.raw.as_ptr(), request, new_tab.into())
+        })
+    }
+
     pub fn mouse_event(&mut self, event: MouseEvent) -> Result<(), String> {
         let raw = RawMouseEvent {
             kind: event.kind as i32,
@@ -457,6 +512,20 @@ impl WebView {
             Key::End => (12, 0),
             Key::PageUp => (13, 0),
             Key::PageDown => (14, 0),
+            Key::Function(n @ 1..=12) => (32 + i32::from(n) - 1, 0),
+            Key::Function(_) => return Err("unsupported function key".into()),
+            Key::Insert => (15, 0),
+            Key::PrintScreen => (16, 0),
+            Key::ScrollLock => (17, 0),
+            Key::Pause => (18, 0),
+            Key::ShiftLeft => (19, 0),
+            Key::ShiftRight => (20, 0),
+            Key::ControlLeft => (21, 0),
+            Key::ControlRight => (22, 0),
+            Key::AltLeft => (23, 0),
+            Key::AltRight => (24, 0),
+            Key::SuperLeft => (25, 0),
+            Key::SuperRight => (26, 0),
         };
         let raw = RawKeyEvent {
             kind: if event.pressed {

@@ -117,6 +117,23 @@ impl Runtime {
                 continue;
             }
             let update = match event {
+                Event::NewTab {
+                    url,
+                    request,
+                    activate,
+                } => {
+                    updates.push(Update::NewTab(tab, url, request, activate));
+                    continue;
+                }
+                Event::ContextMenu(menu) => {
+                    updates.push(Update::ContextMenu(tab, menu));
+                    continue;
+                }
+                Event::Clipboard(text) => {
+                    updates.push(Update::Clipboard(tab, text));
+                    continue;
+                }
+                Event::ImeCaret(rect) => TabUpdate::ImeCaret(rect),
                 Event::Navigation(url) => TabUpdate::Navigation(url),
                 Event::Title(title) => TabUpdate::Title(title),
                 Event::Loading(loading) => TabUpdate::Loading(loading),
@@ -160,6 +177,9 @@ impl Runtime {
 fn apply_to_view(view: &mut View, command: ViewCommand, timing: &mut Timing) -> Result<(), String> {
     let web = &mut view.view;
     match command {
+        ViewCommand::LoadPrepared { source, request } => web.load_prepared(source.raw(), request),
+        ViewCommand::OpenContext { request, new_tab } => web.open_context_target(request, new_tab),
+        ViewCommand::Edit(edit) => web.edit(&edit),
         ViewCommand::Load(url) => web.load(&url),
         ViewCommand::Reload => web.reload(),
         ViewCommand::StopLoading => web.stop_loading(),

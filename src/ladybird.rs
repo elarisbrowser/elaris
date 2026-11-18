@@ -7,10 +7,38 @@ mod bridge;
 #[cfg(feature = "ladybird-bridge")]
 pub use bridge::{Ladybird, Waker, WebView};
 
+/// Ladybird's hit-tested target. Opening it uses the retained navigation descriptor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PageMenu {
+    pub request: u64,
+    pub url: String,
+    pub image: bool,
+    pub editable: bool,
+    pub selection: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Edit {
+    Copy,
+    Cut,
+    Paste(String),
+    SelectAll,
+    Mark(String),
+    Commit(String),
+}
+
 /// What a view raised, delivered with the id it was created with.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     Navigation(String),
+    NewTab {
+        url: String,
+        request: u64,
+        activate: bool,
+    },
+    ContextMenu(PageMenu),
+    Clipboard(String),
+    ImeCaret(Option<[i32; 4]>),
     Title(String),
     Loading(bool),
     ReadyToPaint,
@@ -70,6 +98,7 @@ pub enum MouseKind {
     Move = 3,
     Leave = 4,
     Wheel = 5,
+    Cancel = 6,
 }
 
 /// A pointer event at a device-pixel position in the view.
@@ -122,6 +151,19 @@ pub enum Key {
     End,
     PageUp,
     PageDown,
+    Function(u8),
+    Insert,
+    PrintScreen,
+    ScrollLock,
+    Pause,
+    ShiftLeft,
+    ShiftRight,
+    ControlLeft,
+    ControlRight,
+    AltLeft,
+    AltRight,
+    SuperLeft,
+    SuperRight,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

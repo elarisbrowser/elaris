@@ -21,6 +21,7 @@ pub(crate) struct AppState {
     /// Why the last submitted query could not be opened, until the next is.
     pub(crate) address_error: Option<String>,
     pub(crate) browser: Browser,
+    pub(crate) page_menu: crate::ui::PageMenuState,
     pub(crate) appearance: Appearance,
     pub(crate) sidebar: SidebarState,
     /// The tab and URL last recorded in local recent history.
@@ -45,6 +46,7 @@ impl AppState {
             omnibox: omnibox::State::default(),
             address_error: None,
             browser: Browser::default(),
+            page_menu: Default::default(),
             appearance: Appearance::default(),
             sidebar: SidebarState::default(),
             shown: None,
@@ -75,6 +77,7 @@ impl AppState {
     }
 
     pub(crate) fn open_omnibox(&mut self, mode: omnibox::Mode) {
+        self.page_menu = Default::default();
         self.omnibox.mode = mode;
         let use_active_url = mode == omnibox::Mode::Current;
         let query = if use_active_url {
@@ -151,6 +154,7 @@ impl AppState {
     }
 
     pub(crate) fn activate(&mut self, tab: TabId) {
+        self.page_menu = Default::default();
         self.browser.activate_tab(tab);
         self.address_error = None;
         self.show_active_tab();
@@ -158,6 +162,7 @@ impl AppState {
 
     /// Closes the tab and opens the omnibox when the window becomes empty.
     pub(crate) fn close(&mut self, tab: TabId) {
+        self.page_menu = Default::default();
         self.browser.close_tab(tab);
         if self.browser.tabs().is_empty() {
             self.shown = None;
@@ -183,6 +188,7 @@ impl AppState {
     }
 
     pub(crate) fn open_context_menu(&mut self, tab: Option<TabId>, point: PointerPress) {
+        self.page_menu = Default::default();
         self.context_menu = Some((tab, point));
     }
 
@@ -255,11 +261,19 @@ pub(crate) fn setup(state: &mut AppState, waker: rune::Waker) {
 
 /// Rune's per-frame hook: forwards UI changes to the browser and shows what it reported.
 pub(crate) fn poll(state: &mut AppState, _clock: f64, tx: &mut Tx) -> bool {
-    state
+    let focus_changed = state
         .browser
         .set_viewport_focus(tx.focused() == Some(VIEWPORT));
     let settling = crate::ui::settle_sidebar(state, tx);
     let polled = state.browser.poll();
+    if let Some(text) = polled.clipboard {
+        tx.copy(text);
+    }
+    if let Some((id, menu)) = polled.menu
+        && !state.omnibox.open
+    {
+        state.page_menu.receive(id, menu);
+    }
     // While the page animates, Rune keeps drawing at the display's rate; a frame's pixels alone
     // would only wake it, which can miss every other refresh.
     if polled.animating {
@@ -275,7 +289,7 @@ pub(crate) fn poll(state: &mut AppState, _clock: f64, tx: &mut Tx) -> bool {
             title
         });
     }
-    polled.changed || settling
+    polled.changed || settling || focus_changed
 }
 
 /// A query was submitted from the focused omnibox.

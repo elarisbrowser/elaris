@@ -7,6 +7,7 @@
 #include <AK/Utf16String.h>
 
 #include <LibCore/EventLoop.h>
+#include <LibCore/Promise.h>
 #include <LibCore/Timer.h>
 #include <LibGfx/Bitmap.h>
 #include <LibGfx/SharedImageBuffer.h>
@@ -18,6 +19,7 @@
 #include <LibWebCommon/UIEvents/KeyCode.h>
 #include <LibWebCommon/WebView/Utilities.h>
 #include <LibWebView/Application.h>
+#include <LibWebView/ContextMenuRequest.h>
 #include <LibWebView/HeadlessWebView.h>
 #include <LibWebView/PageBackingStores.h>
 #include <LibWebView/Settings.h>
@@ -25,6 +27,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <map>
 #include <string>
 #include <thread>
 #include <vector>
@@ -36,10 +39,13 @@ class ElarisApplication final : public WebView::Application {
     WEB_VIEW_APPLICATION(ElarisApplication)
 
   public:
+    ElarisLadybird* host{};
     explicit ElarisApplication(Optional<AK::ByteString> helper_directory = {})
         : WebView::Application(AK::move(helper_directory)) {}
 
   private:
+    void open_navigation_in_new_tab(Web::HTML::PreparedNavigationDescriptor, Web::HTML::ActivateTab,
+                                    WebView::ViewImplementation const*) const override;
     Core::EventLoop& create_platform_event_loop() override;
 
     bool should_coordinate_browser_process() const override {
@@ -84,6 +90,17 @@ class ElarisWebView final : public WebView::HeadlessWebView {
 
     // Called when whether the view can go back or forward changes.
     AK::Function<void()> on_navigation_state_change;
+    AK::Function<void(WebView::ContextMenuRequest)> on_menu;
+    AK::Function<void(Web::HTML::PreparedNavigationDescriptor, Web::HTML::ActivateTab)> on_open_tab;
+
+    void did_request_context_menu(WebView::ContextMenuRequest request) override {
+        if (on_menu)
+            on_menu(AK::move(request));
+    }
+
+    WebView::ViewImplementation* create_view_for_new_tab_or_window(WebView::IsPrivate) override {
+        return nullptr;
+    }
 
   private:
     void did_change_state() override {
@@ -114,6 +131,10 @@ struct ElarisLadybirdView {
     uint64_t id{};
     AK::NonnullOwnPtr<ElarisWebView> view;
     Gfx::IntSize copied_size;
+    uint64_t next_request{};
+    uint64_t menu_request{};
+    Optional<Web::HTML::PreparedNavigationDescriptor> menu_target;
+    std::map<uint64_t, Web::HTML::PreparedNavigationDescriptor> pending_tabs;
 };
 
 static AK::OwnPtr<ElarisApplication> s_application;
@@ -159,7 +180,7 @@ static void emit(ElarisLadybirdView const* view, ElarisLadybirdEventKind kind, s
                  int32_t value = 0) {
     if (!view->bridge->callback)
         return;
-    ElarisLadybirdEvent event{kind, view->id, text.c_str(), value, nullptr, 0, 0, 0};
+    ElarisLadybirdEvent event{kind, view->id, text.c_str(), value, nullptr, 0, 0, 0, 0, nullptr, {}};
     view->bridge->callback(view->bridge->context, &event);
 }
 
@@ -168,7 +189,7 @@ static void emit_favicon(ElarisLadybirdView const* view, Optional<Gfx::Bitmap co
         return;
 
     std::vector<uint8_t> rgba;
-    ElarisLadybirdEvent event{ELARIS_LADYBIRD_FAVICON, view->id, "", 0, nullptr, 0, 0, 0};
+    ElarisLadybirdEvent event{ELARIS_LADYBIRD_FAVICON, view->id, "", 0, nullptr, 0, 0, 0, 0, nullptr, {}};
     if (favicon.has_value()) {
         auto const& bitmap = *favicon;
         auto const width = bitmap.width();
@@ -214,6 +235,20 @@ static std::string to_utf8(URL::URL const& url) {
     return {utf8.characters(), utf8.length()};
 }
 
+void ElarisApplication::open_navigation_in_new_tab(Web::HTML::PreparedNavigationDescriptor navigation,
+                                                   Web::HTML::ActivateTab activate,
+                                                   WebView::ViewImplementation const* source) const {
+    // Only registered Elaris views receive input. Auxiliary headless views have no Elaris tab.
+    if (!host)
+        return;
+    for (auto* handle : host->views) {
+        if (handle->view.ptr() == source) {
+            handle->view->on_open_tab(AK::move(navigation), activate);
+            return;
+        }
+    }
+}
+
 extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* profile_dir,
                                           ElarisLadybirdEventCallback callback, void* context,
                                           ElarisLadybird** out_bridge) {
@@ -255,6 +290,7 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
     s_event_loop = &Core::EventLoop::current();
     s_event_loop_thread = std::this_thread::get_id();
     *out_bridge = new ElarisLadybird{callback, context, std::this_thread::get_id(), {}};
+    s_application->host = *out_bridge;
     return succeed();
 }
 
@@ -275,7 +311,7 @@ extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t 
     apply_selection_colors(*theme_buffer.data<Gfx::SystemTheme>());
 
     auto view = ElarisWebView::create(AK::move(theme_buffer), {1024, 768});
-    auto* handle = new ElarisLadybirdView{bridge, view_id, AK::move(view), {}};
+    auto* handle = new ElarisLadybirdView{bridge, view_id, AK::move(view), {}, 0, 0, {}, {}};
     bridge->views.push_back(handle);
     // The callbacks live in the view, which the handle owns, so they never outlive it.
     handle->view->on_url_change = [handle](auto const& url) { emit(handle, ELARIS_LADYBIRD_NAVIGATION, to_utf8(url)); };
@@ -293,6 +329,53 @@ extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t 
              (view.can_navigate_back() ? ELARIS_LADYBIRD_HISTORY_BACK : 0) |
                  (view.can_navigate_forward() ? ELARIS_LADYBIRD_HISTORY_FORWARD : 0));
     };
+    handle->view->on_open_tab = [handle](auto navigation, auto activate) {
+        if (!handle->bridge->callback)
+            return;
+        auto url = to_utf8(navigation.url);
+        auto request = ++handle->next_request;
+        handle->pending_tabs.emplace(request, AK::move(navigation));
+        ElarisLadybirdEvent event{};
+        event.kind = ELARIS_LADYBIRD_NEW_TAB;
+        event.view_id = handle->id;
+        event.text = url.c_str();
+        event.request_id = request;
+        event.value = activate == Web::HTML::ActivateTab::Yes;
+        handle->bridge->callback(handle->bridge->context, &event);
+    };
+    handle->view->on_menu = [handle](WebView::ContextMenuRequest menu) {
+        if (!handle->bridge->callback)
+            return;
+        handle->menu_target =
+            menu.kind == WebView::ContextMenuKind::Link ? AK::move(menu.link_navigation) : AK::move(menu.navigation);
+        auto url = handle->menu_target.has_value() ? to_utf8(handle->menu_target->url) : std::string{};
+        auto selection = menu.selected_text.value_or(String{}).to_byte_string();
+        ElarisLadybirdEvent event{};
+        event.kind = ELARIS_LADYBIRD_CONTEXT_MENU;
+        event.view_id = handle->id;
+        event.request_id = handle->menu_request = ++handle->next_request;
+        event.text = url.c_str();
+        event.selection = selection.characters();
+        event.value = (menu.kind == WebView::ContextMenuKind::Image ? 1 : 0) | (menu.is_editable ? 2 : 0);
+        handle->bridge->callback(handle->bridge->context, &event);
+    };
+    handle->view->on_input_method_state_change = [handle] {
+        if (!handle->bridge->callback)
+            return;
+        auto const& state = handle->view->input_method_state();
+        ElarisLadybirdEvent event{};
+        event.kind = ELARIS_LADYBIRD_IME_CARET;
+        event.view_id = handle->id;
+        event.value = state.is_enabled;
+        if (state.caret_rect.has_value()) {
+            auto rect = state.caret_rect->to_type<int>();
+            event.caret[0] = rect.x();
+            event.caret[1] = rect.y();
+            event.caret[2] = rect.width();
+            event.caret[3] = rect.height();
+        }
+        handle->bridge->callback(handle->bridge->context, &event);
+    };
     *out_view = handle;
     return succeed();
 }
@@ -306,6 +389,72 @@ extern "C" int32_t elaris_ladybird_load(ElarisLadybirdView* handle, char const* 
     if (!parsed.has_value())
         return fail("invalid URL");
     handle->view->load(parsed.release_value());
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_load_prepared(ElarisLadybirdView* target, uint64_t source, uint64_t request) {
+    if (!target || !on_owner_thread(target->bridge))
+        return fail("invalid input view");
+    for (auto* handle : target->bridge->views) {
+        if (handle->id != source)
+            continue;
+        auto item = handle->pending_tabs.extract(request);
+        if (!item.empty())
+            target->view->load(AK::move(item.mapped()));
+        break;
+    }
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_open_context_target(ElarisLadybirdView* handle, uint64_t request, int32_t new_tab) {
+    if (!handle || !on_owner_thread(handle->bridge))
+        return fail("invalid input view");
+    if (handle->menu_request == request && handle->menu_target.has_value()) {
+        auto navigation = handle->menu_target.release_value();
+        if (new_tab)
+            handle->view->open_navigation_in_new_tab(AK::move(navigation), Web::HTML::ActivateTab::No);
+        else
+            handle->view->load(AK::move(navigation));
+    }
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_edit(ElarisLadybirdView* handle, ElarisEdit command, uint8_t const* bytes,
+                                        size_t length) {
+    if (!handle || !on_owner_thread(handle->bridge) || (!bytes && length))
+        return fail("invalid edit");
+    auto text = AK::StringView(reinterpret_cast<char const*>(bytes), length);
+    auto& view = *handle->view;
+    switch (command) {
+    case ELARIS_EDIT_COPY:
+    case ELARIS_EDIT_CUT: {
+        auto promise = command == ELARIS_EDIT_COPY ? view.selected_text() : view.cut_selected_text();
+        promise->when_resolved([weak = view.make_weak_ptr(), handle](ByteString const& selection) {
+            if (weak && !selection.is_empty())
+                emit(handle, ELARIS_LADYBIRD_CLIPBOARD, {selection.characters(), selection.length()});
+        });
+        break;
+    }
+    case ELARIS_EDIT_PASTE: {
+        auto string = String::from_utf8(text);
+        if (string.is_error())
+            return fail("invalid paste text");
+        s_application->set_clipboard_text(string.release_value());
+        view.paste_from_clipboard(Web::Clipboard::PasteMode::PlainTextOnly);
+        break;
+    }
+    case ELARIS_EDIT_SELECT_ALL:
+        view.select_all();
+        break;
+    case ELARIS_EDIT_MARK:
+        view.set_marked_text_from_input_method(Utf16String::from_utf8(text));
+        break;
+    case ELARIS_EDIT_COMMIT:
+        view.commit_text_from_input_method(Utf16String::from_utf8(text));
+        break;
+    default:
+        return fail("unknown edit");
+    }
     return succeed();
 }
 
@@ -464,6 +613,9 @@ extern "C" int32_t elaris_ladybird_mouse_event(ElarisLadybirdView* handle, Elari
     case ELARIS_LADYBIRD_MOUSE_MOVE:
         type = Web::MouseEvent::Type::MouseMove;
         break;
+    case ELARIS_LADYBIRD_MOUSE_CANCEL:
+        type = Web::MouseEvent::Type::MouseCancel;
+        break;
     case ELARIS_LADYBIRD_MOUSE_LEAVE:
         type = Web::MouseEvent::Type::MouseLeave;
         break;
@@ -566,11 +718,51 @@ extern "C" int32_t elaris_ladybird_key_event(ElarisLadybirdView* handle, ElarisL
     case ELARIS_LADYBIRD_KEY_PAGE_UP:
         key = Web::UIEvents::KeyCode::Key_PageUp;
         break;
+    case ELARIS_LADYBIRD_KEY_INSERT:
+        key = Web::UIEvents::KeyCode::Key_Insert;
+        break;
+    case ELARIS_LADYBIRD_KEY_PRINTSCREEN:
+        key = Web::UIEvents::KeyCode::Key_PrintScreen;
+        break;
+    case ELARIS_LADYBIRD_KEY_SCROLLLOCK:
+        key = Web::UIEvents::KeyCode::Key_ScrollLock;
+        break;
+    case ELARIS_LADYBIRD_KEY_PAUSE:
+        key = Web::UIEvents::KeyCode::Key_PauseBreak;
+        break;
+    case ELARIS_LADYBIRD_KEY_SHIFTLEFT:
+        key = Web::UIEvents::KeyCode::Key_LeftShift;
+        break;
+    case ELARIS_LADYBIRD_KEY_SHIFTRIGHT:
+        key = Web::UIEvents::KeyCode::Key_RightShift;
+        break;
+    case ELARIS_LADYBIRD_KEY_CONTROLLEFT:
+        key = Web::UIEvents::KeyCode::Key_LeftControl;
+        break;
+    case ELARIS_LADYBIRD_KEY_CONTROLRIGHT:
+        key = Web::UIEvents::KeyCode::Key_RightControl;
+        break;
+    case ELARIS_LADYBIRD_KEY_ALTLEFT:
+        key = Web::UIEvents::KeyCode::Key_LeftAlt;
+        break;
+    case ELARIS_LADYBIRD_KEY_ALTRIGHT:
+        key = Web::UIEvents::KeyCode::Key_RightAlt;
+        break;
+    case ELARIS_LADYBIRD_KEY_SUPERLEFT:
+        key = Web::UIEvents::KeyCode::Key_LeftSuper;
+        break;
+    case ELARIS_LADYBIRD_KEY_SUPERRIGHT:
+        key = Web::UIEvents::KeyCode::Key_RightSuper;
+        break;
     case ELARIS_LADYBIRD_KEY_PAGE_DOWN:
         key = Web::UIEvents::KeyCode::Key_PageDown;
         break;
     default:
-        return fail("unknown key");
+        if (event->key < ELARIS_LADYBIRD_KEY_F1 || event->key > ELARIS_LADYBIRD_KEY_F12)
+            return fail("unknown key");
+        key = static_cast<Web::UIEvents::KeyCode>(static_cast<int>(Web::UIEvents::KeyCode::Key_F1) + event->key -
+                                                  ELARIS_LADYBIRD_KEY_F1);
+        break;
     }
 
     auto type = event->type == ELARIS_LADYBIRD_KEY_PRESS ? Web::KeyEvent::Type::KeyDown : Web::KeyEvent::Type::KeyUp;

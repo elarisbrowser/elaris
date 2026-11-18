@@ -19,6 +19,10 @@ typedef enum {
     ELARIS_LADYBIRD_FRAME = 4,
     ELARIS_LADYBIRD_HISTORY = 5, /* Whether the view can go back or forward changed. */
     ELARIS_LADYBIRD_FAVICON = 6,
+    ELARIS_LADYBIRD_NEW_TAB,
+    ELARIS_LADYBIRD_CONTEXT_MENU,
+    ELARIS_LADYBIRD_CLIPBOARD,
+    ELARIS_LADYBIRD_IME_CARET,
 } ElarisLadybirdEventKind;
 
 /* Bit flags for HISTORY events' value. */
@@ -27,13 +31,16 @@ typedef enum {
 
 typedef struct {
     ElarisLadybirdEventKind kind;
-    uint64_t view_id; /* The id the host gave the view that raised the event. */
-    const char* text; /* Borrowed until the callback returns; empty when unused. */
-    int32_t value;    /* Loading state for LOADING, HISTORY_* flags for HISTORY; zero otherwise. */
+    uint64_t view_id;            /* The id the host gave the view that raised the event. */
+    const char* text;            /* Borrowed until the callback returns; empty when unused. */
+    int32_t value;               /* Loading state for LOADING, HISTORY_* flags for HISTORY; zero otherwise. */
     const uint8_t* favicon_rgba; /* Borrowed RGBA8 pixels for FAVICON, null when cleared. */
     int32_t favicon_width;
     int32_t favicon_height;
     int32_t favicon_stride;
+    uint64_t request_id;
+    const char* selection;
+    int32_t caret[4]; /* Device pixels, relative to the viewport. */
 } ElarisLadybirdEvent;
 
 typedef void (*ElarisLadybirdEventCallback)(void* context, const ElarisLadybirdEvent* event);
@@ -67,6 +74,7 @@ typedef enum {
     ELARIS_LADYBIRD_MOUSE_MOVE = 3,
     ELARIS_LADYBIRD_MOUSE_LEAVE = 4,
     ELARIS_LADYBIRD_MOUSE_WHEEL = 5,
+    ELARIS_LADYBIRD_MOUSE_CANCEL = 6,
 } ElarisLadybirdMouseType;
 
 /* Bit flags for buttons. */
@@ -123,6 +131,20 @@ typedef enum {
     ELARIS_LADYBIRD_KEY_END,
     ELARIS_LADYBIRD_KEY_PAGE_UP,
     ELARIS_LADYBIRD_KEY_PAGE_DOWN,
+    ELARIS_LADYBIRD_KEY_INSERT,
+    ELARIS_LADYBIRD_KEY_PRINTSCREEN,
+    ELARIS_LADYBIRD_KEY_SCROLLLOCK,
+    ELARIS_LADYBIRD_KEY_PAUSE,
+    ELARIS_LADYBIRD_KEY_SHIFTLEFT,
+    ELARIS_LADYBIRD_KEY_SHIFTRIGHT,
+    ELARIS_LADYBIRD_KEY_CONTROLLEFT,
+    ELARIS_LADYBIRD_KEY_CONTROLRIGHT,
+    ELARIS_LADYBIRD_KEY_ALTLEFT,
+    ELARIS_LADYBIRD_KEY_ALTRIGHT,
+    ELARIS_LADYBIRD_KEY_SUPERLEFT,
+    ELARIS_LADYBIRD_KEY_SUPERRIGHT,
+    ELARIS_LADYBIRD_KEY_F1 = 32,
+    ELARIS_LADYBIRD_KEY_F12 = 43,
 } ElarisLadybirdKey;
 
 typedef struct {
@@ -154,6 +176,17 @@ int32_t elaris_ladybird_frame(ElarisLadybirdView* view, ElarisLadybirdFrame* out
  * outlives this call. */
 int32_t elaris_ladybird_copy_frame(ElarisLadybirdView* view, uint8_t* rgba, size_t length);
 int32_t elaris_ladybird_mouse_event(ElarisLadybirdView* view, const ElarisLadybirdMouseEvent* event);
+typedef enum {
+    ELARIS_EDIT_COPY,
+    ELARIS_EDIT_CUT,
+    ELARIS_EDIT_PASTE,
+    ELARIS_EDIT_SELECT_ALL,
+    ELARIS_EDIT_MARK,
+    ELARIS_EDIT_COMMIT,
+} ElarisEdit;
+int32_t elaris_ladybird_edit(ElarisLadybirdView*, ElarisEdit, const uint8_t* text, size_t length);
+int32_t elaris_ladybird_load_prepared(ElarisLadybirdView*, uint64_t source, uint64_t request);
+int32_t elaris_ladybird_open_context_target(ElarisLadybirdView*, uint64_t request, int32_t new_tab);
 int32_t elaris_ladybird_key_event(ElarisLadybirdView* view, const ElarisLadybirdKeyEvent* event);
 int32_t elaris_ladybird_set_focus(ElarisLadybirdView* view, int32_t focused);
 /* Sets the colour scheme every page sees through prefers-color-scheme: nonzero for dark, zero for light. It is

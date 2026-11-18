@@ -21,8 +21,7 @@ use std::cell::Cell;
 use std::fmt;
 use std::time::Instant;
 
-use elaris::ladybird::{MouseEvent, MouseKind, WheelPhase};
-use rune::KeyEvent;
+mod input_routing;
 
 use crate::address::url_for_address;
 use crate::engine::{Command, Engine, Update, ViewCommand};
@@ -54,6 +53,8 @@ impl std::error::Error for Error {}
 pub(crate) struct Polled {
     /// Some tab's state changed, so the interface needs building again.
     pub(crate) changed: bool,
+    pub(crate) clipboard: Option<String>,
+    pub(crate) menu: Option<(TabId, elaris::ladybird::PageMenu)>,
     /// The active tab showed a frame since the last poll, so it is likely animating.
     pub(crate) animating: bool,
 }
@@ -63,6 +64,7 @@ pub(crate) struct Browser {
     tabs: Vec<Tab>,
     active: Option<TabId>,
     next_id: u64,
+    input: input_routing::Held,
     /// None until the app connects one, and in a build without an engine.
     engine: Option<Engine>,
     /// Why there is no engine, which every tab shows.
@@ -93,6 +95,7 @@ impl Default for Browser {
             tabs: Vec::new(),
             active: None,
             next_id: 1,
+            input: Default::default(),
             engine: None,
             engine_error: None,
             window: Window {
@@ -148,6 +151,10 @@ impl Browser {
     /// Opens a tab at the end of the list loading `address`, and makes it active if no tab is.
     pub(crate) fn open_tab(&mut self, address: &str) -> Result<TabId, Error> {
         let url = url_for_address(address).map_err(Error::Address)?;
+        Ok(self.insert_tab(url))
+    }
+
+    fn insert_tab(&mut self, url: String) -> TabId {
         let id = TabId::from_raw(self.next_id);
         self.next_id += 1;
         let mut tab = Tab::new(id, url);
@@ -157,12 +164,13 @@ impl Browser {
         }
         self.tabs.push(tab);
         self.active.get_or_insert(id);
-        Ok(id)
+        id
     }
 
     /// Shows the tab in the viewport and gives it the page's input.
     pub(crate) fn activate_tab(&mut self, id: TabId) {
-        if self.tab(id).is_some() {
+        if self.active != Some(id) && self.tab(id).is_some() {
+            self.reset_input();
             self.active = Some(id);
         }
     }
@@ -211,6 +219,9 @@ impl Browser {
         let Some(index) = self.tabs.iter().position(|tab| tab.id() == id) else {
             return;
         };
+        if self.active == Some(id) {
+            self.reset_input();
+        }
         self.tabs.remove(index);
         if let Some(engine) = &self.engine {
             engine.send(Command::Close(id));
@@ -235,6 +246,9 @@ impl Browser {
             .map(Tab::id)
             .filter(|tab| *tab != id)
             .collect();
+        if self.active != Some(id) {
+            self.reset_input();
+        }
         self.tabs.retain(|tab| tab.id() == id);
         if let Some(engine) = &self.engine {
             for tab in closed {
@@ -262,45 +276,25 @@ impl Browser {
     }
 
     pub(crate) fn set_window_focus(&mut self, focused: bool) {
+        if !focused {
+            self.reset_input();
+        }
         self.window.focused = focused;
     }
 
-    pub(crate) fn set_viewport_focus(&mut self, focused: bool) {
+    pub(crate) fn set_viewport_focus(&mut self, focused: bool) -> bool {
+        let changed = self.window.viewport_focused != focused;
+        if self.window.viewport_focused && !focused {
+            self.reset_input();
+        }
         self.window.viewport_focused = focused;
+        changed
     }
-
-    pub(crate) fn pointer(&mut self, kind: MouseKind, point: [f32; 2], held: bool, clicks: u32) {
-        let event = input::pointer(kind, point, self.window.scale.get(), held, clicks);
-        self.send_mouse(event);
+    pub(crate) fn page_focused(&self) -> bool {
+        self.window.focused && self.window.viewport_focused
     }
-
-    pub(crate) fn wheel(
-        &mut self,
-        point: [f32; 2],
-        delta: [f32; 2],
-        precise: bool,
-        phase: WheelPhase,
-    ) {
-        let event = input::wheel(point, delta, precise, phase, self.window.scale.get());
-        self.send_mouse(event);
-    }
-
-    /// Sends a key press to the active tab's page; false when the page takes no such key.
-    pub(crate) fn key(&mut self, event: &KeyEvent) -> bool {
-        let Some(id) = self.active.filter(|_| self.engine.is_some()) else {
-            return false;
-        };
-        let keys = input::keys(event);
-        for key in &keys {
-            self.send(id, ViewCommand::Key(*key));
-        }
-        !keys.is_empty()
-    }
-
-    fn send_mouse(&mut self, event: MouseEvent) {
-        if let Some(id) = self.active {
-            self.send(id, ViewCommand::Mouse(event));
-        }
+    pub(crate) fn scale(&self) -> f32 {
+        self.window.scale.get()
     }
 
     /// Forwards what changed to the engine and takes in what it reported. Rune calls it at the
@@ -326,6 +320,27 @@ impl Browser {
                         polled.changed = true;
                     }
                 }
+                Update::NewTab(source, url, request, activate) => {
+                    if self.tab(source).is_some() {
+                        // Ladybird already parsed and authorized this navigation. Keep its referrer
+                        // and origin by transferring the descriptor instead of re-loading the URL.
+                        let tab = self.insert_tab(url);
+                        self.tab_mut(tab).unwrap().engine.pending_load = None;
+                        self.send(tab, ViewCommand::LoadPrepared { source, request });
+                        if activate {
+                            self.activate_tab(tab);
+                        }
+                        polled.changed = true;
+                    }
+                }
+                Update::ContextMenu(id, menu) if self.active == Some(id) => {
+                    polled.menu = Some((id, menu));
+                    polled.changed = true;
+                }
+                Update::Clipboard(id, text) if self.active == Some(id) => {
+                    polled.clipboard = Some(text)
+                }
+                Update::ContextMenu(..) | Update::Clipboard(..) => {}
                 Update::Failed(error) => {
                     self.fail(error);
                     polled.changed = true;
@@ -353,7 +368,7 @@ impl Browser {
     }
 
     /// Sends `command` to the tab's view, if the tab is open and there is an engine.
-    fn send(&self, id: TabId, command: ViewCommand) {
+    pub(crate) fn send(&self, id: TabId, command: ViewCommand) {
         if let Some(engine) = &self.engine
             && self.tab(id).is_some()
         {
@@ -424,7 +439,8 @@ impl Browser {
 
 #[cfg(test)]
 mod tests {
-    use rune::{Key as RuneKey, Mods};
+    use elaris::ladybird::{MouseEvent, MouseKind};
+    use rune::{Key as RuneKey, KeyEvent, Mods, PointerButton};
 
     use super::*;
     use crate::engine::{FakeEngine, Surface, TabUpdate};
@@ -554,17 +570,24 @@ mod tests {
         sent(&fake);
 
         browser.note_scale(2.0);
-        browser.pointer(MouseKind::Down, [1.0, 2.0], true, 1);
+        browser.drag_pointer(
+            MouseKind::Down,
+            [1.0, 2.0],
+            PointerButton::Primary,
+            Mods::default(),
+            1,
+        );
         let enter = KeyEvent {
             key: RuneKey::Enter,
             mods: Mods::default(),
         };
-        assert!(browser.key(&enter));
+        assert!(browser.key(&enter, true, false, None));
+        assert!(browser.key(&enter, false, false, None));
         let shortcut = KeyEvent {
             key: RuneKey::Command('q'),
             mods: Mods::default(),
         };
-        assert!(!browser.key(&shortcut));
+        assert!(!browser.key(&shortcut, true, false, None));
         let sent = sent(&fake);
         assert_eq!(sent.len(), 3);
         assert!(matches!(
@@ -736,7 +759,7 @@ mod tests {
             key: RuneKey::Enter,
             mods: Mods::default(),
         };
-        assert!(!browser.key(&key));
+        assert!(!browser.key(&key, true, false, None));
         assert!(!browser.poll().changed);
     }
 
