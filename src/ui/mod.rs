@@ -43,7 +43,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         if !state.sidebar.collapsed {
             content = content.child(sidebar::resize::handle(state.sidebar.width));
         }
-        let mut window = col()
+        let window = col()
             .key("window")
             .w_full()
             .h_full()
