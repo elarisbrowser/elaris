@@ -14,6 +14,8 @@ const HUE: f32 = 265.0;
 pub(crate) struct Theme {
     /// The window behind the sidebar and around the page.
     pub(crate) window: Color,
+    /// The translucent cool tint layered over the native window material.
+    pub(crate) window_glass_tint: Color,
     /// The page's container, seen before a page draws.
     pub(crate) page: Color,
     pub(crate) text: Color,
@@ -46,6 +48,7 @@ pub(crate) fn palette(dark: bool) -> Theme {
     if dark {
         Theme {
             window: oklch(0.185, 0.004, HUE),
+            window_glass_tint: oklcha(0.20, 0.016, HUE, 0.18),
             page: oklch(0.232, 0.005, HUE),
             text: oklch(0.955, 0.003, HUE),
             text_muted: oklch(0.74, 0.008, HUE),
@@ -67,6 +70,7 @@ pub(crate) fn palette(dark: bool) -> Theme {
     } else {
         Theme {
             window: oklch(0.935, 0.006, HUE),
+            window_glass_tint: oklcha(0.90, 0.035, HUE, 0.30),
             page: oklch(1.0, 0.0, 0.0),
             text: oklch(0.2, 0.008, HUE),
             text_muted: oklch(0.42, 0.012, HUE),
@@ -101,8 +105,6 @@ pub(crate) const SIDEBAR_TOGGLE: Spring = Spring::new(0.25, 0.0);
 pub(crate) const HEADER_MIN_WIDTH: f32 = 220.0;
 /// The window's smallest size: the widest sidebar beside a page still worth reading.
 pub(crate) const WINDOW_MIN_SIZE: (f32, f32) = (SIDEBAR_MAX_WIDTH + 320.0, 360.0);
-/// The share of the theme's window colour layered over the native glass.
-pub(crate) const WINDOW_GLASS_TINT_OPACITY: f32 = 0.14;
 /// The invisible strip over the sidebar's edge that drags it.
 pub(crate) const RESIZE_HANDLE: f32 = 8.0;
 /// How far past its limits the edge can be pulled, however hard.

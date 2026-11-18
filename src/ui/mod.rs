@@ -92,5 +92,5 @@ fn window_glass_tint(theme: &theme::Theme) -> El {
         .absolute(0.0, 0.0)
         .w_full()
         .h_full()
-        .fill(theme.window.alpha(theme::WINDOW_GLASS_TINT_OPACITY))
+        .fill(theme.window_glass_tint)
 }
