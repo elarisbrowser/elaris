@@ -98,6 +98,8 @@ pub(crate) const SIDEBAR_TOGGLE: Spring = Spring::new(0.25, 0.0);
 pub(crate) const HEADER_MIN_WIDTH: f32 = 220.0;
 /// The window's smallest size: the widest sidebar beside a page still worth reading.
 pub(crate) const WINDOW_MIN_SIZE: (f32, f32) = (SIDEBAR_MAX_WIDTH + 320.0, 360.0);
+/// The share of the theme's window colour layered over the native glass.
+pub(crate) const WINDOW_GLASS_TINT_OPACITY: f32 = 0.14;
 /// The invisible strip over the sidebar's edge that drags it.
 pub(crate) const RESIZE_HANDLE: f32 = 8.0;
 /// How far past its limits the edge can be pulled, however hard.

@@ -15,7 +15,7 @@ pub(crate) use sidebar::resize::settle as settle_sidebar;
 pub(crate) use sidebar::{SidebarState, toggle as toggle_sidebar};
 pub(crate) use theme::{TRAFFIC_LIGHTS, WINDOW_MIN_SIZE};
 
-use rune::{Cx, El, SystemMaterial, row};
+use rune::{Cx, El, SystemMaterial, el, row};
 
 use crate::app::AppState;
 
@@ -34,6 +34,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         .h_full()
         .fill(theme.window)
         .system_material(SystemMaterial::Glass)
+        .child(window_glass_tint(&theme))
         .child(sidebar::view(state, &theme))
         .child(viewport::view(state, &theme))
         .child(sidebar::header::view(state, &theme, cx));
@@ -54,4 +55,12 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     viewport::menu::view(state, &theme, &mut overlays);
     sidebar::context_menu(state, &theme, &mut overlays);
     rune_kit::root(window, overlays)
+}
+
+fn window_glass_tint(theme: &theme::Theme) -> El {
+    el().key("window-glass-tint")
+        .absolute(0.0, 0.0)
+        .w_full()
+        .h_full()
+        .fill(theme.window.alpha(theme::WINDOW_GLASS_TINT_OPACITY))
 }
