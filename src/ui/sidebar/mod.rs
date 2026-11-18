@@ -105,6 +105,7 @@ fn search_launcher(theme: &Theme) -> El {
         theme,
     )
     .h(theme::FIELD_HEIGHT)
+    .fill(theme.address_field)
     .label("Search or type a URL")
     .help("Open search and address suggestions")
     .shortcut_hint("cmd+l")
