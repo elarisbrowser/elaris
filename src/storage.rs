@@ -1051,6 +1051,10 @@ mod tests {
         .expect("resolve isolated storage paths");
         let config_file = paths.config_file.clone();
         let storage = Storage::open(paths).expect("open isolated storage");
+        let (wake, notifications) = mpsc::channel();
+        storage.set_notify(Arc::new(move || {
+            let _ = wake.send(());
+        }));
         fs::write(
             &config_file,
             "[appearance]\ntheme = \"dark\"\n[search]\nengine = \"brave\"\n[downloads]\ndirectory = \"default\"\n[startup]\nmode = \"blank\"\n",
@@ -1062,6 +1066,9 @@ mod tests {
 
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
         let loaded = loop {
+            notifications
+                .recv_timeout(deadline.saturating_duration_since(std::time::Instant::now()))
+                .expect("storage worker wakes the UI");
             if let Some(event) = storage.take_config_events().into_iter().next() {
                 match event {
                     ConfigEvent::Reloaded(result) => {
@@ -1074,7 +1081,6 @@ mod tests {
                 std::time::Instant::now() < deadline,
                 "storage worker reloads config"
             );
-            std::thread::yield_now();
         };
         assert_eq!(
             loaded.settings.appearance,

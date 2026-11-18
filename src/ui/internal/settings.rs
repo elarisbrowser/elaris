@@ -106,9 +106,14 @@ fn search_section(
     overlays: &mut Vec<El>,
     compact: bool,
 ) -> El {
-    let options = ["DuckDuckGo", "Google", "Bing", "Brave Search"];
+    const OPTIONS: [SearchEngine; 4] = [
+        SearchEngine::DuckDuckGo,
+        SearchEngine::Google,
+        SearchEngine::Bing,
+        SearchEngine::Brave,
+    ];
     let current = state.settings.search_engine.label();
-    let select = Select::new("settings-search-engine", &options)
+    let select = Select::new("settings-search-engine", &OPTIONS.map(SearchEngine::label))
         .current(Some(current))
         .label("Search engine")
         .appearance(SelectAppearance::Field)
@@ -119,14 +124,7 @@ fn search_section(
         })
         .on_close(|state: &mut AppState| state.settings_picker_open = false)
         .on_choose(|state: &mut AppState, value, _| {
-            let engine = match value {
-                "DuckDuckGo" => Some(SearchEngine::DuckDuckGo),
-                "Google" => Some(SearchEngine::Google),
-                "Bing" => Some(SearchEngine::Bing),
-                "Brave Search" => Some(SearchEngine::Brave),
-                _ => None,
-            };
-            if let Some(engine) = engine {
+            if let Some(engine) = OPTIONS.into_iter().find(|option| option.label() == value) {
                 state.set_search_engine(engine);
             }
             state.settings_picker_open = false;
@@ -211,9 +209,9 @@ fn startup_section(
     overlays: &mut Vec<El>,
     compact: bool,
 ) -> El {
-    let options = ["Restore previous session", "Open a blank window"];
+    const OPTIONS: [StartupMode; 2] = [StartupMode::RestoreSession, StartupMode::BlankWindow];
     let current = state.settings.startup.label();
-    let select = Select::new("settings-startup", &options)
+    let select = Select::new("settings-startup", &OPTIONS.map(StartupMode::label))
         .current(Some(current))
         .label("Startup behavior")
         .appearance(SelectAppearance::Field)
@@ -224,12 +222,7 @@ fn startup_section(
         })
         .on_close(|state: &mut AppState| state.startup_picker_open = false)
         .on_choose(|state: &mut AppState, value, _| {
-            let startup = match value {
-                "Restore previous session" => Some(StartupMode::RestoreSession),
-                "Open a blank window" => Some(StartupMode::BlankWindow),
-                _ => None,
-            };
-            if let Some(startup) = startup {
+            if let Some(startup) = OPTIONS.into_iter().find(|option| option.label() == value) {
                 state.set_startup(startup);
             }
             state.startup_picker_open = false;
