@@ -6,7 +6,7 @@
 pub(crate) mod menu;
 use crate::{engine::ViewCommand, tab::TabId};
 use elaris::ladybird::{Edit, MouseKind};
-use rune::{El, Phase, Transition, el};
+use rune::{El, Phase, el};
 use rune::{Ime, Key, KeyEvent, Tx};
 
 use super::VIEWPORT;
@@ -26,7 +26,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
     } else {
         theme::VIEWPORT_INSET
     };
-    let mut viewport = el()
+    let viewport = el()
         .key("viewport-container")
         .h_full()
         .grow(1.0)
@@ -43,16 +43,6 @@ pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
         })
         .pr(theme::VIEWPORT_INSET)
         .pb(theme::VIEWPORT_INSET);
-    if state.browser.active_tab().is_some() && (state.backdrop_blur_warmup || !state.omnibox.open) {
-        viewport = viewport.child(
-            el().key("backdrop-blur-warmup")
-                .absolute(0.0, 0.0)
-                .size(2.0, 2.0)
-                // Keep Rune's lazily created backdrop-blur pipeline ready before the omnibox opens.
-                .backdrop_blur(theme::MODAL_BACKDROP_BLUR)
-                .transition(Transition::none()),
-        );
-    }
     viewport.child(page(state, theme))
 }
 
