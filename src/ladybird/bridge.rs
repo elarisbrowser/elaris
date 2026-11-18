@@ -99,6 +99,7 @@ unsafe extern "C" {
     ) -> i32;
     fn elaris_ladybird_load(view: *mut RawView, url: *const c_char) -> i32;
     fn elaris_ladybird_reload(view: *mut RawView) -> i32;
+    fn elaris_ladybird_stop_loading(view: *mut RawView) -> i32;
     fn elaris_ladybird_traverse_history(view: *mut RawView, delta: i32) -> i32;
     fn elaris_ladybird_set_visible(view: *mut RawView, visible: i32) -> i32;
     fn elaris_ladybird_resize(view: *mut RawView, width: i32, height: i32, scale: f64) -> i32;
@@ -351,6 +352,11 @@ impl WebView {
     pub fn reload(&mut self) -> Result<(), String> {
         // SAFETY: The view is live on its owner's thread.
         status_result(unsafe { elaris_ladybird_reload(self.raw.as_ptr()) })
+    }
+
+    pub fn stop_loading(&mut self) -> Result<(), String> {
+        // SAFETY: The view is live on its owner's thread.
+        status_result(unsafe { elaris_ladybird_stop_loading(self.raw.as_ptr()) })
     }
 
     /// Moves through the session history: -1 goes back, 1 forward.

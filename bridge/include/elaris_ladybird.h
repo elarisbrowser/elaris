@@ -140,6 +140,7 @@ int32_t elaris_ladybird_create(const char* resource_dir, const char* profile_dir
 int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t view_id, ElarisLadybirdView** out_view);
 int32_t elaris_ladybird_load(ElarisLadybirdView* view, const char* url);
 int32_t elaris_ladybird_reload(ElarisLadybirdView* view);
+int32_t elaris_ladybird_stop_loading(ElarisLadybirdView* view);
 /* Moves through the view's session history: -1 goes back, 1 forward. */
 int32_t elaris_ladybird_traverse_history(ElarisLadybirdView* view, int32_t delta);
 /* Whether the view is on screen. Hidden views stop painting and pages see document.hidden. */

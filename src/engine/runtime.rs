@@ -162,6 +162,7 @@ fn apply_to_view(view: &mut View, command: ViewCommand, timing: &mut Timing) -> 
     match command {
         ViewCommand::Load(url) => web.load(&url),
         ViewCommand::Reload => web.reload(),
+        ViewCommand::StopLoading => web.stop_loading(),
         ViewCommand::Traverse(delta) => web.traverse_history(delta),
         ViewCommand::Resize {
             width,

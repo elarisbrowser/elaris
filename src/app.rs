@@ -207,17 +207,11 @@ impl AppState {
         }
     }
 
-    /// Why the address or the active page failed, or that the page is loading.
+    /// Why the address or active page failed.
     pub(crate) fn status(&self) -> Option<&str> {
-        let tab = self.browser.active_tab();
-        let error = self
-            .address_error
-            .as_ref()
-            .or_else(|| tab.and_then(|tab| tab.error.as_ref()));
-        match error {
-            Some(error) => Some(error.as_str()),
-            None => tab.is_some_and(|tab| tab.loading).then_some("Loading…"),
-        }
+        self.address_error
+            .as_deref()
+            .or_else(|| self.browser.active_tab()?.error.as_deref())
     }
 
     /// Records a real active-page visit when its tab or committed URL changes.

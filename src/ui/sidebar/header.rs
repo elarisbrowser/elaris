@@ -31,7 +31,11 @@ pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
             tab.is_some_and(|t| t.can_go_forward),
             Browser::go_forward,
         ),
-        ("Reload", &icons::RELOAD, tab.is_some(), Browser::reload),
+        if tab.is_some_and(|tab| tab.loading) {
+            ("Stop loading", &icons::CLOSE, true, Browser::stop_loading)
+        } else {
+            ("Reload", &icons::RELOAD, tab.is_some(), Browser::reload)
+        },
     ];
     let collapsed = state.sidebar.collapsed;
     let toggle_label = if collapsed {

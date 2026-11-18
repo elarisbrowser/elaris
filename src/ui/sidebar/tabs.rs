@@ -43,16 +43,17 @@ pub(super) fn view(state: &AppState, theme: &Theme) -> El {
 
 fn tab_row(tab: &Tab, active: bool, theme: &Theme) -> El {
     let id = tab.id();
-    let glyph = if tab.loading {
-        &icons::LOADING
-    } else {
-        &icons::PAGE
-    };
     let color = if active { theme.text } else { theme.text_muted };
-    let leading = tab.favicon.as_ref().map_or_else(
-        || icon(glyph, theme::ICON).color(color),
-        |favicon| el().size(theme::ICON, theme::ICON).center().pixels(favicon),
-    );
+    let leading = if tab.loading {
+        icon(&icons::LOADING, theme::ICON)
+            .color(color)
+            .label("Loading")
+            .looping(rune::LoopSpec::rotation(theme::LOADING_PERIOD))
+    } else if let Some(favicon) = &tab.favicon {
+        el().size(theme::ICON, theme::ICON).center().pixels(favicon)
+    } else {
+        icon(&icons::PAGE, theme::ICON).color(color)
+    };
     let close = icon_button(
         &format!("close-{}", id.raw()),
         "Close tab",

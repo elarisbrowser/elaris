@@ -119,6 +119,7 @@ static bool two_views(ElarisLadybird* bridge, EventsByView& events, std::string 
                                    events[11].history == ELARIS_LADYBIRD_HISTORY_FORWARD;
                         }) &&
              check(elaris_ladybird_reload(second), "reload") &&
+             check(elaris_ladybird_stop_loading(second), "stop reload") &&
              check(elaris_ladybird_set_visible(first, 1), "show first view");
     if (passed && (events[10].history != 0 || events[10].last_title != "Elaris Bridge Smoke")) {
         std::cerr << "the second view's history reached the first\n";

@@ -318,6 +318,15 @@ extern "C" int32_t elaris_ladybird_reload(ElarisLadybirdView* handle) {
     return succeed();
 }
 
+extern "C" int32_t elaris_ladybird_stop_loading(ElarisLadybirdView* handle) {
+    if (!handle)
+        return fail("view is required");
+    if (!on_owner_thread(handle->bridge))
+        return fail("navigation must run on the initialization thread");
+    handle->view->stop_loading();
+    return succeed();
+}
+
 extern "C" int32_t elaris_ladybird_traverse_history(ElarisLadybirdView* handle, int32_t delta) {
     if (!handle)
         return fail("view is required");

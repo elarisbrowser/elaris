@@ -118,6 +118,7 @@ pub(crate) const TRAFFIC_LIGHTS: (f32, f32) = (
 /// Square icon buttons: back, forward, reload, and each tab's close button.
 pub(crate) const ICON_BUTTON: f32 = 28.0;
 pub(crate) const ICON_BUTTON_RADIUS: f32 = radius::SM;
+pub(crate) const LOADING_PERIOD: f64 = 1.0;
 pub(crate) const ICON: f32 = 16.0;
 pub(crate) const CLOSE_BUTTON: f32 = 22.0;
 /// The space between the navigation buttons, and between them and the sidebar toggle while the

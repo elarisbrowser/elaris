@@ -86,6 +86,7 @@ pub(crate) enum Command {
 pub(crate) enum ViewCommand {
     Load(String),
     Reload,
+    StopLoading,
     /// Moves through the session history: -1 goes back, 1 forward.
     Traverse(i32),
     /// The viewport in device pixels and the display scale it is laid out at.

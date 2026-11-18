@@ -187,6 +187,10 @@ impl Browser {
         self.send(id, ViewCommand::Reload);
     }
 
+    pub(crate) fn stop_loading(&mut self, id: TabId) {
+        self.send(id, ViewCommand::StopLoading);
+    }
+
     /// Opens another tab at the same address as `id`.
     pub(crate) fn duplicate_tab(&mut self, id: TabId) -> Option<TabId> {
         let url = self.tab(id)?.url.clone();
