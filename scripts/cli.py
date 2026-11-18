@@ -2,8 +2,13 @@
 """Small developer command wrapper for Elaris and upstream Ladybird."""
 
 import argparse
+import sys
 
 from elaris_cli import cpp, engine, project
+
+
+if sys.version_info < (3, 9):
+    raise SystemExit("elaris: Python 3.9 or newer is required")
 
 
 def parser() -> argparse.ArgumentParser:

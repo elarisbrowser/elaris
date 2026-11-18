@@ -1,6 +1,7 @@
 """C++ bridge formatting, configuration, and analysis commands."""
 
 import argparse
+import os
 import platform
 import re
 import subprocess
@@ -46,6 +47,8 @@ def cpp_configure(_args: argparse.Namespace) -> None:
     harfbuzz_subset = prefix / "lib" / f"libharfbuzz-subset.{library_suffix}"
     if not harfbuzz.is_file() or not harfbuzz_subset.is_file():
         raise SystemExit(f"elaris: HarfBuzz libraries are missing from {prefix}")
+    cmake_prefixes = [str(prefix)]
+    cmake_prefixes.extend(path for path in os.environ.get("CMAKE_PREFIX_PATH", "").split(os.pathsep) if path)
     run(
         "cmake", "-S", str(ENGINE), "-B", str(CPP_BUILD_DIR), "-G", "Ninja",
         # Ladybird's own Release preset; without a build type everything compiles unoptimised.
@@ -53,7 +56,7 @@ def cpp_configure(_args: argparse.Namespace) -> None:
         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON", "-DENABLE_GUI_TARGETS=ON",
         "-DELARIS_BUILD_SMOKE_TESTS=ON",
         f"-DELARIS_VCPKG_PREFIX={prefix}",
-        f"-DCMAKE_PREFIX_PATH={prefix}",
+        f"-DCMAKE_PREFIX_PATH={';'.join(cmake_prefixes)}",
         f"-DCMAKE_PROJECT_ladybird_INCLUDE={ROOT / 'bridge' / 'CMakeLists.txt'}",
         f"-DRUST_RUSTC={rustc.stdout.strip()}",
         f"-DHARFBUZZ_INCLUDE_DIR={prefix / 'include' / 'harfbuzz'}",
