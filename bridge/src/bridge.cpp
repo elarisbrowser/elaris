@@ -119,6 +119,21 @@ struct ElarisLadybirdView {
 static AK::OwnPtr<ElarisApplication> s_application;
 static thread_local std::string s_last_error;
 
+namespace {
+
+// Ladybird's bundled Serenity theme uses a rust-colored selection wash. Keep Elaris page
+// selections blue, with a lighter variant for dark pages.
+constexpr Gfx::Color LIGHT_SELECTION_COLOR{0x0a, 0x66, 0xd0};
+constexpr Gfx::Color DARK_SELECTION_COLOR{0x60, 0xa5, 0xfa, 0x99};
+
+void apply_selection_colors(Gfx::SystemTheme& theme) {
+    theme.color[(int)Gfx::ColorRole::Selection] = LIGHT_SELECTION_COLOR.value();
+    theme.color[(int)Gfx::ColorRole::LightSelection] = LIGHT_SELECTION_COLOR.value();
+    theme.color[(int)Gfx::ColorRole::DarkSelection] = DARK_SELECTION_COLOR.value();
+}
+
+} // namespace
+
 Core::EventLoop& ElarisApplication::create_platform_event_loop() {
     if (s_event_loop)
         return *s_event_loop;
@@ -256,7 +271,10 @@ extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t 
     if (theme.is_error())
         return fail("could not load Ladybird's Default.ini theme");
 
-    auto view = ElarisWebView::create(theme.release_value(), {1024, 768});
+    auto theme_buffer = theme.release_value();
+    apply_selection_colors(*theme_buffer.data<Gfx::SystemTheme>());
+
+    auto view = ElarisWebView::create(AK::move(theme_buffer), {1024, 768});
     auto* handle = new ElarisLadybirdView{bridge, view_id, AK::move(view), {}};
     bridge->views.push_back(handle);
     // The callbacks live in the view, which the handle owns, so they never outlive it.
