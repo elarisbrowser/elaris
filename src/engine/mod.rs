@@ -129,6 +129,7 @@ pub(crate) enum Update {
 #[cfg_attr(not(feature = "ladybird-bridge"), allow(dead_code))]
 pub(crate) enum TabUpdate {
     Navigation(String),
+    NavigationCommitted(String),
     ImeCaret(Option<[i32; 4]>),
     Title(String),
     Loading(bool),
@@ -150,12 +151,13 @@ pub(crate) struct Engine {
 impl Engine {
     /// Starts the engine thread, which calls `notify` when there are updates to read. Returns at
     /// once; starting Ladybird happens on the thread.
-    pub(crate) fn start(notify: Notify) -> Result<Self, String> {
+    pub(crate) fn start(notify: Notify, profile: std::path::PathBuf) -> Result<Self, String> {
         #[cfg(feature = "ladybird-bridge")]
-        return thread::start(notify);
+        return thread::start(notify, profile);
         #[cfg(not(feature = "ladybird-bridge"))]
         {
             let _ = notify;
+            let _ = profile;
             Err("This build has no web engine. Rebuild with --features ladybird-bridge.".to_owned())
         }
     }

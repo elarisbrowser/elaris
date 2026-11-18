@@ -23,6 +23,7 @@ typedef enum {
     ELARIS_LADYBIRD_CONTEXT_MENU,
     ELARIS_LADYBIRD_CLIPBOARD,
     ELARIS_LADYBIRD_IME_CARET,
+    ELARIS_LADYBIRD_NAVIGATION_COMMITTED = 11,
 } ElarisLadybirdEventKind;
 
 /* Bit flags for HISTORY events' value. */

@@ -4,12 +4,17 @@
 //! focus and shutdown. What the interface does with tabs goes through the [`Browser`].
 
 use rune::{Key, KeyEvent, PointerPress, Tx};
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::address::{self, Destination, SearchEngine};
 use crate::appearance::Appearance;
 use crate::browser::Browser;
 use crate::engine::Engine;
-use crate::omnibox::{self, Action, HistoryEntry, Suggestion};
+use crate::omnibox::{self, Action, Suggestion};
+#[cfg(not(test))]
+use crate::storage;
+use crate::storage::{Session, SessionTab, Storage};
 use crate::tab::{Tab, TabId};
 use crate::ui::{SidebarState, VIEWPORT};
 
@@ -126,9 +131,11 @@ pub(crate) struct AppState {
     pub(crate) sidebar: SidebarState,
     #[cfg(target_os = "linux")]
     pub(crate) titlebar: LinuxTitlebar,
-    /// The tab and URL last recorded in local recent history.
-    shown: Option<(TabId, String)>,
-    history: Vec<HistoryEntry>,
+    storage: Option<Storage>,
+    profile_dir: Option<PathBuf>,
+    storage_error: Option<String>,
+    last_saved_session: Option<Session>,
+    history_revision: u64,
     /// The page title the window shows.
     window_title: Option<String>,
     context_menu: Option<(Option<TabId>, PointerPress)>,
@@ -144,6 +151,30 @@ impl Default for AppState {
 impl AppState {
     /// Opens the supplied page, or shows the omnibox in an empty window.
     fn new(start: Option<&str>) -> Self {
+        #[cfg(test)]
+        let (storage, profile_dir, session, storage_error) = (None, None, None, None);
+        #[cfg(not(test))]
+        let (storage, profile_dir, session, storage_error) = match storage::Paths::resolve() {
+            Ok(paths) => {
+                let profile_dir = Some(paths.profile_dir.clone());
+                match Storage::open(paths) {
+                    Ok(mut storage) => {
+                        let session = storage.take_session();
+                        (Some(storage), profile_dir, session, None)
+                    }
+                    Err(error) => {
+                        let message = format!("Cannot open browser storage: {error}");
+                        eprintln!("Elaris: {message}");
+                        (None, profile_dir, None, Some(message))
+                    }
+                }
+            }
+            Err(error) => {
+                let message = format!("Cannot locate browser storage: {error}");
+                eprintln!("Elaris: {message}");
+                (None, None, None, Some(message))
+            }
+        };
         let mut state = Self {
             omnibox: omnibox::State::default(),
             search_engine: SearchEngine::default(),
@@ -154,18 +185,29 @@ impl AppState {
             sidebar: SidebarState::default(),
             #[cfg(target_os = "linux")]
             titlebar: LinuxTitlebar::default(),
-            shown: None,
-            history: Vec::new(),
+            storage,
+            profile_dir,
+            storage_error,
+            last_saved_session: session.clone(),
+            history_revision: 0,
             window_title: None,
             context_menu: None,
         };
         if let Some(start) = start {
             match state.browser.open_tab(start) {
-                Ok(_) => state.show_active_tab(),
+                Ok(_) => {}
                 Err(error) => {
+                    if let Some(session) = &session {
+                        state.restore_session(session);
+                    }
                     state.open_omnibox(omnibox::Mode::New);
                     state.address_error = Some(error.to_string());
                 }
+            }
+        } else if let Some(session) = session {
+            state.restore_session(&session);
+            if state.browser.tabs().is_empty() {
+                state.open_omnibox(omnibox::Mode::New);
             }
         } else {
             state.open_omnibox(omnibox::Mode::New);
@@ -184,7 +226,6 @@ impl AppState {
             Err(error) => Err(crate::browser::Error::Address(error)),
         };
         self.address_error = result.err().map(|error| error.to_string());
-        self.show_active_tab();
     }
 
     pub(crate) fn open_omnibox(&mut self, mode: omnibox::Mode) {
@@ -202,17 +243,46 @@ impl AppState {
         };
         self.omnibox
             .open(&query, use_active_url && !query.is_empty());
+        self.request_history_search();
         self.address_error = None;
     }
 
     pub(crate) fn suggestions(&self) -> Vec<Suggestion> {
+        let query = self.omnibox.input.text.trim();
+        let history = self.storage.as_ref().map_or_else(Vec::new, |storage| {
+            let history = storage.history();
+            if query.is_empty() {
+                let mut entries = history.recent(6);
+                if entries.len() < 3 {
+                    for entry in history.frequent(6) {
+                        if !entries.iter().any(|recent| recent.url == entry.url) {
+                            entries.push(entry);
+                        }
+                        if entries.len() >= 6 {
+                            break;
+                        }
+                    }
+                }
+                entries
+            } else {
+                history.search(query, 100)
+            }
+        });
         omnibox::suggestions(
-            &self.omnibox.input.text,
+            query,
             self.browser.tabs(),
-            &self.history,
+            &history,
             self.sidebar.collapsed,
             self.search_engine,
         )
+    }
+
+    pub(crate) fn request_history_search(&self) {
+        if let Some(storage) = &self.storage
+            && let Err(error) = storage.history().request_search(&self.omnibox.input.text)
+        {
+            eprintln!("Elaris: {error}");
+        }
     }
 
     pub(crate) fn choose_suggestion(&mut self, suggestion: Suggestion, tx: &mut Tx) {
@@ -263,7 +333,6 @@ impl AppState {
             }
         }
         self.address_error = None;
-        self.show_active_tab();
         Ok(())
     }
 
@@ -271,7 +340,6 @@ impl AppState {
         self.page_menu = Default::default();
         self.browser.activate_tab(tab);
         self.address_error = None;
-        self.show_active_tab();
     }
 
     /// Closes the tab and opens the omnibox when the window becomes empty.
@@ -279,10 +347,7 @@ impl AppState {
         self.page_menu = Default::default();
         self.browser.close_tab(tab);
         if self.browser.tabs().is_empty() {
-            self.shown = None;
             self.open_omnibox(omnibox::Mode::New);
-        } else {
-            self.show_active_tab();
         }
     }
 
@@ -294,7 +359,6 @@ impl AppState {
 
     pub(crate) fn close_others(&mut self, tab: TabId) {
         self.browser.close_other_tabs(tab);
-        self.show_active_tab();
     }
 
     pub(crate) fn reload(&mut self, tab: TabId) {
@@ -334,20 +398,66 @@ impl AppState {
             .or_else(|| self.browser.active_tab()?.error.as_deref())
     }
 
-    /// Records a real active-page visit when its tab or committed URL changes.
-    fn show_active_tab(&mut self) {
-        let Some(tab) = self.browser.active_tab() else {
-            return;
-        };
-        if !self
-            .shown
-            .as_ref()
-            .is_some_and(|(id, url)| *id == tab.id() && url == &tab.url)
-        {
-            omnibox::record_visit(&mut self.history, &tab.title, &tab.url);
-            self.shown = Some((tab.id(), tab.url.clone()));
-        } else {
-            omnibox::update_title(&mut self.history, &tab.title, &tab.url);
+    fn restore_session(&mut self, session: &Session) {
+        let mut restored = Vec::with_capacity(session.tabs.len());
+        for (index, tab) in session.tabs.iter().enumerate() {
+            restored.push(
+                self.browser
+                    .restore_tab(&tab.url, &tab.title, index != session.active_tab)
+                    .ok(),
+            );
+        }
+        let active = restored
+            .get(session.active_tab)
+            .copied()
+            .flatten()
+            .or_else(|| restored.iter().find_map(|tab| *tab));
+        if let Some(active) = active {
+            self.browser.activate_tab(active);
+        }
+    }
+
+    fn persist_session_if_changed(&mut self) {
+        let session = self.session_snapshot();
+        if self.last_saved_session.as_ref() != Some(&session) {
+            self.queue_session(session);
+        }
+    }
+
+    fn persist_session(&mut self) {
+        let session = self.session_snapshot();
+        self.queue_session(session);
+    }
+
+    fn session_snapshot(&self) -> Session {
+        let tabs = self
+            .browser
+            .tabs()
+            .iter()
+            .map(|tab| SessionTab {
+                url: tab.url.clone(),
+                title: tab.title.clone(),
+            })
+            .collect();
+        let active_tab = self
+            .browser
+            .active_tab()
+            .and_then(|active| {
+                self.browser
+                    .tabs()
+                    .iter()
+                    .position(|tab| tab.id() == active.id())
+            })
+            .unwrap_or_default();
+        Session::new(tabs, active_tab)
+    }
+
+    fn queue_session(&mut self, session: Session) {
+        if let Some(storage) = &self.storage {
+            match storage.save_session(session.clone()) {
+                Ok(()) => self.last_saved_session = Some(session),
+                Err(error) => eprintln!("Elaris: {error}"),
+            }
         }
     }
 
@@ -367,7 +477,19 @@ impl AppState {
 /// Starts the browser engine. Native windows do this after Rune's first frame; Ladybird starts on
 /// the engine's thread, and the waker schedules `poll` when it has news.
 pub(crate) fn start_engine(state: &mut AppState, waker: rune::Waker) {
-    match Engine::start(waker) {
+    let Some(profile_dir) = state.profile_dir.clone() else {
+        state.browser.fail(
+            state
+                .storage_error
+                .clone()
+                .unwrap_or_else(|| "Cannot locate the browser profile directory".to_owned()),
+        );
+        return;
+    };
+    if let Some(storage) = &state.storage {
+        storage.set_notify(Arc::clone(&waker));
+    }
+    match Engine::start(waker, profile_dir) {
         Ok(engine) => state.browser.connect(engine),
         Err(error) => state.browser.fail(error),
     }
@@ -387,6 +509,27 @@ pub(crate) fn poll(state: &mut AppState, _clock: f64, tx: &mut Tx) -> bool {
         .set_viewport_focus(tx.focused() == Some(VIEWPORT));
     let settling = crate::ui::settle_sidebar(state, tx);
     let polled = state.browser.poll();
+    if let Some(storage) = &state.storage {
+        for (_, url, title) in &polled.committed {
+            if let Err(error) = storage.history().record_visit(url, title) {
+                eprintln!("Elaris: {error}");
+            }
+        }
+        for (url, title) in &polled.titles {
+            if let Err(error) = storage.history().update_title(url, title) {
+                eprintln!("Elaris: {error}");
+            }
+        }
+    }
+    state.persist_session_if_changed();
+    let history_changed = if let Some(storage) = &state.storage {
+        let revision = storage.history().revision();
+        let changed = state.history_revision != revision;
+        state.history_revision = revision;
+        changed
+    } else {
+        false
+    };
     if let Some(text) = polled.clipboard {
         tx.copy(text);
     }
@@ -400,9 +543,6 @@ pub(crate) fn poll(state: &mut AppState, _clock: f64, tx: &mut Tx) -> bool {
     if polled.animating {
         tx.wake_after(std::time::Duration::ZERO);
     }
-    if polled.changed {
-        state.show_active_tab();
-    }
     if let Some(title) = state.new_window_title() {
         tx.set_title(if title.is_empty() {
             APP_NAME.to_owned()
@@ -410,7 +550,7 @@ pub(crate) fn poll(state: &mut AppState, _clock: f64, tx: &mut Tx) -> bool {
             title
         });
     }
-    polled.changed || settling || focus_changed
+    polled.changed || history_changed || settling || focus_changed
 }
 
 /// A query was submitted from the focused omnibox.
@@ -470,6 +610,7 @@ pub(crate) fn on_window_focus(state: &mut AppState, focused: bool, _: &mut Tx) {
 }
 
 pub(crate) fn shut_down(state: &mut AppState, _: &mut Tx) {
+    state.persist_session();
     state.browser.shut_down();
 }
 
@@ -656,6 +797,31 @@ mod tests {
     }
 
     #[test]
+    fn choosing_a_history_result_uses_the_omnibox_tab_mode() {
+        let mut state = AppState::new(Some("example.org"));
+        let current = state.browser.active_tab().unwrap().id();
+        let recent = Suggestion {
+            section: omnibox::Section::Recent,
+            title: "Example Domain".to_owned(),
+            detail: "example.com".to_owned(),
+            glyph: omnibox::Glyph::History,
+            action: Action::VisitRecent("https://example.com/".to_owned()),
+        };
+
+        state.open_omnibox(omnibox::Mode::Current);
+        state.choose_suggestion(recent.clone(), &mut Tx::default());
+        assert_eq!(state.browser.active_tab().unwrap().id(), current);
+        assert_eq!(active_url(&state), "https://example.com/");
+        assert_eq!(state.browser.tabs().len(), 1);
+
+        state.open_omnibox(omnibox::Mode::New);
+        state.choose_suggestion(recent, &mut Tx::default());
+        assert_eq!(state.browser.tabs().len(), 2);
+        assert_eq!(active_url(&state), "https://example.com/");
+        assert_ne!(state.browser.active_tab().unwrap().id(), current);
+    }
+
+    #[test]
     fn new_tab_opens_empty_and_dismisses_without_creating_tabs() {
         let mut state = AppState::new(Some("example.com"));
         let mut tx = Tx::default();
@@ -789,5 +955,76 @@ mod tests {
         assert!(state.browser.tabs().is_empty());
         assert!(state.omnibox.open);
         assert!(state.omnibox.input.text.is_empty());
+    }
+
+    #[test]
+    fn session_restoration_keeps_tab_order_and_active_tab() {
+        let mut state = AppState::new(None);
+        let session = Session::new(
+            vec![
+                SessionTab {
+                    url: "https://one.example/".into(),
+                    title: "One".into(),
+                },
+                SessionTab {
+                    url: "https://two.example/".into(),
+                    title: "Two".into(),
+                },
+                SessionTab {
+                    url: "https://three.example/".into(),
+                    title: "Three".into(),
+                },
+            ],
+            1,
+        );
+
+        state.restore_session(&session);
+
+        let tabs = state.browser.tabs();
+        assert_eq!(tabs.len(), 3);
+        assert_eq!(tabs[0].url, "https://one.example/");
+        assert_eq!(tabs[1].url, "https://two.example/");
+        assert_eq!(tabs[2].url, "https://three.example/");
+        assert_eq!(
+            state.browser.active_tab().unwrap().url,
+            "https://two.example/"
+        );
+        assert!(tabs[0].engine.deferred_load);
+        assert!(!tabs[1].engine.deferred_load);
+        assert!(tabs[2].engine.deferred_load);
+    }
+
+    #[test]
+    fn restoring_an_empty_session_does_not_create_a_blank_tab() {
+        let mut state = AppState::new(None);
+        state.restore_session(&Session::new(Vec::new(), 0));
+        assert!(state.browser.tabs().is_empty());
+        assert!(state.omnibox.open);
+    }
+
+    #[test]
+    fn unsent_omnibox_text_is_not_part_of_the_session() {
+        let mut state = AppState::new(None);
+        state.open_omnibox(omnibox::Mode::New);
+        state
+            .omnibox
+            .input
+            .replace_text("typed but not submitted".to_owned());
+        assert!(state.session_snapshot().tabs.is_empty());
+    }
+
+    #[test]
+    fn session_snapshot_keeps_order_and_active_index() {
+        let mut state = AppState::new(Some("one.example"));
+        state.browser.open_tab("two.example").unwrap();
+        let third = state.browser.open_tab("three.example").unwrap();
+        state.activate(third);
+
+        let session = state.session_snapshot();
+
+        assert_eq!(session.tabs[0].url, "https://one.example");
+        assert_eq!(session.tabs[1].url, "https://two.example");
+        assert_eq!(session.tabs[2].url, "https://three.example");
+        assert_eq!(session.active_tab, 2);
     }
 }

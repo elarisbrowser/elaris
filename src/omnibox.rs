@@ -6,6 +6,7 @@ use rune::TextEdit;
 
 use crate::address::{self, Destination, SearchEngine};
 use crate::tab::{Tab, TabId};
+use elaris::history::Entry as HistoryEntry;
 
 const MAX_TAB_SUGGESTIONS: usize = 4;
 const MAX_HISTORY_SUGGESTIONS: usize = 3;
@@ -94,50 +95,6 @@ pub(crate) struct Suggestion {
     pub(crate) action: Action,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct HistoryEntry {
-    pub(crate) title: String,
-    pub(crate) url: String,
-}
-
-/// The most recent locally observed page visit, deduplicated and kept to a small in-memory list.
-pub(crate) fn record_visit(history: &mut Vec<HistoryEntry>, title: &str, url: &str) {
-    if url.is_empty() || url == "about:blank" {
-        return;
-    }
-    if let Some(index) = history.iter().position(|entry| entry.url == url) {
-        let mut entry = history.remove(index);
-        if !title.is_empty() {
-            entry.title = title.to_owned();
-        }
-        history.insert(0, entry);
-        return;
-    }
-    history.insert(
-        0,
-        HistoryEntry {
-            title: if title.is_empty() {
-                url.to_owned()
-            } else {
-                title.to_owned()
-            },
-            url: url.to_owned(),
-        },
-    );
-    history.truncate(20);
-}
-
-pub(crate) fn update_title(history: &mut [HistoryEntry], title: &str, url: &str) {
-    if title.is_empty() {
-        return;
-    }
-    if let Some(entry) = history.iter_mut().find(|entry| entry.url == url)
-        && entry.title != title
-    {
-        title.clone_into(&mut entry.title);
-    }
-}
-
 /// A short list built only from the input, currently open tabs, and locally recorded visits.
 pub(crate) fn suggestions(
     query: &str,
@@ -204,7 +161,12 @@ pub(crate) fn suggestions(
             match_score(&folded, &entry.title, &entry.url).map(|score| (score, entry))
         })
         .collect();
-    matching_history.sort_by_key(|(score, _)| *score);
+    matching_history.sort_by(|(left_score, left), (right_score, right)| {
+        left_score
+            .cmp(right_score)
+            .then_with(|| right.visit_count.cmp(&left.visit_count))
+            .then_with(|| right.last_visited.cmp(&left.last_visited))
+    });
     suggestions.extend(
         matching_history
             .into_iter()
@@ -274,7 +236,7 @@ pub(crate) fn suggestions(
 
 fn site_detail(title: &str, url: &str) -> String {
     let host = address::host_for_address(url);
-    if title == url || title.eq_ignore_ascii_case(host) {
+    if title.eq_ignore_ascii_case(host) {
         String::new()
     } else {
         host.to_owned()
@@ -353,12 +315,16 @@ mod tests {
     fn filters_recent_entries_to_real_recorded_visits() {
         let history = vec![
             HistoryEntry {
-                title: "Rust Book".into(),
                 url: "https://doc.rust-lang.org/book/".into(),
+                title: "Rust Book".into(),
+                last_visited: 2,
+                visit_count: 1,
             },
             HistoryEntry {
-                title: "Example".into(),
                 url: "https://example.com/".into(),
+                title: "Example".into(),
+                last_visited: 1,
+                visit_count: 1,
             },
         ];
         let suggestions = suggestions("rust", &[], &history, false, SearchEngine::default());
@@ -371,15 +337,36 @@ mod tests {
     }
 
     #[test]
-    fn records_only_real_visits_and_deduplicates_urls() {
-        let mut history = Vec::new();
-        record_visit(&mut history, "", "about:blank");
-        record_visit(&mut history, "Other", "https://other.example/");
-        record_visit(&mut history, "", "https://example.com/");
-        record_visit(&mut history, "Example", "https://example.com/");
-        assert_eq!(history.len(), 2);
-        assert_eq!(history[0].title, "Example");
-        assert_eq!(history[0].url, "https://example.com/");
+    fn history_search_matches_titles_domains_and_urls_with_title_matches_first() {
+        let history = vec![
+            HistoryEntry {
+                url: "https://docs.example.org/book".into(),
+                title: "Rust Book".into(),
+                last_visited: 1,
+                visit_count: 1,
+            },
+            HistoryEntry {
+                url: "https://github.com/rust-lang/rust".into(),
+                title: "Source repository".into(),
+                last_visited: 2,
+                visit_count: 1,
+            },
+        ];
+
+        let rust = suggestions("rust", &[], &history, false, SearchEngine::default());
+        let recent: Vec<_> = rust
+            .iter()
+            .filter(|suggestion| suggestion.section == Section::Recent)
+            .collect();
+        assert_eq!(recent[0].title, "Rust Book");
+        assert_eq!(recent[1].title, "Source repository");
+
+        let github = suggestions("github", &[], &history, false, SearchEngine::default());
+        assert!(github.iter().any(|suggestion| {
+            suggestion.section == Section::Recent
+                && suggestion.action
+                    == Action::VisitRecent("https://github.com/rust-lang/rust".into())
+        }));
     }
 
     #[test]

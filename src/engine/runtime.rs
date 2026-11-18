@@ -37,9 +37,8 @@ pub(super) struct Runtime {
 }
 
 impl Runtime {
-    pub(super) fn start() -> Result<Self, String> {
+    pub(super) fn start(profile: PathBuf) -> Result<Self, String> {
         let resources = directory("ELARIS_LADYBIRD_RESOURCE_DIR", "vendor/ladybird/Base/res");
-        let profile = directory("ELARIS_LADYBIRD_PROFILE_DIR", "build/elaris-profile");
         std::fs::create_dir_all(&profile)
             .map_err(|e| format!("cannot create profile {}: {e}", profile.display()))?;
         let events = Rc::new(RefCell::new(Vec::new()));
@@ -135,6 +134,7 @@ impl Runtime {
                 }
                 Event::ImeCaret(rect) => TabUpdate::ImeCaret(rect),
                 Event::Navigation(url) => TabUpdate::Navigation(url),
+                Event::NavigationCommitted(url) => TabUpdate::NavigationCommitted(url),
                 Event::Title(title) => TabUpdate::Title(title),
                 Event::Loading(loading) => TabUpdate::Loading(loading),
                 Event::Favicon(favicon) => TabUpdate::Favicon(favicon),

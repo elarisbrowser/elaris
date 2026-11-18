@@ -11,6 +11,7 @@
 
 struct Events {
     unsigned navigation{};
+    unsigned committed_navigation{};
     unsigned new_tabs{};
     bool foreground{};
     std::string link_menu;
@@ -48,6 +49,9 @@ static void on_event(void* context, ElarisLadybirdEvent const* event) {
         break;
     case ELARIS_LADYBIRD_NAVIGATION:
         ++events.navigation;
+        break;
+    case ELARIS_LADYBIRD_NAVIGATION_COMMITTED:
+        ++events.committed_navigation;
         break;
     case ELARIS_LADYBIRD_TITLE:
         ++events.title;
@@ -269,7 +273,8 @@ int main(int argc, char** argv) {
         bool frame_ready = false;
         auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
         while (passed &&
-               (events.navigation == 0 || events.title == 0 || events.loading_started == 0 ||
+               (events.navigation == 0 || events.committed_navigation == 0 || events.title == 0 ||
+                events.loading_started == 0 ||
                 events.loading_finished == 0 || events.frames == 0 || events.favicons == 0 || !frame_ready) &&
                std::chrono::steady_clock::now() < deadline) {
             passed = check(elaris_ladybird_pump(bridge), "pump");
@@ -304,7 +309,8 @@ int main(int argc, char** argv) {
                       << " showing the page background\n";
             passed = false;
         }
-        if (events.navigation == 0 || events.title == 0 || events.loading_started == 0 ||
+        if (events.navigation == 0 || events.committed_navigation == 0 || events.title == 0 ||
+            events.loading_started == 0 ||
             events.loading_finished == 0 || events.frames == 0 || events.favicons == 0 || events.favicon_width <= 0 ||
             events.favicon_height <= 0 || events.last_title != "Elaris Bridge Smoke") {
             std::cerr << "expected navigation, title, loading, favicon, and ready-to-paint callbacks; observed title='"

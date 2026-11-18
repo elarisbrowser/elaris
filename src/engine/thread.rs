@@ -57,7 +57,7 @@ fn request_shutdown(commands: &Sender<Command>, wake_handle: &Wake) {
     }
 }
 
-pub(super) fn start(notify: Notify) -> Result<Engine, String> {
+pub(super) fn start(notify: Notify, profile: std::path::PathBuf) -> Result<Engine, String> {
     let (commands, received) = channel();
     let (sender, updates) = channel();
     let wake = Wake::default();
@@ -65,7 +65,7 @@ pub(super) fn start(notify: Notify) -> Result<Engine, String> {
         let wake = Arc::clone(&wake);
         std::thread::Builder::new()
             .name("elaris-engine".to_owned())
-            .spawn(move || run(&received, &sender, &wake, &*notify))
+            .spawn(move || run(&received, &sender, &wake, &*notify, profile))
             .map_err(|e| format!("cannot start the engine thread: {e}"))?
     };
     *RUNNING.lock().unwrap_or_else(|e| e.into_inner()) = Some(Running {
@@ -92,13 +92,14 @@ fn run(
     updates: &Sender<Update>,
     wake: &Wake,
     notify: &(dyn Fn() + Send + Sync),
+    profile: std::path::PathBuf,
 ) {
     let report = |update| {
         if updates.send(update).is_ok() {
             notify();
         }
     };
-    let mut runtime = match Runtime::start() {
+    let mut runtime = match Runtime::start(profile) {
         Ok(runtime) => runtime,
         Err(error) => return report(Update::Failed(error)),
     };

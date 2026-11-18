@@ -31,6 +31,8 @@ pub enum Edit {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
     Navigation(String),
+    /// The active top-level document committed this URL, or a history traversal completed.
+    NavigationCommitted(String),
     NewTab {
         url: String,
         request: u64,

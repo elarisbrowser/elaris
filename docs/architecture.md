@@ -1,90 +1,124 @@
 # Architecture
 
-Elaris is one Rust package. Rune draws the window on the UI thread; upstream Ladybird runs on a
-thread of its own behind a small C++ bridge. Nothing on the UI thread waits for Ladybird.
+Elaris is one Rust package. Rune owns the window and interface on the UI thread. Ladybird runs on
+its own thread behind the Elaris-owned C++ bridge. A separate storage worker owns the SQLite
+connection and writes session files, so neither page work nor browser-data writes block Rune.
 
 ## Modules
 
 | Module | Responsibility |
 |---|---|
-| `src/main.rs` | Hands Rune the app's state, view and hooks. |
-| `src/app.rs` | Application state and Rune hooks: native engine startup from `on_ready`, headless startup from `setup`, plus polling, focus and shutdown. |
-| `src/page.rs` | One page: its latest frame, loading state and error. It turns UI changes (viewport size, scale, focus, colour scheme, input) into engine commands, sending only what changed, and reads back engine updates. |
+| `src/main.rs` | Builds the Rune app and installs its lifecycle hooks. |
+| `src/app.rs` | App state, tab actions, omnibox actions, startup restoration, persistence scheduling, polling and shutdown. |
+| `src/browser.rs` | Ordered tabs, active-tab selection, input routing and commands sent to the engine. |
+| `src/tab.rs` | Per-tab address, committed address, title, favicon, page state and engine state. |
+| `src/omnibox.rs` | Omnibox state, local suggestion ranking and typed actions. |
+| `src/history.rs` | Public synchronous SQLite history API; the app uses it through the storage worker. |
+| `src/storage.rs` | Native data paths, asynchronous history access, session JSON and atomic session replacement. |
 | `src/engine/` | The engine thread and everything it owns (see below). |
-| `src/input.rs` | Translates Rune pointer, wheel and key input into Ladybird's, from points to device pixels. |
-| `src/address.rs` | Turns what was typed into a URL to load, or says why it cannot. |
-| `src/appearance.rs` | The System/Light/Dark preference. |
+| `src/input.rs` | Translates Rune pointer, wheel and key input into Ladybird input. |
+| `src/address.rs` | Classifies omnibox input and builds navigation or search URLs. |
+| `src/appearance.rs` | System, light and dark appearance preference. |
 | `src/perf.rs` | Development timing, printed when `ELARIS_PERF=1`. |
-| `src/ui/` | Rune components: `toolbar`, `appearance_picker`, `viewport` (the page's frame and its input), and `theme` (every colour and measurement). |
-| `src/ladybird/` (library) | Safe Rust over the bridge's C ABI. The plain event, frame and input types are always built; the FFI wrappers need the `ladybird-bridge` feature. |
-| `bridge/` | The C++ bridge: a headless Ladybird view whose frames are read from CPU memory, behind `elaris_ladybird.h`. |
-| `scripts/elaris_cli/` | The `./elaris` developer commands. |
+| `src/ui/` | Rune components for the toolbar, sidebar, omnibox, viewport and shared theme. |
+| `src/ladybird/` (library) | Safe Rust wrappers around the bridge's C ABI. Plain event, frame and input types build without the bridge feature. |
+| `bridge/` | The C++ bridge and its headless Ladybird views. |
 
-Dependencies point one way: `ui` → `app` → `page` → `engine` → `ladybird` → bridge. The UI knows
-pages and their pixels, not the engine or C++; the engine knows nothing of the UI's layout.
+The main dependency direction is `ui` → `app` → `browser` → `engine` → `ladybird` → bridge.
+Storage is an app-owned boundary: the app queues committed visits and session snapshots, and the
+storage worker handles disk access. The UI knows tabs and pixels, not SQLite or C++.
+
+## Storage and privacy
+
+Release data lives in the native application-data directory:
+
+| Platform | Release data directory |
+|---|---|
+| macOS | `~/Library/Application Support/Elaris/` |
+| Linux | `$XDG_DATA_HOME/Elaris/`, or `~/.local/share/Elaris/` when `XDG_DATA_HOME` is unset or relative |
+
+Debug builds use a `development/` subdirectory under that root, keeping development profiles
+separate from release data. The default Ladybird profile is `profile/`. The existing
+`ELARIS_LADYBIRD_PROFILE_DIR` override still selects Ladybird's profile directory; history and
+session files remain in Elaris's application-data directory. `ELARIS_LADYBIRD_RESOURCE_DIR`
+continues to select Ladybird resources.
+
+Elaris stores:
+
+- `history.sqlite`: one row per visited HTTP or HTTPS URL, with its latest title, visit time and
+  visit count. Internal, invalid and non-web URLs are excluded. Typed omnibox queries are never
+  recorded.
+- `session.json`: a versioned list of open tab URLs and titles plus the active tab index. It is
+  written to a temporary file and atomically renamed into place.
+- `profile/`: Ladybird's engine-owned profile data, separate from Elaris history and session
+  metadata.
+
+The storage worker owns the database connection. It serves recent and frequent snapshots and
+search results to the UI from memory; searches are sent to SQLite off the UI thread. The local
+history API supports recording visits, title updates, recent/frequent lists, search, individual
+deletion and clearing. No remote autocomplete requests, telemetry or analytics are used.
+
+History currently keeps the latest row for each URL and increments its visit count on each
+committed visit. Elaris does not yet expose a history-management screen. Session metadata does not
+include scroll position, form state, cookies or Ladybird's internal per-view navigation stack.
+Restored background tabs are created in order but are not laid out or loaded until selected.
 
 ## The engine
 
-`src/engine/` is the only code that talks to Ladybird:
+`src/engine/` is the only Rust code that talks to Ladybird:
 
-- `mod.rs`: the protocol. The page sends `Command`s (load, resize, input, focus, colour scheme,
-  close) and reads `Update`s (navigation, title, loading, history, favicon and error). `Engine` is
-  the page's handle on both channels.
-- `thread.rs`: starts the thread, runs its loop and finishes it as the process exits.
-- `runtime.rs`: Ladybird and its view. Ladybird requires every call on the thread that started it,
-  so only the engine thread holds these; they are neither `Send` nor `Sync`.
+- `mod.rs`: the protocol. The browser sends `Command`s (open, load, resize, input, focus, close)
+  and reads `Update`s (display URL, committed navigation, title, loading, history, favicon and
+  error).
+- `thread.rs`: starts the thread, runs its loop and joins it during process exit.
+- `runtime.rs`: Ladybird and its views. They stay on the engine thread and are neither `Send` nor
+  `Sync`.
 - `frames.rs`: which presented frames are worth copying.
 
-Without the `ladybird-bridge` feature, `Engine::start` returns an error the toolbar shows, so
-`cargo run` works without Ladybird.
+Without `ladybird-bridge`, `Engine::start` reports the missing feature and `cargo run` still works
+without Ladybird.
 
-## From the UI to Ladybird
+Ladybird permits one application per process, so Elaris uses one engine thread with one view per
+tab. Commands and updates carry a stable tab ID. Closing a tab drops later updates for that ID.
+Only the active tab receives the viewport size and focus; hidden tabs retain their page. Restored
+background tabs are an exception to the usual eager first layout: their load remains pending until
+they become active.
 
-1. Rune calls `app::poll` at the start of every frame. The page sends the engine whatever changed
-   since the last poll: viewport size and scale, focus, and the first load once both size and
-   colour scheme are known. Input handlers send pointer, wheel and key commands immediately.
-2. Sending queues the command on a channel and wakes Ladybird's event loop (`elaris_ladybird_wake`,
-   safe from any thread). Nothing waits for a reply.
-3. The engine thread sleeps in `elaris_ladybird_wait` until Ladybird has work or a command wakes
-   it. It applies queued commands in order, except that of several resizes only the newest is
-   applied, so a live resize lays out the size the window has now.
+## Navigation and history
 
-## From Ladybird to the screen
+Ladybird's display-URL callback can report an in-progress address, so it is used only to update the
+omnibox and tab label. The bridge also reports a distinct committed-navigation event from
+Ladybird's top-level commit and history-traversal callbacks. `app::poll` records only those events
+in SQLite. A title updates history only after the displayed address agrees with the last committed
+URL, so a provisional page title cannot overwrite the prior entry. This keeps typed queries and
+provisional navigations out of persistent history.
 
-1. Ladybird's callbacks (navigation, title, loading, ready to paint) are collected during a wait
-   and handled after it returns.
-2. On ready to paint, the engine skips frames already shown or laid out at an old scale, then
-   copies the displayed frame into a new RGBA buffer (`elaris_ladybird_copy_frame`).
-3. Each new frame goes straight into the page's `rune::Pixels`, which Rune allows from any thread
-   and which wakes the window. Rune scales the latest complete frame to the current viewport, so
-   it stays pinned during a live resize until the next frame arrives.
-4. Navigation, title, loading, history, favicon and error updates go through the update channel,
-   followed by the waker installed at native `on_ready` or supplied through headless `setup`.
-5. While frames keep arriving, `poll` asks Rune for the next display frame, which keeps Rune
-   drawing at the display's rate.
+The omnibox combines a compact recent list or local database matches with existing open-tab
+suggestions. Matching considers title and URL/domain, then favors stronger text matches, visit
+count and recency. Query work runs on the storage worker; the UI reads a small in-memory result
+snapshot and never waits for SQLite.
 
-## Ownership and shutdown
+## From Rune to Ladybird
 
-- `Page` owns the `Engine` handle and the `Pixels` the engine draws into.
-- The engine thread owns Ladybird and the view. Each `WebView` holds a reference to the bridge, so
-  the bridge is destroyed only after its last view.
-- Closing or quitting only sends `Close`. The engine closes the view, keeps Ladybird running for
-  a short grace period so helper processes see it go, and exits. It does this on every exit path,
-  including errors.
-- Rune ends the process from inside its event loop, so an `atexit` handler sends `Close` if it was
-  not sent and joins the engine thread. It runs before Ladybird's own exit handlers, so no
-  Ladybird code runs while its statics are torn down. Ladybird's helper processes exit with it.
+1. Rune calls `app::poll`. The browser sends changed viewport, focus, visibility and first-load
+   state to the engine without waiting for a reply.
+2. Commands travel over a channel. They wake Ladybird's event loop with a bridge waker.
+3. Ladybird callbacks are collected during the engine wait, tagged with a tab ID and sent back to
+   the app. Committed navigation events and title changes are queued to the storage worker.
+4. On ready to paint, the engine skips frames already shown or laid out at an old scale, then
+   copies the displayed frame into a new RGBA buffer.
+5. Frames go into the tab's `rune::Pixels`, which Rune can draw from any thread and which wakes the
+   window. Rune scales the latest complete frame to the viewport.
 
-## Where tabs fit
+## Startup and shutdown
 
-Ladybird allows one application per process, and the bridge, the colour scheme and the `atexit`
-handler are all process-wide. Tabs therefore mean one engine thread with many views, not many
-engines:
+At app construction, Elaris resolves its data directory and reads the small session file. It
+recreates tabs in saved order and activates the saved tab before the engine starts. The active
+view's first load waits for the viewport and colour scheme; restored background views stay lazy.
+History database opening and subsequent queries/writes happen on the storage worker.
 
-- `AppState` would own the `Engine` and a list of pages; each page would own its `Pixels`,
-  frame size, loading state, error and address text, and the active page would be the one the
-  viewport shows.
-- `Command` and `Update` would carry a view id, and `Runtime` would hold a view per id with a
-  `FrameGate` each. The colour scheme is already applied to the whole application, not a view.
-- The bridge's events do not yet say which view raised them: `ElarisLadybirdEvent` would need the
-  view (or each view its own callback context) before a second view can be told apart.
+On normal close, the current tab list and active index are queued before Ladybird shutdown. Session
+replacement is atomic. A process-exit handler drains and joins the storage worker after queued
+writes, while the existing Ladybird exit handler still closes views, gives helper processes its
+short grace period and joins the engine thread. A forced process termination can still lose work
+that had not reached the storage worker; this milestone does not add crash recovery.

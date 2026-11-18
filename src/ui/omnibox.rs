@@ -55,6 +55,7 @@ pub(crate) fn view(
                     }
                     state.omnibox.selected = 0;
                     state.omnibox.selection_moved = false;
+                    state.request_history_search();
                 })
                 .on_input_key(app::omnibox_input_key)
                 .on_submit(app::submit_omnibox),

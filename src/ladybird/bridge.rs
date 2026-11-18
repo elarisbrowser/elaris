@@ -180,6 +180,7 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
             }),
             9 => Event::Clipboard(text),
             10 => Event::ImeCaret((raw.value != 0).then_some(raw.caret)),
+            11 => Event::NavigationCommitted(text),
             _ => return,
         };
         (state.callback)(raw.view_id, event);

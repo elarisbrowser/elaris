@@ -57,6 +57,10 @@ pub(crate) struct Polled {
     pub(crate) menu: Option<(TabId, elaris::ladybird::PageMenu)>,
     /// The active tab showed a frame since the last poll, so it is likely animating.
     pub(crate) animating: bool,
+    /// URLs Ladybird confirmed as committed, with the title currently known for each tab.
+    pub(crate) committed: Vec<(TabId, String, String)>,
+    /// Titles reported for a tab's last committed URL.
+    pub(crate) titles: Vec<(String, String)>,
 }
 
 pub(crate) struct Browser {
@@ -155,9 +159,26 @@ impl Browser {
     }
 
     fn insert_tab(&mut self, url: String) -> TabId {
+        self.insert_tab_with_state(url, String::new(), false)
+    }
+
+    /// Restores a tab without starting a background page until it becomes active.
+    pub(crate) fn restore_tab(
+        &mut self,
+        address: &str,
+        title: &str,
+        deferred_load: bool,
+    ) -> Result<TabId, Error> {
+        let url = url_for_address(address).map_err(Error::Address)?;
+        Ok(self.insert_tab_with_state(url, title.to_owned(), deferred_load))
+    }
+
+    fn insert_tab_with_state(&mut self, url: String, title: String, deferred_load: bool) -> TabId {
         let id = TabId::from_raw(self.next_id);
         self.next_id += 1;
         let mut tab = Tab::new(id, url);
+        tab.title = title;
+        tab.engine.deferred_load = deferred_load;
         tab.error.clone_from(&self.engine_error);
         if let Some(engine) = &self.engine {
             engine.send(Command::Open(id, tab.surface.clone()));
@@ -169,9 +190,15 @@ impl Browser {
 
     /// Shows the tab in the viewport and gives it the page's input.
     pub(crate) fn activate_tab(&mut self, id: TabId) {
-        if self.active != Some(id) && self.tab(id).is_some() {
+        if self.tab(id).is_none() {
+            return;
+        }
+        if self.active != Some(id) {
             self.reset_input();
             self.active = Some(id);
+        }
+        if let Some(tab) = self.tab_mut(id) {
+            tab.engine.deferred_load = false;
         }
     }
 
@@ -316,7 +343,23 @@ impl Browser {
                 // A tab closed since the engine reported this has nothing to show it.
                 Update::Tab(id, update) => {
                     if let Some(tab) = self.tab_mut(id) {
+                        let committed = match &update {
+                            crate::engine::TabUpdate::NavigationCommitted(url) => Some(url.clone()),
+                            _ => None,
+                        };
+                        let title_changed = matches!(&update, crate::engine::TabUpdate::Title(_));
                         tab.update(update);
+                        if let Some(url) = committed {
+                            polled.committed.push((id, url, tab.title.clone()));
+                        }
+                        if title_changed
+                            && !tab.committed_url.is_empty()
+                            && tab.url == tab.committed_url
+                        {
+                            polled
+                                .titles
+                                .push((tab.committed_url.clone(), tab.title.clone()));
+                        }
                         polled.changed = true;
                     }
                 }
@@ -408,7 +451,7 @@ impl Browser {
                 send(ViewCommand::Visible(active));
             }
             // Hidden tabs keep their last layout, unless they have yet to load their first page.
-            if (active || applied.pending_load.is_some())
+            if (active || (applied.pending_load.is_some() && !applied.deferred_load))
                 && let Some(wanted) = viewport
                 && applied.viewport != Some(wanted)
             {
@@ -424,6 +467,7 @@ impl Browser {
             // at its real size and never starts in the wrong scheme.
             if applied.viewport.is_some()
                 && scheme_known
+                && (active || !applied.deferred_load)
                 && let Some(url) = applied.pending_load.take()
             {
                 send(ViewCommand::Load(url));
@@ -559,6 +603,38 @@ mod tests {
                 view(second, ViewCommand::Focus(true)),
             ]
         );
+    }
+
+    #[test]
+    fn restored_background_tabs_load_only_when_selected() {
+        let (mut browser, fake) = connected();
+        let first = browser
+            .restore_tab("https://one.example/", "One", true)
+            .unwrap();
+        let second = browser
+            .restore_tab("https://two.example/", "Two", false)
+            .unwrap();
+        browser.activate_tab(second);
+        lay_out(&mut browser, [100.0, 50.0], 1.0, false);
+
+        browser.poll();
+        let commands = sent(&fake);
+        assert!(commands.contains(&Command::Open(first, surface(&browser, first))));
+        assert!(commands.contains(&Command::Open(second, surface(&browser, second))));
+        assert!(!commands.iter().any(|command| {
+            matches!(command, Command::View(id, ViewCommand::Load(_)) if *id == first)
+        }));
+        assert!(commands.contains(&view(
+            second,
+            ViewCommand::Load("https://two.example/".into())
+        )));
+
+        browser.activate_tab(first);
+        browser.poll();
+        assert!(sent(&fake).contains(&view(
+            first,
+            ViewCommand::Load("https://one.example/".into())
+        )));
     }
 
     #[test]
@@ -720,6 +796,83 @@ mod tests {
         send(second, TabUpdate::Title("Late".into()));
         assert!(!browser.poll().changed);
         assert_eq!(browser.tab(first).unwrap().title, "First");
+    }
+
+    #[test]
+    fn only_committed_navigation_updates_are_reported_for_history() {
+        let (mut browser, fake) = connected();
+        let tab = browser.open_tab("example.com").unwrap();
+        fake.updates
+            .send(Update::Tab(
+                tab,
+                TabUpdate::Navigation("https://provisional.example/".into()),
+            ))
+            .unwrap();
+        assert!(browser.poll().committed.is_empty());
+
+        fake.updates
+            .send(Update::Tab(
+                tab,
+                TabUpdate::NavigationCommitted("https://committed.example/".into()),
+            ))
+            .unwrap();
+        let polled = browser.poll();
+        assert_eq!(
+            polled.committed,
+            [(tab, "https://committed.example/".into(), String::new())]
+        );
+        assert_eq!(
+            browser.tab(tab).unwrap().committed_url,
+            "https://committed.example/"
+        );
+    }
+
+    #[test]
+    fn provisional_titles_do_not_update_the_previous_history_entry() {
+        let (mut browser, fake) = connected();
+        let tab = browser.open_tab("example.com").unwrap();
+        fake.updates
+            .send(Update::Tab(
+                tab,
+                TabUpdate::NavigationCommitted("https://example.com/".into()),
+            ))
+            .unwrap();
+        browser.poll();
+
+        fake.updates
+            .send(Update::Tab(
+                tab,
+                TabUpdate::Navigation("https://iana.org/domains/reserved".into()),
+            ))
+            .unwrap();
+        fake.updates
+            .send(Update::Tab(
+                tab,
+                TabUpdate::Title("IANA-managed Reserved Domains".into()),
+            ))
+            .unwrap();
+        assert!(browser.poll().titles.is_empty());
+
+        fake.updates
+            .send(Update::Tab(
+                tab,
+                TabUpdate::NavigationCommitted("https://iana.org/domains/reserved".into()),
+            ))
+            .unwrap();
+        browser.poll();
+        fake.updates
+            .send(Update::Tab(
+                tab,
+                TabUpdate::Title("IANA-managed Reserved Domains".into()),
+            ))
+            .unwrap();
+        assert_eq!(
+            browser.poll().titles,
+            [(
+                "https://iana.org/domains/reserved".into(),
+                "IANA-managed Reserved Domains".into()
+            )]
+        );
     }
 
     #[test]

@@ -26,6 +26,8 @@ pub(crate) struct Tab {
     id: TabId,
     /// The page's address, once Ladybird has committed it; the address asked for until then.
     pub(crate) url: String,
+    /// Last top-level URL Ladybird confirmed as committed.
+    pub(crate) committed_url: String,
     pub(crate) title: String,
     pub(crate) loading: bool,
     pub(crate) ime_caret: Option<[i32; 4]>,
@@ -43,6 +45,8 @@ pub(crate) struct Tab {
 pub(crate) struct Applied {
     /// The first page, held until the view can lay it out at its real size.
     pub(crate) pending_load: Option<String>,
+    /// Restored background tabs wait until selected before their first layout and load.
+    pub(crate) deferred_load: bool,
     /// The device-pixel size and scale the view was last given.
     pub(crate) viewport: Option<(i32, i32, f64)>,
     pub(crate) focused: bool,
@@ -57,6 +61,7 @@ impl Tab {
         Self {
             id,
             url: url.clone(),
+            committed_url: "about:blank".to_owned(),
             title: String::new(),
             loading: false,
             ime_caret: None,
@@ -91,6 +96,11 @@ impl Tab {
             TabUpdate::ImeCaret(rect) => self.ime_caret = rect,
             TabUpdate::Navigation(url) => {
                 self.url = url;
+                self.error = None;
+            }
+            TabUpdate::NavigationCommitted(url) => {
+                self.url.clone_from(&url);
+                self.committed_url = url;
                 self.error = None;
             }
             TabUpdate::Title(title) => self.title = title,

@@ -9,6 +9,7 @@ mod input;
 mod omnibox;
 mod perf;
 mod shortcuts;
+mod storage;
 mod tab;
 #[cfg(target_os = "macos")]
 mod titlebar_controls;

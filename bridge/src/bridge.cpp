@@ -329,6 +329,12 @@ extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t 
              (view.can_navigate_back() ? ELARIS_LADYBIRD_HISTORY_BACK : 0) |
                  (view.can_navigate_forward() ? ELARIS_LADYBIRD_HISTORY_FORWARD : 0));
     };
+    handle->view->on_top_level_navigation_commit = [handle] {
+        emit(handle, ELARIS_LADYBIRD_NAVIGATION_COMMITTED, to_utf8(handle->view->url()));
+    };
+    handle->view->on_browser_history_traversal_complete = [handle] {
+        emit(handle, ELARIS_LADYBIRD_NAVIGATION_COMMITTED, to_utf8(handle->view->url()));
+    };
     handle->view->on_open_tab = [handle](auto navigation, auto activate) {
         if (!handle->bridge->callback)
             return;
