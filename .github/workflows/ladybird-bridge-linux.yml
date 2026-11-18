@@ -22,24 +22,16 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Expose clang-tidy from the Ladybird CI image
+      - name: Install clang-tidy from LLVM's apt repository
         timeout-minutes: 5
         run: |
-          if [ -d /usr/lib/llvm-22/bin ]; then
-            echo "/usr/lib/llvm-22/bin" >> "$GITHUB_PATH"
-            export PATH="/usr/lib/llvm-22/bin:${PATH}"
-          fi
-          if ! command -v clang-tidy-22 >/dev/null 2>&1; then
-            if command -v clang-tidy >/dev/null 2>&1 && clang-tidy --version | grep -q 'version 22'; then
-              mkdir -p /tmp/elaris-clang-tidy/bin
-              ln -s "$(command -v clang-tidy)" /tmp/elaris-clang-tidy/bin/clang-tidy-22
-              echo "/tmp/elaris-clang-tidy/bin" >> "$GITHUB_PATH"
-              export PATH="/tmp/elaris-clang-tidy/bin:${PATH}"
-            else
-              echo "Ladybird CI image does not provide clang-tidy 22" >&2
-              exit 1
-            fi
-          fi
+          apt-get update -o APT::Update::Error-Mode=any
+          apt-get install -y --no-install-recommends ca-certificates curl gnupg lsb-release
+          curl -fsSL https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-snapshot.gpg
+          llvm_release="$(lsb_release -sc)"
+          echo "deb [signed-by=/usr/share/keyrings/llvm-snapshot.gpg] https://apt.llvm.org/${llvm_release}/ llvm-toolchain-${llvm_release}-22 main" > /etc/apt/sources.list.d/llvm.list
+          apt-get update -o APT::Update::Error-Mode=any
+          apt-get install -y --no-install-recommends clang-tidy-22 libxkbcommon-dev
           clang-tidy-22 --version
 
       - name: Verify headless display and compiler-cache tools
