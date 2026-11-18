@@ -131,6 +131,7 @@ pub(crate) const PRESS_SCALE: f32 = 0.97;
 /// The address field.
 pub(crate) const FIELD_HEIGHT: f32 = 36.0;
 pub(crate) const FIELD_PADDING: f32 = space::S3;
+pub(crate) const FIELD_RADIUS: f32 = radius::MD;
 
 /// The floating search palette and its compact result rows.
 pub(crate) const OMNIBOX_WIDTH: f32 = 680.0;

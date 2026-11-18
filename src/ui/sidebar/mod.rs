@@ -105,6 +105,8 @@ fn search_launcher(theme: &Theme) -> El {
         theme,
     )
     .h(theme::FIELD_HEIGHT)
+    .radius(theme::FIELD_RADIUS)
+    .continuous_corners()
     .fill(theme.address_field)
     .label("Search or type a URL")
     .help("Open search and address suggestions")
