@@ -52,17 +52,9 @@ def linux_build(args: argparse.Namespace) -> None:
         cwd=DEVCONTAINER_DIR,
     )
 
-    container_command = [
-        "docker",
-        "run",
-        "--rm",
-        "--init",
-        "--shm-size=2g",
-        "--mount",
-        f"type=bind,source={ROOT},target={ROOT}",
-    ]
+    mounts = ["--mount", f"type=bind,source={ROOT},target={ROOT}"]
     if not git_common_dir.is_relative_to(ROOT):
-        container_command.extend(
+        mounts.extend(
             ["--mount", f"type=bind,source={git_common_dir},target={git_common_dir}"]
         )
 
@@ -75,10 +67,34 @@ def linux_build(args: argparse.Namespace) -> None:
         str(ladybird_main_dir / "Build"): f"{volume_prefix}-vcpkg-build",
     }
     for target, source in volumes.items():
-        container_command.extend(
+        mounts.extend(
             ["--mount", f"type=volume,source={source},target={target},volume-nocopy"]
         )
 
+    print("Preparing Linux build cache volumes.", flush=True)
+    run(
+        "docker",
+        "run",
+        "--rm",
+        "--init",
+        "--shm-size=2g",
+        "--user",
+        "0:0",
+        *mounts,
+        "--env",
+        f"ELARIS_VOLUME_UID={uid}",
+        "--env",
+        f"ELARIS_VOLUME_GID={gid}",
+        "--env",
+        f"ELARIS_VCPKG_BUILD_DIR={ladybird_main_dir / 'Build'}",
+        "--workdir",
+        str(ROOT),
+        image,
+        "/bin/sh",
+        str(ROOT / ".devcontainer" / "prepare-volumes.sh"),
+    )
+
+    container_command = ["docker", "run", "--rm", "--init", "--shm-size=2g", *mounts]
     container_command.extend(
         [
             "--workdir",

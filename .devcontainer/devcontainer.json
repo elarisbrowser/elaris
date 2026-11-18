@@ -21,7 +21,7 @@
     "ELARIS_JOBS": "4"
   },
   "runArgs": ["--init", "--shm-size=2g"],
-  "postCreateCommand": "./elaris setup --skip-system-deps",
+  "postCreateCommand": "sh .devcontainer/prepare-volumes.sh && ./elaris setup --skip-system-deps",
   "customizations": {
     "vscode": {
       "extensions": ["rust-lang.rust-analyzer"]
