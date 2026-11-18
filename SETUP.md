@@ -1,64 +1,82 @@
-# Elaris development setup
+# Development setup
 
-## Elaris
+## Before running `./elaris`
 
-Install the stable Rust toolchain and run the Rune app from the repository root:
-
-```sh
-cargo run
-```
-
-This app runs independently of Ladybird. It does not require, link, or launch the web engine.
-On Linux, install `libxkbcommon-dev` first so Rune's native backend can link:
+The launcher needs Python 3.9 or newer before it can start. Git is needed to clone the repository and check out Ladybird. If `python3` selects an older interpreter, point the launcher to a newer one:
 
 ```sh
-sudo apt install libxkbcommon-dev
+ELARIS_PYTHON=/path/to/python3.12 ./elaris setup
 ```
 
-## Ladybird
-
-Ladybird is an unmodified upstream Git submodule at `vendor/ladybird`, pinned to revision `76bef6eee7bffd40c1895a2ee7332405fa1ef83d`. There are no local Ladybird patches.
-
-Initialize the pinned submodule after cloning Elaris:
+Install those bootstrap tools using your platform's package manager if they are missing:
 
 ```sh
-git submodule update --init --recursive
+brew install python git                         # macOS
+sudo apt-get install python3 python3-venv git   # Debian or Ubuntu
+sudo dnf install python3 git                    # Fedora
+sudo pacman -S python git                       # Arch or Manjaro
+sudo zypper install python3 git                 # openSUSE
 ```
 
-Ladybird's build script misidentifies the `.git` file used by a submodule as a linked worktree. Use a detached worktree for the build; this keeps `vendor/ladybird` clean and lets the upstream script resolve its build paths:
+macOS also needs [Homebrew](https://brew.sh/) and Xcode 26 or newer. Linux setup supports apt, dnf, pacman, and zypper.
+
+## One-time setup
+
+Run this from the repository root:
 
 ```sh
-git -C vendor/ladybird worktree add --detach /tmp/elaris-ladybird-build 76bef6eee7bffd40c1895a2ee7332405fa1ef83d
-cd /tmp/elaris-ladybird-build
-./Meta/ladybird.py build --jobs 8
+./elaris setup
 ```
 
-This builds Ladybird's Release configuration. Adjust `--jobs` for the available memory and CPU count. Use another temporary path if `/tmp/elaris-ladybird-build` already exists.
+Setup installs the Ladybird system build packages through Homebrew or the detected Linux package manager, installs rustup and the stable plus pinned Ladybird Rust toolchains, and checks out the exact Ladybird revision recorded by this repository. On Linux, `sudo` prompts for your password when it needs permission to install packages. The password is handled by `sudo`; Elaris does not read or save it.
 
-To remove the worktree after the build, run this from the Elaris repository root:
+The automatic package install supports macOS with Homebrew, Debian or Ubuntu with apt, Fedora with dnf, Arch or Manjaro with pacman, and openSUSE with zypper. Other distributions can install prerequisites from [Ladybird's build instructions](https://github.com/LadybirdBrowser/ladybird/blob/master/Documentation/BuildInstructionsLadybird.md), then run:
 
 ```sh
-git -C vendor/ladybird worktree remove /tmp/elaris-ladybird-build
+./elaris setup --skip-system-deps
 ```
 
-### macOS prerequisites
-
-Install Xcode 26 or newer, including its command-line tools. Install Ladybird's additional build tools with Homebrew:
+Setup verifies CMake 3.30 or newer on all platforms, Qt 6.10 or newer on Linux, and Xcode 26 or newer on macOS. Debian and Ubuntu setup adds LLVM's signed apt repository for Ladybird's supported C++ compiler and adds Kitware's signed apt repository on Ubuntu only when the system CMake is too old. Some Linux distributions still ship Qt older than 6.10; install a newer Qt development kit and set its paths before rerunning setup. For example:
 
 ```sh
-brew install autoconf autoconf-archive automake ccache cmake libtool make nasm ninja pkg-config
+export CMAKE_PREFIX_PATH="$HOME/Qt/6.10.0/gcc_64"
+export PKG_CONFIG_PATH="$CMAKE_PREFIX_PATH/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+./elaris setup --skip-system-deps
 ```
 
-Ladybird can use Xcode's compiler. Homebrew LLVM 22 is an alternative.
+The setup command never adds a Ladybird fork or changes its pinned revision.
 
-### Linux prerequisites
+## Build and run
 
-Ladybird requires a C++23-capable compiler, CMake 3.30 or newer, and Qt 6.10 or newer. This package list is for Debian or Ubuntu:
+After setup:
 
 ```sh
-sudo apt install autoconf autoconf-archive automake build-essential ccache cmake curl fonts-liberation2 git glslang-tools libdrm-dev libgl1-mesa-dev libncurses-dev libpulse-dev libtool libwayland-dev libxkbcommon-dev libxcb-icccm4-dev nasm ninja-build pkg-config python3-venv qt6-base-private-dev qt6-positioning-dev qt6-tools-dev-tools qt6-wayland tar unzip zip
+./elaris build             # build Ladybird dependencies, bridge, and Elaris
+./elaris run               # build what is needed, then launch Elaris
+./elaris run https://example.com
 ```
 
-Some distributions provide CMake or Qt versions below Ladybird's minimum; install newer versions before building when needed. For other distributions, use the matching package list in [Ladybird's official build instructions](https://github.com/LadybirdBrowser/ladybird/blob/master/Documentation/BuildInstructionsLadybird.md).
+The first build bootstraps Ladybird's pinned vcpkg checkout and compiles its third-party dependencies and runtime helper processes. It requires an internet connection and can take a while; allow several gigabytes for source and build artifacts. The default build parallelism is four jobs. Set `ELARIS_JOBS=8` or pass `--jobs 8` to `build` or `run` to change it.
 
-The future Elaris C++ bridge will live outside `vendor/ladybird`. No bridge or engine integration is implemented yet.
+To work on Rune UI without compiling Ladybird:
+
+```sh
+./elaris build --ui
+./elaris run --ui
+```
+
+Direct `cargo run` also remains a UI-only build and does not require the Ladybird submodule or bridge.
+
+## Contributor commands
+
+| Command | What it does |
+| --- | --- |
+| `./elaris setup` | Install prerequisites, Rust toolchains, and the pinned Ladybird submodule |
+| `./elaris build` | Build the integrated browser, including Ladybird and its bridge |
+| `./elaris run [URL]` | Build the integrated browser and open it |
+| `./elaris check` | Run `cargo fmt --check`, `cargo check`, Clippy, and Rust tests |
+| `./elaris format` | Format Rust and Elaris-owned C++ sources |
+| `./elaris engine status` | Inspect the pinned Ladybird revision and local build status |
+| `./elaris cpp-tidy` | Run clang-tidy on Elaris-owned bridge code after configuring it |
+
+For focused FFI work and bridge smoke tests, see [bridge/README.md](bridge/README.md). For code organization and thread ownership, see [docs/architecture.md](docs/architecture.md).

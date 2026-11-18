@@ -1,6 +1,6 @@
 # Ladybird bridge
 
-The bridge is an opt-in C ABI over the pinned `vendor/ladybird` checkout. It does not add files to or patch that submodule. Ladybird must remain the top-level CMake project because its Rust rules use `CMAKE_SOURCE_DIR`; Elaris injects its target after Ladybird declares its libraries. Normal `cargo run` does not build or link Ladybird.
+For the normal local workflow, run `./elaris setup` once and then `./elaris build`; the wrapper installs prerequisites, prepares the pinned checkout, builds Ladybird's dependencies, and compiles the bridge and helper processes described below. The bridge is an opt-in C ABI over `vendor/ladybird`. It does not add files to or patch that submodule. Ladybird must remain the top-level CMake project because its Rust rules use `CMAKE_SOURCE_DIR`; Elaris injects its target after Ladybird declares its libraries. Direct `cargo run` remains a UI-only build and does not link Ladybird.
 
 ## Configure, build and test
 
