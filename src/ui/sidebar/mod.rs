@@ -106,22 +106,10 @@ fn body(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
             .center_y()
             .child(super::downloads::trigger(state, theme, overlays))
             .child(rune::el().grow(1.0))
-            .child(settings_button(theme))
             .child(appearance(state.settings.appearance, theme)),
     )
 }
 
-fn settings_button(theme: &Theme) -> El {
-    super::controls::icon_button(
-        "settings",
-        "Open settings",
-        &icons::SETTINGS,
-        theme::ICON_BUTTON,
-        theme,
-    )
-    .shortcut_hint("cmd+,")
-    .on_press_tx(app::open_settings)
-}
 
 fn search_launcher(state: &AppState, theme: &Theme) -> El {
     let address = state

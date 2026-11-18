@@ -262,6 +262,14 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
             },
         ));
     }
+    menu = menu
+        .separator()
+        .item(
+            MenuItem::new("Settings").on_select_tx(|state: &mut AppState, tx: &mut Tx| {
+                state.dismiss_context_menu();
+                app::open_settings(state, tx);
+            }),
+        );
     let kit = Kit::from_palette(PaletteSeed {
         bg: theme.window,
         fg: theme.text,
