@@ -15,7 +15,7 @@ pub(crate) use sidebar::resize::settle as settle_sidebar;
 pub(crate) use sidebar::{SidebarState, toggle as toggle_sidebar};
 pub(crate) use theme::{TRAFFIC_LIGHTS, WINDOW_MIN_SIZE};
 
-use rune::{Cx, El, row};
+use rune::{Cx, El, SystemMaterial, row};
 
 use crate::app::AppState;
 
@@ -33,6 +33,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         .w_full()
         .h_full()
         .fill(theme.window)
+        .system_material(SystemMaterial::Glass)
         .child(sidebar::view(state, &theme))
         .child(viewport::view(state, &theme))
         .child(sidebar::header::view(state, &theme, cx));

@@ -16,7 +16,7 @@ mod ui;
 
 use std::sync::Arc;
 
-use rune::{App, AppSpec, Chrome};
+use rune::{App, AppSpec, Chrome, WindowOptions};
 
 fn main() {
     let spec = AppSpec {
@@ -33,6 +33,10 @@ fn main() {
         )
     };
     let app = App::new(spec)
+        .window_options(WindowOptions {
+            transparent: true,
+            ..WindowOptions::default()
+        })
         // macOS drags the titlebar band natively; the window controls sit centred in it, level
         // with the header's buttons.
         .chrome(Chrome {

@@ -152,6 +152,7 @@ pub(crate) fn view(
             .px(theme::FIELD_PADDING + 4.0)
             .py(theme::FIELD_PADDING)
             .center()
+            .backdrop_blur(theme::MODAL_BACKDROP_BLUR)
             .fill(theme.overlay_scrim)
             .child(panel),
     )
