@@ -81,7 +81,7 @@ fn search_engine_pixels(engine: SearchEngine) -> &'static Pixels {
         let cache = ImageCache::new(Arc::new(|| {}));
         let images = [
             cache.load(include_bytes!("../../assets/search-engines/google.svg").as_slice()),
-            cache.load(include_bytes!("../../assets/search-engines/bing.png").as_slice()),
+            cache.load(include_bytes!("../../assets/search-engines/bing.svg").as_slice()),
             cache.load(include_bytes!("../../assets/search-engines/duckduckgo.svg").as_slice()),
             cache.load(include_bytes!("../../assets/search-engines/brave.png").as_slice()),
         ];
