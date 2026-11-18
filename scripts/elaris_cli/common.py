@@ -56,11 +56,14 @@ def prepare_ladybird_paths() -> None:
         raise SystemExit(f"elaris: could not locate the Ladybird Git directory: {git_dir.stderr.strip()}")
 
     git_dir_path = Path(git_dir.stdout.strip())
-    if git_pointer.is_file() and not git_pointer.is_symlink():
-        expected_pointer = f"gitdir: {git_dir_path}\n"
-        if git_pointer.read_text() != expected_pointer:
-            git_pointer.write_text(expected_pointer)
+    if git_pointer.is_file():
+        if not git_pointer.is_symlink():
+            expected_pointer = f"gitdir: {git_dir_path}\n"
+            if git_pointer.read_text() != expected_pointer:
+                git_pointer.write_text(expected_pointer)
         main_source_dir = git_dir_path.parent.parent
+        if main_source_dir.name == ".git":
+            main_source_dir = main_source_dir.parent
     else:
         main_source_dir = ENGINE
 
