@@ -159,7 +159,7 @@ pub(crate) fn view(
 }
 
 fn search_engine_selector(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
-    let engine = state.search_engine;
+    let engine = state.settings.search_engine;
     let label = format!("Search engine: {}", engine.label());
     let trigger = row()
         .key("search-engine-button")
@@ -198,7 +198,7 @@ fn search_engine_selector(state: &AppState, theme: &Theme, overlays: &mut Vec<El
                 .lead(super::icons::search_engine(option, theme::ICON))
                 .checked(option == engine)
                 .on_select_tx(move |state: &mut AppState, tx: &mut Tx| {
-                    state.search_engine = option;
+                    state.set_search_engine(option);
                     state.omnibox.search_engine_menu_open = false;
                     tx.focus("omnibox-input", false);
                 }),

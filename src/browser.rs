@@ -24,8 +24,9 @@ use std::time::Instant;
 mod input_routing;
 
 use crate::address::url_for_address;
-use crate::engine::{Command, DownloadAction, Engine, Update, ViewCommand};
+use crate::engine::{Command, DownloadAction, Engine, Surface, Update, ViewCommand};
 use crate::input;
+use crate::internal::{InternalPage, InternalRoute};
 use crate::perf::{self, Stage};
 use crate::tab::{Tab, TabId};
 use elaris::downloads::{
@@ -67,6 +68,8 @@ pub(crate) struct Polled {
     pub(crate) committed: Vec<(TabId, String, String)>,
     /// Titles reported for a tab's last committed URL.
     pub(crate) titles: Vec<(String, String)>,
+    /// The engine could not apply the selected download directory.
+    pub(crate) download_directory_error: Option<String>,
 }
 
 pub(crate) struct Browser {
@@ -128,7 +131,9 @@ impl Browser {
     /// Gives the browser the engine that shows its tabs, opening a view for each.
     pub(crate) fn connect(&mut self, engine: Engine) {
         for tab in &self.tabs {
-            engine.send(Command::Open(tab.id(), tab.surface.clone()));
+            if !tab.is_internal() {
+                engine.send(Command::Open(tab.id(), tab.surface.clone()));
+            }
         }
         self.engine = Some(engine);
     }
@@ -156,6 +161,12 @@ impl Browser {
     /// The browser's downloads, including work initiated by a webpage.
     pub(crate) fn downloads(&self) -> &[Download] {
         &self.downloads
+    }
+
+    pub(crate) fn set_download_directory(&self, directory: Option<std::path::PathBuf>) {
+        if let Some(engine) = &self.engine {
+            engine.send(Command::SetDownloadDirectory(directory));
+        }
     }
 
     /// Starts a Ladybird transfer and returns its stable browser identifier immediately.
@@ -257,8 +268,18 @@ impl Browser {
 
     /// Opens a tab at the end of the list loading `address`, and makes it active if no tab is.
     pub(crate) fn open_tab(&mut self, address: &str) -> Result<TabId, Error> {
+        if let Some(route) = InternalRoute::parse(address) {
+            return Ok(self.insert_internal_tab(route));
+        }
         let url = url_for_address(address).map_err(Error::Address)?;
         Ok(self.insert_tab(url))
+    }
+
+    pub(crate) fn internal_tab(&self, page: InternalPage) -> Option<TabId> {
+        self.tabs
+            .iter()
+            .find(|tab| tab.internal == Some(InternalRoute::Page(page)))
+            .map(Tab::id)
     }
 
     fn insert_tab(&mut self, url: String) -> TabId {
@@ -272,8 +293,19 @@ impl Browser {
         title: &str,
         deferred_load: bool,
     ) -> Result<TabId, Error> {
+        if let Some(route) = InternalRoute::parse(address) {
+            return Ok(self.insert_internal_tab(route));
+        }
         let url = url_for_address(address).map_err(Error::Address)?;
         Ok(self.insert_tab_with_state(url, title.to_owned(), deferred_load))
+    }
+
+    fn insert_internal_tab(&mut self, route: InternalRoute) -> TabId {
+        let id = TabId::from_raw(self.next_id);
+        self.next_id += 1;
+        self.tabs.push(Tab::new_internal(id, route));
+        self.active.get_or_insert(id);
+        id
     }
 
     fn insert_tab_with_state(&mut self, url: String, title: String, deferred_load: bool) -> TabId {
@@ -283,7 +315,9 @@ impl Browser {
         tab.title = title;
         tab.engine.deferred_load = deferred_load;
         tab.error.clone_from(&self.engine_error);
-        if let Some(engine) = &self.engine {
+        if !tab.is_internal()
+            && let Some(engine) = &self.engine
+        {
             engine.send(Command::Open(id, tab.surface.clone()));
         }
         self.tabs.push(tab);
@@ -307,22 +341,64 @@ impl Browser {
 
     /// Loads `address` in the tab.
     pub(crate) fn navigate(&mut self, id: TabId, address: &str) -> Result<(), Error> {
+        if InternalRoute::parse(address).is_some() {
+            return Err(Error::Address(
+                "Internal pages must be opened through Elaris navigation",
+            ));
+        }
         let url = url_for_address(address).map_err(Error::Address)?;
         let connected = self.engine.is_some();
-        let tab = self.tab_mut(id).ok_or(Error::NoSuchTab(id))?;
-        tab.url.clone_from(&url);
-        tab.error = None;
-        // A tab the engine has not laid out yet loads once it has.
-        if !connected || tab.engine.pending_load.is_some() {
-            tab.engine.pending_load = Some(url);
-        } else {
+        let open_view = self.tab(id).ok_or(Error::NoSuchTab(id))?.is_internal();
+        let mut load_now = false;
+        let mut surface = None;
+        {
+            let tab = self.tab_mut(id).ok_or(Error::NoSuchTab(id))?;
+            if open_view {
+                tab.internal = None;
+                tab.surface = Surface::default();
+                tab.engine = Default::default();
+                tab.committed_url.clear();
+                surface = Some(tab.surface.clone());
+            }
+            tab.url.clone_from(&url);
+            tab.error = None;
+            // A tab the engine has not laid out yet loads once it has.
+            if open_view || !connected || tab.engine.pending_load.is_some() {
+                tab.engine.pending_load = Some(url.clone());
+            } else {
+                load_now = true;
+            }
+        }
+        if let Some(surface) = surface
+            && let Some(engine) = &self.engine
+        {
+            engine.send(Command::Open(id, surface));
+        }
+        if load_now {
             self.send(id, ViewCommand::Load(url));
         }
         Ok(())
     }
 
+    /// Replaces a tab with an Elaris-owned page without asking Ladybird to load its address.
+    pub(crate) fn navigate_internal(
+        &mut self,
+        id: TabId,
+        route: InternalRoute,
+    ) -> Result<(), Error> {
+        let is_internal = self.tab(id).ok_or(Error::NoSuchTab(id))?.is_internal();
+        if !is_internal && let Some(engine) = &self.engine {
+            engine.send(Command::Close(id));
+        }
+        let internal = Tab::new_internal(id, route);
+        *self.tab_mut(id).ok_or(Error::NoSuchTab(id))? = internal;
+        Ok(())
+    }
+
     pub(crate) fn reload(&mut self, id: TabId) {
-        self.send(id, ViewCommand::Reload);
+        if self.tab(id).is_some_and(|tab| !tab.is_internal()) {
+            self.send(id, ViewCommand::Reload);
+        }
     }
 
     pub(crate) fn stop_loading(&mut self, id: TabId) {
@@ -352,8 +428,9 @@ impl Browser {
         if self.active == Some(id) {
             self.reset_input();
         }
+        let is_internal = self.tabs[index].is_internal();
         self.tabs.remove(index);
-        if let Some(engine) = &self.engine {
+        if !is_internal && let Some(engine) = &self.engine {
             engine.send(Command::Close(id));
         }
         if self.active == Some(id) {
@@ -373,8 +450,8 @@ impl Browser {
         let closed: Vec<TabId> = self
             .tabs
             .iter()
+            .filter(|tab| tab.id() != id && !tab.is_internal())
             .map(Tab::id)
-            .filter(|tab| *tab != id)
             .collect();
         if self.active != Some(id) {
             self.reset_input();
@@ -445,6 +522,25 @@ impl Browser {
             match update {
                 // A tab closed since the engine reported this has nothing to show it.
                 Update::Tab(id, update) => {
+                    if self.tab(id).is_some_and(Tab::is_internal) {
+                        continue;
+                    }
+                    let internal_navigation = match &update {
+                        crate::engine::TabUpdate::Navigation(url)
+                        | crate::engine::TabUpdate::NavigationCommitted(url) => {
+                            InternalRoute::is_internal_address(url)
+                        }
+                        _ => false,
+                    };
+                    if internal_navigation {
+                        if let Some(tab) = self.tab_mut(id) {
+                            tab.error = Some(
+                                "Internal pages can only be opened from Elaris navigation".into(),
+                            );
+                            polled.changed = true;
+                        }
+                        continue;
+                    }
                     if let Some(tab) = self.tab_mut(id) {
                         let committed = match &update {
                             crate::engine::TabUpdate::NavigationCommitted(url) => Some(url.clone()),
@@ -467,7 +563,9 @@ impl Browser {
                     }
                 }
                 Update::NewTab(source, url, request, activate) => {
-                    if self.tab(source).is_some() {
+                    if self.tab(source).is_some_and(|tab| !tab.is_internal())
+                        && !InternalRoute::is_internal_address(&url)
+                    {
                         // Ladybird already parsed and authorized this navigation. Keep its referrer
                         // and origin by transferring the descriptor instead of re-loading the URL.
                         let tab = self.insert_tab(url);
@@ -507,6 +605,10 @@ impl Browser {
                         download.error = Some(error);
                         polled.changed = true;
                     }
+                }
+                Update::DownloadDirectoryFailed(error) => {
+                    polled.download_directory_error = Some(error);
+                    polled.changed = true;
                 }
             }
         }
@@ -562,6 +664,9 @@ impl Browser {
         let viewport = (width > 0 && height > 0).then_some((width, height, f64::from(scale)));
         let scheme_known = window.applied_dark.get().is_some();
         for tab in &mut self.tabs {
+            if tab.is_internal() {
+                continue;
+            }
             let id = tab.id();
             let applied = &mut tab.engine;
             let active = self.active == Some(id);
@@ -705,6 +810,129 @@ mod tests {
         browser.connect(engine);
         assert_eq!(sent(&fake), [Command::Open(tab, surface(&browser, tab))]);
         assert_eq!(browser.active_tab().map(Tab::id), Some(tab));
+    }
+
+    #[test]
+    fn internal_tabs_never_open_ladybird_views_and_close_like_other_tabs() {
+        let (mut browser, fake) = connected();
+        let settings = browser.open_tab("elaris://settings").unwrap();
+        let tab = browser
+            .tab(settings)
+            .expect("native settings tab is present");
+        assert!(tab.is_internal());
+        assert_eq!(tab.title, "Settings");
+        assert_eq!(tab.engine.pending_load, None);
+        browser.poll();
+        assert!(
+            sent(&fake).is_empty(),
+            "native pages never create engine views"
+        );
+
+        let website = browser.open_tab("example.com").unwrap();
+        assert!(matches!(sent(&fake).as_slice(), [Command::Open(id, _)] if *id == website));
+        browser.close_tab(settings);
+        assert!(browser.tab(settings).is_none());
+        assert_eq!(browser.active_tab().map(Tab::id), Some(website));
+        assert!(
+            sent(&fake).is_empty(),
+            "closing a native page sends no engine command"
+        );
+    }
+
+    #[test]
+    fn download_directory_updates_are_engine_commands_and_report_without_failing_the_browser() {
+        let (mut browser, fake) = connected();
+        let path = std::path::PathBuf::from("/tmp/elaris-downloads");
+        browser.set_download_directory(Some(path.clone()));
+        assert_eq!(sent(&fake), [Command::SetDownloadDirectory(Some(path))]);
+
+        fake.updates
+            .send(Update::DownloadDirectoryFailed(
+                "directory is read-only".into(),
+            ))
+            .unwrap();
+        let polled = browser.poll();
+        assert!(polled.changed);
+        assert_eq!(
+            polled.download_directory_error.as_deref(),
+            Some("directory is read-only")
+        );
+        assert!(browser.engine_error.is_none());
+
+        browser.set_download_directory(None);
+        assert_eq!(sent(&fake), [Command::SetDownloadDirectory(None)]);
+    }
+
+    #[test]
+    fn restored_internal_tabs_stay_native_and_do_not_record_history() {
+        let (mut browser, fake) = connected();
+        let settings = browser
+            .restore_tab("elaris://settings", "Old title", true)
+            .unwrap();
+        let website = browser
+            .restore_tab("https://example.com/", "Example", true)
+            .unwrap();
+        browser.activate_tab(settings);
+        assert_eq!(browser.tab(settings).unwrap().title, "Settings");
+        assert_eq!(
+            browser.tab(settings).unwrap().internal,
+            Some(InternalRoute::Page(InternalPage::Settings))
+        );
+
+        fake.updates
+            .send(Update::Tab(
+                settings,
+                crate::engine::TabUpdate::NavigationCommitted("elaris://settings".into()),
+            ))
+            .unwrap();
+        assert!(browser.poll().committed.is_empty());
+        assert_eq!(
+            sent(&fake),
+            [
+                Command::Open(website, surface(&browser, website)),
+                view(website, ViewCommand::Visible(false)),
+            ]
+        );
+    }
+
+    #[test]
+    fn website_navigation_cannot_open_privileged_internal_pages() {
+        let (mut browser, fake) = ready();
+        let website = browser.open_tab("example.com").unwrap();
+        browser.poll();
+        sent(&fake);
+
+        assert!(browser.navigate(website, "elaris://settings").is_err());
+        fake.updates
+            .send(Update::Tab(
+                website,
+                TabUpdate::NavigationCommitted("elaris://settings".into()),
+            ))
+            .unwrap();
+        let result = browser.poll();
+        assert!(result.committed.is_empty());
+        assert_eq!(browser.tab(website).unwrap().url, "https://example.com");
+        assert!(!browser.tab(website).unwrap().is_internal());
+    }
+
+    #[test]
+    fn navigation_between_websites_and_native_pages_opens_and_closes_views() {
+        let (mut browser, fake) = ready();
+        let tab = browser.open_tab("example.com").unwrap();
+        browser.poll();
+        sent(&fake);
+
+        browser
+            .navigate_internal(tab, InternalRoute::Page(InternalPage::Settings))
+            .unwrap();
+        assert!(browser.tab(tab).unwrap().is_internal());
+        assert_eq!(sent(&fake), [Command::Close(tab)]);
+
+        browser.navigate(tab, "example.org").unwrap();
+        assert!(!browser.tab(tab).unwrap().is_internal());
+        assert_eq!(sent(&fake), [Command::Open(tab, surface(&browser, tab))]);
+        browser.poll();
+        assert!(sent(&fake).contains(&view(tab, ViewCommand::Load("https://example.org".into()))));
     }
 
     #[test]
@@ -878,7 +1106,7 @@ mod tests {
         browser.navigate(tab, "two words").unwrap();
         assert_eq!(
             browser.tab(tab).unwrap().url,
-            "https://www.google.com/search?q=two%20words"
+            "https://duckduckgo.com/?q=two%20words"
         );
         assert!(matches!(
             browser.navigate(tab, "ftp://example.com"),

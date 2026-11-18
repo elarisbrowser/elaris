@@ -5,7 +5,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command as ProcessCommand;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -45,7 +45,10 @@ pub(super) struct Runtime {
 }
 
 impl Runtime {
-    pub(super) fn start(profile: PathBuf) -> Result<Self, String> {
+    pub(super) fn start(
+        profile: PathBuf,
+        download_directory: Option<PathBuf>,
+    ) -> Result<(Self, Option<String>), String> {
         let resources = directory("ELARIS_LADYBIRD_RESOURCE_DIR", "vendor/ladybird/Base/res");
         std::fs::create_dir_all(&profile)
             .map_err(|e| format!("cannot create profile {}: {e}", profile.display()))?;
@@ -54,28 +57,20 @@ impl Runtime {
         let mut ladybird = Ladybird::new(&resources, &profile, move |view, event| {
             sink.borrow_mut().push((view, event));
         })?;
-        if let Some(path) = std::env::var_os("ELARIS_DOWNLOAD_DIR") {
-            let path = PathBuf::from(path);
-            if !path.is_absolute() {
-                return Err("ELARIS_DOWNLOAD_DIR must be an absolute path".to_owned());
-            }
-            std::fs::create_dir_all(&path).map_err(|error| {
-                format!(
-                    "cannot create download directory {}: {error}",
-                    path.display()
-                )
-            })?;
-            ladybird.set_download_directory(&path)?;
-        }
-        Ok(Self {
-            views: HashMap::new(),
-            ladybird,
-            events,
-            native_download_ids: HashMap::new(),
-            native_ids_by_download: HashMap::new(),
-            downloads: HashMap::new(),
-            timing: Timing::default(),
-        })
+        let download_directory_error =
+            configure_download_directory(&mut ladybird, download_directory.as_deref()).err();
+        Ok((
+            Self {
+                views: HashMap::new(),
+                ladybird,
+                events,
+                native_download_ids: HashMap::new(),
+                native_ids_by_download: HashMap::new(),
+                downloads: HashMap::new(),
+                timing: Timing::default(),
+            },
+            download_directory_error,
+        ))
     }
 
     /// A handle any thread can use to end a [`Self::wait`].
@@ -100,6 +95,11 @@ impl Runtime {
                 .download_action(id, action)
                 .err()
                 .map(|error| Update::DownloadActionFailed(id, error)),
+            Command::SetDownloadDirectory(path) => {
+                configure_download_directory(&mut self.ladybird, path.as_deref())
+                    .err()
+                    .map(Update::DownloadDirectoryFailed)
+            }
             other => self.apply_tab_command(other),
         }
     }
@@ -122,7 +122,10 @@ impl Runtime {
                     .err()
                     .map(Update::Failed);
             }
-            Command::Shutdown | Command::StartDownload(..) | Command::DownloadAction(..) => {
+            Command::Shutdown
+            | Command::StartDownload(..)
+            | Command::DownloadAction(..)
+            | Command::SetDownloadDirectory(_) => {
                 return None;
             }
         };
@@ -268,6 +271,25 @@ impl Runtime {
             && ladybird.wait(Some(left)).is_ok()
         {}
     }
+}
+
+fn configure_download_directory(
+    ladybird: &mut Ladybird,
+    path: Option<&Path>,
+) -> Result<(), String> {
+    let Some(path) = path else {
+        return ladybird.clear_download_directory();
+    };
+    if !path.is_absolute() {
+        return Err("download directory must be an absolute path".to_owned());
+    }
+    std::fs::create_dir_all(path).map_err(|error| {
+        format!(
+            "cannot create download directory {}: {error}",
+            path.display()
+        )
+    })?;
+    ladybird.set_download_directory(path)
 }
 
 fn open_download(path: &std::path::Path, reveal: bool) -> Result<(), String> {

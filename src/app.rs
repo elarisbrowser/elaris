@@ -10,9 +10,11 @@ use std::sync::Arc;
 use crate::address::{self, Destination, SearchEngine};
 use crate::appearance::Appearance;
 use crate::browser::Browser;
+use crate::config::ConfigLoad;
 use crate::engine::Engine;
+use crate::internal::{InternalPage, InternalRoute};
 use crate::omnibox::{self, Action, Suggestion};
-#[cfg(not(test))]
+use crate::settings::{DownloadDirectory, Settings, SettingsChange, StartupMode};
 use crate::storage;
 use crate::storage::{Session, SessionTab, Storage};
 use crate::tab::{Tab, TabId};
@@ -122,19 +124,24 @@ pub(crate) const APP_NAME: &str = "Elaris";
 
 pub(crate) struct AppState {
     pub(crate) omnibox: omnibox::State,
-    pub(crate) search_engine: SearchEngine,
+    pub(crate) settings: Settings,
     /// Why the last submitted query could not be opened, until the next is.
     pub(crate) address_error: Option<String>,
     pub(crate) browser: Browser,
     /// Whether the downloads popover is open.
     pub(crate) downloads_open: bool,
     pub(crate) page_menu: crate::ui::PageMenuState,
-    pub(crate) appearance: Appearance,
     pub(crate) sidebar: SidebarState,
+    pub(crate) settings_picker_open: bool,
+    pub(crate) startup_picker_open: bool,
     #[cfg(target_os = "linux")]
     pub(crate) titlebar: LinuxTitlebar,
     storage: Option<Storage>,
     profile_dir: Option<PathBuf>,
+    config_file: Option<PathBuf>,
+    default_download_directory: PathBuf,
+    download_directory_override: Option<PathBuf>,
+    pub(crate) configuration_issue: Option<String>,
     storage_error: Option<String>,
     last_saved_session: Option<Session>,
     history_revision: u64,
@@ -154,42 +161,84 @@ impl AppState {
     /// Opens the supplied page, or shows the omnibox in an empty window.
     fn new(start: Option<&str>) -> Self {
         #[cfg(test)]
-        let (storage, profile_dir, session, storage_error) = (None, None, None, None);
+        let (storage, profile_dir, config_file, config_load, session, storage_error) = (
+            None,
+            None,
+            None,
+            None::<Result<ConfigLoad, String>>,
+            None,
+            None,
+        );
         #[cfg(not(test))]
-        let (storage, profile_dir, session, storage_error) = match storage::Paths::resolve() {
-            Ok(paths) => {
-                let profile_dir = Some(paths.profile_dir.clone());
-                match Storage::open(paths) {
-                    Ok(mut storage) => {
-                        let session = storage.take_session();
-                        (Some(storage), profile_dir, session, None)
-                    }
-                    Err(error) => {
-                        let message = format!("Cannot open browser storage: {error}");
-                        eprintln!("Elaris: {message}");
-                        (None, profile_dir, None, Some(message))
+        let (storage, profile_dir, config_file, config_load, session, storage_error) =
+            match storage::Paths::resolve() {
+                Ok(paths) => {
+                    let profile_dir = Some(paths.profile_dir.clone());
+                    let config_file = Some(paths.config_file.clone());
+                    match Storage::open(paths) {
+                        Ok(mut storage) => {
+                            let session = storage.take_session();
+                            let config_load = storage.take_config_load();
+                            (
+                                Some(storage),
+                                profile_dir,
+                                config_file,
+                                config_load,
+                                session,
+                                None,
+                            )
+                        }
+                        Err(error) => {
+                            let message = format!("Cannot open browser storage: {error}");
+                            eprintln!("Elaris: {message}");
+                            (None, profile_dir, config_file, None, None, Some(message))
+                        }
                     }
                 }
-            }
-            Err(error) => {
-                let message = format!("Cannot locate browser storage: {error}");
-                eprintln!("Elaris: {message}");
-                (None, None, None, Some(message))
-            }
+                Err(error) => {
+                    let message = format!("Cannot locate browser storage: {error}");
+                    eprintln!("Elaris: {message}");
+                    (None, None, None, None, None, Some(message))
+                }
+            };
+        #[cfg_attr(test, allow(unused_mut))]
+        let (settings, mut configuration_issue) = match config_load {
+            Some(Ok(load)) => (
+                load.settings,
+                (!load.issues.is_empty()).then(|| load.issues.join("\n")),
+            ),
+            Some(Err(error)) => (Settings::default(), Some(error)),
+            None => (Settings::default(), None),
         };
+        let default_download_directory = storage::default_download_directory();
+        #[cfg_attr(test, allow(unused_mut))]
+        let mut download_directory_override = None;
+        #[cfg(not(test))]
+        if let Some(path) = std::env::var_os("ELARIS_DOWNLOAD_DIR").map(PathBuf::from) {
+            if path.is_absolute() {
+                download_directory_override = Some(path);
+            } else {
+                configuration_issue = Some("ELARIS_DOWNLOAD_DIR must be an absolute path".into());
+            }
+        }
         let mut state = Self {
             omnibox: omnibox::State::default(),
-            search_engine: SearchEngine::default(),
+            settings,
             address_error: None,
             browser: Browser::default(),
             downloads_open: false,
             page_menu: Default::default(),
-            appearance: Appearance::default(),
             sidebar: SidebarState::default(),
+            settings_picker_open: false,
+            startup_picker_open: false,
             #[cfg(target_os = "linux")]
             titlebar: LinuxTitlebar::default(),
             storage,
             profile_dir,
+            config_file,
+            default_download_directory,
+            download_directory_override,
+            configuration_issue,
             storage_error,
             last_saved_session: session.clone(),
             history_revision: 0,
@@ -207,6 +256,11 @@ impl AppState {
                     state.address_error = Some(error.to_string());
                 }
             }
+        } else if state.settings.startup == StartupMode::NewTab {
+            if let Ok(tab) = state.browser.open_tab("about:blank") {
+                state.browser.activate_tab(tab);
+            }
+            state.open_omnibox(omnibox::Mode::New);
         } else if let Some(session) = session {
             state.restore_session(&session);
             if state.browser.tabs().is_empty() {
@@ -224,7 +278,7 @@ impl AppState {
         let result = match address::destination_for_input(&address) {
             Ok(Destination::Url(url)) => self.navigate_destination(&url),
             Ok(Destination::Search(query)) => {
-                self.navigate_destination(&address::search_url(self.search_engine, &query))
+                self.navigate_destination(&address::search_url(self.settings.search_engine, &query))
             }
             Err(error) => Err(crate::browser::Error::Address(error)),
         };
@@ -276,7 +330,7 @@ impl AppState {
             self.browser.tabs(),
             &history,
             self.sidebar.collapsed,
-            self.search_engine,
+            self.settings.search_engine,
         )
     }
 
@@ -292,7 +346,7 @@ impl AppState {
         let result = match suggestion.action {
             Action::Navigate(url) => self.navigate_destination(&url),
             Action::Search(query) => {
-                self.navigate_destination(&address::search_url(self.search_engine, &query))
+                self.navigate_destination(&address::search_url(self.settings.search_engine, &query))
             }
             Action::VisitRecent(url) => self.navigate_destination(&url),
             Action::SwitchTab(tab) => {
@@ -328,15 +382,128 @@ impl AppState {
     }
 
     fn navigate_destination(&mut self, url: &str) -> Result<(), crate::browser::Error> {
-        match (self.omnibox.mode, self.browser.active_tab().map(Tab::id)) {
-            (omnibox::Mode::Current, Some(tab)) => self.browser.navigate(tab, url)?,
-            _ => {
+        let route = InternalRoute::parse(url);
+        match (
+            self.omnibox.mode,
+            self.browser.active_tab().map(Tab::id),
+            route,
+        ) {
+            (omnibox::Mode::Current, Some(tab), Some(route)) => {
+                self.browser.navigate_internal(tab, route)?;
+            }
+            (omnibox::Mode::Current, Some(tab), None) => self.browser.navigate(tab, url)?,
+            (_, _, _) => {
                 let tab = self.browser.open_tab(url)?;
                 self.browser.activate_tab(tab);
             }
         }
         self.address_error = None;
         Ok(())
+    }
+
+    pub(crate) fn set_appearance(&mut self, appearance: Appearance) {
+        if self.settings.appearance == appearance {
+            return;
+        }
+        self.settings.set_appearance(appearance);
+        self.save_setting(SettingsChange::Appearance(appearance));
+    }
+
+    pub(crate) fn settings_tab(&mut self) -> TabId {
+        if let Some(tab) = self.browser.internal_tab(InternalPage::Settings) {
+            return tab;
+        }
+        self.browser
+            .open_tab(InternalPage::Settings.address())
+            .expect("the built-in settings route is valid")
+    }
+
+    pub(crate) fn set_search_engine(&mut self, search_engine: SearchEngine) {
+        if self.settings.search_engine == search_engine {
+            return;
+        }
+        self.settings.set_search_engine(search_engine);
+        self.save_setting(SettingsChange::SearchEngine(search_engine));
+    }
+
+    pub(crate) fn set_download_directory(&mut self, directory: DownloadDirectory) {
+        if let Err(error) = self.settings.set_download_directory(directory.clone()) {
+            self.configuration_issue = Some(error);
+            return;
+        }
+        self.browser
+            .set_download_directory(self.engine_download_directory());
+        self.save_setting(SettingsChange::DownloadDirectory(directory));
+    }
+
+    pub(crate) fn download_directory(&self) -> PathBuf {
+        self.engine_download_directory()
+            .unwrap_or_else(|| self.default_download_directory.clone())
+    }
+
+    fn engine_download_directory(&self) -> Option<PathBuf> {
+        self.download_directory_override.clone().or_else(|| {
+            match &self.settings.download_directory {
+                DownloadDirectory::Default => None,
+                DownloadDirectory::Custom(path) => Some(path.clone()),
+            }
+        })
+    }
+
+    pub(crate) fn set_startup(&mut self, startup: StartupMode) {
+        if self.settings.startup == startup {
+            return;
+        }
+        self.settings.set_startup(startup);
+        self.save_setting(SettingsChange::Startup(startup));
+    }
+
+    fn save_setting(&mut self, change: SettingsChange) {
+        if let Some(storage) = &self.storage
+            && let Err(error) = storage.save_setting(change)
+        {
+            self.configuration_issue = Some(error);
+        }
+    }
+
+    pub(crate) fn reload_configuration(&mut self) {
+        let result = self
+            .storage
+            .as_ref()
+            .ok_or_else(|| "Configuration storage is unavailable".to_owned())
+            .and_then(Storage::reload_configuration);
+        if let Err(error) = result {
+            self.configuration_issue = Some(error);
+        }
+    }
+
+    pub(crate) fn open_config_file(&mut self) {
+        let Some(path) = &self.config_file else {
+            self.configuration_issue = Some("Configuration file path is unavailable".into());
+            return;
+        };
+        #[cfg(target_os = "macos")]
+        let result = std::process::Command::new("open").arg(path).spawn();
+        #[cfg(target_os = "linux")]
+        let result = std::process::Command::new("xdg-open").arg(path).spawn();
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        let result: std::io::Result<std::process::Child> = Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "opening config.toml is not supported on this platform",
+        ));
+        if let Err(error) = result {
+            self.configuration_issue = Some(format!("Cannot open config.toml: {error}"));
+        }
+    }
+
+    fn apply_config_load(&mut self, load: ConfigLoad) {
+        let previous_download_directory = self.engine_download_directory();
+        self.settings = load.settings;
+        let download_directory = self.engine_download_directory();
+        if previous_download_directory != download_directory {
+            self.browser.set_download_directory(download_directory);
+        }
+        self.configuration_issue = (!load.issues.is_empty()).then(|| load.issues.join("\n"));
     }
 
     pub(crate) fn activate(&mut self, tab: TabId) {
@@ -492,7 +659,7 @@ pub(crate) fn start_engine(state: &mut AppState, waker: rune::Waker) {
     if let Some(storage) = &state.storage {
         storage.set_notify(Arc::clone(&waker));
     }
-    match Engine::start(waker, profile_dir) {
+    match Engine::start(waker, profile_dir, state.engine_download_directory()) {
         Ok(engine) => state.browser.connect(engine),
         Err(error) => state.browser.fail(error),
     }
@@ -512,6 +679,31 @@ pub(crate) fn poll(state: &mut AppState, _clock: f64, tx: &mut Tx) -> bool {
         .set_viewport_focus(tx.focused() == Some(VIEWPORT));
     let settling = crate::ui::settle_sidebar(state, tx);
     let polled = state.browser.poll();
+    if let Some(error) = &polled.download_directory_error {
+        state.configuration_issue = Some(error.clone());
+    }
+    let config_events = state
+        .storage
+        .as_ref()
+        .map_or_else(Vec::new, Storage::take_config_events);
+    let mut configuration_changed = polled.download_directory_error.is_some();
+    for event in config_events {
+        match event {
+            storage::ConfigEvent::Saved(Ok(())) => {}
+            storage::ConfigEvent::Saved(Err(error)) => {
+                state.configuration_issue = Some(error);
+                configuration_changed = true;
+            }
+            storage::ConfigEvent::Reloaded(Ok(load)) => {
+                state.apply_config_load(load);
+                configuration_changed = true;
+            }
+            storage::ConfigEvent::Reloaded(Err(error)) => {
+                state.configuration_issue = Some(error);
+                configuration_changed = true;
+            }
+        }
+    }
     if let Some(storage) = &state.storage {
         for (_, url, title) in &polled.committed {
             if let Err(error) = storage.history().record_visit(url, title) {
@@ -553,7 +745,11 @@ pub(crate) fn poll(state: &mut AppState, _clock: f64, tx: &mut Tx) -> bool {
             title
         });
     }
-    polled.changed || history_changed || settling || focus_changed
+    polled.changed
+        || history_changed
+        || settling
+        || focus_changed
+        || configuration_changed
 }
 
 /// A query was submitted from the focused omnibox.
@@ -585,6 +781,15 @@ pub(crate) fn open_from_launcher(state: &mut AppState, tx: &mut Tx) {
 pub(crate) fn new_tab(state: &mut AppState, tx: &mut Tx) {
     state.open_omnibox(omnibox::Mode::New);
     tx.focus("omnibox-input", false);
+}
+
+/// Opens the existing settings tab, or creates it once, and returns focus to the native page.
+pub(crate) fn open_settings(state: &mut AppState, tx: &mut Tx) {
+    state.omnibox.close();
+    state.address_error = None;
+    let tab = state.settings_tab();
+    state.activate(tab);
+    tx.focus(VIEWPORT, false);
 }
 
 /// Keyboard input the omnibox uses before the text editor handles it.
@@ -715,12 +920,110 @@ mod tests {
     }
 
     #[test]
+    fn the_settings_shortcut_reuses_its_existing_native_tab() {
+        let mut state = AppState::new(Some("example.com"));
+        let website = state.browser.active_tab().unwrap().id();
+        let mut tx = Tx::default();
+        let event = KeyEvent {
+            key: Key::Command(','),
+            mods: Mods {
+                cmd: true,
+                ..Mods::default()
+            },
+        };
+        assert!(crate::shortcuts::on_key(&mut state, &event, &mut tx));
+        let settings = state.browser.active_tab().unwrap().id();
+        assert!(state.browser.active_tab().unwrap().is_internal());
+        assert_eq!(state.browser.tabs().len(), 2);
+
+        state.activate(website);
+        assert!(crate::shortcuts::on_key(&mut state, &event, &mut tx));
+        assert_eq!(state.browser.tabs().len(), 2);
+        assert_eq!(state.browser.active_tab().unwrap().id(), settings);
+    }
+
+    #[test]
+    fn omnibox_routes_internal_pages_and_keeps_ordinary_web_navigation() {
+        let mut state = AppState::new(Some("example.com"));
+        let tab = state.browser.active_tab().unwrap().id();
+        state.open_omnibox(omnibox::Mode::Current);
+        state
+            .omnibox
+            .input
+            .replace_text("elaris://settings".to_owned());
+        state.submit_omnibox();
+        assert_eq!(state.browser.active_tab().unwrap().id(), tab);
+        assert!(state.browser.active_tab().unwrap().is_internal());
+        assert_eq!(active_url(&state), "elaris://settings");
+
+        state.open_omnibox(omnibox::Mode::Current);
+        state.omnibox.input.replace_text("example.org".to_owned());
+        state.submit_omnibox();
+        assert!(!state.browser.active_tab().unwrap().is_internal());
+        assert_eq!(active_url(&state), "https://example.org");
+    }
+
+    #[test]
+    fn settings_updates_drive_search_download_and_startup_preferences() {
+        let mut state = AppState::new(Some("example.com"));
+        state.set_appearance(Appearance::Dark);
+        state.set_search_engine(SearchEngine::Brave);
+        state.set_startup(StartupMode::NewTab);
+        let download_path = PathBuf::from("/tmp/elaris-test-downloads");
+        state.set_download_directory(DownloadDirectory::Custom(download_path.clone()));
+
+        assert_eq!(state.settings.appearance, Appearance::Dark);
+        assert_eq!(state.settings.search_engine, SearchEngine::Brave);
+        assert_eq!(state.settings.startup, StartupMode::NewTab);
+        assert_eq!(state.download_directory(), download_path);
+
+        state.open_omnibox(omnibox::Mode::Current);
+        state
+            .omnibox
+            .input
+            .replace_text("browser settings".to_owned());
+        state.submit_omnibox();
+        assert_eq!(
+            active_url(&state),
+            "https://search.brave.com/search?q=browser%20settings"
+        );
+    }
+
+    #[test]
+    fn restored_sessions_keep_internal_pages_in_their_tab_positions() {
+        let mut state = AppState::new(None);
+        let session = Session::new(
+            vec![
+                SessionTab {
+                    url: "https://one.example/".into(),
+                    title: "One".into(),
+                },
+                SessionTab {
+                    url: "elaris://settings".into(),
+                    title: "Settings".into(),
+                },
+                SessionTab {
+                    url: "https://three.example/".into(),
+                    title: "Three".into(),
+                },
+            ],
+            1,
+        );
+        state.restore_session(&session);
+        assert_eq!(state.browser.tabs().len(), 3);
+        assert_eq!(state.browser.active_tab().unwrap().url, "elaris://settings");
+        assert!(state.browser.active_tab().unwrap().is_internal());
+        assert!(state.browser.tabs()[0].engine.deferred_load);
+        assert!(state.browser.tabs()[2].engine.deferred_load);
+    }
+
+    #[test]
     fn treats_an_ordinary_start_argument_as_a_search() {
         let state = AppState::new(Some("not an address"));
         assert_eq!(state.browser.tabs().len(), 1);
         assert_eq!(
             active_url(&state),
-            "https://www.google.com/search?q=not%20an%20address"
+            "https://duckduckgo.com/?q=not%20an%20address"
         );
         assert_eq!(state.address_error, None);
     }
@@ -740,7 +1043,7 @@ mod tests {
         state.submit_omnibox();
         assert_eq!(
             active_url(&state),
-            "https://www.google.com/search?q=best%20Rust%20GUI%20framework"
+            "https://duckduckgo.com/?q=best%20Rust%20GUI%20framework"
         );
         assert_eq!(state.browser.tabs().len(), 1);
         assert_eq!(state.address_error, None);
@@ -849,11 +1152,7 @@ mod tests {
         }
         for (query, expected, count) in [
             ("example.org", "https://example.org", 2),
-            (
-                "two words",
-                "https://www.google.com/search?q=two%20words",
-                3,
-            ),
+            ("two words", "https://duckduckgo.com/?q=two%20words", 3),
         ] {
             new_tab(&mut state, &mut tx);
             state.omnibox.input.replace_text(query);
@@ -1030,4 +1329,6 @@ mod tests {
         assert_eq!(session.tabs[2].url, "https://three.example");
         assert_eq!(session.active_tab, 2);
     }
+
+
 }

@@ -17,7 +17,7 @@ use rune::PointerButton;
 /// The container's padding holds the page in from the window's edges, the sidebar being its
 /// left; the page's own element clips to rounded corners and takes input in the page's
 /// coordinates.
-pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
+pub(crate) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
     #[cfg(target_os = "linux")]
     let top_padding = theme::VIEWPORT_INSET;
     #[cfg(not(target_os = "linux"))]
@@ -43,17 +43,23 @@ pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
         })
         .pr(theme::VIEWPORT_INSET)
         .pb(theme::VIEWPORT_INSET);
-    viewport.child(page(state, theme))
+    viewport.child(page(state, theme, overlays))
 }
 
 /// The page's latest frame fills the viewport. With no active page, it stays transparent so the
 /// window's native material shows through. During a live resize Rune scales a frame to new bounds.
-fn page(state: &AppState, theme: &Theme) -> El {
+fn page(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
     let mut page = el().key(VIEWPORT);
-    let has_active_tab = state.browser.active_tab().is_some();
+    let mut internal = false;
     if let Some(tab) = state.browser.active_tab() {
-        page = page.pixels(&tab.surface.pixels);
-        if !state.omnibox.open
+        if let Some(route) = &tab.internal {
+            internal = true;
+            page = page.child(super::internal::view(state, route, theme, overlays));
+        } else {
+            page = page.pixels(&tab.surface.pixels);
+        }
+        if !internal
+            && !state.omnibox.open
             && !state.page_menu.open()
             && state.browser.page_focused()
             && let Some(rect) = tab.ime_caret
@@ -68,7 +74,7 @@ fn page(state: &AppState, theme: &Theme) -> El {
         }
     }
     let page = page.w_full().h_full();
-    let page = if has_active_tab {
+    let page = if state.browser.active_tab().is_some() {
         page.fill(theme.page)
     } else {
         page
@@ -82,6 +88,13 @@ fn page(state: &AppState, theme: &Theme) -> El {
         .pointer_buttons([PointerButton::Middle])
         .on_secondary_press_local(|state: &mut AppState, p, tx| {
             tx.focus(VIEWPORT, false);
+            if state
+                .browser
+                .active_tab()
+                .is_some_and(|tab| tab.is_internal())
+            {
+                return;
+            }
             state.page_menu.anchor = state.browser.active_tab().map(|tab| (tab.id(), p.window()));
             for kind in [MouseKind::Down, MouseKind::Up] {
                 state.browser.drag_pointer(
@@ -94,6 +107,13 @@ fn page(state: &AppState, theme: &Theme) -> El {
             }
         })
         .on_drag(|state: &mut AppState, drag, tx| {
+            if state
+                .browser
+                .active_tab()
+                .is_some_and(|tab| tab.is_internal())
+            {
+                return;
+            }
             let kind = match drag.phase {
                 Phase::Down => {
                     tx.focus(VIEWPORT, false);
@@ -109,22 +129,49 @@ fn page(state: &AppState, theme: &Theme) -> El {
                 .drag_pointer(kind, [drag.x, drag.y], tx.button(), tx.mods(), drag.clicks);
         })
         .on_pointer_move_local(|state: &mut AppState, pointer, tx| {
+            if state
+                .browser
+                .active_tab()
+                .is_some_and(|tab| tab.is_internal())
+            {
+                return;
+            }
             state
                 .browser
                 .hover(MouseKind::Move, [pointer.x, pointer.y], tx.mods());
         })
         .on_hover_change(|state: &mut AppState, inside, tx| {
-            if !inside {
+            if !inside
+                && !state
+                    .browser
+                    .active_tab()
+                    .is_some_and(|tab| tab.is_internal())
+            {
                 state.browser.hover(MouseKind::Leave, [0.0, 0.0], tx.mods());
             }
         })
         .on_wheel(|state: &mut AppState, wheel, _| {
+            if state
+                .browser
+                .active_tab()
+                .is_some_and(|tab| tab.is_internal())
+            {
+                return false;
+            }
             state.browser.wheel(wheel);
             true
         })
         .on_key(page_key)
         .on_key_up(|state: &mut AppState, key, tx| {
-            state.browser.key(key, false, false, tx.physical_key())
+            if state
+                .browser
+                .active_tab()
+                .is_some_and(|tab| tab.is_internal())
+            {
+                false
+            } else {
+                state.browser.key(key, false, false, tx.physical_key())
+            }
         })
 }
 
@@ -144,6 +191,13 @@ fn paste(id: TabId, tx: &mut Tx) {
 }
 
 fn page_key(state: &mut AppState, key: &KeyEvent, tx: &mut Tx) -> bool {
+    if state
+        .browser
+        .active_tab()
+        .is_some_and(|tab| tab.is_internal())
+    {
+        return false;
+    }
     let Some(id) = state.browser.active_tab().map(|tab| tab.id()) else {
         return false;
     };

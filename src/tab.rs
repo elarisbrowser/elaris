@@ -4,6 +4,7 @@
 //! last told about it. The browser owns every tab and is the only one to change them.
 
 use crate::engine::{Surface, TabUpdate};
+use crate::internal::InternalRoute;
 use rune::Pixels;
 
 /// A tab's identity, stable for as long as the tab is open and never reused afterwards, so a
@@ -33,6 +34,7 @@ pub(crate) struct Tab {
     pub(crate) ime_caret: Option<[i32; 4]>,
     pub(crate) favicon: Option<Pixels>,
     pub(crate) error: Option<String>,
+    pub(crate) internal: Option<InternalRoute>,
     pub(crate) can_go_back: bool,
     pub(crate) can_go_forward: bool,
     /// Where the engine shows the page's frames, which the viewport scales to its bounds.
@@ -67,6 +69,7 @@ impl Tab {
             ime_caret: None,
             favicon: None,
             error: None,
+            internal: None,
             can_go_back: false,
             can_go_forward: false,
             surface: Surface::default(),
@@ -75,6 +78,32 @@ impl Tab {
                 ..Applied::default()
             },
         }
+    }
+
+    pub(crate) fn new_internal(id: TabId, route: InternalRoute) -> Self {
+        let address = match &route {
+            InternalRoute::Page(page) => page.address().to_owned(),
+            InternalRoute::NotFound(address) => address.clone(),
+        };
+        Self {
+            id,
+            url: address,
+            committed_url: String::new(),
+            title: route.title().to_owned(),
+            loading: false,
+            ime_caret: None,
+            favicon: None,
+            error: None,
+            internal: Some(route),
+            can_go_back: false,
+            can_go_forward: false,
+            surface: Surface::default(),
+            engine: Default::default(),
+        }
+    }
+
+    pub(crate) fn is_internal(&self) -> bool {
+        self.internal.is_some()
     }
 
     pub(crate) fn id(&self) -> TabId {

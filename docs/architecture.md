@@ -9,18 +9,21 @@ connection and writes session files, so neither page work nor browser-data write
 | Module | Responsibility |
 |---|---|
 | `src/main.rs` | Builds the Rune app and installs its lifecycle hooks. |
-| `src/app.rs` | App state, tab actions, omnibox actions, startup restoration, persistence scheduling, polling and shutdown. |
-| `src/browser.rs` | Ordered tabs, active-tab selection, input routing and commands sent to the engine. |
-| `src/tab.rs` | Per-tab address, committed address, title, favicon, page state and engine state. |
+| `src/app.rs` | App state, settings actions, tab actions, omnibox actions, startup restoration, persistence scheduling, polling and shutdown. |
+| `src/browser.rs` | Ordered web and native tabs, active-tab selection, input routing and commands sent to the engine. |
+| `src/tab.rs` | Per-tab address, committed address, title, favicon, page state, native route and engine state. |
 | `src/omnibox.rs` | Omnibox state, local suggestion ranking and typed actions. |
 | `src/history.rs` | Public synchronous SQLite history API; the app uses it through the storage worker. |
-| `src/storage.rs` | Native data paths, asynchronous history access, session JSON and atomic session replacement. |
+| `src/storage.rs` | Native data/config paths, asynchronous history and configuration access, session JSON and atomic replacement. |
+| `src/config.rs` | Typed TOML loading, validation, comment-preserving edits and atomic configuration writes. |
+| `src/settings.rs` | The single typed settings model shared by the app, settings page and TOML file. |
+| `src/internal.rs` | Explicit `elaris://` route parsing for Elaris-owned native pages. |
 | `src/engine/` | The engine thread and everything it owns (see below). |
 | `src/input.rs` | Translates Rune pointer, wheel and key input into Ladybird input. |
 | `src/address.rs` | Classifies omnibox input and builds navigation or search URLs. |
 | `src/appearance.rs` | System, light and dark appearance preference. |
 | `src/perf.rs` | Development timing, printed when `ELARIS_PERF=1`. |
-| `src/ui/` | Rune components for the toolbar, sidebar, omnibox, viewport and shared theme. |
+| `src/ui/` | Rune components for the toolbar, sidebar, omnibox, viewport, native settings page and shared theme. |
 | `src/ladybird/` (library) | Safe Rust wrappers around the bridge's C ABI. Plain event, frame and input types build without the bridge feature. |
 | `bridge/` | The C++ bridge and its headless Ladybird views. |
 
@@ -36,6 +39,11 @@ Release data lives in the native application-data directory:
 |---|---|
 | macOS | `~/Library/Application Support/Elaris/` |
 | Linux | `$XDG_DATA_HOME/Elaris/`, or `~/.local/share/Elaris/` when `XDG_DATA_HOME` is unset or relative |
+
+The user-editable `config.toml` lives at `~/Library/Application Support/Elaris/config.toml` on macOS
+and `$XDG_CONFIG_HOME/elaris/config.toml` on Linux, falling back to `~/.config/elaris/config.toml`.
+Debug builds place each profile under its own `development/` directory. `ELARIS_DATA_DIR` is an
+explicit test/development override and places the config beside the selected data root.
 
 Debug builds use a `development/` subdirectory under that root, keeping development profiles
 separate from release data. Set `ELARIS_DATA_DIR` to select an exact application-data root for
@@ -54,6 +62,11 @@ Elaris stores:
   written to a temporary file and atomically renamed into place.
 - `profile/`: Ladybird's engine-owned profile data, separate from Elaris history and session
   metadata.
+- `config.toml`: appearance, search provider, download directory and startup mode. The settings
+  page and file use the same typed `Settings` value. The storage worker edits one key at a time,
+  preserves unrelated TOML comments and keys, and replaces the file atomically. A malformed file
+  is reported and never replaced by defaults. Reloading from the settings page reads the file
+  again without restarting the browser.
 
 The storage worker owns the database connection. It serves recent and frequent snapshots and
 search results to the UI from memory; searches are sent to SQLite off the UI thread. The local
@@ -114,10 +127,14 @@ snapshot and never waits for SQLite.
 
 ## Startup and shutdown
 
-At app construction, Elaris resolves its data directory and reads the small session file. It
-recreates tabs in saved order and activates the saved tab before the engine starts. The active
-view's first load waits for the viewport and colour scheme; restored background views stay lazy.
-History database opening and subsequent queries/writes happen on the storage worker.
+At app construction, Elaris resolves its data/config directories, loads the small settings file,
+and reads the session file. It recreates tabs in saved order and activates the saved tab before the
+engine starts. `elaris://` URLs restore as Elaris-owned native tabs and never create Ladybird views.
+Only explicitly supported routes are rendered; unknown internal routes show a native not-found
+page. A webpage's navigation to an `elaris:` URL is rejected at the browser/engine boundary.
+The active web view's first load waits for the viewport and colour scheme; restored background web
+views stay lazy. History database opening, configuration saves/reloads and subsequent history
+queries/writes happen on the storage worker.
 
 On normal close, the current tab list and active index are queued before Ladybird shutdown. Session
 replacement is atomic. A process-exit handler drains and joins the storage worker after queued

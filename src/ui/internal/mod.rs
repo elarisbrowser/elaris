@@ -1,0 +1,53 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
+//! Native Rune pages for routes owned by Elaris.
+
+mod settings;
+
+use rune::tok::type_;
+use rune::{El, col, text};
+
+use crate::app::AppState;
+use crate::internal::{InternalPage, InternalRoute};
+use crate::ui::theme::Theme;
+
+pub(crate) fn view(
+    state: &AppState,
+    route: &InternalRoute,
+    theme: &Theme,
+    overlays: &mut Vec<El>,
+) -> El {
+    match route {
+        InternalRoute::Page(InternalPage::Settings) => settings::view(state, theme, overlays),
+        InternalRoute::Page(page) => message_page(
+            page.title(),
+            "This page is reserved for a future release.",
+            theme,
+        ),
+        InternalRoute::NotFound(address) => message_page(
+            "Page not found",
+            &format!("Elaris does not have an internal page at {address}."),
+            theme,
+        ),
+    }
+}
+
+fn message_page(title: &str, message: &str, theme: &Theme) -> El {
+    col()
+        .key("internal-message-page")
+        .w_full()
+        .h_full()
+        .center()
+        .gap(10.0)
+        .child(
+            text(title)
+                .font(rune::TextStyle::new(25.0, 600.0).lh(31.0))
+                .color(theme.text),
+        )
+        .child(
+            text(message)
+                .font(type_::BODY)
+                .color(theme.text_muted)
+                .wrap(),
+        )
+}

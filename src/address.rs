@@ -7,9 +7,9 @@ use std::net::IpAddr;
 /// A provider used for text that is not an address.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum SearchEngine {
-    #[default]
     Google,
     Bing,
+    #[default]
     DuckDuckGo,
     Brave,
 }
@@ -24,6 +24,25 @@ impl SearchEngine {
             Self::Bing => "Bing",
             Self::DuckDuckGo => "DuckDuckGo",
             Self::Brave => "Brave Search",
+        }
+    }
+
+    pub(crate) fn config_key(self) -> &'static str {
+        match self {
+            Self::Google => "google",
+            Self::Bing => "bing",
+            Self::DuckDuckGo => "duckduckgo",
+            Self::Brave => "brave",
+        }
+    }
+
+    pub(crate) fn from_config_key(key: &str) -> Option<Self> {
+        match key {
+            "google" => Some(Self::Google),
+            "bing" => Some(Self::Bing),
+            "duckduckgo" => Some(Self::DuckDuckGo),
+            "brave" => Some(Self::Brave),
+            _ => None,
         }
     }
 
@@ -54,7 +73,7 @@ pub(crate) fn destination_for_input(input: &str) -> Result<Destination, &'static
         return if supported_scheme(scheme) {
             Ok(Destination::Url(input.to_owned()))
         } else {
-            Err("Only http, https and file addresses are supported")
+            Err("Only http, https, file and elaris addresses are supported")
         };
     }
 
@@ -137,7 +156,7 @@ pub(crate) fn host_for_address(input: &str) -> &str {
 fn supported_scheme(scheme: &str) -> bool {
     matches!(
         scheme.to_ascii_lowercase().as_str(),
-        "http" | "https" | "file"
+        "http" | "https" | "file" | "elaris"
     )
 }
 
@@ -205,7 +224,7 @@ mod tests {
         );
         assert_eq!(
             url_for_address("café"),
-            Ok("https://www.google.com/search?q=caf%C3%A9".into())
+            Ok("https://duckduckgo.com/?q=caf%C3%A9".into())
         );
     }
 

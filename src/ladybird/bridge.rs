@@ -403,6 +403,14 @@ impl Ladybird {
         })
     }
 
+    /// Restores Ladybird's platform Downloads directory.
+    pub fn clear_download_directory(&mut self) -> Result<(), String> {
+        // SAFETY: The bridge is live on its owner thread; null resets the process override.
+        status_result(unsafe {
+            elaris_ladybird_set_download_directory(self.owner.raw.as_ptr(), std::ptr::null())
+        })
+    }
+
     /// Starts a direct HTTP(S) download and returns Ladybird's transfer identifier.
     pub fn start_download(
         &mut self,

@@ -6,6 +6,7 @@
 mod controls;
 mod downloads;
 mod icons;
+pub(crate) mod internal;
 mod omnibox;
 mod sidebar;
 mod theme;
@@ -25,7 +26,7 @@ use crate::app::AppState;
 /// The focus key of the page viewport.
 pub(crate) const VIEWPORT: &str = "viewport";
 pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
-    let dark = state.appearance.is_dark(cx.system_dark());
+    let dark = state.settings.appearance.is_dark(cx.system_dark());
     let theme = theme::palette(dark);
     state.browser.note_scale(cx.env().scale);
     state.browser.note_dark(dark);
@@ -39,7 +40,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
             .grow(1.0)
             .min_h(0.0)
             .child(sidebar::view(state, &theme, &mut overlays))
-            .child(viewport::view(state, &theme));
+            .child(viewport::view(state, &theme, &mut overlays));
         if !state.sidebar.collapsed {
             content = content.child(sidebar::resize::handle(state.sidebar.width));
         }
@@ -66,7 +67,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
             .child(window_glass_tint(&theme));
         window = window
             .child(sidebar::view(state, &theme, &mut overlays))
-            .child(viewport::view(state, &theme))
+            .child(viewport::view(state, &theme, &mut overlays))
             .child(sidebar::header::view(state, &theme, cx));
         if !state.sidebar.collapsed {
             window = window.child(sidebar::resize::handle(state.sidebar.width));

@@ -22,6 +22,9 @@ use serde::{Deserialize, Serialize};
 
 use elaris::history::{Entry, History};
 
+use crate::config::{self, ConfigLoad};
+use crate::settings::SettingsChange;
+
 const SESSION_VERSION: u8 = 1;
 const HISTORY_CACHE_LIMIT: usize = 100;
 static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(1);
@@ -34,12 +37,14 @@ pub(crate) struct Paths {
     pub(crate) profile_dir: PathBuf,
     pub(crate) history_file: PathBuf,
     pub(crate) session_file: PathBuf,
+    pub(crate) config_file: PathBuf,
 }
 
 impl Paths {
     pub(crate) fn resolve() -> io::Result<Self> {
         let home = std::env::var_os("HOME").map(PathBuf::from);
         let xdg_data_home = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from);
+        let xdg_config_home = std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from);
         let data_dir = std::env::var_os("ELARIS_DATA_DIR")
             .filter(|path| !path.is_empty())
             .map(PathBuf::from);
@@ -56,6 +61,7 @@ impl Paths {
             data_dir.as_deref(),
             home.as_deref(),
             xdg_data_home.as_deref(),
+            xdg_config_home.as_deref(),
             explicit_profile_dir.as_deref(),
             cfg!(debug_assertions),
         )
@@ -66,6 +72,7 @@ impl Paths {
         data_dir: Option<&Path>,
         home: Option<&Path>,
         xdg_data_home: Option<&Path>,
+        xdg_config_home: Option<&Path>,
         explicit_profile_dir: Option<&Path>,
         development: bool,
     ) -> io::Result<Self> {
@@ -86,9 +93,20 @@ impl Paths {
             })?
         };
         let profile_dir = profile_directory(&application_dir, explicit_profile_dir);
+        let config_dir = if data_dir.is_some() {
+            application_dir.clone()
+        } else {
+            config_directory(platform, home, xdg_config_home, development).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "cannot locate Elaris configuration directory",
+                )
+            })?
+        };
         Ok(Self {
             history_file: application_dir.join("history.sqlite"),
             session_file: application_dir.join("session.json"),
+            config_file: config_dir.join("config.toml"),
             application_dir,
             profile_dir,
         })
@@ -96,8 +114,90 @@ impl Paths {
 
     fn create_directories(&self) -> io::Result<()> {
         create_private_dir(&self.application_dir)?;
-        create_private_dir(&self.profile_dir)
+        create_private_dir(&self.profile_dir)?;
+        if let Some(parent) = self.config_file.parent() {
+            create_private_dir(parent)?;
+        }
+        Ok(())
     }
+}
+
+pub(crate) fn default_download_directory() -> PathBuf {
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+    #[cfg(target_os = "linux")]
+    if let Some(path) = xdg_download_directory(
+        &home,
+        std::env::var_os("XDG_DOWNLOAD_DIR").as_deref(),
+        std::env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .as_deref(),
+    ) {
+        return path;
+    }
+    home.join("Downloads")
+}
+
+#[cfg(target_os = "linux")]
+fn xdg_download_directory(
+    home: &Path,
+    environment_path: Option<&std::ffi::OsStr>,
+    config_home: Option<&Path>,
+) -> Option<PathBuf> {
+    if let Some(path) = environment_path.map(PathBuf::from)
+        && path.is_absolute()
+    {
+        return Some(path);
+    }
+    let default_config_home = home.join(".config");
+    let config_home = config_home
+        .filter(|path| path.is_absolute())
+        .unwrap_or(&default_config_home);
+    let contents = fs::read_to_string(config_home.join("user-dirs.dirs")).ok()?;
+    contents
+        .lines()
+        .filter_map(|line| parse_xdg_download_directory(line, home))
+        .last()
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn parse_xdg_download_directory(line: &str, home: &Path) -> Option<PathBuf> {
+    let value = line
+        .strip_prefix("XDG_DOWNLOAD_DIR")?
+        .trim_start()
+        .strip_prefix('=')?
+        .trim_start()
+        .strip_prefix('"')?;
+    let (prefix, rest) = value
+        .strip_prefix("$HOME")
+        .map(|rest| (Some(home), rest))
+        .or_else(|| value.starts_with('/').then_some((None, value)))?;
+    let mut path = prefix
+        .map(|home| home.as_os_str().to_os_string())
+        .unwrap_or_default();
+    let mut chars = rest.chars();
+    let mut closed = false;
+    while let Some(character) = chars.next() {
+        match character {
+            '"' => {
+                closed = true;
+                break;
+            }
+            '\\' => match chars.clone().next() {
+                Some(next @ ('$' | '`' | '"' | '\\')) => {
+                    path.push(next.to_string());
+                    chars.next();
+                }
+                _ => path.push("\\"),
+            },
+            other => path.push(other.to_string()),
+        }
+    }
+    let trailing = chars.as_str().trim();
+    let path = PathBuf::from(path);
+    (closed && (trailing.is_empty() || trailing.starts_with('#')) && path.is_absolute())
+        .then_some(path)
 }
 
 fn profile_directory(application_dir: &Path, explicit: Option<&Path>) -> PathBuf {
@@ -133,6 +233,29 @@ fn application_dir(
                 .or_else(|| home.map(|home| home.join(".local/share")))?;
             data_home.join("Elaris")
         }
+    };
+    Some(if development {
+        root.join("development")
+    } else {
+        root
+    })
+}
+
+fn config_directory(
+    platform: Platform,
+    home: Option<&Path>,
+    _xdg_config_home: Option<&Path>,
+    development: bool,
+) -> Option<PathBuf> {
+    let root = match platform {
+        #[cfg(any(target_os = "macos", test))]
+        Platform::MacOs => home?.join("Library/Application Support/Elaris"),
+        #[cfg(any(not(target_os = "macos"), test))]
+        Platform::Linux => _xdg_config_home
+            .filter(|path| path.is_absolute())
+            .map(Path::to_path_buf)
+            .or_else(|| home.map(|home| home.join(".config")))?
+            .join("elaris"),
     };
     Some(if development {
         root.join("development")
@@ -298,13 +421,21 @@ impl HistoryHandle {
 
 pub(crate) struct Storage {
     session: Option<Session>,
+    config_load: Option<Result<ConfigLoad, String>>,
     commands: Sender<Command>,
     history: HistoryHandle,
+    config_events: Arc<Mutex<Vec<ConfigEvent>>>,
+}
+
+pub(crate) enum ConfigEvent {
+    Saved(Result<(), String>),
+    Reloaded(Result<ConfigLoad, String>),
 }
 
 impl Storage {
     pub(crate) fn open(paths: Paths) -> io::Result<Self> {
         paths.create_directories()?;
+        let config_load = Some(config::load_or_create(&paths.config_file));
         let session = match load_session(&paths.session_file) {
             Ok(session) => session,
             Err(error) => {
@@ -318,18 +449,30 @@ impl Storage {
         let (commands, receiver) = mpsc::channel();
         let shared = Arc::new(SharedHistory::default());
         let worker_shared = Arc::clone(&shared);
+        let config_events = Arc::new(Mutex::new(Vec::new()));
+        let worker_config_events = Arc::clone(&config_events);
         let history_file = paths.history_file.clone();
         let session_file = paths.session_file.clone();
+        let config_file = paths.config_file.clone();
         let worker = std::thread::Builder::new()
             .name("elaris-storage".to_owned())
             .spawn(move || {
-                run_worker(receiver, worker_shared, history_file, session_file);
+                run_worker(
+                    receiver,
+                    worker_shared,
+                    history_file,
+                    session_file,
+                    config_file,
+                    worker_config_events,
+                );
             })?;
         register_worker(commands.clone(), worker);
         Ok(Self {
             session,
+            config_load,
             commands: commands.clone(),
             history: HistoryHandle { commands, shared },
+            config_events,
         })
     }
 
@@ -339,6 +482,31 @@ impl Storage {
 
     pub(crate) fn history(&self) -> &HistoryHandle {
         &self.history
+    }
+
+    pub(crate) fn take_config_load(&mut self) -> Option<Result<ConfigLoad, String>> {
+        self.config_load.take()
+    }
+
+    pub(crate) fn save_setting(&self, change: SettingsChange) -> Result<(), String> {
+        self.commands
+            .send(Command::SaveSetting(change))
+            .map_err(|_| "configuration storage worker has stopped".to_owned())
+    }
+
+    pub(crate) fn reload_configuration(&self) -> Result<(), String> {
+        self.commands
+            .send(Command::ReloadConfig)
+            .map_err(|_| "configuration storage worker has stopped".to_owned())
+    }
+
+    pub(crate) fn take_config_events(&self) -> Vec<ConfigEvent> {
+        std::mem::take(
+            &mut *self
+                .config_events
+                .lock()
+                .expect("configuration event lock poisoned"),
+        )
     }
 
     pub(crate) fn save_session(&self, session: Session) -> Result<(), String> {
@@ -365,6 +533,8 @@ enum Command {
     Remove(String),
     Clear,
     SaveSession(Session),
+    SaveSetting(SettingsChange),
+    ReloadConfig,
     Shutdown,
 }
 
@@ -409,6 +579,8 @@ fn run_worker(
     shared: Arc<SharedHistory>,
     history_file: PathBuf,
     session_file: PathBuf,
+    config_file: PathBuf,
+    config_events: Arc<Mutex<Vec<ConfigEvent>>>,
 ) {
     let history = match History::open(&history_file) {
         Ok(history) => Some(history),
@@ -464,6 +636,22 @@ fn run_worker(
                 if let Err(error) = write_session_atomic(&session_file, &session) {
                     eprintln!("Elaris: cannot save session: {error}");
                 }
+            }
+            Command::SaveSetting(change) => {
+                let result = config::write_change(&config_file, &change);
+                config_events
+                    .lock()
+                    .expect("configuration event lock poisoned")
+                    .push(ConfigEvent::Saved(result));
+                notify(&shared);
+            }
+            Command::ReloadConfig => {
+                let result = config::load_or_create(&config_file);
+                config_events
+                    .lock()
+                    .expect("configuration event lock poisoned")
+                    .push(ConfigEvent::Reloaded(result));
+                notify(&shared);
             }
             Command::Shutdown => break,
         }
@@ -639,6 +827,65 @@ mod tests {
         let release = application_dir(Platform::Linux, Some(home), None, false).unwrap();
         let development = application_dir(Platform::Linux, Some(home), None, true).unwrap();
         assert_eq!(development, release.join("development"));
+        let config_release = config_directory(Platform::Linux, Some(home), None, false).unwrap();
+        let config_development = config_directory(Platform::Linux, Some(home), None, true).unwrap();
+        assert_eq!(config_development, config_release.join("development"));
+    }
+
+    #[test]
+    fn config_paths_follow_platform_conventions_and_xdg() {
+        let home = Path::new("/home/tester");
+        assert_eq!(
+            config_directory(Platform::MacOs, Some(home), None, false),
+            Some(home.join("Library/Application Support/Elaris"))
+        );
+        assert_eq!(
+            config_directory(Platform::Linux, Some(home), None, false),
+            Some(home.join(".config/elaris"))
+        );
+        assert_eq!(
+            config_directory(
+                Platform::Linux,
+                Some(home),
+                Some(Path::new("/mnt/user-config")),
+                false
+            ),
+            Some(PathBuf::from("/mnt/user-config/elaris"))
+        );
+        let paths = Paths::resolve_with(
+            Platform::Linux,
+            None,
+            Some(home),
+            None,
+            Some(Path::new("/mnt/user-config")),
+            None,
+            false,
+        )
+        .expect("resolve Linux paths");
+        assert_eq!(
+            paths.config_file,
+            PathBuf::from("/mnt/user-config/elaris/config.toml")
+        );
+    }
+
+    #[test]
+    fn parses_xdg_download_directory_without_evaluating_shell_content() {
+        let home = Path::new("/home/tester");
+        assert_eq!(
+            parse_xdg_download_directory(
+                "XDG_DOWNLOAD_DIR=\"$HOME/Shared Downloads\" # user choice",
+                home
+            ),
+            Some(home.join("Shared Downloads"))
+        );
+        assert_eq!(
+            parse_xdg_download_directory("XDG_DOWNLOAD_DIR=\"/mnt/files\"", home),
+            Some(PathBuf::from("/mnt/files"))
+        );
+        assert_eq!(
+            parse_xdg_download_directory("XDG_DOWNLOAD_DIR=\"$(touch /tmp/pwned)\"", home),
+            None
+        );
     }
 
     #[test]
@@ -649,6 +896,7 @@ mod tests {
             Platform::MacOs,
             Some(&data_dir),
             Some(Path::new("/Users/tester")),
+            None,
             None,
             None,
             true,
@@ -665,6 +913,7 @@ mod tests {
             paths.session_file,
             paths.application_dir.join("session.json")
         );
+        assert_eq!(paths.config_file, paths.application_dir.join("config.toml"));
         assert!(!paths.application_dir.exists());
     }
 
@@ -678,6 +927,7 @@ mod tests {
             Some(&data_dir),
             Some(Path::new("/home/tester")),
             Some(Path::new("/xdg-data")),
+            None,
             Some(&explicit_profile),
             true,
         )
@@ -695,6 +945,7 @@ mod tests {
             Platform::Linux,
             Some(Path::new("relative-data")),
             Some(Path::new("/home/tester")),
+            None,
             None,
             None,
             true,
@@ -738,6 +989,76 @@ mod tests {
         assert_eq!(restored.tabs[0].url, "https://one.example/");
         assert_eq!(restored.tabs[2].url, "https://three.example/");
         assert_eq!(restored.active_tab, 1);
+    }
+
+    #[test]
+    fn session_metadata_keeps_internal_page_addresses() {
+        let session = Session::new(
+            vec![SessionTab {
+                url: "elaris://settings".into(),
+                title: "Settings".into(),
+            }],
+            0,
+        );
+        let bytes = serde_json::to_vec(&session).expect("serialize session");
+        let restored: Session = serde_json::from_slice(&bytes).expect("restore session");
+        assert_eq!(restored.tabs[0].url, "elaris://settings");
+        assert_eq!(restored.tabs[0].title, "Settings");
+    }
+
+    #[test]
+    fn configuration_reload_runs_on_storage_worker_and_returns_typed_values() {
+        let temp = TempDir::new();
+        let data_dir = temp.0.join("data");
+        let paths = Paths::resolve_with(
+            Platform::Linux,
+            Some(&data_dir),
+            Some(Path::new("/home/tester")),
+            None,
+            None,
+            None,
+            false,
+        )
+        .expect("resolve isolated storage paths");
+        let config_file = paths.config_file.clone();
+        let storage = Storage::open(paths).expect("open isolated storage");
+        fs::write(
+            &config_file,
+            "[appearance]\ntheme = \"dark\"\n[search]\nengine = \"brave\"\n[downloads]\ndirectory = \"default\"\n[startup]\nmode = \"blank\"\n",
+        )
+        .expect("edit config file");
+        storage
+            .reload_configuration()
+            .expect("queue asynchronous configuration reload");
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        let loaded = loop {
+            if let Some(event) = storage.take_config_events().into_iter().next() {
+                match event {
+                    ConfigEvent::Reloaded(result) => {
+                        break result.expect("configuration reload succeeds");
+                    }
+                    ConfigEvent::Saved(_) => continue,
+                }
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "storage worker reloads config"
+            );
+            std::thread::yield_now();
+        };
+        assert_eq!(
+            loaded.settings.appearance,
+            crate::appearance::Appearance::Dark
+        );
+        assert_eq!(
+            loaded.settings.search_engine,
+            crate::address::SearchEngine::Brave
+        );
+        assert_eq!(
+            loaded.settings.startup,
+            crate::settings::StartupMode::NewTab
+        );
     }
 
     #[test]

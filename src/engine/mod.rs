@@ -89,6 +89,8 @@ pub(crate) enum Command {
     DownloadAction(DownloadId, DownloadAction),
     /// Whether pages see a dark colour scheme.
     ColorScheme(bool),
+    /// Changes the native destination for subsequent downloads.
+    SetDownloadDirectory(Option<std::path::PathBuf>),
     /// Closes every view and stops the engine.
     Shutdown,
 }
@@ -143,6 +145,7 @@ pub(crate) enum Update {
     Download(DownloadId, DownloadUpdate),
     DownloadStartFailed(DownloadId, String),
     DownloadActionFailed(DownloadId, String),
+    DownloadDirectoryFailed(String),
     /// The engine could not start or stopped; no tab will hear from it again.
     Failed(String),
 }
@@ -174,13 +177,18 @@ pub(crate) struct Engine {
 impl Engine {
     /// Starts the engine thread, which calls `notify` when there are updates to read. Returns at
     /// once; starting Ladybird happens on the thread.
-    pub(crate) fn start(notify: Notify, profile: std::path::PathBuf) -> Result<Self, String> {
+    pub(crate) fn start(
+        notify: Notify,
+        profile: std::path::PathBuf,
+        download_directory: Option<std::path::PathBuf>,
+    ) -> Result<Self, String> {
         #[cfg(feature = "ladybird-bridge")]
-        return thread::start(notify, profile);
+        return thread::start(notify, profile, download_directory);
         #[cfg(not(feature = "ladybird-bridge"))]
         {
             let _ = notify;
             let _ = profile;
+            let _ = download_directory;
             Err("This build has no web engine. Rebuild with --features ladybird-bridge.".to_owned())
         }
     }

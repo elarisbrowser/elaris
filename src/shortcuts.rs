@@ -25,6 +25,7 @@ pub(crate) enum Shortcut {
     SelectTab(usize),
     SelectLastTab,
     ToggleSidebar,
+    OpenSettings,
 }
 
 /// Rune's hook for keys nothing focused took: runs the shortcut the key is, if any.
@@ -47,6 +48,7 @@ pub(crate) fn on_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> boo
         Shortcut::FocusOmnibox => focus_omnibox(state, tx),
         Shortcut::Reload => state.with_active_tab(Browser::reload),
         Shortcut::ToggleSidebar => ui::toggle_sidebar(state, tx),
+        Shortcut::OpenSettings => app::open_settings(state, tx),
         Shortcut::PreviousTab
         | Shortcut::NextTab
         | Shortcut::SelectTab(_)
@@ -90,6 +92,7 @@ pub(crate) fn shortcut(event: &KeyEvent) -> Option<Shortcut> {
         ('l', false) => Shortcut::FocusOmnibox,
         ('r', false) => Shortcut::Reload,
         ('s', false) => Shortcut::ToggleSidebar,
+        (',', false) => Shortcut::OpenSettings,
         // Shift turns [ and ] into { and } on most layouts.
         ('[' | '{', true) => Shortcut::PreviousTab,
         (']' | '}', true) => Shortcut::NextTab,
@@ -123,6 +126,7 @@ mod tests {
         assert_eq!(press('l', false), Some(Shortcut::FocusOmnibox));
         assert_eq!(press('r', false), Some(Shortcut::Reload));
         assert_eq!(press('s', false), Some(Shortcut::ToggleSidebar));
+        assert_eq!(press(',', false), Some(Shortcut::OpenSettings));
         assert_eq!(press('{', true), Some(Shortcut::PreviousTab));
         assert_eq!(press(']', true), Some(Shortcut::NextTab));
         assert_eq!(press('1', false), Some(Shortcut::SelectTab(0)));

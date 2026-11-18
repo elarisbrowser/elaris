@@ -127,3 +127,7 @@ pub(crate) static FOLDER: Icon = icon(
     "folder",
     r#"<path d="M2.5 4.25C2.5 3.84 2.84 3.5 3.25 3.5H6L7.5 5H12.75C13.16 5 13.5 5.34 13.5 5.75V11.75C13.5 12.16 13.16 12.5 12.75 12.5H3.25C2.84 12.5 2.5 12.16 2.5 11.75Z" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/>"#,
 );
+pub(crate) static SETTINGS: Icon = icon(
+    "settings",
+    r#"<path d="M8 5.25A2.75 2.75 0 1 0 8 10.75A2.75 2.75 0 1 0 8 5.25Z" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M8 2.25V3.5M8 12.5V13.75M13.75 8H12.5M3.5 8H2.25M12.07 3.93L11.18 4.82M4.82 11.18L3.93 12.07M12.07 12.07L11.18 11.18M4.82 4.82L3.93 3.93" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>"#,
+);
