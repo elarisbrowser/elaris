@@ -64,7 +64,7 @@ jobs:
           echo "VCPKG_ROOT=${GITHUB_WORKSPACE}/.git/modules/Build/vcpkg-release" >> "$GITHUB_ENV"
 
       - name: Restore Ladybird dependency and compiler caches
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: |
             .git/modules/Build/vcpkg-release
@@ -72,10 +72,22 @@ jobs:
             .ccache
             .cargo/registry
             .cargo/git
-          key: ladybird-bridge-linux-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ladybird-bridge-linux-deps-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            ladybird-bridge-linux-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-
-            ladybird-bridge-linux-2026.11.12-
+            ladybird-bridge-linux-deps-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-
+            ladybird-bridge-linux-deps-2026.11.12-
+
+      - name: Restore Ladybird and Elaris build progress
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            vendor/ladybird/Build/release
+            build/cpp-ladybird
+            target
+          key: ladybird-bridge-linux-build-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ladybird-bridge-linux-build-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-
+            ladybird-bridge-linux-build-2026.11.12-
 
       - name: Install Ladybird vcpkg
         timeout-minutes: 15
@@ -196,3 +208,25 @@ jobs:
             build/cpp-ladybird/CMakeFiles/CMakeConfigureLog.yaml
             build/cpp-ladybird/Testing/Temporary/LastTest.log
             /tmp/elaris-xvfb.log
+
+      - name: Save Ladybird dependency and compiler caches
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .git/modules/Build/vcpkg-release
+            .git/modules/Build/caches/vcpkg-binary-cache
+            .ccache
+            .cargo/registry
+            .cargo/git
+          key: ladybird-bridge-linux-deps-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Save Ladybird and Elaris build progress
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            vendor/ladybird/Build/release
+            build/cpp-ladybird
+            target
+          key: ladybird-bridge-linux-build-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
