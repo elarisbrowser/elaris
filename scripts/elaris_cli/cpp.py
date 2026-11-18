@@ -66,6 +66,8 @@ def cpp_configure(_args: argparse.Namespace) -> None:
         "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON", "-DENABLE_GUI_TARGETS=ON",
         "-DELARIS_BUILD_SMOKE_TESTS=ON",
+        f"-DVCPKG_INSTALLED_DIR={VCPKG_INSTALLED}",
+        f"-DVCPKG_TARGET_TRIPLET={triplet}",
         f"-DELARIS_VCPKG_PREFIX={prefix}",
         f"-DCMAKE_PREFIX_PATH={';'.join(cmake_prefixes)}",
         f"-DCMAKE_PROJECT_ladybird_INCLUDE={ROOT / 'bridge' / 'CMakeLists.txt'}",
