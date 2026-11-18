@@ -3,8 +3,10 @@
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from . import dependencies, engine
@@ -138,10 +140,49 @@ def rune_dev_python() -> str:
             if minor.isdigit() and int(minor) >= 11 and candidate.is_file() and os.access(candidate, os.X_OK):
                 candidates.append((int(minor), candidate.resolve()))
     if candidates:
-        return str(max(candidates)[1])
+        return str(max(candidates, key=lambda candidate: candidate[0])[1])
 
     current = ".".join(str(version) for version in sys.version_info[:3])
     raise SystemExit(f"elaris: Rune's hot-reload launcher needs Python 3.11+; found Python {current}")
+
+
+def rune_git_shim(directory: Path) -> Path:
+    # Rune's source walker reads Git submodule entries as files; omit those directory paths.
+    git = shutil.which("git")
+    if git is None:
+        raise SystemExit("elaris: git is required by Rune's hot-reload launcher")
+
+    shim = directory / "git"
+    shim.write_text(
+        "#!/usr/bin/env python3\n"
+        "import os\n"
+        "import subprocess\n"
+        "import sys\n"
+        f"real_git = {git!r}\n"
+        "args = sys.argv[1:]\n"
+        "if 'ls-files' not in args or '-z' not in args:\n"
+        "    os.execv(real_git, [real_git, *args])\n"
+        "result = subprocess.run([real_git, *args], capture_output=True)\n"
+        "output = result.stdout\n"
+        "if result.returncode == 0:\n"
+        "    paths = [\n"
+        "        path\n"
+        "        for path in output.split(b'\\0')\n"
+        "        if path and (\n"
+        "            os.path.islink(os.fsdecode(path))\n"
+        "            or not os.path.isdir(os.fsdecode(path))\n"
+        "        )\n"
+        "    ]\n"
+        "    output = b'\\0'.join(paths)\n"
+        "    if output:\n"
+        "        output += b'\\0'\n"
+        "sys.stdout.buffer.write(output)\n"
+        "sys.stderr.buffer.write(result.stderr)\n"
+        "raise SystemExit(result.returncode)\n",
+        encoding="utf-8",
+    )
+    shim.chmod(0o755)
+    return shim
 
 
 def hot_reload(args: argparse.Namespace) -> None:
@@ -156,7 +197,20 @@ def hot_reload(args: argparse.Namespace) -> None:
     ]
     for pattern in args.patch:
         command.extend(("--patch", pattern))
-    run(*command)
+
+    original_path = os.environ.get("PATH")
+    with tempfile.TemporaryDirectory(prefix="elaris-rune-hot-") as directory:
+        rune_git_shim(Path(directory))
+        os.environ["PATH"] = os.pathsep.join(filter(None, (directory, original_path)))
+        try:
+            run(*command)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            if original_path is None:
+                os.environ.pop("PATH", None)
+            else:
+                os.environ["PATH"] = original_path
 
 
 def check(_args: argparse.Namespace) -> None:
