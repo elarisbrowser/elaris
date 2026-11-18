@@ -118,6 +118,7 @@ pub(crate) fn view(
         .max_w(theme::OMNIBOX_WIDTH)
         .radius(theme::OMNIBOX_RADIUS)
         .continuous_corners()
+        .backdrop_blur(theme::MODAL_BACKDROP_BLUR)
         .fill(theme.overlay_panel)
         .border(theme::OMNIBOX_BORDER_WIDTH, theme.overlay_border)
         .shadow(
@@ -152,7 +153,6 @@ pub(crate) fn view(
             .px(theme::FIELD_PADDING + 4.0)
             .py(theme::FIELD_PADDING)
             .center()
-            .backdrop_blur(theme::MODAL_BACKDROP_BLUR)
             .fill(theme.overlay_scrim)
             .child(panel),
     )
