@@ -161,7 +161,7 @@ pub(crate) const OMNIBOX_BORDER_WIDTH: f32 = 1.0;
 pub(crate) const OMNIBOX_SHADOW_Y: f32 = 16.0;
 pub(crate) const OMNIBOX_SHADOW_BLUR: f32 = 22.0;
 /// The blur behind the omnibox panel, in Rune points.
-pub(crate) const MODAL_BACKDROP_BLUR: f32 = 24.0;
+pub(crate) const MODAL_BACKDROP_BLUR: f32 = 16.0;
 pub(crate) const OMNIBOX_SEARCH_ICON: f32 = 16.0;
 pub(crate) const OMNIBOX_SEARCH_CHEVRON: f32 = 12.0;
 pub(crate) const OMNIBOX_SEARCH_BUTTON_HEIGHT: f32 = 28.0;

@@ -73,7 +73,10 @@ fn main() {
         let wake_handle = app_handle.clone();
         let waker: rune::Waker = Arc::new(move || wake_handle.wake());
         let app_handle = app_handle.clone();
-        app_handle.update(move |state, _| app::start_engine(state, waker));
+        app_handle.update(move |state, _| {
+            state.backdrop_blur_warmup = false;
+            app::start_engine(state, waker);
+        });
     });
     #[cfg(target_os = "macos")]
     let app = app.on_window(titlebar_controls::install);

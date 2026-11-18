@@ -6,7 +6,7 @@
 pub(crate) mod menu;
 use crate::{engine::ViewCommand, tab::TabId};
 use elaris::ladybird::{Edit, MouseKind};
-use rune::{El, Phase, el};
+use rune::{El, Phase, Transition, el};
 use rune::{Ime, Key, KeyEvent, Tx};
 
 use super::VIEWPORT;
@@ -26,7 +26,8 @@ pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
     } else {
         theme::VIEWPORT_INSET
     };
-    el().key("viewport-container")
+    let mut viewport = el()
+        .key("viewport-container")
         .h_full()
         .grow(1.0)
         // Its size comes from the window, never from the frame inside: otherwise the last
@@ -41,14 +42,24 @@ pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
             0.0
         })
         .pr(theme::VIEWPORT_INSET)
-        .pb(theme::VIEWPORT_INSET)
-        .child(page(state, theme))
+        .pb(theme::VIEWPORT_INSET);
+    if state.backdrop_blur_warmup && !state.omnibox.open {
+        viewport = viewport.child(
+            el().key("backdrop-blur-warmup")
+                .absolute(0.0, 0.0)
+                .size(2.0, 2.0)
+                .backdrop_blur(theme::MODAL_BACKDROP_BLUR)
+                .transition(Transition::none()),
+        );
+    }
+    viewport.child(page(state, theme))
 }
 
-/// The page's latest frame fills the viewport. During a live resize Rune scales it to the new
-/// bounds until Ladybird presents a frame laid out at that size.
+/// The page's latest frame fills the viewport. With no active page, it stays transparent so the
+/// window's native material shows through. During a live resize Rune scales a frame to new bounds.
 fn page(state: &AppState, theme: &Theme) -> El {
     let mut page = el().key(VIEWPORT);
+    let has_active_tab = state.browser.active_tab().is_some();
     if let Some(tab) = state.browser.active_tab() {
         page = page.pixels(&tab.surface.pixels);
         if !state.omnibox.open
@@ -65,10 +76,13 @@ fn page(state: &AppState, theme: &Theme) -> El {
             );
         }
     }
-    page.w_full()
-        .h_full()
-        .fill(theme.page)
-        .continuous_corners()
+    let page = page.w_full().h_full();
+    let page = if has_active_tab {
+        page.fill(theme.page)
+    } else {
+        page
+    };
+    page.continuous_corners()
         .clip_rounded(theme::VIEWPORT_RADIUS)
         .focusable(true)
         .no_focus_ring()

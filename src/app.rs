@@ -122,6 +122,7 @@ pub(crate) const APP_NAME: &str = "Elaris";
 
 pub(crate) struct AppState {
     pub(crate) omnibox: omnibox::State,
+    pub(crate) backdrop_blur_warmup: bool,
     pub(crate) search_engine: SearchEngine,
     /// Why the last submitted query could not be opened, until the next is.
     pub(crate) address_error: Option<String>,
@@ -177,6 +178,7 @@ impl AppState {
         };
         let mut state = Self {
             omnibox: omnibox::State::default(),
+            backdrop_blur_warmup: true,
             search_engine: SearchEngine::default(),
             address_error: None,
             browser: Browser::default(),
