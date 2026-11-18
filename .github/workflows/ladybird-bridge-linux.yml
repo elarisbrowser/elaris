@@ -130,7 +130,7 @@ jobs:
         run: >-
           cmake --build build/cpp-ladybird --parallel 4 --target
           elaris_ladybird_smoke WebContent RequestServer Hub ImageDecoder
-          Compositor SystemProbe AudioServer MediaServer VideoDecoderServer
+          Compositor SystemProbe AudioServer MediaServer VideoDecoderServer WebRTCClient
 
       - name: Run clang-tidy on Elaris C++ sources
         timeout-minutes: 10
@@ -146,7 +146,7 @@ jobs:
         timeout-minutes: 2
         run: |
           sleep 1
-          if ps -eo comm= | grep -E '^(WebContent|RequestServer|Hub|ImageDecoder|Compositor|SystemProbe|AudioServer|MediaServer|VideoDecoderS|ProcessReaper)$'; then
+          if ps -eo comm= | grep -E '^(WebContent|RequestServer|Hub|ImageDecoder|Compositor|SystemProbe|AudioServer|MediaServer|VideoDecoderS|WebRTCClient|ProcessReaper)$'; then
             echo "Ladybird helper process remained after C++ smoke test" >&2
             exit 1
           fi
@@ -182,7 +182,7 @@ jobs:
         timeout-minutes: 2
         run: |
           sleep 1
-          if ps -eo comm= | grep -E '^(WebContent|RequestServer|Hub|ImageDecoder|Compositor|SystemProbe|AudioServer|MediaServer|VideoDecoderS|ProcessReaper)$'; then
+          if ps -eo comm= | grep -E '^(WebContent|RequestServer|Hub|ImageDecoder|Compositor|SystemProbe|AudioServer|MediaServer|VideoDecoderS|WebRTCClient|ProcessReaper)$'; then
             echo "Ladybird helper process remained after Rust smoke test" >&2
             exit 1
           fi
