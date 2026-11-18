@@ -142,7 +142,7 @@ pub(crate) const TRAFFIC_LIGHTS: (f32, f32) = (
 
 /// Square icon buttons: back, forward, reload, and each tab's close button.
 pub(crate) const ICON_BUTTON: f32 = 28.0;
-pub(crate) const ICON_BUTTON_RADIUS: f32 = radius::SM;
+pub(crate) const ICON_BUTTON_RADIUS: f32 = radius::MD;
 pub(crate) const LOADING_PERIOD: f64 = 1.0;
 pub(crate) const ICON: f32 = 16.0;
 pub(crate) const CLOSE_BUTTON: f32 = 22.0;
@@ -157,7 +157,7 @@ pub(crate) const PRESS_SCALE: f32 = 0.97;
 /// The address field.
 pub(crate) const FIELD_HEIGHT: f32 = 36.0;
 pub(crate) const FIELD_PADDING: f32 = space::S3;
-pub(crate) const FIELD_RADIUS: f32 = radius::MD;
+pub(crate) const FIELD_RADIUS: f32 = radius::LG;
 
 /// The floating search palette and its compact result rows.
 pub(crate) const OMNIBOX_WIDTH: f32 = 680.0;
@@ -180,7 +180,7 @@ pub(crate) const OMNIBOX_SEARCH_BUTTON_GAP: f32 = 4.0;
 
 /// Rows in the tab list, and the new-tab and appearance buttons that share their shape.
 pub(crate) const ROW_HEIGHT: f32 = 34.0;
-pub(crate) const ROW_RADIUS: f32 = radius::MD;
+pub(crate) const ROW_RADIUS: f32 = radius::LG;
 pub(crate) const ROW_PADDING: f32 = space::S2;
 pub(crate) const ROW_GAP: f32 = space::S2;
 pub(crate) const TAB_GAP: f32 = space::S1;
