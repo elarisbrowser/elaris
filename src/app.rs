@@ -361,6 +361,31 @@ mod tests {
     }
 
     #[test]
+    fn reduced_motion_centers_the_resized_omnibox_immediately() {
+        let mut runtime = rune::Runtime::new(
+            AppState::new(None),
+            crate::ui::view,
+            (960.0, 640.0),
+            rune::Env::new(false, 1.0),
+        );
+        runtime.set_system_reduced_motion(true);
+        runtime.frame(0.0);
+        runtime.key(KeyEvent {
+            key: Key::Text("x".into()),
+            mods: Mods::default(),
+        });
+        runtime.frame(1.0 / 60.0);
+        let panel = runtime
+            .elements()
+            .into_iter()
+            .find(|el| el.key.as_deref() == Some("omnibox-panel"))
+            .unwrap();
+        assert_eq!(panel.rect, panel.target);
+        let [x, y, width, height] = panel.rect;
+        assert_eq!((x + width / 2.0, y + height / 2.0), (480.0, 320.0));
+    }
+
+    #[test]
     fn two_suggestions_fit_a_compact_panel() {
         let mut state = AppState::new(None);
         for address in ["example.org", "example.com"] {

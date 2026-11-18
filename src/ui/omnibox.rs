@@ -9,7 +9,12 @@ use crate::app::{self, AppState};
 use crate::omnibox::{Action, Glyph, Section, Suggestion};
 use crate::ui::theme::{self, Theme};
 
-pub(crate) fn view(state: &AppState, theme: &Theme, height: f32) -> Option<El> {
+pub(crate) fn view(
+    state: &AppState,
+    theme: &Theme,
+    height: f32,
+    reduced_motion: bool,
+) -> Option<El> {
     if !state.omnibox.open {
         return None;
     }
@@ -38,7 +43,12 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32) -> Option<El> {
                 .label("Search or type a URL")
                 .autofocus()
                 .on_edit(|state: &mut AppState| &mut state.omnibox.input)
-                .on_input_change(|state: &mut AppState, _| {
+                .on_input_change(move |state: &mut AppState, tx| {
+                    if reduced_motion {
+                        tx.instant();
+                    } else {
+                        tx.animated();
+                    }
                     state.omnibox.selected = 0;
                     state.omnibox.selection_moved = false;
                 })
@@ -46,8 +56,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32) -> Option<El> {
                 .on_submit(app::submit_omnibox),
         );
 
-    let top = (height * 0.12).min(theme::OMNIBOX_TOP_MAX);
-    let available = (height - top - theme::FIELD_PADDING).min(theme::OMNIBOX_MAX_HEIGHT);
+    let available = (height - 2.0 * theme::FIELD_PADDING).min(theme::OMNIBOX_MAX_HEIGHT);
     let results_limit = available - theme::OMNIBOX_INPUT_HEIGHT - theme::OMNIBOX_FOOTER_HEIGHT;
     let mut results = col()
         .key("omnibox-results")
@@ -93,6 +102,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32) -> Option<El> {
         .h(theme::OMNIBOX_FOOTER_HEIGHT)
         .px(theme::FIELD_PADDING + 4.0)
         .center_y()
+        .justify_end()
         .child(text(hints).font(type_::LABEL).color(theme.text_muted));
 
     let panel = col()
@@ -116,9 +126,12 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32) -> Option<El> {
         })
         .role("dialog")
         .label("Search and navigation")
-        .transition(
-            Transition::opacity().combined(Transition::offset(0.0, theme::OMNIBOX_ENTER_OFFSET)),
-        )
+        .token_motion(if reduced_motion {
+            rune::Spring::NONE
+        } else {
+            theme::OMNIBOX_MOTION
+        })
+        .transition(Transition::opacity())
         .child(input)
         .child(results)
         .child(footer);
@@ -130,8 +143,8 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32) -> Option<El> {
             .w_full()
             .h_full()
             .px(theme::FIELD_PADDING + 4.0)
-            .pt(top)
-            .items_center()
+            .py(theme::FIELD_PADDING)
+            .center()
             .fill(theme.overlay_scrim)
             .child(panel),
     )

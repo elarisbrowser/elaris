@@ -132,7 +132,7 @@ pub(crate) const FIELD_PADDING: f32 = space::S3;
 /// The floating search palette and its compact result rows.
 pub(crate) const OMNIBOX_WIDTH: f32 = 680.0;
 pub(crate) const OMNIBOX_MAX_HEIGHT: f32 = 500.0;
-pub(crate) const OMNIBOX_TOP_MAX: f32 = 80.0;
+pub(crate) const OMNIBOX_MOTION: Spring = Spring::new(0.24, 0.0);
 pub(crate) const OMNIBOX_FOOTER_HEIGHT: f32 = 32.0;
 pub(crate) const OMNIBOX_LABEL_HEIGHT: f32 = 22.0;
 pub(crate) const OMNIBOX_RADIUS: f32 = radius::LG + 4.0;
@@ -142,7 +142,6 @@ pub(crate) const OMNIBOX_INPUT_TEXT: rune::TextStyle = rune::TextStyle::new(18.0
 pub(crate) const OMNIBOX_BORDER_WIDTH: f32 = 1.0;
 pub(crate) const OMNIBOX_SHADOW_Y: f32 = 16.0;
 pub(crate) const OMNIBOX_SHADOW_BLUR: f32 = 22.0;
-pub(crate) const OMNIBOX_ENTER_OFFSET: f32 = 8.0;
 pub(crate) const OMNIBOX_SEARCH_ICON: f32 = 20.0;
 
 /// Rows in the tab list, and the new-tab and appearance buttons that share their shape.

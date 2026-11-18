@@ -44,6 +44,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         &theme,
         cx.layout_size("window")
             .map_or(WINDOW_MIN_SIZE.1, |size| size[1]),
+        cx.is_reduced_motion(),
     ) {
         window = window.child(overlay);
     }
