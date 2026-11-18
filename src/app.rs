@@ -259,6 +259,13 @@ pub(crate) fn start_engine(state: &mut AppState, waker: rune::Waker) {
     }
 }
 
+/// Headless tooling has no native `on_ready`, so start its engine during Rune's setup callback.
+pub(crate) fn setup_headless(state: &mut AppState, waker: rune::Waker) {
+    if rune::is_headless() {
+        start_engine(state, waker);
+    }
+}
+
 /// Rune's per-frame hook: forwards UI changes to the browser and shows what it reported.
 pub(crate) fn poll(state: &mut AppState, _clock: f64, tx: &mut Tx) -> bool {
     let focus_changed = state

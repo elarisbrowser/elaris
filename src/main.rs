@@ -21,7 +21,7 @@ use rune::{App, AppSpec, Chrome};
 fn main() {
     let spec = AppSpec {
         // Headless tooling has no native `on_ready`; keep engine startup there.
-        setup: rune::is_headless().then_some(app::start_engine),
+        setup: Some(app::setup_headless),
         poll: Some(app::poll),
         on_key: Some(shortcuts::on_key),
         min_size: Some(ui::WINDOW_MIN_SIZE),
