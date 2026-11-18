@@ -3,7 +3,7 @@
 //! Rune's native, window-centred presentation for the omnibox.
 
 use rune::tok::type_;
-use rune::{El, ScrollSpec, Transition, Tx, col, el, icon, row, text, text_input};
+use rune::{El, ScrollSpec, SystemMaterial, Transition, Tx, col, el, icon, row, text, text_input};
 use rune_kit::{Kit, Menu, MenuItem, PaletteSeed};
 
 use crate::address::SearchEngine;
@@ -118,8 +118,13 @@ pub(crate) fn view(
         .w_full()
         .max_w(theme::OMNIBOX_WIDTH)
         .radius(theme::OMNIBOX_RADIUS)
-        .continuous_corners()
-        .backdrop_blur(theme::MODAL_BACKDROP_BLUR)
+        .continuous_corners();
+    let panel = if state.browser.active_tab().is_some() {
+        panel.backdrop_blur(theme::MODAL_BACKDROP_BLUR)
+    } else {
+        panel.system_material(SystemMaterial::Glass)
+    };
+    let panel = panel
         .fill(theme.overlay_panel)
         .border(theme::OMNIBOX_BORDER_WIDTH, theme.overlay_border)
         .shadow(

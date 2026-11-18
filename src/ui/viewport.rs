@@ -43,11 +43,12 @@ pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
         })
         .pr(theme::VIEWPORT_INSET)
         .pb(theme::VIEWPORT_INSET);
-    if state.backdrop_blur_warmup && !state.omnibox.open {
+    if state.browser.active_tab().is_some() && (state.backdrop_blur_warmup || !state.omnibox.open) {
         viewport = viewport.child(
             el().key("backdrop-blur-warmup")
                 .absolute(0.0, 0.0)
                 .size(2.0, 2.0)
+                // Keep Rune's lazily created backdrop-blur pipeline ready before the omnibox opens.
                 .backdrop_blur(theme::MODAL_BACKDROP_BLUR)
                 .transition(Transition::none()),
         );
