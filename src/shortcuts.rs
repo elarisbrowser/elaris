@@ -15,7 +15,7 @@ use crate::ui;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Shortcut {
     NewTab,
-    CloseTab,
+    Close,
     /// Open the omnibox with the active page address selected.
     FocusOmnibox,
     Reload,
@@ -34,7 +34,16 @@ pub(crate) fn on_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> boo
     };
     match shortcut {
         Shortcut::NewTab => app::new_tab(state, tx),
-        Shortcut::CloseTab => state.close_active(),
+        Shortcut::Close => {
+            if state.omnibox.open {
+                state.omnibox.close();
+                tx.focus(ui::VIEWPORT, false);
+            } else if state.browser.active_tab().is_some() {
+                state.close_active();
+            } else {
+                tx.close_window();
+            }
+        }
         Shortcut::FocusOmnibox => focus_omnibox(state, tx),
         Shortcut::Reload => state.with_active_tab(Browser::reload),
         Shortcut::ToggleSidebar => ui::toggle_sidebar(state, tx),
@@ -77,7 +86,7 @@ pub(crate) fn shortcut(event: &KeyEvent) -> Option<Shortcut> {
     let shift = event.mods.shift;
     Some(match (key, shift) {
         ('t', false) => Shortcut::NewTab,
-        ('w', false) => Shortcut::CloseTab,
+        ('w', false) => Shortcut::Close,
         ('l', false) => Shortcut::FocusOmnibox,
         ('r', false) => Shortcut::Reload,
         ('s', false) => Shortcut::ToggleSidebar,
@@ -110,7 +119,7 @@ mod tests {
     #[test]
     fn knows_the_browser_shortcuts() {
         assert_eq!(press('t', false), Some(Shortcut::NewTab));
-        assert_eq!(press('w', false), Some(Shortcut::CloseTab));
+        assert_eq!(press('w', false), Some(Shortcut::Close));
         assert_eq!(press('l', false), Some(Shortcut::FocusOmnibox));
         assert_eq!(press('r', false), Some(Shortcut::Reload));
         assert_eq!(press('s', false), Some(Shortcut::ToggleSidebar));
