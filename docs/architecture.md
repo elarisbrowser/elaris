@@ -180,3 +180,17 @@ replacement is atomic. A process-exit handler drains and joins the storage worke
 writes, while the existing Ladybird exit handler still closes views, gives helper processes its
 short grace period and joins the engine thread. A forced process termination can still lose work
 that had not reached the storage worker; this milestone does not add crash recovery.
+
+### Quick Tab Switcher
+
+Control+Tab previews the next recently used tab, and Control+Shift+Tab
+cycles backwards. Rune's desktop host delivers native modifier changes to
+the focused switcher. Releasing Control or pressing Enter commits the
+selection. Escape, an outside click, and window deactivation cancel it.
+The switcher ignores the chord during an active sidebar drag.
+
+Browser records recency at activation using stable tab IDs. Tabs without an
+activation record follow in sidebar order. A restored session starts with
+its saved active tab followed by the saved sidebar order. The switcher
+snapshots that order when opened and keeps its preview separate from
+Browser, so cycling leaves the page, session, and lazy loads untouched.

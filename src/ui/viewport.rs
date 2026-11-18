@@ -237,6 +237,9 @@ fn paste(id: TabId, tx: &mut Tx) {
 }
 
 fn page_key(state: &mut AppState, key: &KeyEvent, tx: &mut Tx) -> bool {
+    if crate::ui::tab_switcher::cycle_key(state, key, tx) {
+        return true;
+    }
     if state
         .browser
         .active_tab()

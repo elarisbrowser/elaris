@@ -232,6 +232,9 @@ fn counter_label(find: Option<&FindState>) -> String {
 }
 
 fn find_input_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> bool {
+    if crate::ui::tab_switcher::cycle_key(state, event, tx) {
+        return true;
+    }
     match &event.key {
         Key::Escape => {
             state.close_find(tx);

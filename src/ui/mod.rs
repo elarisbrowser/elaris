@@ -10,6 +10,7 @@ mod icons;
 pub(crate) mod internal;
 mod omnibox;
 mod sidebar;
+pub(crate) mod tab_switcher;
 mod theme;
 pub(crate) mod viewport;
 pub(crate) use viewport::menu::PageMenuState;
@@ -80,23 +81,30 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         }
         window
     };
-    if let Some(find) = find::view(state, &theme, reduced_motion, viewport::page_origin(state)) {
-        overlays.push(find);
-    }
-    if let Some(overlay) = omnibox::view(
-        state,
-        &theme,
-        cx.layout_size("window")
-            .map_or(WINDOW_MIN_SIZE.1, |size| size[1]),
-        reduced_motion,
-        &mut overlays,
-    ) {
-        window = window.child(overlay);
+    if state.tab_switcher.is_none() {
+        if let Some(find) = find::view(state, &theme, reduced_motion, viewport::page_origin(state))
+        {
+            overlays.push(find);
+        }
+        if let Some(overlay) = omnibox::view(
+            state,
+            &theme,
+            cx.layout_size("window")
+                .map_or(WINDOW_MIN_SIZE.1, |size| size[1]),
+            reduced_motion,
+            &mut overlays,
+        ) {
+            window = window.child(overlay);
+        }
     }
     viewport::menu::view(state, &theme, &mut overlays);
     sidebar::context_menu(state, &theme, &mut overlays);
     #[cfg(target_os = "linux")]
     overlays.push(sidebar::header::hover_zone());
+    let height = cx
+        .layout_size("window")
+        .map_or(WINDOW_MIN_SIZE.1, |size| size[1]);
+    overlays.extend(tab_switcher::view(state, &theme, height, reduced_motion));
     rune_kit::root(window, overlays)
 }
 

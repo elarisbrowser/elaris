@@ -34,6 +34,9 @@ pub(crate) enum Shortcut {
 
 /// Rune's hook for keys nothing focused took: runs the shortcut the key is, if any.
 pub(crate) fn on_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> bool {
+    if crate::ui::tab_switcher::cycle_key(state, event, tx) {
+        return true;
+    }
     if event.key == Key::Escape && state.tab_drag.is_dragging() {
         state.cancel_tab_drag();
         tx.animated();
@@ -47,6 +50,7 @@ pub(crate) fn on_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> boo
     let Some(shortcut) = shortcut(event) else {
         return false;
     };
+    crate::ui::tab_switcher::finish(state, None, tx);
     match shortcut {
         Shortcut::NewTab => app::new_tab(state, tx),
         Shortcut::ReopenClosedTab => {

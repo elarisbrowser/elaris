@@ -154,6 +154,7 @@ pub(crate) struct AppState {
     pub(crate) omnibox: omnibox::State,
     /// Whether the floating Find in Page bar is mounted.
     pub(crate) find_open: bool,
+    pub(crate) tab_switcher: Option<crate::ui::tab_switcher::Switcher>,
     /// The active tab's find input. Each tab separately remembers its last query.
     pub(crate) find_input: TextEdit,
     /// The tab whose query currently backs the floating bar.
@@ -199,7 +200,7 @@ impl Default for AppState {
 
 impl AppState {
     /// Opens the supplied page, or shows the omnibox in an empty window.
-    fn new(start: Option<&str>) -> Self {
+    pub(crate) fn new(start: Option<&str>) -> Self {
         #[cfg(test)]
         let (storage, _profile_dir, config_file, config_load, session, _storage_error) = (
             None,
@@ -264,6 +265,7 @@ impl AppState {
         let mut state = Self {
             omnibox: omnibox::State::default(),
             find_open: false,
+            tab_switcher: None,
             find_input: TextEdit::default(),
             find_tab: None,
             find_selection_request: 0,
@@ -966,6 +968,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         .set_viewport_focus(tx.focused() == Some(VIEWPORT));
     let settling = crate::ui::settle_sidebar(state, tx);
     let polled = state.browser.poll();
+    let switcher_changed = crate::ui::tab_switcher::reconcile(state, tx);
     state.sync_find_tab();
     for (tab, request_id, text) in &polled.find_selections {
         if state.find_open
@@ -1081,6 +1084,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         || settling
         || focus_changed
         || configuration_changed
+        || switcher_changed
         || tab_drag_changed
 }
 
@@ -1131,6 +1135,9 @@ pub(crate) fn open_settings(state: &mut AppState, tx: &mut Tx) {
 
 /// Keyboard input the omnibox uses before the text editor handles it.
 pub(crate) fn omnibox_input_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> bool {
+    if crate::ui::tab_switcher::cycle_key(state, event, tx) {
+        return true;
+    }
     match &event.key {
         Key::Escape => {
             state.omnibox.close();
@@ -1152,6 +1159,9 @@ pub(crate) fn omnibox_input_key(state: &mut AppState, event: &KeyEvent, tx: &mut
 
 pub(crate) fn on_window_focus(state: &mut AppState, focused: bool, tx: &mut Tx) {
     state.browser.set_window_focus(focused);
+    if !focused {
+        crate::ui::tab_switcher::finish(state, None, tx);
+    }
     if !focused && state.cancel_tab_drag() {
         tx.animated();
         tx.motion(crate::ui::TAB_REORDER_MOTION);
@@ -1956,6 +1966,16 @@ mod tests {
         assert_eq!(
             state.browser.active_tab().unwrap().url,
             "https://two.example/"
+        );
+        assert_eq!(
+            state.browser.recent_tabs(),
+            [tabs[1].id(), tabs[0].id(), tabs[2].id()]
+        );
+        state.browser.activate_tab(tabs[1].id());
+        let tabs = state.browser.tabs();
+        assert_eq!(
+            state.browser.recent_tabs(),
+            [tabs[1].id(), tabs[0].id(), tabs[2].id()]
         );
         assert!(tabs[0].engine.deferred_load);
         assert!(!tabs[1].engine.deferred_load);

@@ -89,6 +89,7 @@ pub(crate) struct Browser {
     /// In the order the sidebar shows them.
     tabs: Vec<Tab>,
     active: Option<TabId>,
+    recent: Vec<TabId>,
     next_id: u64,
     input: input_routing::Held,
     /// None until the app connects one, and in a build without an engine.
@@ -122,6 +123,7 @@ impl Default for Browser {
         Self {
             tabs: Vec::new(),
             active: None,
+            recent: Vec::new(),
             next_id: 1,
             input: Default::default(),
             engine: None,
@@ -369,6 +371,7 @@ impl Browser {
     pub(crate) fn clear_active_tab(&mut self) {
         self.reset_input();
         self.active = None;
+        self.recent.clear();
     }
 
     /// Opens a tab at the end of the list loading `address`, and makes it active if no tab is.
@@ -435,7 +438,9 @@ impl Browser {
             .position(|candidate| section_rank(candidate.section()) > section_rank(section))
             .unwrap_or(self.tabs.len());
         self.tabs.insert(index, tab);
-        self.active.get_or_insert(id);
+        if self.active.is_none() {
+            self.set_active(id);
+        }
         id
     }
 
@@ -464,8 +469,30 @@ impl Browser {
             .position(|candidate| section_rank(candidate.section()) > section_rank(section))
             .unwrap_or(self.tabs.len());
         self.tabs.insert(index, tab);
-        self.active.get_or_insert(id);
+        if self.active.is_none() {
+            self.set_active(id);
+        }
         id
+    }
+
+    fn set_active(&mut self, id: TabId) {
+        self.active = Some(id);
+        self.recent.retain(|&tab| tab != id);
+        self.recent.insert(0, id);
+    }
+
+    pub(crate) fn recent_tabs(&self) -> Vec<TabId> {
+        let seen: std::collections::HashSet<_> = self.recent.iter().copied().collect();
+        self.recent
+            .iter()
+            .copied()
+            .chain(
+                self.tabs
+                    .iter()
+                    .map(Tab::id)
+                    .filter(|id| !seen.contains(id)),
+            )
+            .collect()
     }
 
     /// Shows the tab in the viewport and gives it the page's input.
@@ -475,7 +502,7 @@ impl Browser {
         }
         if self.active != Some(id) {
             self.reset_input();
-            self.active = Some(id);
+            self.set_active(id);
         }
         if let Some(tab) = self.tab_mut(id) {
             tab.engine.deferred_load = false;
@@ -663,15 +690,20 @@ impl Browser {
         }
         let is_internal = self.tabs[index].is_internal();
         self.tabs.remove(index);
+        self.recent.retain(|&tab| tab != id);
         if !is_internal && let Some(engine) = &self.engine {
             engine.send(Command::Close(id));
         }
         if self.active == Some(id) {
-            self.active = self
+            self.active = None;
+            if let Some(next) = self
                 .tabs
                 .get(index)
                 .or_else(|| self.tabs.last())
-                .map(Tab::id);
+                .map(Tab::id)
+            {
+                self.activate_tab(next);
+            }
         }
     }
 
@@ -695,7 +727,8 @@ impl Browser {
                 engine.send(Command::Close(tab));
             }
         }
-        self.active = Some(id);
+        self.recent.retain(|&tab| tab == id);
+        self.activate_tab(id);
     }
 
     /// Records the display scale. The view calls it as it builds, because only the view knows it.
