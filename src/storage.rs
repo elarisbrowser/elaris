@@ -158,7 +158,7 @@ fn xdg_download_directory(
     contents
         .lines()
         .filter_map(|line| parse_xdg_download_directory(line, home))
-        .last()
+        .next_back()
 }
 
 #[cfg(any(target_os = "linux", test))]
