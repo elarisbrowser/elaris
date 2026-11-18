@@ -127,9 +127,26 @@ def rune_dev_launcher() -> Path:
     return launcher
 
 
+def rune_dev_python() -> str:
+    if sys.version_info >= (3, 11):
+        return sys.executable
+
+    candidates: list[tuple[int, Path]] = []
+    for directory in os.environ.get("PATH", "").split(os.pathsep):
+        for candidate in Path(directory or ".").glob("python3.*"):
+            minor = candidate.name.removeprefix("python3.")
+            if minor.isdigit() and int(minor) >= 11 and candidate.is_file() and os.access(candidate, os.X_OK):
+                candidates.append((int(minor), candidate.resolve()))
+    if candidates:
+        return str(max(candidates)[1])
+
+    current = ".".join(str(version) for version in sys.version_info[:3])
+    raise SystemExit(f"elaris: Rune's hot-reload launcher needs Python 3.11+; found Python {current}")
+
+
 def hot_reload(args: argparse.Namespace) -> None:
     command = [
-        "python3",
+        rune_dev_python(),
         str(rune_dev_launcher()),
         "--local",
         "--manifest-path",
