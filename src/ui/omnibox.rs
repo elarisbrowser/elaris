@@ -6,7 +6,7 @@ use rune::tok::type_;
 use rune::{El, ScrollSpec, Transition, col, el, icon, row, text, text_input};
 
 use crate::app::{self, AppState};
-use crate::omnibox::{Action, Glyph, Section, Suggestion};
+use crate::omnibox::{Action, Glyph, Suggestion};
 use crate::ui::theme::{self, Theme};
 
 pub(crate) fn view(state: &AppState, theme: &Theme, height: f32) -> Option<El> {
@@ -47,14 +47,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32) -> Option<El> {
     let mut results = col()
         .key("omnibox-results")
         .w_full()
-        .max_h(
-            (height
-                - theme::OMNIBOX_TOP_INSET
-                - theme::OMNIBOX_INPUT_HEIGHT
-                - theme::ROW_HEIGHT
-                - theme::FIELD_PADDING * 2.0)
-                .clamp(0.0, theme::OMNIBOX_MAX_RESULTS_HEIGHT),
-        )
+        .grow(1.0)
         .min_h(0.0)
         .px(theme::ROW_PADDING)
         .py(theme::ROW_PADDING / 2.0)
@@ -64,12 +57,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32) -> Option<El> {
         })
         .role("listbox")
         .label("Suggestions");
-    let mut previous_section = None;
     for (index, suggestion) in suggestions.iter().enumerate() {
-        if previous_section != Some(suggestion.section) {
-            results = results.child(section_heading(suggestion.section, theme));
-            previous_section = Some(suggestion.section);
-        }
         results = results.child(result_row(state, suggestion, index, theme));
     }
     if suggestions.is_empty() {
@@ -94,17 +82,34 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32) -> Option<El> {
         .px(theme::FIELD_PADDING + 4.0)
         .gap(theme::ROW_GAP + 4.0)
         .center_y()
-        .child(text("↑ ↓").font(type_::LABEL).color(theme.text_muted))
-        .child(text("Navigate").font(type_::LABEL).color(theme.text_muted))
-        .child(text("↵").font(type_::LABEL).color(theme.text_muted))
-        .child(text("Open").font(type_::LABEL).color(theme.text_muted))
-        .child(text("esc").font(type_::LABEL).color(theme.text_muted))
-        .child(text("Close").font(type_::LABEL).color(theme.text_muted));
+        .child(el().grow(1.0))
+        .child(
+            row()
+                .center_y()
+                .gap(theme::ROW_GAP)
+                .px(theme::FIELD_PADDING)
+                .h(theme::ICON_BUTTON)
+                .radius(theme::ICON_BUTTON / 2.0)
+                .fill(theme.hover)
+                .child(
+                    text("↑ ↓  Navigate")
+                        .font(type_::LABEL)
+                        .color(theme.text_muted),
+                )
+                .child(text("↵  Open").font(type_::LABEL).color(theme.text_muted))
+                .child(
+                    text("esc  Close")
+                        .font(type_::LABEL)
+                        .color(theme.text_muted),
+                ),
+        );
 
     let panel = col()
         .key("omnibox-panel")
         .w_full()
         .max_w(theme::OMNIBOX_WIDTH)
+        .h((height - 2.0 * theme::FIELD_PADDING).clamp(0.0, theme::OMNIBOX_HEIGHT))
+        .pb(theme::ROW_PADDING)
         .radius(theme::OMNIBOX_RADIUS)
         .continuous_corners()
         .fill(theme.overlay_panel)
@@ -126,13 +131,6 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32) -> Option<El> {
             Transition::opacity().combined(Transition::offset(0.0, theme::OMNIBOX_ENTER_OFFSET)),
         )
         .child(input)
-        .child(
-            el().key("omnibox-input-divider")
-                .w_full()
-                .h(theme::OMNIBOX_DIVIDER_HEIGHT)
-                .mx(theme::FIELD_PADDING + 4.0)
-                .fill(theme.separator),
-        )
         .child(results)
         .child(footer);
 
@@ -142,25 +140,11 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32) -> Option<El> {
             .absolute(0.0, 0.0)
             .w_full()
             .h_full()
-            .pt(theme::OMNIBOX_TOP_INSET)
             .px(theme::FIELD_PADDING + 4.0)
-            .center_y()
+            .center()
             .fill(theme.overlay_scrim)
             .child(panel),
     )
-}
-
-fn section_heading(section: Section, theme: &Theme) -> El {
-    el().key(format!("omnibox-section-{}", section.label()))
-        .w_full()
-        .h(theme::OMNIBOX_SECTION_HEIGHT)
-        .pl(theme::ROW_PADDING + 4.0)
-        .center_y()
-        .child(
-            text(section.label())
-                .font(type_::SECTION)
-                .color(theme.text_muted),
-        )
 }
 
 fn result_row(state: &AppState, suggestion: &Suggestion, index: usize, theme: &Theme) -> El {
@@ -191,25 +175,26 @@ fn result_row(state: &AppState, suggestion: &Suggestion, index: usize, theme: &T
     if selected {
         row = row.fill(theme.overlay_selected);
     }
-    row.child(glyph).child(
-        col()
-            .w_full()
-            .min_w(0.0)
-            .gap(theme::OMNIBOX_DETAIL_GAP)
-            .child(
-                text(suggestion.title.as_str())
-                    .font(type_::BODY)
-                    .color(theme.text)
-                    .single_line()
-                    .truncate(),
-            )
-            .child(
-                text(suggestion.detail.as_str())
-                    .font(type_::LABEL)
-                    .color(theme.text_muted)
-                    .single_line()
-                    .truncate(),
-            ),
+    row.child(
+        el().size(theme::CLOSE_BUTTON, theme::CLOSE_BUTTON)
+            .center()
+            .radius(theme::ICON_BUTTON_RADIUS)
+            .fill(theme.hover)
+            .child(glyph),
+    )
+    .child(
+        text(&suggestion.title)
+            .font(type_::BODY)
+            .color(theme.text)
+            .single_line()
+            .truncate(),
+    )
+    .child(
+        text(&suggestion.detail)
+            .font(type_::LABEL)
+            .color(theme.text_muted)
+            .single_line()
+            .truncate(),
     )
 }
 

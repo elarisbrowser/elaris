@@ -35,7 +35,6 @@ pub(crate) struct Theme {
     pub(crate) overlay_border: Color,
     pub(crate) overlay_shadow: Color,
     pub(crate) overlay_selected: Color,
-    pub(crate) separator: Color,
     /// How faint a control that can't be used now is.
     pub(crate) disabled_opacity: f32,
 }
@@ -59,7 +58,6 @@ pub(crate) fn palette(dark: bool) -> Theme {
             overlay_border: oklcha(1.0, 0.0, 0.0, 0.11),
             overlay_shadow: oklcha(0.0, 0.0, 0.0, 0.55),
             overlay_selected: oklcha(1.0, 0.0, 0.0, 0.09),
-            separator: oklcha(1.0, 0.0, 0.0, 0.08),
             disabled_opacity: 0.35,
         }
     } else {
@@ -79,7 +77,6 @@ pub(crate) fn palette(dark: bool) -> Theme {
             overlay_border: oklcha(0.2, 0.02, HUE, 0.12),
             overlay_shadow: oklcha(0.2, 0.02, HUE, 0.2),
             overlay_selected: oklcha(0.2, 0.02, HUE, 0.07),
-            separator: oklcha(0.2, 0.02, HUE, 0.09),
             disabled_opacity: 0.3,
         }
     }
@@ -133,21 +130,17 @@ pub(crate) const FIELD_HEIGHT: f32 = 36.0;
 pub(crate) const FIELD_PADDING: f32 = space::S3;
 
 /// The floating search palette and its compact result rows.
-pub(crate) const OMNIBOX_WIDTH: f32 = 700.0;
+pub(crate) const OMNIBOX_WIDTH: f32 = 750.0;
+pub(crate) const OMNIBOX_HEIGHT: f32 = 474.0;
 pub(crate) const OMNIBOX_RADIUS: f32 = radius::LG + 4.0;
 pub(crate) const OMNIBOX_INPUT_HEIGHT: f32 = 60.0;
-pub(crate) const OMNIBOX_ROW_HEIGHT: f32 = 46.0;
-pub(crate) const OMNIBOX_TOP_INSET: f32 = 72.0;
-pub(crate) const OMNIBOX_INPUT_TEXT: rune::TextStyle = rune::TextStyle::new(18.0, 400.0);
-pub(crate) const OMNIBOX_MAX_RESULTS_HEIGHT: f32 = 340.0;
-pub(crate) const OMNIBOX_SECTION_HEIGHT: f32 = 26.0;
-pub(crate) const OMNIBOX_DIVIDER_HEIGHT: f32 = 1.0;
+pub(crate) const OMNIBOX_ROW_HEIGHT: f32 = 38.0;
+pub(crate) const OMNIBOX_INPUT_TEXT: rune::TextStyle = rune::TextStyle::new(20.0, 400.0);
 pub(crate) const OMNIBOX_BORDER_WIDTH: f32 = 1.0;
 pub(crate) const OMNIBOX_SHADOW_Y: f32 = 16.0;
 pub(crate) const OMNIBOX_SHADOW_BLUR: f32 = 22.0;
 pub(crate) const OMNIBOX_ENTER_OFFSET: f32 = 8.0;
 pub(crate) const OMNIBOX_SEARCH_ICON: f32 = 20.0;
-pub(crate) const OMNIBOX_DETAIL_GAP: f32 = 1.0;
 
 /// Rows in the tab list, and the new-tab and appearance buttons that share their shape.
 pub(crate) const ROW_HEIGHT: f32 = 34.0;

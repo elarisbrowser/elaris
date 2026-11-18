@@ -60,17 +60,6 @@ pub(crate) enum Section {
     QuickActions,
 }
 
-impl Section {
-    pub(crate) fn label(self) -> &'static str {
-        match self {
-            Self::Navigate => "Navigate",
-            Self::OpenTabs => "Open Tabs",
-            Self::Recent => "Recent",
-            Self::QuickActions => "Quick Actions",
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Glyph {
     Search,
@@ -168,8 +157,8 @@ pub(crate) fn suggestions(
             }),
             Destination::Search(query) => suggestions.push(Suggestion {
                 section: Section::Navigate,
-                title: format!("Search the web for “{query}”"),
-                detail: "Google · Search when selected".to_owned(),
+                title: query.clone(),
+                detail: "Google".to_owned(),
                 glyph: Glyph::Search,
                 action: Action::Search(query),
             }),
