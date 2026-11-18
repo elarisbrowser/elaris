@@ -3,11 +3,13 @@
 use std::ffi::{CStr, CString, c_char, c_void};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
+use std::path::PathBuf;
 use std::ptr::NonNull;
 use std::rc::Rc;
 use std::time::Duration;
 
 use super::{Event, Favicon, Frame, Key, KeyEvent, MouseEvent};
+use crate::downloads::{Status as DownloadStatus, Update as DownloadUpdate};
 
 #[repr(C)]
 struct RawBridge {
@@ -37,6 +39,13 @@ struct RawEvent {
     request_id: u64,
     selection: *const c_char,
     caret: [i32; 4],
+    download_id: u64,
+    bytes_downloaded: u64,
+    total_bytes: u64,
+    has_total_bytes: i32,
+    download_status: i32,
+    destination: *const c_char,
+    error: *const c_char,
 }
 
 #[repr(C)]
@@ -95,6 +104,15 @@ unsafe extern "C" {
         context: *mut c_void,
         out_bridge: *mut *mut RawBridge,
     ) -> i32;
+    fn elaris_ladybird_set_download_directory(bridge: *mut RawBridge, path: *const c_char) -> i32;
+    fn elaris_ladybird_start_download(
+        bridge: *mut RawBridge,
+        url: *const c_char,
+        suggested_filename: *const c_char,
+        out_download_id: *mut u64,
+    ) -> i32;
+    fn elaris_ladybird_cancel_download(bridge: *mut RawBridge, download_id: u64) -> i32;
+    fn elaris_ladybird_cancel_active_downloads(bridge: *mut RawBridge) -> i32;
     fn elaris_ladybird_create_view(
         bridge: *mut RawBridge,
         view_id: u64,
@@ -181,6 +199,52 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
             9 => Event::Clipboard(text),
             10 => Event::ImeCaret((raw.value != 0).then_some(raw.caret)),
             11 => Event::NavigationCommitted(text),
+            12 => {
+                let status = match raw.download_status {
+                    1 | 2 => DownloadStatus::Downloading,
+                    3 => DownloadStatus::Completed,
+                    4 => DownloadStatus::Cancelled,
+                    5 => DownloadStatus::Failed,
+                    _ => return,
+                };
+                let filename = if raw.selection.is_null() {
+                    "download".to_owned()
+                } else {
+                    // SAFETY: Download strings are borrowed until the event callback returns.
+                    unsafe { CStr::from_ptr(raw.selection) }
+                        .to_string_lossy()
+                        .into_owned()
+                };
+                let destination = if raw.destination.is_null() {
+                    None
+                } else {
+                    // SAFETY: Download strings are borrowed until the event callback returns.
+                    let path = unsafe { CStr::from_ptr(raw.destination) }
+                        .to_string_lossy()
+                        .into_owned();
+                    (!path.is_empty()).then(|| PathBuf::from(path))
+                };
+                let error = if raw.error.is_null() {
+                    None
+                } else {
+                    // SAFETY: Download strings are borrowed until the event callback returns.
+                    Some(
+                        unsafe { CStr::from_ptr(raw.error) }
+                            .to_string_lossy()
+                            .into_owned(),
+                    )
+                };
+                Event::Download(DownloadUpdate {
+                    filename,
+                    source_url: text,
+                    destination,
+                    status,
+                    bytes_downloaded: raw.bytes_downloaded,
+                    total_bytes: (raw.has_total_bytes != 0).then_some(raw.total_bytes),
+                    error,
+                    native_id: raw.download_id,
+                })
+            }
             _ => return,
         };
         (state.callback)(raw.view_id, event);
@@ -326,6 +390,54 @@ impl Ladybird {
         status_result(unsafe {
             elaris_ladybird_set_color_scheme(self.owner.raw.as_ptr(), dark.into())
         })
+    }
+
+    /// Uses `directory` instead of the operating system Downloads directory.
+    ///
+    /// This is primarily useful for isolated profiles and integration tests.
+    pub fn set_download_directory(&mut self, directory: &Path) -> Result<(), String> {
+        let directory = path_cstring(directory)?;
+        // SAFETY: The bridge is live on its owner thread and the path is borrowed only for this call.
+        status_result(unsafe {
+            elaris_ladybird_set_download_directory(self.owner.raw.as_ptr(), directory.as_ptr())
+        })
+    }
+
+    /// Starts a direct HTTP(S) download and returns Ladybird's transfer identifier.
+    pub fn start_download(
+        &mut self,
+        url: &str,
+        suggested_filename: Option<&str>,
+    ) -> Result<u64, String> {
+        let url = CString::new(url).map_err(|_| "URL contains an interior NUL byte".to_owned())?;
+        let filename = suggested_filename
+            .map(CString::new)
+            .transpose()
+            .map_err(|_| "suggested filename contains an interior NUL byte".to_owned())?;
+        let empty = CString::default();
+        let mut id = 0;
+        // SAFETY: All strings and the output stay live through this owner-thread call.
+        status_result(unsafe {
+            elaris_ladybird_start_download(
+                self.owner.raw.as_ptr(),
+                url.as_ptr(),
+                filename.as_ref().unwrap_or(&empty).as_ptr(),
+                &mut id,
+            )
+        })?;
+        Ok(id)
+    }
+
+    /// Cancels a Ladybird transfer by its bridge-side identifier.
+    pub fn cancel_download(&mut self, id: u64) -> Result<(), String> {
+        // SAFETY: The bridge is live on its owner thread.
+        status_result(unsafe { elaris_ladybird_cancel_download(self.owner.raw.as_ptr(), id) })
+    }
+
+    /// Cancels every in-flight transfer before the Ladybird application shuts down.
+    pub fn cancel_active_downloads(&mut self) -> Result<(), String> {
+        // SAFETY: The bridge is live on its owner thread.
+        status_result(unsafe { elaris_ladybird_cancel_active_downloads(self.owner.raw.as_ptr()) })
     }
 
     /// A handle any thread can use to end a [`Self::wait`].
@@ -605,6 +717,13 @@ mod tests {
             request_id: 0,
             selection: std::ptr::null(),
             caret: [0; 4],
+            download_id: 0,
+            bytes_downloaded: 0,
+            total_bytes: 0,
+            has_total_bytes: 0,
+            download_status: 0,
+            destination: std::ptr::null(),
+            error: std::ptr::null(),
         };
         // SAFETY: Both pointers reference stack values that remain alive through the callback.
         unsafe {

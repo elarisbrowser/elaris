@@ -115,3 +115,15 @@ pub(crate) static HISTORY: Icon = icon(
     "history",
     r#"<path d="M3.25 5.25A5.5 5.5 0 1 1 2.5 8" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/><path d="M2.25 2.75V5.5H5M8 4.5V8L10.25 9.5" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>"#,
 );
+pub(crate) static DOWNLOAD: Icon = icon(
+    "download",
+    r#"<path d="M8 2.5V9M5.25 6.5L8 9.25L10.75 6.5M3 12.25H13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>"#,
+);
+pub(crate) static OPEN: Icon = icon(
+    "open",
+    r#"<path d="M8.5 3H13V7.5M12.75 3.25L7 9M11.5 8.5V12.25C11.5 12.66 11.16 13 10.75 13H3.75C3.34 13 3 12.66 3 12.25V5.25C3 4.84 3.34 4.5 3.75 4.5H7.5" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>"#,
+);
+pub(crate) static FOLDER: Icon = icon(
+    "folder",
+    r#"<path d="M2.5 4.25C2.5 3.84 2.84 3.5 3.25 3.5H6L7.5 5H12.75C13.16 5 13.5 5.34 13.5 5.75V11.75C13.5 12.16 13.16 12.5 12.75 12.5H3.25C2.84 12.5 2.5 12.16 2.5 11.75Z" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/>"#,
+);

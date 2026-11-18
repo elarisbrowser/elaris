@@ -24,10 +24,13 @@ use std::time::Instant;
 mod input_routing;
 
 use crate::address::url_for_address;
-use crate::engine::{Command, Engine, Update, ViewCommand};
+use crate::engine::{Command, DownloadAction, Engine, Update, ViewCommand};
 use crate::input;
 use crate::perf::{self, Stage};
 use crate::tab::{Tab, TabId};
+use elaris::downloads::{
+    self, Download, DownloadId, Request as DownloadRequest, Status as DownloadStatus,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Error {
@@ -35,6 +38,8 @@ pub(crate) enum Error {
     Address(&'static str),
     /// No open tab has this id.
     NoSuchTab(TabId),
+    /// The requested download operation could not be queued.
+    Download(downloads::Error),
 }
 
 impl fmt::Display for Error {
@@ -42,6 +47,7 @@ impl fmt::Display for Error {
         match self {
             Self::Address(reason) => f.write_str(reason),
             Self::NoSuchTab(_) => f.write_str("The tab has closed"),
+            Self::Download(error) => error.fmt(f),
         }
     }
 }
@@ -73,6 +79,8 @@ pub(crate) struct Browser {
     engine: Option<Engine>,
     /// Why there is no engine, which every tab shows.
     engine_error: Option<String>,
+    /// Downloads belong to the browser process, not to the tab that requested them.
+    downloads: Vec<Download>,
     window: Window,
     /// Development timing: the last poll.
     last_poll: Option<Instant>,
@@ -102,6 +110,7 @@ impl Default for Browser {
             input: Default::default(),
             engine: None,
             engine_error: None,
+            downloads: Vec::new(),
             window: Window {
                 scale: Cell::new(1.0),
                 dark: Cell::new(None),
@@ -142,6 +151,100 @@ impl Browser {
 
     pub(crate) fn active_tab(&self) -> Option<&Tab> {
         self.active.and_then(|id| self.tab(id))
+    }
+
+    /// The browser's downloads, including work initiated by a webpage.
+    pub(crate) fn downloads(&self) -> &[Download] {
+        &self.downloads
+    }
+
+    /// Starts a Ladybird transfer and returns its stable browser identifier immediately.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "The direct Rust start path complements page initiated downloads from Ladybird."
+        )
+    )]
+    pub(crate) fn start_download(
+        &mut self,
+        mut request: DownloadRequest,
+    ) -> Result<DownloadId, Error> {
+        let Some(engine) = &self.engine else {
+            return Err(Error::Download(downloads::Error::EngineUnavailable));
+        };
+        let is_http_url = request
+            .url
+            .get(..7)
+            .is_some_and(|scheme| scheme.eq_ignore_ascii_case("http://"))
+            || request
+                .url
+                .get(..8)
+                .is_some_and(|scheme| scheme.eq_ignore_ascii_case("https://"));
+        if !is_http_url {
+            return Err(Error::Download(downloads::Error::InvalidAddress));
+        }
+        let url = url_for_address(&request.url)
+            .map_err(|_| Error::Download(downloads::Error::InvalidAddress))?;
+        if !(url.starts_with("http://") || url.starts_with("https://")) {
+            return Err(Error::Download(downloads::Error::InvalidAddress));
+        }
+        request.url.clone_from(&url);
+        let id = DownloadId::next().map_err(Error::Download)?;
+        self.downloads.push(Download::pending(id, &request, url));
+        engine.send(Command::StartDownload(id, request));
+        Ok(id)
+    }
+
+    /// Cancels an active download without waiting for Ladybird's cancellation callback.
+    pub(crate) fn cancel_download(&self, id: DownloadId) -> Result<(), Error> {
+        let download = self.download(id)?;
+        if !matches!(
+            download.status,
+            DownloadStatus::Pending | DownloadStatus::Downloading
+        ) {
+            return Err(Error::Download(downloads::Error::InvalidState));
+        }
+        self.send_download_action(id, DownloadAction::Cancel)
+    }
+
+    /// Opens a completed file through the operating system's default handler.
+    pub(crate) fn open_download(&self, id: DownloadId) -> Result<(), Error> {
+        if self.download(id)?.status != DownloadStatus::Completed {
+            return Err(Error::Download(downloads::Error::InvalidState));
+        }
+        self.send_download_action(id, DownloadAction::Open)
+    }
+
+    /// Opens the completed file's containing folder in the system file manager.
+    pub(crate) fn reveal_download(&self, id: DownloadId) -> Result<(), Error> {
+        if self.download(id)?.status != DownloadStatus::Completed {
+            return Err(Error::Download(downloads::Error::InvalidState));
+        }
+        self.send_download_action(id, DownloadAction::Reveal)
+    }
+
+    fn download(&self, id: DownloadId) -> Result<&Download, Error> {
+        self.downloads
+            .iter()
+            .find(|download| download.id == id)
+            .ok_or(Error::Download(downloads::Error::NoSuchDownload))
+    }
+
+    fn send_download_action(&self, id: DownloadId, action: DownloadAction) -> Result<(), Error> {
+        let Some(engine) = &self.engine else {
+            return Err(Error::Download(downloads::Error::EngineUnavailable));
+        };
+        engine.send(Command::DownloadAction(id, action));
+        Ok(())
+    }
+
+    fn apply_download_update(&mut self, id: DownloadId, update: downloads::Update) {
+        let Some(download) = self.downloads.iter_mut().find(|download| download.id == id) else {
+            self.downloads.push(update.into_download(id));
+            return;
+        };
+        *download = update.into_download(id);
     }
 
     /// The tab `offset` places from `id` in the list, wrapping around its ends.
@@ -388,6 +491,23 @@ impl Browser {
                     self.fail(error);
                     polled.changed = true;
                 }
+                Update::Download(id, update) => {
+                    self.apply_download_update(id, update);
+                    polled.changed = true;
+                }
+                Update::DownloadStartFailed(id, error) => {
+                    if let Some(download) = self.downloads.iter_mut().find(|item| item.id == id) {
+                        download.status = DownloadStatus::Failed;
+                        download.error = Some(error);
+                        polled.changed = true;
+                    }
+                }
+                Update::DownloadActionFailed(id, error) => {
+                    if let Some(download) = self.downloads.iter_mut().find(|item| item.id == id) {
+                        download.error = Some(error);
+                        polled.changed = true;
+                    }
+                }
             }
         }
         if let Some(id) = self.active
@@ -483,6 +603,7 @@ impl Browser {
 
 #[cfg(test)]
 mod tests {
+    use elaris::downloads::{Request as DownloadRequest, Status as DownloadStatus};
     use elaris::ladybird::{MouseEvent, MouseKind};
     use rune::{Key as RuneKey, KeyEvent, Mods, PointerButton};
 
@@ -494,6 +615,50 @@ mod tests {
         let (engine, fake) = Engine::fake();
         browser.connect(engine);
         (browser, fake)
+    }
+
+    #[test]
+    fn downloads_are_queued_with_a_stable_id_and_can_be_cancelled() {
+        let (mut browser, fake) = connected();
+        let id = browser
+            .start_download(DownloadRequest::new("https://example.com/archive.zip"))
+            .expect("an HTTP download can be queued");
+
+        let download = browser
+            .downloads()
+            .iter()
+            .find(|download| download.id == id)
+            .expect("queued download is visible immediately");
+        assert_eq!(download.status, DownloadStatus::Pending);
+        assert_eq!(download.source_url, "https://example.com/archive.zip");
+        assert_eq!(download.filename, "archive.zip");
+        assert_eq!(
+            fake.commands.recv().expect("start command is queued"),
+            Command::StartDownload(id, DownloadRequest::new("https://example.com/archive.zip"))
+        );
+
+        browser
+            .cancel_download(id)
+            .expect("pending download can be cancelled");
+        assert_eq!(
+            fake.commands.recv().expect("cancel command is queued"),
+            Command::DownloadAction(id, DownloadAction::Cancel)
+        );
+    }
+
+    #[test]
+    fn downloads_reject_non_http_addresses_and_unavailable_engines() {
+        let mut disconnected = Browser::default();
+        assert_eq!(
+            disconnected.start_download(DownloadRequest::new("https://example.com")),
+            Err(Error::Download(downloads::Error::EngineUnavailable))
+        );
+
+        let (mut browser, _) = connected();
+        assert_eq!(
+            browser.start_download(DownloadRequest::new("file:///etc/passwd")),
+            Err(Error::Download(downloads::Error::InvalidAddress))
+        );
     }
 
     fn sent(fake: &FakeEngine) -> Vec<Command> {

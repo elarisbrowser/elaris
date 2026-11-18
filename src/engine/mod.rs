@@ -22,6 +22,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::sync::{Arc, OnceLock};
 
+use elaris::downloads::{DownloadId, Request as DownloadRequest, Update as DownloadUpdate};
 use elaris::ladybird::{Favicon, KeyEvent, MouseEvent};
 use rune::Pixels;
 
@@ -75,10 +76,29 @@ pub(crate) enum Command {
     View(TabId, ViewCommand),
     /// Destroys the tab's view. Nothing more is reported for it.
     Close(TabId),
+    /// Starts a browser-owned transfer through Ladybird.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "The direct Rust start path complements page initiated downloads from Ladybird."
+        )
+    )]
+    StartDownload(DownloadId, DownloadRequest),
+    /// Applies a browser-owned download action on the engine thread.
+    DownloadAction(DownloadId, DownloadAction),
     /// Whether pages see a dark colour scheme.
     ColorScheme(bool),
     /// Closes every view and stops the engine.
     Shutdown,
+}
+
+/// An operation applied to a download on the engine thread.
+#[derive(Debug, PartialEq)]
+pub(crate) enum DownloadAction {
+    Cancel,
+    Open,
+    Reveal,
 }
 
 /// What one tab's view is asked to do.
@@ -120,6 +140,9 @@ pub(crate) enum Update {
     NewTab(TabId, String, u64, bool),
     ContextMenu(TabId, elaris::ladybird::PageMenu),
     Clipboard(TabId, String),
+    Download(DownloadId, DownloadUpdate),
+    DownloadStartFailed(DownloadId, String),
+    DownloadActionFailed(DownloadId, String),
     /// The engine could not start or stopped; no tab will hear from it again.
     Failed(String),
 }

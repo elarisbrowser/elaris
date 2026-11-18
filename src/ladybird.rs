@@ -51,6 +51,8 @@ pub enum Event {
     },
     /// The page's favicon changed, or was cleared when its active document changed.
     Favicon(Option<Favicon>),
+    /// A copied download snapshot raised by Ladybird's application-level downloader.
+    Download(crate::downloads::Update),
 }
 
 /// A favicon copied from Ladybird as tightly packed, straight-alpha RGBA8 pixels.

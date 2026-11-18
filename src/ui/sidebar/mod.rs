@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! The sidebar: the header beside the window controls, the search launcher and status, the open
-//! tabs, and the appearance button.
+//! tabs, and compact controls at its foot.
 //!
 //! - `header`: the titlebar row, its sidebar toggle and navigation buttons. The window draws it
 //!   over the sidebar, so it stays when the sidebar collapses.
@@ -51,7 +51,7 @@ pub(crate) fn toggle(state: &mut AppState, tx: &mut Tx) {
 
 /// The sidebar below the header's room. Collapsing springs its width to zero; its contents
 /// keep their width meanwhile, clipped, so they slide away rather than reflow.
-pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
+pub(crate) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
     let collapsed = state.sidebar.collapsed;
     #[cfg(target_os = "linux")]
     let header_clearance = 0.0;
@@ -63,7 +63,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
         .h_full()
         .clip_soft(0.0)
         .pt(header_clearance)
-        .child(body(state, theme));
+        .child(body(state, theme, overlays));
     if collapsed {
         sidebar.a11y_hidden()
     } else {
@@ -72,14 +72,14 @@ pub(crate) fn view(state: &AppState, theme: &Theme) -> El {
 }
 
 /// Everything below the header, inset from the sidebar's edges.
-fn body(state: &AppState, theme: &Theme) -> El {
+fn body(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
     let mut body = col()
         .key("sidebar-body")
         .w(state.sidebar.width)
         .grow(1.0)
         .min_h(0.0)
         .px(theme::SIDEBAR_PADDING)
-        .pb(theme::SIDEBAR_PADDING)
+        .pb(theme::VIEWPORT_INSET)
         .gap(theme::SIDEBAR_GAP)
         .child(search_launcher(state, theme));
     if let Some(status) = state.status() {
@@ -92,8 +92,15 @@ fn body(state: &AppState, theme: &Theme) -> El {
                 .truncate(),
         );
     }
-    body.child(tabs::view(state, theme))
-        .child(appearance(state.appearance, theme))
+    body.child(tabs::view(state, theme)).child(
+        rune::row()
+            .key("sidebar-bottom-controls")
+            .w_full()
+            .center_y()
+            .child(super::downloads::trigger(state, theme, overlays))
+            .child(rune::el().grow(1.0))
+            .child(appearance(state.appearance, theme)),
+    )
 }
 
 fn search_launcher(state: &AppState, theme: &Theme) -> El {
@@ -140,14 +147,8 @@ fn appearance(current: Appearance, theme: &Theme) -> El {
         Appearance::Dark => &icons::DARK,
     };
     let label = format!("Appearance: {}", current.label());
-    row_button(
-        "appearance",
-        icon(glyph, theme::ICON).color(theme.text_muted),
-        current.label(),
-        theme.text_muted,
-        theme,
-    )
-    .label(label.clone())
-    .help(format!("{label}. Click to change."))
-    .on_press(|state: &mut AppState| state.appearance = state.appearance.next())
+    super::controls::icon_button("appearance", &label, glyph, theme::ICON_BUTTON, theme)
+        .label(label.clone())
+        .help(format!("{label}. Click to change."))
+        .on_press(|state: &mut AppState| state.appearance = state.appearance.next())
 }

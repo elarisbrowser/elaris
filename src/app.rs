@@ -126,6 +126,8 @@ pub(crate) struct AppState {
     /// Why the last submitted query could not be opened, until the next is.
     pub(crate) address_error: Option<String>,
     pub(crate) browser: Browser,
+    /// Whether the downloads popover is open.
+    pub(crate) downloads_open: bool,
     pub(crate) page_menu: crate::ui::PageMenuState,
     pub(crate) appearance: Appearance,
     pub(crate) sidebar: SidebarState,
@@ -180,6 +182,7 @@ impl AppState {
             search_engine: SearchEngine::default(),
             address_error: None,
             browser: Browser::default(),
+            downloads_open: false,
             page_menu: Default::default(),
             appearance: Appearance::default(),
             sidebar: SidebarState::default(),

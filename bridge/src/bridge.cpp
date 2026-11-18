@@ -8,32 +8,42 @@
 
 #include <LibCore/EventLoop.h>
 #include <LibCore/Promise.h>
+#include <LibCore/StandardPaths.h>
 #include <LibCore/Timer.h>
+#include <LibFileSystem/FileSystem.h>
 #include <LibGfx/Bitmap.h>
 #include <LibGfx/SharedImageBuffer.h>
 #include <LibGfx/SystemTheme.h>
 #include <LibURL/Parser.h>
 #include <LibURL/URL.h>
+#include <LibWebCommon/Loader/DownloadFilename.h>
 #include <LibWebCommon/Page/InputEvent.h>
 #include <LibWebCommon/PixelUnits.h>
 #include <LibWebCommon/UIEvents/KeyCode.h>
 #include <LibWebCommon/WebView/Utilities.h>
 #include <LibWebView/Application.h>
 #include <LibWebView/ContextMenuRequest.h>
+#include <LibWebView/FileDownloader.h>
 #include <LibWebView/HeadlessWebView.h>
 #include <LibWebView/PageBackingStores.h>
 #include <LibWebView/Settings.h>
 
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <cstring>
 #include <map>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
 
 static Core::EventLoop* s_event_loop;
 static std::thread::id s_event_loop_thread;
+static Optional<AK::ByteString> s_download_directory_override;
+
+static ErrorOr<AK::LexicalPath> unique_download_path(AK::ByteString const& directory, AK::ByteString const& file);
+static std::string to_utf8(URL::URL const& url);
 
 class ElarisApplication final : public WebView::Application {
     WEB_VIEW_APPLICATION(ElarisApplication)
@@ -42,6 +52,7 @@ class ElarisApplication final : public WebView::Application {
     ElarisLadybird* host{};
     explicit ElarisApplication(Optional<AK::ByteString> helper_directory = {})
         : WebView::Application(AK::move(helper_directory)) {}
+    ErrorOr<AK::LexicalPath> default_path_for_downloaded_file(AK::ByteString const& file) const override;
 
   private:
     void open_navigation_in_new_tab(Web::HTML::PreparedNavigationDescriptor, Web::HTML::ActivateTab,
@@ -119,11 +130,14 @@ class ElarisWebView final : public WebView::HeadlessWebView {
     uint64_t m_serial{};
 };
 
+class ElarisDownloadObserver;
+
 struct ElarisLadybird {
     ElarisLadybirdEventCallback callback{};
     void* context{};
     std::thread::id owner_thread;
     std::vector<ElarisLadybirdView*> views;
+    std::unique_ptr<ElarisDownloadObserver> download_observer;
 };
 
 struct ElarisLadybirdView {
@@ -155,6 +169,86 @@ void apply_selection_colors(Gfx::SystemTheme& theme) {
 
 } // namespace
 
+class ElarisDownloadObserver final : public WebView::FileDownloaderObserver {
+  public:
+    explicit ElarisDownloadObserver(ElarisLadybird& bridge) : m_bridge(bridge) {
+        // Incomplete records from a previous browser run are deliberately not resumed in this
+        // milestone. Cancelling them also removes Ladybird's temporary files and stored records.
+        Vector<u64> restored;
+        for (auto const& download : WebView::Application::the().file_downloader().downloads()) {
+            if (WebView::FileDownloader::status_is_active(download.status))
+                restored.append(download.id);
+        }
+        for (auto id : restored)
+            WebView::Application::the().file_downloader().cancel_download(id);
+    }
+
+    void download_added(WebView::FileDownloader::Download const& download) override {
+        emit_download(download);
+    }
+    void download_updated(WebView::FileDownloader::Download const& download) override {
+        emit_download(download);
+    }
+
+  private:
+    void emit_download(WebView::FileDownloader::Download const& download) {
+        if (!m_bridge.callback)
+            return;
+        auto url = to_utf8(download.url);
+        auto path = download.destination.string();
+        auto filename = AK::ByteString{download.destination.basename()};
+        auto error = download.error.has_value() ? download.error->to_byte_string() : AK::ByteString{};
+        ElarisLadybirdEvent event{};
+        event.kind = ELARIS_LADYBIRD_DOWNLOAD;
+        event.text = url.c_str();
+        event.selection = filename.characters();
+        event.destination = path.characters();
+        event.error = error.is_empty() ? nullptr : error.characters();
+        event.download_id = download.id;
+        event.bytes_downloaded = download.downloaded_size;
+        event.has_total_bytes = download.total_size.has_value();
+        event.total_bytes = download.total_size.value_or(0);
+        event.download_status = static_cast<ElarisLadybirdDownloadStatus>(static_cast<int>(download.status) + 1);
+        m_bridge.callback(m_bridge.context, &event);
+    }
+
+    ElarisLadybird& m_bridge;
+};
+
+static bool download_path_is_available(AK::LexicalPath const& path) {
+    if (FileSystem::exists(path.string()))
+        return false;
+    for (auto const& download : WebView::Application::the().file_downloader().downloads()) {
+        if (WebView::FileDownloader::status_is_active(download.status) &&
+            download.destination.string() == path.string())
+            return false;
+    }
+    return true;
+}
+
+static ErrorOr<AK::LexicalPath> unique_download_path(AK::ByteString const& directory, AK::ByteString const& file) {
+    if (!FileSystem::is_directory(directory))
+        return Error::from_errno(ENOENT);
+
+    auto safe_filename = Web::sanitize_suggested_download_filename(file);
+    auto destination = AK::LexicalPath::join(directory, safe_filename.view());
+    if (download_path_is_available(destination))
+        return destination;
+
+    for (u64 index = 1;; ++index) {
+        auto candidate_filename = Web::numbered_download_filename(safe_filename, index);
+        auto candidate = AK::LexicalPath::join(directory, candidate_filename.view());
+        if (download_path_is_available(candidate))
+            return candidate;
+    }
+}
+
+ErrorOr<AK::LexicalPath> ElarisApplication::default_path_for_downloaded_file(AK::ByteString const& file) const {
+    if (!s_download_directory_override.has_value())
+        return WebView::Application::default_path_for_downloaded_file(file);
+    return unique_download_path(*s_download_directory_override, file);
+}
+
 Core::EventLoop& ElarisApplication::create_platform_event_loop() {
     if (s_event_loop)
         return *s_event_loop;
@@ -180,7 +274,11 @@ static void emit(ElarisLadybirdView const* view, ElarisLadybirdEventKind kind, s
                  int32_t value = 0) {
     if (!view->bridge->callback)
         return;
-    ElarisLadybirdEvent event{kind, view->id, text.c_str(), value, nullptr, 0, 0, 0, 0, nullptr, {}};
+    ElarisLadybirdEvent event{};
+    event.kind = kind;
+    event.view_id = view->id;
+    event.text = text.c_str();
+    event.value = value;
     view->bridge->callback(view->bridge->context, &event);
 }
 
@@ -189,7 +287,10 @@ static void emit_favicon(ElarisLadybirdView const* view, Optional<Gfx::Bitmap co
         return;
 
     std::vector<uint8_t> rgba;
-    ElarisLadybirdEvent event{ELARIS_LADYBIRD_FAVICON, view->id, "", 0, nullptr, 0, 0, 0, 0, nullptr, {}};
+    ElarisLadybirdEvent event{};
+    event.kind = ELARIS_LADYBIRD_FAVICON;
+    event.view_id = view->id;
+    event.text = "";
     if (favicon.has_value()) {
         auto const& bitmap = *favicon;
         auto const width = bitmap.width();
@@ -266,6 +367,7 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
     }
 
     WebView::s_ladybird_resource_root = resource_dir;
+    s_download_directory_override.clear();
 
     // Headless manual mode initializes Ladybird without starting its blocking execute() loop.
     AK::StringView arguments[]{
@@ -289,8 +391,81 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
     WebView::s_ladybird_resource_root = resource_dir;
     s_event_loop = &Core::EventLoop::current();
     s_event_loop_thread = std::this_thread::get_id();
-    *out_bridge = new ElarisLadybird{callback, context, std::this_thread::get_id(), {}};
+    *out_bridge = new ElarisLadybird{
+        .callback = callback,
+        .context = context,
+        .owner_thread = std::this_thread::get_id(),
+        .views = {},
+        .download_observer = nullptr,
+    };
     s_application->host = *out_bridge;
+    (*out_bridge)->download_observer = std::make_unique<ElarisDownloadObserver>(**out_bridge);
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_set_download_directory(ElarisLadybird* bridge, char const* path) {
+    if (!bridge)
+        return fail("bridge is required");
+    if (!on_owner_thread(bridge))
+        return fail("download directory must be set on the initialization thread");
+    if (!path) {
+        s_download_directory_override.clear();
+        return succeed();
+    }
+    AK::LexicalPath directory{AK::ByteString{path}};
+    if (!directory.is_absolute())
+        return fail("download directory must be an absolute path");
+    s_download_directory_override = directory.string();
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_start_download(ElarisLadybird* bridge, char const* input_url,
+                                                  char const* suggested_filename, uint64_t* out_download_id) {
+    if (out_download_id)
+        *out_download_id = 0;
+    if (!bridge || !input_url || !out_download_id)
+        return fail("bridge, URL, and download id output are required");
+    if (!on_owner_thread(bridge))
+        return fail("download must start on the initialization thread");
+    auto parsed = URL::Parser::basic_parse(AK::StringView(input_url, std::char_traits<char>::length(input_url)));
+    if (!parsed.has_value() || !parsed->scheme().is_one_of("http"sv, "https"sv))
+        return fail("download URL must use HTTP or HTTPS");
+
+    auto filename =
+        suggested_filename && suggested_filename[0] ? AK::ByteString{suggested_filename} : parsed->basename();
+    if (filename.is_empty())
+        filename = AK::ByteString{"download"};
+    auto destination = s_application->default_path_for_downloaded_file(filename);
+    if (destination.is_error())
+        return fail("could not select a destination in the Downloads directory");
+
+    *out_download_id = s_application->file_downloader().download_file(
+        WebView::IsPrivate::No, parsed.value(), destination.release_value(),
+        WebView::FileDownloader::MayReplaceDestination::No);
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_cancel_download(ElarisLadybird* bridge, uint64_t download_id) {
+    if (!bridge)
+        return fail("bridge is required");
+    if (!on_owner_thread(bridge))
+        return fail("download cancellation must run on the initialization thread");
+    s_application->file_downloader().cancel_download(download_id);
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_cancel_active_downloads(ElarisLadybird* bridge) {
+    if (!bridge)
+        return fail("bridge is required");
+    if (!on_owner_thread(bridge))
+        return fail("download shutdown must run on the initialization thread");
+    Vector<u64> active_ids;
+    for (auto const& download : s_application->file_downloader().downloads()) {
+        if (WebView::FileDownloader::status_is_active(download.status))
+            active_ids.append(download.id);
+    }
+    for (auto id : active_ids)
+        s_application->file_downloader().cancel_download(id);
     return succeed();
 }
 
@@ -876,6 +1051,8 @@ extern "C" void elaris_ladybird_destroy(ElarisLadybird* bridge) {
         fail("shutdown must run on the initialization thread");
         return;
     }
+    (void)elaris_ladybird_cancel_active_downloads(bridge);
+    bridge->download_observer.reset();
     for (auto* view : bridge->views) {
         view->view->request_close();
         delete view;
@@ -883,6 +1060,7 @@ extern "C" void elaris_ladybird_destroy(ElarisLadybird* bridge) {
     bridge->views.clear();
     delete bridge;
     s_application = nullptr;
+    s_download_directory_override.clear();
 }
 
 extern "C" char const* elaris_ladybird_last_error(void) {

@@ -6,13 +6,17 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::process::Command as ProcessCommand;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use elaris::downloads::{
+    Download, DownloadId, Request as DownloadRequest, Status as DownloadStatus,
+};
 use elaris::ladybird::{Event, Frame, Ladybird, Waker, WebView};
 
 use super::frames::{FrameGate, Verdict};
-use super::{Command, Surface, TabUpdate, Update, ViewCommand};
+use super::{Command, DownloadAction, Surface, TabUpdate, Update, ViewCommand};
 use crate::perf::{self, Count, Stage};
 use crate::tab::TabId;
 
@@ -33,6 +37,10 @@ pub(super) struct Runtime {
     /// What Ladybird's callback raised during the last wait, by view id, handled after it
     /// returns.
     events: Rc<RefCell<Vec<(u64, Event)>>>,
+    /// Ladybird identifiers are private to the engine; browser IDs stay stable across commands.
+    native_download_ids: HashMap<u64, DownloadId>,
+    native_ids_by_download: HashMap<DownloadId, u64>,
+    downloads: HashMap<DownloadId, Download>,
     timing: Timing,
 }
 
@@ -43,13 +51,29 @@ impl Runtime {
             .map_err(|e| format!("cannot create profile {}: {e}", profile.display()))?;
         let events = Rc::new(RefCell::new(Vec::new()));
         let sink = Rc::clone(&events);
-        let ladybird = Ladybird::new(&resources, &profile, move |view, event| {
+        let mut ladybird = Ladybird::new(&resources, &profile, move |view, event| {
             sink.borrow_mut().push((view, event));
         })?;
+        if let Some(path) = std::env::var_os("ELARIS_DOWNLOAD_DIR") {
+            let path = PathBuf::from(path);
+            if !path.is_absolute() {
+                return Err("ELARIS_DOWNLOAD_DIR must be an absolute path".to_owned());
+            }
+            std::fs::create_dir_all(&path).map_err(|error| {
+                format!(
+                    "cannot create download directory {}: {error}",
+                    path.display()
+                )
+            })?;
+            ladybird.set_download_directory(&path)?;
+        }
         Ok(Self {
             views: HashMap::new(),
             ladybird,
             events,
+            native_download_ids: HashMap::new(),
+            native_ids_by_download: HashMap::new(),
+            downloads: HashMap::new(),
             timing: Timing::default(),
         })
     }
@@ -67,6 +91,20 @@ impl Runtime {
     /// Applies `command`, returning the error to report if it failed. Commands for a tab that
     /// has closed are dropped: the browser may have sent them before it closed the tab.
     pub(super) fn apply(&mut self, command: Command) -> Option<Update> {
+        match command {
+            Command::StartDownload(id, request) => self
+                .start_download(id, request)
+                .err()
+                .map(|error| Update::DownloadStartFailed(id, error)),
+            Command::DownloadAction(id, action) => self
+                .download_action(id, action)
+                .err()
+                .map(|error| Update::DownloadActionFailed(id, error)),
+            other => self.apply_tab_command(other),
+        }
+    }
+
+    fn apply_tab_command(&mut self, command: Command) -> Option<Update> {
         let (tab, result) = match command {
             Command::Open(tab, surface) => (tab, self.open(tab, surface)),
             Command::Close(tab) => {
@@ -84,11 +122,51 @@ impl Runtime {
                     .err()
                     .map(Update::Failed);
             }
-            Command::Shutdown => return None,
+            Command::Shutdown | Command::StartDownload(..) | Command::DownloadAction(..) => {
+                return None;
+            }
         };
         result
             .err()
             .map(|error| Update::Tab(tab, TabUpdate::Error(error)))
+    }
+
+    fn start_download(&mut self, id: DownloadId, request: DownloadRequest) -> Result<(), String> {
+        match self
+            .ladybird
+            .start_download(&request.url, request.suggested_filename.as_deref())
+        {
+            Ok(native_id) => {
+                self.native_download_ids.insert(native_id, id);
+                self.native_ids_by_download.insert(id, native_id);
+                Ok(())
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn download_action(&mut self, id: DownloadId, action: DownloadAction) -> Result<(), String> {
+        match action {
+            DownloadAction::Cancel => {
+                let Some(native_id) = self.native_ids_by_download.get(&id).copied() else {
+                    // A cancel queued behind a request that failed to start is already satisfied.
+                    return Ok(());
+                };
+                self.ladybird.cancel_download(native_id)
+            }
+            DownloadAction::Open | DownloadAction::Reveal => {
+                let Some(download) = self.downloads.get(&id) else {
+                    return Err("download state is not available yet".to_owned());
+                };
+                if download.status != DownloadStatus::Completed {
+                    return Err("download has not completed".to_owned());
+                }
+                let Some(path) = &download.destination else {
+                    return Err("download destination is unavailable".to_owned());
+                };
+                open_download(path, action == DownloadAction::Reveal)
+            }
+        }
     }
 
     fn open(&mut self, tab: TabId, surface: Surface) -> Result<(), String> {
@@ -111,6 +189,22 @@ impl Runtime {
         let mut updates = Vec::new();
         let mut painted: Vec<TabId> = Vec::new();
         for (id, event) in events {
+            if let Event::Download(update) = event {
+                let native_id = update.native_id();
+                let Some(id) = self
+                    .native_download_ids
+                    .get(&native_id)
+                    .copied()
+                    .or_else(|| DownloadId::next().ok())
+                else {
+                    continue;
+                };
+                self.native_download_ids.insert(native_id, id);
+                self.native_ids_by_download.insert(id, native_id);
+                self.downloads.insert(id, update.clone().into_download(id));
+                updates.push(Update::Download(id, update));
+                continue;
+            }
             let tab = TabId::from_raw(id);
             if !self.views.contains_key(&tab) {
                 continue;
@@ -139,6 +233,7 @@ impl Runtime {
                 Event::Loading(loading) => TabUpdate::Loading(loading),
                 Event::Favicon(favicon) => TabUpdate::Favicon(favicon),
                 Event::History { back, forward } => TabUpdate::History { back, forward },
+                Event::Download(_) => unreachable!("download events are handled above"),
                 Event::ReadyToPaint => {
                     if !painted.contains(&tab) {
                         painted.push(tab);
@@ -168,10 +263,37 @@ impl Runtime {
         } = self;
         drop(views);
         let deadline = Instant::now() + CLOSE_GRACE;
+        let _ = ladybird.cancel_active_downloads();
         while let Some(left) = deadline.checked_duration_since(Instant::now())
             && ladybird.wait(Some(left)).is_ok()
         {}
     }
+}
+
+fn open_download(path: &std::path::Path, reveal: bool) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut command = ProcessCommand::new("open");
+        if reveal {
+            command.arg("-R");
+        }
+        command.arg(path);
+        command
+    };
+    #[cfg(target_os = "linux")]
+    let mut command = {
+        let mut command = ProcessCommand::new("xdg-open");
+        command.arg(if reveal {
+            path.parent().unwrap_or(path)
+        } else {
+            path
+        });
+        command
+    };
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("could not open download: {error}"))
 }
 
 fn apply_to_view(view: &mut View, command: ViewCommand, timing: &mut Timing) -> Result<(), String> {

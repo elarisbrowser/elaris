@@ -37,7 +37,7 @@ function(elaris_add_ladybird_bridge)
         "${CMAKE_BINARY_DIR}/Libraries"
         "${CMAKE_BINARY_DIR}/Services"
     )
-    target_link_libraries(elaris_ladybird PRIVATE AK LibWebView LibWebCommon LibCore LibGfx LibIPC LibURL)
+    target_link_libraries(elaris_ladybird PRIVATE AK LibWebView LibWebCommon LibCore LibFileSystem LibGfx LibIPC LibURL)
 
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         target_compile_options(elaris_ladybird PRIVATE -Wall -Wextra -Wpedantic)
@@ -66,6 +66,26 @@ function(elaris_add_ladybird_bridge)
                 ENVIRONMENT "DYLD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib:${ELARIS_VCPKG_PREFIX}/lib")
         elseif(UNIX)
             set_tests_properties(elaris_ladybird_smoke PROPERTIES
+                ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib:${ELARIS_VCPKG_PREFIX}/lib")
+        endif()
+
+        add_executable(elaris_ladybird_download_smoke "${ELARIS_BRIDGE_DIR}/tests/download_smoke.cpp")
+        target_compile_features(elaris_ladybird_download_smoke PRIVATE cxx_std_20)
+        target_link_libraries(elaris_ladybird_download_smoke PRIVATE elaris_ladybird)
+        if(ELARIS_VCPKG_PREFIX)
+            set_property(TARGET elaris_ladybird_download_smoke APPEND PROPERTY BUILD_RPATH "${ELARIS_VCPKG_PREFIX}/lib")
+            target_link_options(elaris_ladybird_download_smoke PRIVATE "-Wl,-rpath,${ELARIS_VCPKG_PREFIX}/lib")
+        endif()
+        add_test(NAME elaris_ladybird_download_smoke
+            COMMAND elaris_ladybird_download_smoke
+                "${LADYBIRD_SOURCE_DIR}/Base/res"
+                "${CMAKE_BINARY_DIR}/elaris-download-smoke"
+        )
+        if(APPLE)
+            set_tests_properties(elaris_ladybird_download_smoke PROPERTIES
+                ENVIRONMENT "DYLD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib:${ELARIS_VCPKG_PREFIX}/lib")
+        elseif(UNIX)
+            set_tests_properties(elaris_ladybird_download_smoke PROPERTIES
                 ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib:${ELARIS_VCPKG_PREFIX}/lib")
         endif()
     endif()

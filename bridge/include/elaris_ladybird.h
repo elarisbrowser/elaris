@@ -24,7 +24,16 @@ typedef enum {
     ELARIS_LADYBIRD_CLIPBOARD,
     ELARIS_LADYBIRD_IME_CARET,
     ELARIS_LADYBIRD_NAVIGATION_COMMITTED = 11,
+    ELARIS_LADYBIRD_DOWNLOAD = 12,
 } ElarisLadybirdEventKind;
+
+typedef enum {
+    ELARIS_LADYBIRD_DOWNLOAD_IN_PROGRESS = 1,
+    ELARIS_LADYBIRD_DOWNLOAD_PAUSED,
+    ELARIS_LADYBIRD_DOWNLOAD_COMPLETED,
+    ELARIS_LADYBIRD_DOWNLOAD_CANCELLED,
+    ELARIS_LADYBIRD_DOWNLOAD_FAILED,
+} ElarisLadybirdDownloadStatus;
 
 /* Bit flags for HISTORY events' value. */
 #define ELARIS_LADYBIRD_HISTORY_BACK 1
@@ -42,6 +51,13 @@ typedef struct {
     uint64_t request_id;
     const char* selection;
     int32_t caret[4]; /* Device pixels, relative to the viewport. */
+    uint64_t download_id;
+    uint64_t bytes_downloaded;
+    uint64_t total_bytes;
+    int32_t has_total_bytes;
+    ElarisLadybirdDownloadStatus download_status;
+    const char* destination; /* Borrowed UTF-8 path, valid until the callback returns. */
+    const char* error;       /* Borrowed UTF-8 error, valid until the callback returns. */
 } ElarisLadybirdEvent;
 
 typedef void (*ElarisLadybirdEventCallback)(void* context, const ElarisLadybirdEvent* event);
@@ -159,6 +175,14 @@ typedef struct {
 /* All calls, including callbacks, run on the thread that initializes the bridge. */
 int32_t elaris_ladybird_create(const char* resource_dir, const char* profile_dir, ElarisLadybirdEventCallback callback,
                                void* context, ElarisLadybird** out_bridge);
+/* An optional per-application destination override. NULL restores the operating system Downloads directory. */
+int32_t elaris_ladybird_set_download_directory(ElarisLadybird* bridge, const char* path);
+/* Starts an HTTP(S) URL through Ladybird's request server and returns its Ladybird-side ID. */
+int32_t elaris_ladybird_start_download(ElarisLadybird* bridge, const char* url, const char* suggested_filename,
+                                       uint64_t* out_download_id);
+int32_t elaris_ladybird_cancel_download(ElarisLadybird* bridge, uint64_t download_id);
+/* Cancels in-flight downloads before the application shuts down. */
+int32_t elaris_ladybird_cancel_active_downloads(ElarisLadybird* bridge);
 /* Creates a view; every event it raises carries view_id, which the host chooses. */
 int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t view_id, ElarisLadybirdView** out_view);
 int32_t elaris_ladybird_load(ElarisLadybirdView* view, const char* url);

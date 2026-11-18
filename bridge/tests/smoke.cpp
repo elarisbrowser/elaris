@@ -74,6 +74,8 @@ static void on_event(void* context, ElarisLadybirdEvent const* event) {
             events.favicon_height = event->favicon_height;
         }
         break;
+    case ELARIS_LADYBIRD_DOWNLOAD:
+        break;
     }
 }
 
@@ -274,8 +276,8 @@ int main(int argc, char** argv) {
         auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
         while (passed &&
                (events.navigation == 0 || events.committed_navigation == 0 || events.title == 0 ||
-                events.loading_started == 0 ||
-                events.loading_finished == 0 || events.frames == 0 || events.favicons == 0 || !frame_ready) &&
+                events.loading_started == 0 || events.loading_finished == 0 || events.frames == 0 ||
+                events.favicons == 0 || !frame_ready) &&
                std::chrono::steady_clock::now() < deadline) {
             passed = check(elaris_ladybird_pump(bridge), "pump");
             frame_ready = frame_ready || frame_matches(view, width, height, device_pixel_ratio);
@@ -310,9 +312,8 @@ int main(int argc, char** argv) {
             passed = false;
         }
         if (events.navigation == 0 || events.committed_navigation == 0 || events.title == 0 ||
-            events.loading_started == 0 ||
-            events.loading_finished == 0 || events.frames == 0 || events.favicons == 0 || events.favicon_width <= 0 ||
-            events.favicon_height <= 0 || events.last_title != "Elaris Bridge Smoke") {
+            events.loading_started == 0 || events.loading_finished == 0 || events.frames == 0 || events.favicons == 0 ||
+            events.favicon_width <= 0 || events.favicon_height <= 0 || events.last_title != "Elaris Bridge Smoke") {
             std::cerr << "expected navigation, title, loading, favicon, and ready-to-paint callbacks; observed title='"
                       << events.last_title << "'\n";
             passed = false;

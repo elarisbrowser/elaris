@@ -4,6 +4,7 @@
 //! colours and measurements live in `theme`.
 
 mod controls;
+mod downloads;
 mod icons;
 mod omnibox;
 mod sidebar;
@@ -28,6 +29,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     let theme = theme::palette(dark);
     state.browser.note_scale(cx.env().scale);
     state.browser.note_dark(dark);
+    let mut overlays = Vec::new();
 
     #[cfg(target_os = "linux")]
     let mut window = {
@@ -36,7 +38,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
             .w_full()
             .grow(1.0)
             .min_h(0.0)
-            .child(sidebar::view(state, &theme))
+            .child(sidebar::view(state, &theme, &mut overlays))
             .child(viewport::view(state, &theme));
         if !state.sidebar.collapsed {
             content = content.child(sidebar::resize::handle(state.sidebar.width));
@@ -63,7 +65,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
             .system_material(SystemMaterial::Glass)
             .child(window_glass_tint(&theme));
         window = window
-            .child(sidebar::view(state, &theme))
+            .child(sidebar::view(state, &theme, &mut overlays))
             .child(viewport::view(state, &theme))
             .child(sidebar::header::view(state, &theme, cx));
         if !state.sidebar.collapsed {
@@ -71,7 +73,6 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         }
         window
     };
-    let mut overlays = Vec::new();
     if let Some(overlay) = omnibox::view(
         state,
         &theme,
