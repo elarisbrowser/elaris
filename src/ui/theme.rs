@@ -61,7 +61,7 @@ pub(crate) fn palette(dark: bool) -> Theme {
             tab_active: oklcha(1.0, 0.0, 0.0, 0.15),
             tab_active_shadow: oklcha(0.0, 0.0, 0.0, 0.3),
             overlay_scrim: oklcha(0.0, 0.0, 0.0, 0.16),
-            overlay_panel: oklcha(0.255, 0.006, HUE, 0.82),
+            overlay_panel: oklcha(0.255, 0.006, HUE, 0.68),
             overlay_border: oklcha(1.0, 0.0, 0.0, 0.11),
             overlay_shadow: oklcha(0.0, 0.0, 0.0, 0.55),
             overlay_selected: oklcha(1.0, 0.0, 0.0, 0.09),
@@ -83,7 +83,7 @@ pub(crate) fn palette(dark: bool) -> Theme {
             tab_active: oklch(1.0, 0.0, 0.0),
             tab_active_shadow: oklcha(0.2, 0.02, HUE, 0.18),
             overlay_scrim: oklcha(0.2, 0.02, HUE, 0.12),
-            overlay_panel: oklcha(0.995, 0.002, HUE, 0.82),
+            overlay_panel: oklcha(0.995, 0.002, HUE, 0.68),
             overlay_border: oklcha(0.2, 0.02, HUE, 0.12),
             overlay_shadow: oklcha(0.2, 0.02, HUE, 0.2),
             overlay_selected: oklcha(0.2, 0.02, HUE, 0.07),
@@ -161,7 +161,7 @@ pub(crate) const OMNIBOX_BORDER_WIDTH: f32 = 1.0;
 pub(crate) const OMNIBOX_SHADOW_Y: f32 = 16.0;
 pub(crate) const OMNIBOX_SHADOW_BLUR: f32 = 22.0;
 /// The blur behind the omnibox panel, in Rune points.
-pub(crate) const MODAL_BACKDROP_BLUR: f32 = 16.0;
+pub(crate) const MODAL_BACKDROP_BLUR: f32 = 24.0;
 pub(crate) const OMNIBOX_SEARCH_ICON: f32 = 16.0;
 pub(crate) const OMNIBOX_SEARCH_CHEVRON: f32 = 12.0;
 pub(crate) const OMNIBOX_SEARCH_BUTTON_HEIGHT: f32 = 28.0;
