@@ -745,7 +745,7 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
     }
     menu = menu.separator().group_label("Recently Closed");
     if state.recently_closed().is_empty() {
-        menu = menu.item(MenuItem::new("No recently closed tabs").disabled(true));
+        menu = menu.item(MenuItem::new("No closed tabs").disabled(true));
     } else {
         for (index, closed) in state.recently_closed().iter().take(5).enumerate() {
             let label = closed.label().to_owned();

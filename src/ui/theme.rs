@@ -86,7 +86,7 @@ pub(crate) fn palette(dark: bool) -> Theme {
             #[cfg(not(target_os = "linux"))]
             window_control: oklcha(1.0, 0.0, 0.0, 0.16),
             address_field: oklch(0.24, 0.006, HUE),
-            control_border: oklch(0.53, 0.015, HUE),
+            control_border: oklch(0.56, 0.015, HUE),
             focus: oklch(0.80, 0.09, HUE),
             selection: oklch(0.43, 0.065, HUE),
             hover: oklcha(0.66, 0.008, HUE, 0.08),
@@ -181,6 +181,9 @@ pub(crate) const HEADER_GROUP_GAP: f32 = space::S3;
 
 /// How far buttons and rows shrink while pressed, springing back on release.
 pub(crate) const PRESS_SCALE: f32 = 0.97;
+
+/// Headings for native pages. Compact labels and body copy use Rune’s type scale.
+pub(crate) const PAGE_TITLE: rune::TextStyle = rune::TextStyle::new(26.0, 600.0).lh(32.0);
 
 /// The address field.
 pub(crate) const FOCUS_WIDTH: f32 = 2.0;
@@ -322,7 +325,7 @@ mod tests {
             }
             assert!(contrast(t.text, t.selection) >= 4.5);
             assert!(contrast(t.tab_drop_indicator, t.window) >= 3.0);
-            for background in [t.address_field, t.window] {
+            for background in [t.address_field, t.window, t.settings_surface] {
                 assert!(contrast(t.control_border, background) >= 3.0);
             }
         }

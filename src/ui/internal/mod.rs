@@ -9,7 +9,7 @@ use rune::{El, col, text};
 
 use crate::app::AppState;
 use crate::internal::{InternalPage, InternalRoute};
-use crate::ui::theme::Theme;
+use crate::ui::theme::{self, Theme};
 
 pub(crate) fn view(
     state: &AppState,
@@ -39,11 +39,7 @@ fn message_page(title: &str, message: &str, theme: &Theme) -> El {
         .h_full()
         .center()
         .gap(10.0)
-        .child(
-            text(title)
-                .font(rune::TextStyle::new(25.0, 600.0).lh(31.0))
-                .color(theme.text),
-        )
+        .child(text(title).font(theme::PAGE_TITLE).color(theme.text))
         .child(
             text(message)
                 .font(type_::BODY)

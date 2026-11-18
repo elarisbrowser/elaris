@@ -36,7 +36,7 @@ pub(super) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> E
         .gap(SECTION_GAP)
         .child(
             text("Settings")
-                .font(TextStyle::new(26.0, 600.0).lh(32.0))
+                .font(super::theme::PAGE_TITLE)
                 .color(theme.text),
         )
         .child(appearance_section(state, theme, &kit, compact))
@@ -137,7 +137,9 @@ fn search_section(
                 "Search engine",
                 "Used for searches from the address bar.",
                 theme,
-                select.build(kit, overlays),
+                select
+                    .build(kit, overlays)
+                    .border(1.0, theme.control_border),
                 compact,
             ),
             theme,
@@ -235,7 +237,9 @@ fn startup_section(
                 "When Elaris opens",
                 "Choose what opens when you launch Elaris.",
                 theme,
-                select.build(kit, overlays),
+                select
+                    .build(kit, overlays)
+                    .border(1.0, theme.control_border),
                 compact,
             ),
             theme,
