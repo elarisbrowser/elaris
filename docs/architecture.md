@@ -45,8 +45,7 @@ and `$XDG_CONFIG_HOME/elaris/config.toml` on Linux, falling back to `~/.config/e
 Debug builds place each profile under its own `development/` directory. `ELARIS_DATA_DIR` is an
 explicit test/development override and places the config beside the selected data root.
 
-Debug builds use a `development/` subdirectory under that root, keeping development profiles
-separate from release data. Set `ELARIS_DATA_DIR` to select an exact application-data root for
+Set `ELARIS_DATA_DIR` to select an exact application-data root for
 development or tests; it must be absolute and bypasses the platform default and build-mode suffix.
 The default Ladybird profile is `profile/` under the selected data root. The existing
 `ELARIS_LADYBIRD_PROFILE_DIR` override still selects Ladybird's profile directory independently;
@@ -175,11 +174,16 @@ When Find opens with an empty query, the bridge reads the selected webpage text 
 tab and request are still active and the user has not started typing. Elaris-owned internal pages
 do not have Ladybird views; the bar states that Find is unavailable on those pages.
 
-On normal close, the current tab list and active index are queued before Ladybird shutdown. Session
-replacement is atomic. A process-exit handler drains and joins the storage worker after queued
-writes, while the existing Ladybird exit handler still closes views, gives helper processes its
-short grace period and joins the engine thread. A forced process termination can still lose work
-that had not reached the storage worker; this milestone does not add crash recovery.
+Rune connects the storage wake callback when the window is ready, including UI-only builds.
+The callback schedules a poll after the worker publishes configuration or history updates.
+
+On close or quit, App queues the current session and waits up to two seconds for the storage worker
+to acknowledge the queue. The worker still owns all disk I/O and replaces the session atomically.
+The acknowledgement means earlier commands finished processing. Write errors are logged by the worker.
+Process-exit handlers still request worker shutdown and join the storage and engine threads when the
+host runs those handlers. A forced exit or stalled disk can still leave pending work.
+
+See [Design and visual verification](ui-design.md) for native UI conventions and checks.
 
 ### Quick Tab Switcher
 

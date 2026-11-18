@@ -1,0 +1,69 @@
+# Native UI design and verification
+
+`src/ui/theme.rs` owns chrome surfaces, foregrounds and interaction colours. Window, page and
+floating surfaces provide stable backgrounds for text. Hover and press use restrained alpha
+overlays. Dragged tabs and keyboard selection use dedicated fills. Keep focus, selection and
+control boundaries distinct from decorative dividers and shadows.
+
+Build Rune Kit palettes through `Theme::kit`, using the Settings group or floating panel as the
+seed surface. Rune Kit derives elevations and control geometry. Elaris supplies foregrounds for
+menu labels, shortcuts and icons, plus the focus and interaction colours.
+
+Use the shared native page title for full pages and Rune's body and label styles for common copy.
+Reuse Rune spacing and radius tokens and Elaris's existing field, row and icon button dimensions.
+Keep pointer-tracked geometry direct, spring surrounding layout, and respect system reduced
+motion when revealing overlays or toolbars. The two theme tests use the [WCAG 2.2 contrast
+criteria](https://www.w3.org/TR/WCAG22/#contrast-minimum) as a baseline. They model linear
+source-over on stable backgrounds and include the surfaces Rune Kit derives.
+
+## Repeatable graphical check
+
+Set `ELARIS_DATA_DIR` to a new absolute temporary directory before launching a bridge-enabled
+build. Put the download destination inside it and keep any explicit Ladybird profile override
+inside it as well. Use the local `bridge/tests/smoke.html` fixture for Find and favicon checks.
+Open Settings and an unknown `elaris://` page. Add a pinned tab and two Favourites, then reopen
+the browser to verify their order. Capture each surface in both forced appearances.
+
+| Surface | What to inspect | November 2026 review |
+|---|---|---|
+| Sidebar, tabs, Favourites and pinned tabs | Current and inactive labels, favicon, fallback icon, close, drag across sections, resize and collapse | Both themes on macOS Retina. Light cross-section drag and resize observed. |
+| Omnibox | Empty and populated, text selection, current result, footer and focus return | Populated and selected text inspected in both themes. Creation and submission verified. |
+| Find | Placeholder, disabled arrows, no matches, matches and selection | No-match and three-match light states, three-match dark state on the local page. |
+| Quick Tab Switcher | Selected row, URL, wrapping, long list and modifier release | Both themes in Rune screenshots at 800×560. Native Control+Tab commit observed. |
+| Settings and menus | Descriptions, selection, picker, keyboard focus and disabled rows | Both themes, including tab context menus. Light picker and narrower Settings layout inspected. Linux ARM64 Settings also reviewed in offscreen Mesa renders in both themes. |
+| Downloads | Empty, active, completed and failed rows | Empty popover in both themes. macOS C++ download smoke covers transfer behaviour. |
+| Native pages | Settings and unknown route, expanded and collapsed sidebar | Both themes, with collapsed layout inspected in dark mode. |
+
+For the switcher's fleeting preview, use a restored session and Rune's CLI renderer. Set
+`[appearance].theme` to `"system"` in the isolated config. Replay the following script with
+`--script FILE --at 0.6 --size 800x560 --scale 1 --theme light --snap light.png`. Repeat with
+`--theme dark`. Use `--tree` when checking that selected rows remain visible. Compare the
+screenshots visually because text rasterization varies by display and platform.
+
+```json
+[
+  {"t": 0.1, "hold": "ctrl"},
+  {"t": 0.15, "type": "key", "name": "Tab", "ctrl": true},
+  {"t": 0.75, "hold": ""}
+]
+```
+
+Still to verify visually are live OS appearance changes, system reduced motion, screen-reader
+navigation, tooltips and loading indicators across both themes, active download rows, and Linux
+native windows. Headless tests cover reduced-motion omnibox and switcher behaviour. History
+queries and search selection are covered by tests. The final close/quit check left a valid
+session with the closed test page absent and no temporary session files. Rune reported a 12 ms
+main-thread wait during that quit. The wait is limited to close and quit hooks.
+
+Linux ARM64 passed formatting, locked metadata, check, Clippy and the default tests in Docker.
+Bridge-enabled check and Clippy also passed. The cached Linux bridge predates the current download
+ABI, so the feature-enabled tests need a fresh bridge build to link and run.
+
+## Performance observations
+
+The macOS debug review used `ELARIS_PERF=1` on a restored 24-tab fixture. Recorded frame-interval
+medians were about 17 ms across most interaction windows. Some windows included idle gaps and
+occasional long intervals, so the log cannot establish continuous 60 Hz motion or a performance
+improvement. One idle process observation showed 0.0% CPU after 27 seconds. The Rune switcher
+replay reported p95 CPU frame times of 6.1 ms in light and 4.9 ms in dark over 37 frames each.
+Those are offscreen observations without a before/after comparison.
