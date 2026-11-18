@@ -39,6 +39,8 @@ pub(crate) enum Error {
     Address(&'static str),
     /// No open tab has this id.
     NoSuchTab(TabId),
+    /// The requested position is outside the current tab order.
+    InvalidTabIndex(usize),
     /// The requested download operation could not be queued.
     Download(downloads::Error),
 }
@@ -48,6 +50,7 @@ impl fmt::Display for Error {
         match self {
             Self::Address(reason) => f.write_str(reason),
             Self::NoSuchTab(_) => f.write_str("The tab has closed"),
+            Self::InvalidTabIndex(_) => f.write_str("The tab position is out of range"),
             Self::Download(error) => error.fmt(f),
         }
     }
@@ -264,6 +267,22 @@ impl Browser {
         let len = self.tabs.len() as isize;
         let beside = (index as isize + offset).rem_euclid(len) as usize;
         Some(self.tabs[beside].id())
+    }
+
+    /// Moves an open tab to its zero-based position without touching its page or active state.
+    pub(crate) fn move_tab(&mut self, id: TabId, target_index: usize) -> Result<(), Error> {
+        let Some(source_index) = self.tabs.iter().position(|tab| tab.id() == id) else {
+            return Err(Error::NoSuchTab(id));
+        };
+        if target_index >= self.tabs.len() {
+            return Err(Error::InvalidTabIndex(target_index));
+        }
+        if source_index == target_index {
+            return Ok(());
+        }
+        let tab = self.tabs.remove(source_index);
+        self.tabs.insert(target_index, tab);
+        Ok(())
     }
 
     /// Opens a tab at the end of the list loading `address`, and makes it active if no tab is.
@@ -1156,6 +1175,63 @@ mod tests {
         assert_eq!(browser.tab_beside(a, -1), Some(c));
         browser.close_tab(b);
         assert_eq!(browser.tab_beside(b, 1), None);
+    }
+
+    #[test]
+    fn moves_tabs_in_both_directions_without_replacing_their_pages() {
+        let (mut browser, fake) = connected();
+        let [a, b, c, d] = ["a.example", "b.example", "c.example", "d.example"]
+            .map(|address| browser.open_tab(address).unwrap());
+        browser.activate_tab(c);
+        let surfaces = [a, b, c, d].map(|id| (id, surface(&browser, id)));
+        sent(&fake);
+
+        browser.move_tab(d, 0).unwrap();
+        assert_eq!(
+            browser.tabs().iter().map(Tab::id).collect::<Vec<_>>(),
+            [d, a, b, c]
+        );
+        browser.move_tab(d, 3).unwrap();
+        assert_eq!(
+            browser.tabs().iter().map(Tab::id).collect::<Vec<_>>(),
+            [a, b, c, d]
+        );
+        browser.move_tab(a, 3).unwrap();
+        assert_eq!(
+            browser.tabs().iter().map(Tab::id).collect::<Vec<_>>(),
+            [b, c, d, a]
+        );
+        browser.move_tab(a, 3).unwrap();
+
+        assert_eq!(browser.active_tab().map(Tab::id), Some(c));
+        for (id, old_surface) in surfaces {
+            assert_eq!(surface(&browser, id), old_surface);
+        }
+        assert!(
+            sent(&fake).is_empty(),
+            "reordering sends no engine commands"
+        );
+        assert_eq!(browser.tab_beside(c, 1), Some(d));
+        assert_eq!(browser.tab_beside(c, -1), Some(b));
+    }
+
+    #[test]
+    fn rejects_missing_tabs_and_out_of_range_positions() {
+        let mut browser = Browser::default();
+        let first = browser.open_tab("a.example").unwrap();
+        let second = browser.open_tab("b.example").unwrap();
+        let missing = TabId::from_raw(99);
+
+        assert_eq!(browser.move_tab(missing, 0), Err(Error::NoSuchTab(missing)));
+        assert_eq!(browser.move_tab(first, 2), Err(Error::InvalidTabIndex(2)));
+        assert_eq!(
+            browser.move_tab(first, usize::MAX),
+            Err(Error::InvalidTabIndex(usize::MAX))
+        );
+        assert_eq!(
+            browser.tabs().iter().map(Tab::id).collect::<Vec<_>>(),
+            [first, second]
+        );
     }
 
     #[test]

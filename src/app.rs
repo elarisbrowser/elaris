@@ -132,6 +132,7 @@ pub(crate) struct AppState {
     pub(crate) downloads_open: bool,
     pub(crate) page_menu: crate::ui::PageMenuState,
     pub(crate) sidebar: SidebarState,
+    pub(crate) tab_drag: crate::ui::TabDragState,
     pub(crate) settings_picker_open: bool,
     pub(crate) startup_picker_open: bool,
     #[cfg(target_os = "linux")]
@@ -229,6 +230,7 @@ impl AppState {
             downloads_open: false,
             page_menu: Default::default(),
             sidebar: SidebarState::default(),
+            tab_drag: crate::ui::TabDragState::default(),
             settings_picker_open: false,
             startup_picker_open: false,
             #[cfg(target_os = "linux")]
@@ -507,6 +509,7 @@ impl AppState {
     }
 
     pub(crate) fn activate(&mut self, tab: TabId) {
+        self.cancel_tab_drag();
         self.page_menu = Default::default();
         self.browser.activate_tab(tab);
         self.address_error = None;
@@ -514,6 +517,7 @@ impl AppState {
 
     /// Closes the tab and opens the omnibox when the window becomes empty.
     pub(crate) fn close(&mut self, tab: TabId) {
+        self.cancel_tab_drag();
         self.page_menu = Default::default();
         self.browser.close_tab(tab);
         if self.browser.tabs().is_empty() {
@@ -528,7 +532,22 @@ impl AppState {
     }
 
     pub(crate) fn close_others(&mut self, tab: TabId) {
+        self.cancel_tab_drag();
         self.browser.close_other_tabs(tab);
+    }
+
+    pub(crate) fn cancel_tab_drag(&mut self) -> bool {
+        self.tab_drag.cancel()
+    }
+
+    pub(crate) fn commit_tab_reorder(
+        &mut self,
+        tab: TabId,
+        target_index: usize,
+    ) -> Result<(), crate::browser::Error> {
+        self.browser.move_tab(tab, target_index)?;
+        self.persist_session_if_changed();
+        Ok(())
     }
 
     pub(crate) fn reload(&mut self, tab: TabId) {
@@ -587,7 +606,7 @@ impl AppState {
         }
     }
 
-    fn persist_session_if_changed(&mut self) {
+    pub(crate) fn persist_session_if_changed(&mut self) {
         let session = self.session_snapshot();
         if self.last_saved_session.as_ref() != Some(&session) {
             self.queue_session(session);
@@ -673,12 +692,36 @@ pub(crate) fn setup_headless(state: &mut AppState, waker: rune::Waker) {
 }
 
 /// Rune's per-frame hook: forwards UI changes to the browser and shows what it reported.
-pub(crate) fn poll(state: &mut AppState, _clock: f64, tx: &mut Tx) -> bool {
+pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     let focus_changed = state
         .browser
         .set_viewport_focus(tx.focused() == Some(VIEWPORT));
     let settling = crate::ui::settle_sidebar(state, tx);
     let polled = state.browser.poll();
+    let mut tab_drag_changed = false;
+    if state.tab_drag.is_dragging() {
+        match state.tab_drag.refresh_target(state.browser.tabs()) {
+            crate::ui::TabDragMoveResult::PreviewChanged => {
+                tx.animated();
+                tx.motion(crate::ui::TAB_REORDER_MOTION);
+                tab_drag_changed = true;
+            }
+            crate::ui::TabDragMoveResult::Cancelled => tab_drag_changed = true,
+            crate::ui::TabDragMoveResult::NoChange => {}
+        }
+        if let Some(y) = state.tab_drag.scroll_target(clock) {
+            tx.scroll_to_instant("tabs-scroll", 0.0, y);
+            tx.wake_after(std::time::Duration::ZERO);
+        }
+    }
+    let tab_drag_settled = state.tab_drag.settle_tick(clock);
+    if tab_drag_settled {
+        tx.animated();
+        tx.motion(crate::ui::TAB_REORDER_MOTION);
+        tab_drag_changed = true;
+    } else if let Some(wait) = state.tab_drag.settle_wake() {
+        tx.wake_after(wait);
+    }
     if let Some(error) = &polled.download_directory_error {
         state.configuration_issue = Some(error.clone());
     }
@@ -750,6 +793,7 @@ pub(crate) fn poll(state: &mut AppState, _clock: f64, tx: &mut Tx) -> bool {
         || settling
         || focus_changed
         || configuration_changed
+        || tab_drag_changed
 }
 
 /// A query was submitted from the focused omnibox.
@@ -779,6 +823,10 @@ pub(crate) fn open_from_launcher(state: &mut AppState, tx: &mut Tx) {
 
 /// A new tab starts in the omnibox, ready to type.
 pub(crate) fn new_tab(state: &mut AppState, tx: &mut Tx) {
+    if state.cancel_tab_drag() {
+        tx.animated();
+        tx.motion(crate::ui::TAB_REORDER_MOTION);
+    }
     state.open_omnibox(omnibox::Mode::New);
     tx.focus("omnibox-input", false);
 }
@@ -813,8 +861,12 @@ pub(crate) fn omnibox_input_key(state: &mut AppState, event: &KeyEvent, tx: &mut
     }
 }
 
-pub(crate) fn on_window_focus(state: &mut AppState, focused: bool, _: &mut Tx) {
+pub(crate) fn on_window_focus(state: &mut AppState, focused: bool, tx: &mut Tx) {
     state.browser.set_window_focus(focused);
+    if !focused && state.cancel_tab_drag() {
+        tx.animated();
+        tx.motion(crate::ui::TAB_REORDER_MOTION);
+    }
 }
 
 pub(crate) fn shut_down(state: &mut AppState, _: &mut Tx) {
@@ -1330,5 +1382,212 @@ mod tests {
         assert_eq!(session.active_tab, 2);
     }
 
+    #[test]
+    fn a_committed_reorder_is_saved_in_order_without_changing_the_active_tab() {
+        let mut state = AppState::new(Some("one.example"));
+        let first = state.browser.active_tab().unwrap().id();
+        let second = state.browser.open_tab("two.example").unwrap();
+        let third = state.browser.open_tab("three.example").unwrap();
+        state.activate(second);
 
+        state.commit_tab_reorder(first, 2).unwrap();
+
+        assert_eq!(
+            state.browser.tabs().iter().map(Tab::id).collect::<Vec<_>>(),
+            [second, third, first]
+        );
+        assert_eq!(state.browser.active_tab().map(Tab::id), Some(second));
+        let session = state.session_snapshot();
+        assert_eq!(
+            session
+                .tabs
+                .iter()
+                .map(|tab| tab.url.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "https://two.example",
+                "https://three.example",
+                "https://one.example"
+            ]
+        );
+        assert_eq!(session.active_tab, 0);
+    }
+
+    #[test]
+    fn dragging_a_background_tab_reorders_live_without_activating_it() {
+        use rune::{Env, Runtime};
+
+        let mut state = AppState::new(Some("one.example"));
+        let first = state.browser.active_tab().unwrap().id();
+        let second = state.browser.open_tab("two.example").unwrap();
+        let third = state.browser.open_tab("three.example").unwrap();
+        let mut runtime =
+            Runtime::new(state, crate::ui::view, (960.0, 640.0), Env::new(false, 1.0));
+        runtime.frame(0.0);
+
+        let rect = |runtime: &Runtime<AppState>, id: TabId| {
+            runtime
+                .elements()
+                .into_iter()
+                .find(|element| element.key.as_deref() == Some(&format!("tab-{}", id.raw())))
+                .unwrap()
+                .rect
+        };
+        let second_rect = rect(&runtime, second);
+        let third_rect = rect(&runtime, third);
+        let before_order = [first, second, third];
+        let pointer_x = second_rect[0] + 24.0;
+        let pointer_y = second_rect[1] + second_rect[3] / 2.0;
+        runtime.pointer_move(pointer_x, pointer_y);
+        runtime.pointer_down(pointer_x, pointer_y);
+        runtime.frame(0.0);
+        runtime.pointer_move(pointer_x, third_rect[1] + third_rect[3] / 2.0 + 5.0);
+        runtime.frame(1.0 / 60.0);
+
+        assert!(runtime.state.tab_drag.is_dragging());
+        assert_eq!(
+            runtime
+                .state
+                .browser
+                .tabs()
+                .iter()
+                .map(Tab::id)
+                .collect::<Vec<_>>(),
+            before_order,
+            "the browser order stays committed until release"
+        );
+        let third_mid_y = rect(&runtime, third)[1];
+        assert!(
+            third_mid_y < third_rect[1] && third_mid_y > second_rect[1],
+            "the neighbouring row starts moving into the preview slot"
+        );
+
+        let release_y = third_rect[1] + third_rect[3] / 2.0 + 5.0;
+        let dragged_visual = runtime
+            .elements()
+            .into_iter()
+            .find(|element| element.key.as_deref() == Some("tab-drag-visual"))
+            .expect("drag overlay is visible");
+        assert!(
+            (dragged_visual.rect[0] - second_rect[0]).abs() < 0.1,
+            "drag visual x {} differs from row x {}",
+            dragged_visual.rect[0],
+            second_rect[0]
+        );
+        assert!(
+            (dragged_visual.rect[1] - (release_y - second_rect[3] / 2.0)).abs() < 0.1,
+            "drag visual y {} differs from expected row y {}",
+            dragged_visual.rect[1],
+            release_y - second_rect[3] / 2.0
+        );
+        runtime.pointer_up(pointer_x, release_y);
+        runtime.frame(1.0 / 60.0);
+
+        assert_eq!(
+            runtime
+                .state
+                .browser
+                .tabs()
+                .iter()
+                .map(Tab::id)
+                .collect::<Vec<_>>(),
+            [first, third, second]
+        );
+        assert_eq!(runtime.state.browser.active_tab().map(Tab::id), Some(first));
+        assert!(
+            runtime.state.tab_drag.visual().is_some(),
+            "the drop is still settling"
+        );
+    }
+
+    #[test]
+    fn a_tab_click_without_drag_still_selects_the_tab() {
+        use rune::{Env, Runtime};
+
+        let mut state = AppState::new(Some("one.example"));
+        let first = state.browser.active_tab().unwrap().id();
+        let second = state.browser.open_tab("two.example").unwrap();
+        let mut runtime =
+            Runtime::new(state, crate::ui::view, (960.0, 640.0), Env::new(false, 1.0));
+        runtime.frame(0.0);
+
+        let row = runtime
+            .elements()
+            .into_iter()
+            .find(|element| element.key.as_deref() == Some(&format!("tab-{}", second.raw())))
+            .unwrap()
+            .rect;
+        let (x, y) = (row[0] + 24.0, row[1] + row[3] / 2.0);
+        runtime.pointer_move(x, y);
+        runtime.pointer_down(x, y);
+        runtime.frame(0.0);
+        runtime.pointer_up(x, y);
+        runtime.frame(1.0 / 60.0);
+
+        assert_eq!(
+            runtime.state.browser.active_tab().map(Tab::id),
+            Some(second)
+        );
+        assert_eq!(
+            runtime
+                .state
+                .browser
+                .tabs()
+                .iter()
+                .map(Tab::id)
+                .collect::<Vec<_>>(),
+            [first, second],
+            "clicking leaves tab order unchanged"
+        );
+        assert!(!runtime.state.tab_drag.is_dragging());
+    }
+
+    #[test]
+    fn escape_cancels_a_live_tab_preview_without_persisting_an_order_change() {
+        use rune::{Env, Runtime};
+
+        let mut state = AppState::new(Some("one.example"));
+        let first = state.browser.active_tab().unwrap().id();
+        let second = state.browser.open_tab("two.example").unwrap();
+        let third = state.browser.open_tab("three.example").unwrap();
+        let mut runtime =
+            Runtime::new(state, crate::ui::view, (960.0, 640.0), Env::new(false, 1.0));
+        runtime.frame(0.0);
+        let row = |runtime: &Runtime<AppState>, id: TabId| {
+            runtime
+                .elements()
+                .into_iter()
+                .find(|element| element.key.as_deref() == Some(&format!("tab-{}", id.raw())))
+                .unwrap()
+                .rect
+        };
+        let second_rect = row(&runtime, second);
+        let third_rect = row(&runtime, third);
+        let (x, y) = (second_rect[0] + 24.0, second_rect[1] + second_rect[3] / 2.0);
+        runtime.pointer_move(x, y);
+        runtime.pointer_down(x, y);
+        runtime.frame(0.0);
+        runtime.pointer_move(x, third_rect[1] + third_rect[3] / 2.0 + 5.0);
+        runtime.frame(1.0 / 60.0);
+        assert!(runtime.state.tab_drag.is_dragging());
+
+        runtime.key(KeyEvent {
+            key: Key::Escape,
+            mods: Mods::default(),
+        });
+        runtime.frame(1.0 / 60.0);
+
+        assert_eq!(
+            runtime
+                .state
+                .browser
+                .tabs()
+                .iter()
+                .map(Tab::id)
+                .collect::<Vec<_>>(),
+            [first, second, third]
+        );
+        assert!(!runtime.state.tab_drag.is_dragging());
+        assert!(runtime.state.tab_drag.visual().is_none());
+    }
 }

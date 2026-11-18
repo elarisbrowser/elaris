@@ -8,6 +8,7 @@
 //! - `tabs`: the tab list and the new-tab button.
 //! - `resize`: dragging the sidebar's edge.
 
+pub(crate) mod drag;
 pub(crate) mod header;
 pub(crate) mod resize;
 mod tabs;
@@ -21,6 +22,8 @@ use super::icons;
 use super::theme::{self, Theme};
 use crate::app::{self, AppState};
 use crate::appearance::Appearance;
+pub(crate) use drag::MoveResult as TabDragMoveResult;
+pub(crate) use drag::TabDragState;
 
 /// How the sidebar is laid out: what the window shows of it, not of the browser.
 pub(crate) struct SidebarState {
@@ -44,6 +47,10 @@ impl Default for SidebarState {
 
 /// Shows or hides the sidebar, springing the page to its new width.
 pub(crate) fn toggle(state: &mut AppState, tx: &mut Tx) {
+    if state.cancel_tab_drag() {
+        tx.animated();
+        tx.motion(theme::TAB_REORDER_MOTION);
+    }
     state.sidebar.collapsed = !state.sidebar.collapsed;
     tx.animated();
     tx.motion(theme::SIDEBAR_TOGGLE);
@@ -92,7 +99,7 @@ fn body(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
                 .truncate(),
         );
     }
-    body.child(tabs::view(state, theme)).child(
+    body.child(tabs::view(state, theme, overlays)).child(
         rune::row()
             .key("sidebar-bottom-controls")
             .w_full()

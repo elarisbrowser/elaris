@@ -33,6 +33,8 @@ pub(crate) struct Theme {
     /// The active tab, raised above the sidebar.
     pub(crate) tab_active: Color,
     pub(crate) tab_active_shadow: Color,
+    /// A tab lifted for a reorder, including inactive tabs.
+    pub(crate) tab_drag: Color,
     /// The dim layer and raised surface of the omnibox.
     pub(crate) overlay_scrim: Color,
     pub(crate) overlay_panel: Color,
@@ -60,6 +62,7 @@ pub(crate) fn palette(dark: bool) -> Theme {
             press: oklcha(1.0, 0.0, 0.0, 0.1),
             tab_active: oklcha(1.0, 0.0, 0.0, 0.15),
             tab_active_shadow: oklcha(0.0, 0.0, 0.0, 0.3),
+            tab_drag: oklcha(1.0, 0.0, 0.0, 0.1),
             overlay_scrim: oklcha(0.0, 0.0, 0.0, 0.16),
             overlay_panel: oklch(0.255, 0.006, HUE),
             overlay_border: oklcha(1.0, 0.0, 0.0, 0.11),
@@ -82,6 +85,7 @@ pub(crate) fn palette(dark: bool) -> Theme {
             press: oklcha(0.2, 0.02, HUE, 0.1),
             tab_active: oklch(1.0, 0.0, 0.0),
             tab_active_shadow: oklcha(0.2, 0.02, HUE, 0.18),
+            tab_drag: oklcha(0.2, 0.02, HUE, 0.07),
             overlay_scrim: oklcha(0.2, 0.02, HUE, 0.12),
             overlay_panel: oklch(0.995, 0.002, HUE),
             overlay_border: oklcha(0.2, 0.02, HUE, 0.12),
@@ -177,6 +181,13 @@ pub(crate) const ACTIVE_SHADOW_Y: f32 = 0.5;
 pub(crate) const ACTIVE_SHADOW_BLUR: f32 = 1.5;
 /// How the active tab's highlight moves to the tab pressed.
 pub(crate) const SELECTION_MOTION: Spring = motion::SNAPPY;
+/// The short spring shared by live tab preview movement and the dragged tab's drop.
+pub(crate) const TAB_REORDER_MOTION: Spring = Spring::new(0.2, 0.12);
+pub(crate) const TAB_DROP_SETTLE_SECONDS: f32 = 0.2;
+pub(crate) const TAB_DRAG_SCROLL_EDGE: f32 = 34.0;
+pub(crate) const TAB_DRAG_SCROLL_MAX: f32 = 520.0;
+pub(crate) const TAB_DRAG_SHADOW_Y: f32 = 3.0;
+pub(crate) const TAB_DRAG_SHADOW_BLUR: f32 = 8.0;
 
 /// The web page's container: how far it sits in from the window's edges, and its corners.
 pub(crate) const VIEWPORT_INSET: f32 = space::S1 + space::S1 / 2.0;

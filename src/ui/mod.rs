@@ -14,8 +14,8 @@ pub(crate) mod viewport;
 pub(crate) use viewport::menu::PageMenuState;
 
 pub(crate) use sidebar::resize::settle as settle_sidebar;
-pub(crate) use sidebar::{SidebarState, toggle as toggle_sidebar};
-pub(crate) use theme::{TRAFFIC_LIGHTS, WINDOW_MIN_SIZE};
+pub(crate) use sidebar::{SidebarState, TabDragMoveResult, TabDragState, toggle as toggle_sidebar};
+pub(crate) use theme::{TAB_REORDER_MOTION, TRAFFIC_LIGHTS, WINDOW_MIN_SIZE};
 
 #[cfg(target_os = "linux")]
 use rune::col;
