@@ -501,6 +501,10 @@ impl Browser {
         self.window.viewport = size;
     }
 
+    pub(crate) fn viewport_width(&self) -> f32 {
+        self.window.viewport[0]
+    }
+
     pub(crate) fn set_window_focus(&mut self, focused: bool) {
         if !focused {
             self.reset_input();

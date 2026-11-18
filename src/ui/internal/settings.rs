@@ -2,8 +2,10 @@
 
 //! The browser's compact native settings page.
 
+use std::path::{Path, PathBuf};
+
 use rune::tok::type_;
-use rune::{El, ScrollSpec, TextStyle, col, el, row, text};
+use rune::{El, ScrollSpec, TextStyle, col, row, text};
 use rune_kit::{
     Button, ButtonVariant, Kit, PaletteSeed, SegmentedControl, Select, SelectAppearance,
 };
@@ -12,13 +14,15 @@ use crate::address::SearchEngine;
 use crate::app::AppState;
 use crate::appearance::Appearance;
 use crate::settings::{DownloadDirectory, StartupMode};
-use crate::ui::theme::Theme;
+use crate::ui::theme::{self, Theme};
 
 const CONTENT_WIDTH: f32 = 720.0;
-const CONTENT_INSET: f32 = 32.0;
-const SECTION_GAP: f32 = 28.0;
-const ROW_GAP: f32 = 14.0;
-const CONTROL_WIDTH: f32 = 240.0;
+const CONTENT_INSET: f32 = 28.0;
+const TOP_PADDING: f32 = 48.0;
+const SECTION_GAP: f32 = 25.0;
+const ROW_GAP: f32 = 16.0;
+const CONTROL_WIDTH: f32 = 220.0;
+const COMPACT_BREAKPOINT: f32 = 560.0;
 
 pub(super) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
     let kit = Kit::from_palette(PaletteSeed {
@@ -26,34 +30,26 @@ pub(super) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> E
         fg: theme.text,
         accent: theme.icon,
     });
+    let viewport_width = state.browser.viewport_width();
+    let compact = viewport_width > 0.0 && viewport_width < COMPACT_BREAKPOINT;
     let content = col()
         .key("settings-content")
         .w_full()
         .max_w(CONTENT_WIDTH)
         .px(CONTENT_INSET)
-        .pt(34.0)
+        .pt(TOP_PADDING)
         .pb(40.0)
         .gap(SECTION_GAP)
         .child(
-            col()
-                .key("settings-heading")
-                .gap(6.0)
-                .child(
-                    text("Settings")
-                        .font(TextStyle::new(29.0, 600.0).lh(35.0))
-                        .color(theme.text),
-                )
-                .child(
-                    text("Make Elaris feel like yours.")
-                        .font(type_::BODY)
-                        .color(theme.text_muted),
-                ),
+            text("Settings")
+                .font(TextStyle::new(26.0, 600.0).lh(32.0))
+                .color(theme.text),
         )
-        .child(appearance_section(state, theme, &kit))
-        .child(search_section(state, theme, &kit, overlays))
-        .child(downloads_section(state, theme, &kit))
-        .child(startup_section(state, theme, &kit, overlays))
-        .child(configuration_section(state, theme, &kit));
+        .child(appearance_section(state, theme, &kit, compact))
+        .child(search_section(state, theme, &kit, overlays, compact))
+        .child(downloads_section(state, theme, &kit, compact))
+        .child(startup_section(state, theme, &kit, overlays, compact))
+        .child(configuration_section(state, theme, &kit, compact));
 
     col()
         .key("settings-scroll")
@@ -72,34 +68,50 @@ pub(super) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> E
         )
 }
 
-fn appearance_section(state: &AppState, theme: &Theme, kit: &Kit) -> El {
-    section("Appearance", theme).child(setting_row(
-        "Theme",
-        "Choose how Elaris and webpages look.",
+fn appearance_section(state: &AppState, theme: &Theme, kit: &Kit, compact: bool) -> El {
+    let control = SegmentedControl::new(
+        &["System", "Light", "Dark"],
+        Some(match state.settings.appearance {
+            Appearance::System => 0,
+            Appearance::Light => 1,
+            Appearance::Dark => 2,
+        }),
+    )
+    .width(Some(CONTROL_WIDTH))
+    .label("Appearance")
+    .on_pick(|state: &mut AppState, index, _| {
+        let appearance = match index {
+            0 => Appearance::System,
+            1 => Appearance::Light,
+            _ => Appearance::Dark,
+        };
+        state.set_appearance(appearance);
+    })
+    .build(kit);
+
+    section(
+        "Appearance",
         theme,
-        SegmentedControl::new(
-            &["System", "Light", "Dark"],
-            Some(match state.settings.appearance {
-                Appearance::System => 0,
-                Appearance::Light => 1,
-                Appearance::Dark => 2,
-            }),
-        )
-        .width(Some(CONTROL_WIDTH))
-        .label("Appearance")
-        .on_pick(|state: &mut AppState, index, _| {
-            let appearance = match index {
-                0 => Appearance::System,
-                1 => Appearance::Light,
-                _ => Appearance::Dark,
-            };
-            state.set_appearance(appearance);
-        })
-        .build(kit),
-    ))
+        settings_group(
+            setting_row(
+                "Theme",
+                "Choose how Elaris and webpages look.",
+                theme,
+                control,
+                compact,
+            ),
+            theme,
+        ),
+    )
 }
 
-fn search_section(state: &AppState, theme: &Theme, kit: &Kit, overlays: &mut Vec<El>) -> El {
+fn search_section(
+    state: &AppState,
+    theme: &Theme,
+    kit: &Kit,
+    overlays: &mut Vec<El>,
+    compact: bool,
+) -> El {
     let options = ["DuckDuckGo", "Google", "Bing", "Brave Search"];
     let current = state.settings.search_engine.label();
     let select = Select::new("settings-search-engine", &options)
@@ -125,19 +137,27 @@ fn search_section(state: &AppState, theme: &Theme, kit: &Kit, overlays: &mut Vec
             }
             state.settings_picker_open = false;
         });
-    section("Search", theme).child(setting_row(
-        "Search engine",
-        "Used when you search from the address bar.",
+    section(
+        "Search",
         theme,
-        select.build(kit, overlays),
-    ))
+        settings_group(
+            setting_row(
+                "Search engine",
+                "Used for searches from the address bar.",
+                theme,
+                select.build(kit, overlays),
+                compact,
+            ),
+            theme,
+        ),
+    )
 }
 
-fn downloads_section(state: &AppState, theme: &Theme, kit: &Kit) -> El {
+fn downloads_section(state: &AppState, theme: &Theme, kit: &Kit, compact: bool) -> El {
     let download_directory = state.download_directory();
     let path = download_directory.display().to_string();
     let current_directory = download_directory;
-    let choose = Button::new("Choose…")
+    let change = Button::new("Change…")
         .variant(ButtonVariant::Neutral)
         .on_press_tx(move |_state: &mut AppState, tx| {
             let options = rune::FileDialogOptions {
@@ -155,33 +175,49 @@ fn downloads_section(state: &AppState, theme: &Theme, kit: &Kit) -> El {
             });
         })
         .build(kit);
-    let reset = Button::new("Restore default")
+    let restore = Button::new("Restore Default")
         .variant(ButtonVariant::GhostMuted)
         .on_press(|state: &mut AppState| state.set_download_directory(DownloadDirectory::Default))
         .build(kit);
-
-    section("Downloads", theme).child(
+    let actions = row().gap(8.0).child(change).child(restore);
+    let copy = col()
+        .grow(1.0)
+        .min_w(0.0)
+        .gap(4.0)
+        .child(setting_title("Download location", theme))
+        .child(
+            text(display_path(&state.download_directory()))
+                .font(type_::BODY)
+                .color(theme.text_muted)
+                .truncate()
+                .help_when_truncated(path),
+        );
+    let row = if compact {
         col()
-            .key("downloads-setting")
             .w_full()
-            .gap(11.0)
-            .child(
-                col()
-                    .gap(4.0)
-                    .child(setting_title("Download folder", theme))
-                    .child(
-                        text(path)
-                            .font(type_::BODY)
-                            .color(theme.text_muted)
-                            .wrap_anywhere(),
-                    ),
-            )
-            .child(row().gap(8.0).child(choose).child(reset)),
-    )
+            .gap(10.0)
+            .child(copy)
+            .child(row().w_full().justify_end().child(actions))
+    } else {
+        row()
+            .w_full()
+            .min_h(54.0)
+            .gap(ROW_GAP)
+            .center_y()
+            .child(copy)
+            .child(actions)
+    };
+    section("Downloads", theme, settings_group(row, theme))
 }
 
-fn startup_section(state: &AppState, theme: &Theme, kit: &Kit, overlays: &mut Vec<El>) -> El {
-    let options = ["Restore previous session", "Open a new blank tab"];
+fn startup_section(
+    state: &AppState,
+    theme: &Theme,
+    kit: &Kit,
+    overlays: &mut Vec<El>,
+    compact: bool,
+) -> El {
+    let options = ["Restore previous session", "Open a blank window"];
     let current = state.settings.startup.label();
     let select = Select::new("settings-startup", &options)
         .current(Some(current))
@@ -204,38 +240,61 @@ fn startup_section(state: &AppState, theme: &Theme, kit: &Kit, overlays: &mut Ve
             }
             state.startup_picker_open = false;
         });
-    section("Startup", theme).child(setting_row(
-        "When Elaris opens",
-        "Restored background tabs keep their existing lazy loading behavior.",
+    section(
+        "Startup",
         theme,
-        select.build(kit, overlays),
-    ))
+        settings_group(
+            setting_row(
+                "When Elaris opens",
+                "Choose what opens when you launch Elaris.",
+                theme,
+                select.build(kit, overlays),
+                compact,
+            ),
+            theme,
+        ),
+    )
 }
 
-fn configuration_section(state: &AppState, theme: &Theme, kit: &Kit) -> El {
-    let open = Button::new("Open config.toml")
+fn configuration_section(state: &AppState, theme: &Theme, kit: &Kit, compact: bool) -> El {
+    let open = Button::new("Open Configuration File")
         .variant(ButtonVariant::Neutral)
         .on_press(|state: &mut AppState| state.open_config_file())
         .build(kit);
-    let reload = Button::new("Reload configuration")
+    let reload = Button::new("Reload Configuration")
         .variant(ButtonVariant::GhostMuted)
         .on_press(|state: &mut AppState| state.reload_configuration())
         .build(kit);
-    let mut section = section("Configuration", theme)
-        .child(
-            text(
-                "Changes apply as you make them. Edit the TOML file directly for advanced options.",
-            )
+    let description = col().grow(1.0).min_w(0.0).child(
+        text("Edit config.toml directly, then reload your changes here.")
             .font(type_::BODY)
             .color(theme.text_muted)
             .wrap(),
-        )
-        .child(row().gap(8.0).child(open).child(reload));
+    );
+    let actions = if compact {
+        col()
+            .w_full()
+            .gap(6.0)
+            .child(row().w_full().justify_end().child(open))
+            .child(row().w_full().justify_end().child(reload))
+    } else {
+        row().gap(8.0).child(open).child(reload)
+    };
+    let mut content = if compact {
+        col().w_full().gap(14.0).child(description).child(actions)
+    } else {
+        row()
+            .w_full()
+            .gap(ROW_GAP)
+            .center_y()
+            .child(description)
+            .child(actions)
+    };
     if let Some(issue) = &state.configuration_issue {
-        section = section.child(
+        content = content.child(
             col()
                 .key("configuration-issue")
-                .gap(5.0)
+                .gap(4.0)
                 .child(
                     text("Configuration needs attention")
                         .font(type_::LABEL)
@@ -249,48 +308,84 @@ fn configuration_section(state: &AppState, theme: &Theme, kit: &Kit) -> El {
                 ),
         );
     }
-    section
+    section(
+        "Advanced Configuration",
+        theme,
+        settings_group(content, theme),
+    )
 }
 
-fn section(title: &str, theme: &Theme) -> El {
+fn section(title: &str, theme: &Theme, content: El) -> El {
     col()
         .key(format!("settings-section-{title}"))
         .w_full()
-        .gap(12.0)
+        .gap(9.0)
         .child(
             text(title)
-                .font(TextStyle::new(16.0, 600.0).lh(21.0))
-                .color(theme.text),
+                .font(TextStyle::new(14.0, 600.0).lh(19.0))
+                .color(theme.text_muted),
         )
-        .child(el().w_full().h(1.0).fill(theme.overlay_border))
+        .child(content)
 }
 
-fn setting_row(title: &str, description: &str, theme: &Theme, control: El) -> El {
-    row()
-        .key(format!("setting-row-{title}"))
+fn settings_group(content: El, theme: &Theme) -> El {
+    col()
         .w_full()
-        .gap(ROW_GAP)
-        .justify_between()
-        .center_y()
+        .px(16.0)
+        .py(12.0)
+        .fill(theme.settings_surface)
+        .continuous_corners()
+        .clip_rounded(theme::FIELD_RADIUS)
+        .child(content)
+}
+
+fn setting_row(title: &str, description: &str, theme: &Theme, control: El, compact: bool) -> El {
+    let copy = col()
+        .key("setting-copy")
+        .grow(1.0)
+        .min_w(0.0)
+        .gap(3.0)
+        .child(setting_title(title, theme))
         .child(
-            col()
-                .key("setting-copy")
-                .grow(1.0)
-                .min_w(0.0)
-                .gap(3.0)
-                .child(setting_title(title, theme))
-                .child(
-                    text(description)
-                        .font(type_::BODY)
-                        .color(theme.text_muted)
-                        .wrap(),
-                ),
-        )
-        .child(control)
+            text(description)
+                .font(type_::BODY)
+                .color(theme.text_muted)
+                .wrap(),
+        );
+    if compact {
+        col()
+            .w_full()
+            .gap(10.0)
+            .child(copy)
+            .child(row().w_full().justify_end().child(control))
+    } else {
+        row()
+            .w_full()
+            .min_h(54.0)
+            .gap(ROW_GAP)
+            .justify_between()
+            .center_y()
+            .child(copy)
+            .child(control)
+    }
 }
 
 fn setting_title(title: &str, theme: &Theme) -> El {
     text(title)
         .font(TextStyle::new(14.0, 500.0).lh(19.0))
         .color(theme.text)
+}
+
+fn display_path(path: &Path) -> String {
+    if let Some(home) = std::env::var_os("HOME").map(PathBuf::from)
+        && let Ok(relative) = path.strip_prefix(home)
+    {
+        if relative.as_os_str().is_empty() {
+            "~".to_owned()
+        } else {
+            format!("~/{}", relative.display())
+        }
+    } else {
+        path.display().to_string()
+    }
 }

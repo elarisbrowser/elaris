@@ -18,6 +18,8 @@ pub(crate) struct Theme {
     pub(crate) window_glass_tint: Color,
     /// The page's container, seen before a page draws.
     pub(crate) page: Color,
+    /// Soft surface behind cohesive settings groups.
+    pub(crate) settings_surface: Color,
     pub(crate) text: Color,
     /// Labels that matter less: inactive tabs, the status line, placeholders.
     pub(crate) text_muted: Color,
@@ -52,6 +54,7 @@ pub(crate) fn palette(dark: bool) -> Theme {
             window: oklch(0.185, 0.004, HUE),
             window_glass_tint: oklcha(0.20, 0.016, HUE, 0.18),
             page: oklch(0.232, 0.005, HUE),
+            settings_surface: oklch(0.255, 0.006, HUE),
             text: oklch(0.955, 0.003, HUE),
             text_muted: oklch(0.74, 0.008, HUE),
             icon: oklch(0.82, 0.006, HUE),
@@ -75,6 +78,7 @@ pub(crate) fn palette(dark: bool) -> Theme {
             window: oklch(0.935, 0.006, HUE),
             window_glass_tint: oklcha(0.90, 0.035, HUE, 0.30),
             page: oklch(1.0, 0.0, 0.0),
+            settings_surface: oklch(0.975, 0.004, HUE),
             text: oklch(0.2, 0.008, HUE),
             text_muted: oklch(0.42, 0.012, HUE),
             icon: oklch(0.32, 0.01, HUE),
