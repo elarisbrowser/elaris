@@ -1,59 +1,67 @@
-# Elaris
-
-Elaris is a cross-platform browser with a Rust and [Rune](https://github.com/anomalyco/rune) desktop interface and the upstream [Ladybird](https://github.com/LadybirdBrowser/ladybird) web engine. Ladybird is pinned as a Git submodule; Elaris keeps its C++ integration in `bridge/`.
+<div align="center">
+  <img src="assets/brand-kit/logo/logo-color.svg" alt="elaris logo" width="112" />
+  <h1>elaris</h1>
+  <p>A cross-platform browser built with Rust and Rune, powered by Ladybird.</p>
+  <p>
+    <a href="https://github.com/elarisbrowser/elaris/actions/workflows/ci.yml?query=branch%3Amain">
+      <img src="https://github.com/elarisbrowser/elaris/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status" />
+    </a>
+    <a href="LICENSE">
+      <img src="https://img.shields.io/badge/license-GPL--3.0--only-5e5dfb?style=flat" alt="GPL-3.0-only license" />
+    </a>
+    <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-76b4fb?style=flat" alt="macOS and Linux" />
+  </p>
+</div>
 
 ## Get started
 
-You need Python 3.9 or newer and Git to start `./elaris`. On macOS, install Homebrew and Xcode 26 or newer first. On Linux, use a supported package manager (apt, dnf, pacman, or zypper) and a desktop session with a working GPU driver to open the app.
+Install Python 3.9 or newer and Git first. On macOS, you also need [Homebrew](https://brew.sh/) and Xcode 26 or newer. On Linux, use a supported package manager (apt, dnf, pacman, or zypper) and a desktop session with a working GPU driver.
 
 From the repository root:
 
 ```sh
-./elaris setup       # install build prerequisites, Rust toolchains, and Ladybird
-./elaris build       # build the Ladybird engine, bridge, and Elaris
-./elaris run         # build what is needed, then launch Elaris
-./elaris run https://example.com
+./elaris setup                         # install prerequisites and set up Ladybird
+./elaris build                         # build the engine, bridge, and browser
+./elaris run https://example.com       # build if needed, then open a page
 ```
 
-The first engine build downloads and compiles Ladybird's dependencies and can take a while. On Linux, setup asks for your password through `sudo` when package installation requires it. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full setup, platform details, checks, and project layout.
+On Linux, setup uses `sudo` when it needs to install packages, so your terminal will ask for your password. The first engine build downloads and compiles Ladybird's dependencies and can take a while. See [Development setup](SETUP.md) for platform details and troubleshooting.
 
-To work on the browser shell without building Ladybird, use `./elaris build --ui` and `./elaris run --ui`. A direct `cargo run` also remains independent of Ladybird.
+To work on the browser shell without building Ladybird, run `./elaris build --ui` or `./elaris run --ui`. A direct `cargo run` also stays independent of the engine.
 
-## Common commands
+## Development
 
 | Command | Purpose |
 | --- | --- |
-| `./elaris setup` | Install host prerequisites, Rust toolchains, and the pinned Ladybird submodule |
-| `./elaris build` | Build Ladybird dependencies, the Elaris bridge, and the Rust app |
-| `./elaris run [URL]` | Build the integrated browser and launch it, optionally at a URL |
-| `./elaris check` | Run Rust formatting, check, Clippy, and tests |
-| `./elaris format` | Format Elaris Rust and C++ sources |
-| `./elaris engine status` | Show the pinned Ladybird revision and build status |
+| `./elaris check` | Run formatting, Rust checks, Clippy, and tests |
+| `./elaris format` | Format Rust and Elaris-owned C++ sources |
+| `./elaris engine status` | Show the pinned Ladybird revision and local build status |
+| `./elaris run --ui` | Launch the Rune interface without Ladybird |
 
-Set `ELARIS_JOBS` or pass `--jobs N` to `build` or `run` to control parallel builds. `./elaris setup --skip-system-deps` skips package-manager installs when prerequisites are already managed separately, but still verifies them.
+Use `ELARIS_JOBS` or pass `--jobs N` to `build` or `run` to control build parallelism. Use `./elaris setup --skip-system-deps` if you installed system packages yourself; setup still verifies them.
 
-## UI tooling
+## Documentation
 
-Rune includes an offscreen renderer and command-line tools for inspecting the UI without opening a window. Put Rune's flags after `--`:
+- [Contributing](CONTRIBUTING.md) — workflow, code guidelines, and checks before a pull request.
+- [Development setup](SETUP.md) — prerequisites, supported platforms, and build troubleshooting.
+- [Architecture](docs/architecture.md) — application modules, engine thread, and bridge.
+- [Ladybird integration](docs/ladybird-embedding.md) — embedding constraints and design notes.
+- [Bridge development](bridge/README.md) — C++ bridge, FFI, and integration checks.
+- [Trademark policy](TRADEMARKS.md) — use of the elaris name and branding.
+
+<details>
+<summary>Inspect the Rune UI without opening a window</summary>
+
+Rune can render a screenshot, export the accessibility and layout tree, or run a scripted interaction:
 
 ```sh
-# Render the initial browser window to a PNG.
 ./elaris run --ui -- --snap /tmp/elaris.png
-
-# Save the UI element tree, including labels, roles, text, and layout rectangles.
 ./elaris run --ui -- --tree /tmp/elaris-tree.json
-
-# Drive the app with a Rune input script and save a trace.
 ./elaris run --ui -- --script interaction.json --frames 120 --trace /tmp/elaris-trace.jsonl
 ```
 
-Headless runs can check layout, visual output, and scripted UI behavior. They do not load pages through Ladybird or measure native window presentation. See [Rune's agent tooling guide](https://github.com/anomalyco/rune/blob/dev/crates/rune/README.md#agent-tooling) for the complete flag and script reference.
+These tools inspect the UI only; they do not load pages through Ladybird. See [Rune's agent tooling guide](https://github.com/anomalyco/rune/blob/dev/crates/rune/README.md#agent-tooling) for options and script formats.
 
-Rune also accepts options such as `--size 960x640`, `--scale 2`, `--theme dark`, and `--at 0.5` (virtual time in seconds) with `--snap` and `--tree`. Combine `--script` with `--frames`, `--fps`, `--out`, or `--trace` to inspect a sequence of frames. Use `--native --trace` on a real display to inspect window presentation timings.
+</details>
 
-## Project notes
-
-- [Architecture](docs/architecture.md) explains the UI, engine thread, and bridge.
-- [Ladybird embedding notes](docs/ladybird-embedding.md) record the integration constraints.
-- [Bridge development and integration checks](bridge/README.md) cover focused C++ and FFI work.
-- Elaris is GPL-3.0-only; contributions are accepted under that license without a CLA. Rune is MIT-licensed and Ladybird is BSD-2-Clause. See [TRADEMARKS.md](TRADEMARKS.md) for branding policy.
+elaris is licensed under [GPL-3.0-only](LICENSE). Contributions are accepted under the same license without a CLA. Rune is MIT-licensed and Ladybird is BSD-2-Clause.
