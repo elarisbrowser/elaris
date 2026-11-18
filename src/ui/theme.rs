@@ -147,8 +147,11 @@ pub(crate) const OMNIBOX_INPUT_TEXT: rune::TextStyle = rune::TextStyle::new(18.0
 pub(crate) const OMNIBOX_BORDER_WIDTH: f32 = 1.0;
 pub(crate) const OMNIBOX_SHADOW_Y: f32 = 16.0;
 pub(crate) const OMNIBOX_SHADOW_BLUR: f32 = 22.0;
-pub(crate) const OMNIBOX_SEARCH_ICON: f32 = 20.0;
-pub(crate) const OMNIBOX_SEARCH_BUTTON: f32 = 36.0;
+pub(crate) const OMNIBOX_SEARCH_ICON: f32 = 16.0;
+pub(crate) const OMNIBOX_SEARCH_CHEVRON: f32 = 12.0;
+pub(crate) const OMNIBOX_SEARCH_BUTTON_HEIGHT: f32 = 28.0;
+pub(crate) const OMNIBOX_SEARCH_BUTTON_PADDING: f32 = 6.0;
+pub(crate) const OMNIBOX_SEARCH_BUTTON_GAP: f32 = 4.0;
 
 /// Rows in the tab list, and the new-tab and appearance buttons that share their shape.
 pub(crate) const ROW_HEIGHT: f32 = 34.0;

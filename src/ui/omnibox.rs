@@ -160,11 +160,14 @@ pub(crate) fn view(
 fn search_engine_selector(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
     let engine = state.search_engine;
     let label = format!("Search engine: {}", engine.label());
-    let trigger = el()
+    let trigger = row()
         .key("search-engine-button")
-        .size(theme::OMNIBOX_SEARCH_BUTTON, theme::OMNIBOX_SEARCH_BUTTON)
-        .center()
-        .radius(theme::ICON_BUTTON_RADIUS)
+        .h(theme::OMNIBOX_SEARCH_BUTTON_HEIGHT)
+        .px(theme::OMNIBOX_SEARCH_BUTTON_PADDING)
+        .gap(theme::OMNIBOX_SEARCH_BUTTON_GAP)
+        .center_y()
+        .radius(theme::OMNIBOX_SEARCH_BUTTON_HEIGHT / 2.0)
+        .fill(theme.address_field)
         .hover(theme.hover)
         .press(theme.press)
         .press_scale(theme::PRESS_SCALE)
@@ -178,7 +181,8 @@ fn search_engine_selector(state: &AppState, theme: &Theme, overlays: &mut Vec<El
         .child(icon(
             super::icons::search_engine(engine),
             theme::OMNIBOX_SEARCH_ICON,
-        ));
+        ))
+        .child(icon(&super::icons::CHEVRON_DOWN, theme::OMNIBOX_SEARCH_CHEVRON).color(theme.icon));
     let kit = Kit::from_palette(PaletteSeed {
         bg: theme.window,
         fg: theme.text,

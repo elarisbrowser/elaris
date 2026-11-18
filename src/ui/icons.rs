@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The sidebar's icons: plain strokes on a 16-point grid, drawn in their element's colour.
+//! Interface icons: plain strokes and the search providers' coloured brand marks.
 
 use rune::Icon;
 
@@ -62,10 +62,14 @@ pub(crate) static SEARCH: Icon = icon(
     "search",
     r#"<circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5L14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>"#,
 );
+pub(crate) static CHEVRON_DOWN: Icon = icon(
+    "chevron-down",
+    r#"<path d="m4.5 6.5 3.5 3 3.5-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>"#,
+);
 pub(crate) static GOOGLE: Icon = Icon {
     name: "google",
     view: 24.0,
-    body: r##"<path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.2-2.27H12v4.51h6.44c-.28 1.45-1.08 2.68-2.29 3.5v2.91h3.71c2.17-2 3.43-4.96 3.43-8.65z"/><path fill="#34A853" d="M12 24c3.11 0 5.72-1.03 7.63-2.79l-3.71-2.91c-1.03.69-2.35 1.1-3.92 1.1-3.01 0-5.56-2.03-6.47-4.76H1.7v3C3.6 21.02 7.48 24 12 24z"/><path fill="#FBBC05" d="M5.53 14.64A7.2 7.2 0 0 1 5.15 12c0-.92.16-1.8.38-2.64v-3H1.7A12 12 0 0 0 0 12c0 1.94.46 3.77 1.27 5.4l4.26-2.76z"/><path fill="#EA4335" d="M12 4.6c1.7 0 3.23.58 4.43 1.73l3.32-3.32C17.72 1.15 15.11 0 12 0 7.48 0 3.6 2.98 1.7 6.36l3.83 3C6.44 6.63 8.99 4.6 12 4.6z"/>"##,
+    body: r##"<circle cx="12" cy="12" r="12" fill="#fff"/><path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.2-2.27H12v4.51h6.44c-.28 1.45-1.08 2.68-2.29 3.5v2.91h3.71c2.17-2 3.43-4.96 3.43-8.65z"/><path fill="#34A853" d="M12 24c3.11 0 5.72-1.03 7.63-2.79l-3.71-2.91c-1.03.69-2.35 1.1-3.92 1.1-3.01 0-5.56-2.03-6.47-4.76H1.7v3C3.6 21.02 7.48 24 12 24z"/><path fill="#FBBC05" d="M5.53 14.64A7.2 7.2 0 0 1 5.15 12c0-.92.16-1.8.38-2.64v-3H1.7A12 12 0 0 0 0 12c0 1.94.46 3.77 1.27 5.4l4.26-2.76z"/><path fill="#EA4335" d="M12 4.6c1.7 0 3.23.58 4.43 1.73l3.32-3.32C17.72 1.15 15.11 0 12 0 7.48 0 3.6 2.98 1.7 6.36l3.83 3C6.44 6.63 8.99 4.6 12 4.6z"/>"##,
 };
 pub(crate) static BING: Icon = Icon {
     name: "bing",

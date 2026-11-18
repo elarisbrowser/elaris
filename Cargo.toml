@@ -9,7 +9,7 @@ rust-version = "1.88"
 git = "https://github.com/anomalyco/rune"
 rev = "cca5df6fafb4721d96fe105f126ebfd2ec351bb6"
 default-features = false
-features = ["accessibility", "embedded-fonts", "metal-backend", "tooling"]
+features = ["accessibility", "embedded-fonts", "metal-backend", "svg", "tooling"]
 
 [dependencies.rune-kit]
 git = "https://github.com/anomalyco/rune"
