@@ -22,6 +22,7 @@ Elaris is a cross-platform browser written in Rust. It uses Rune for its desktop
 
 - Check the existing code and relevant documentation before changing anything.
 - Keep `cargo run` working without requiring Ladybird until integration is explicitly enabled.
+- Keep `Cargo.toml` valid TOML 1.0: use dependency subtables or single-line inline tables, not multiline inline tables. Validate manifest edits with `cargo metadata --locked --no-deps --format-version 1` before finishing.
 - Run `cargo fmt --check`, `cargo check --locked`, `cargo clippy --locked -- -D warnings`, and `cargo test --locked` after changes.
 - Test on macOS and Linux where possible; clearly state what was not tested.
 - Summarize what changed and note any limitations or follow-up work.
