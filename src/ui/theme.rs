@@ -153,7 +153,7 @@ pub(crate) const ROW_HEIGHT: f32 = 34.0;
 pub(crate) const ROW_RADIUS: f32 = radius::MD;
 pub(crate) const ROW_PADDING: f32 = space::S2;
 pub(crate) const ROW_GAP: f32 = space::S2;
-pub(crate) const TAB_GAP: f32 = 2.0;
+pub(crate) const TAB_GAP: f32 = space::S1;
 /// The raised look of the active tab.
 pub(crate) const ACTIVE_SHADOW_Y: f32 = 0.5;
 pub(crate) const ACTIVE_SHADOW_BLUR: f32 = 1.5;
