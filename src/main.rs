@@ -14,11 +14,14 @@ mod tab;
 mod titlebar_controls;
 mod ui;
 
+use std::sync::Arc;
+
 use rune::{App, AppSpec, Chrome};
 
 fn main() {
     let spec = AppSpec {
-        setup: Some(app::setup),
+        // Headless tooling has no native `on_ready`; keep engine startup there.
+        setup: rune::is_headless().then_some(app::start_engine),
         poll: Some(app::poll),
         on_key: Some(shortcuts::on_key),
         min_size: Some(ui::WINDOW_MIN_SIZE),
@@ -36,6 +39,19 @@ fn main() {
             traffic_lights: Some(ui::TRAFFIC_LIGHTS),
             ..Chrome::DEFAULT
         });
+    let app_handle = app.handle();
+    let mut engine_started = false;
+    let app = app.on_ready(move |_| {
+        if engine_started {
+            return;
+        }
+        engine_started = true;
+
+        let wake_handle = app_handle.clone();
+        let waker: rune::Waker = Arc::new(move || wake_handle.wake());
+        let app_handle = app_handle.clone();
+        app_handle.update(move |state, _| app::start_engine(state, waker));
+    });
     #[cfg(target_os = "macos")]
     let app = app.on_window(titlebar_controls::install);
     app.modifier_keys()

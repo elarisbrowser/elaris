@@ -250,9 +250,9 @@ impl AppState {
     }
 }
 
-/// Rune's one-time setup, before the first poll: starts the engine, which uses the waker to run
-/// `poll` when it has news. Starting returns at once; Ladybird starts on the engine's thread.
-pub(crate) fn setup(state: &mut AppState, waker: rune::Waker) {
+/// Starts the browser engine. Native windows do this after Rune's first frame; Ladybird starts on
+/// the engine's thread, and the waker schedules `poll` when it has news.
+pub(crate) fn start_engine(state: &mut AppState, waker: rune::Waker) {
     match Engine::start(waker) {
         Ok(engine) => state.browser.connect(engine),
         Err(error) => state.browser.fail(error),
