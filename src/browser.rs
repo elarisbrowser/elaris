@@ -28,7 +28,7 @@ use crate::engine::{Command, DownloadAction, Engine, Surface, Update, ViewComman
 use crate::input;
 use crate::internal::{InternalPage, InternalRoute};
 use crate::perf::{self, Stage};
-use crate::tab::{Tab, TabId};
+use crate::tab::{Tab, TabId, TabSection};
 use elaris::downloads::{
     self, Download, DownloadId, Request as DownloadRequest, Status as DownloadStatus,
 };
@@ -40,7 +40,10 @@ pub(crate) enum Error {
     /// No open tab has this id.
     NoSuchTab(TabId),
     /// The requested position is outside the current tab order.
+    #[cfg(test)]
     InvalidTabIndex(usize),
+    /// The requested position is outside the destination section.
+    InvalidSectionIndex(usize),
     /// The requested download operation could not be queued.
     Download(downloads::Error),
 }
@@ -50,7 +53,9 @@ impl fmt::Display for Error {
         match self {
             Self::Address(reason) => f.write_str(reason),
             Self::NoSuchTab(_) => f.write_str("The tab has closed"),
+            #[cfg(test)]
             Self::InvalidTabIndex(_) => f.write_str("The tab position is out of range"),
+            Self::InvalidSectionIndex(_) => f.write_str("The section position is out of range"),
             Self::Download(error) => error.fmt(f),
         }
     }
@@ -132,6 +137,7 @@ impl Default for Browser {
 
 impl Browser {
     /// Gives the browser the engine that shows its tabs, opening a view for each.
+    #[cfg(any(feature = "ladybird-bridge", test))]
     pub(crate) fn connect(&mut self, engine: Engine) {
         for tab in &self.tabs {
             if !tab.is_internal() {
@@ -270,19 +276,78 @@ impl Browser {
     }
 
     /// Moves an open tab to its zero-based position without touching its page or active state.
+    #[cfg(test)]
     pub(crate) fn move_tab(&mut self, id: TabId, target_index: usize) -> Result<(), Error> {
         let Some(source_index) = self.tabs.iter().position(|tab| tab.id() == id) else {
             return Err(Error::NoSuchTab(id));
         };
-        if target_index >= self.tabs.len() {
+        let section = self.tabs[source_index].section();
+        let section_index = self.tabs[..source_index]
+            .iter()
+            .filter(|tab| tab.section() == section)
+            .count();
+        let section_len = self
+            .tabs
+            .iter()
+            .filter(|tab| tab.section() == section)
+            .count();
+        if target_index >= section_len {
             return Err(Error::InvalidTabIndex(target_index));
         }
-        if source_index == target_index {
+        if target_index == section_index {
             return Ok(());
         }
-        let tab = self.tabs.remove(source_index);
-        self.tabs.insert(target_index, tab);
+        self.move_tab_to(id, section, target_index)
+    }
+
+    /// Moves a live tab into `section` at its zero-based position without changing its page or
+    /// active state. The single tab vector stays grouped in keyboard order: favourites, pinned,
+    /// then regular tabs.
+    pub(crate) fn move_tab_to(
+        &mut self,
+        id: TabId,
+        section: TabSection,
+        target_index: usize,
+    ) -> Result<(), Error> {
+        let Some(source_index) = self.tabs.iter().position(|tab| tab.id() == id) else {
+            return Err(Error::NoSuchTab(id));
+        };
+        let source_section = self.tabs[source_index].section();
+        let source_section_index = self.tabs[..source_index]
+            .iter()
+            .filter(|tab| tab.section() == source_section)
+            .count();
+        let target_len = self
+            .tabs
+            .iter()
+            .filter(|tab| tab.section() == section)
+            .count()
+            - usize::from(source_section == section);
+        if target_index > target_len {
+            return Err(Error::InvalidSectionIndex(target_index));
+        }
+        if source_section == section && source_section_index == target_index {
+            return Ok(());
+        }
+
+        let mut tab = self.tabs.remove(source_index);
+        tab.section = section;
+        let section_start = self
+            .tabs
+            .iter()
+            .position(|candidate| section_rank(candidate.section()) >= section_rank(section))
+            .unwrap_or(self.tabs.len());
+        self.tabs.insert(section_start + target_index, tab);
         Ok(())
+    }
+
+    pub(crate) fn section_tabs(&self, section: TabSection) -> impl Iterator<Item = &Tab> {
+        self.tabs.iter().filter(move |tab| tab.section() == section)
+    }
+
+    pub(crate) fn clear_active_tab(&mut self) {
+        self.reset_input();
+        self.active = None;
     }
 
     /// Opens a tab at the end of the list loading `address`, and makes it active if no tab is.
@@ -302,35 +367,68 @@ impl Browser {
     }
 
     fn insert_tab(&mut self, url: String) -> TabId {
-        self.insert_tab_with_state(url, String::new(), false)
+        self.insert_tab_with_state(url, String::new(), false, TabSection::Regular)
     }
 
     /// Restores a tab without starting a background page until it becomes active.
+    #[cfg(test)]
     pub(crate) fn restore_tab(
         &mut self,
         address: &str,
         title: &str,
         deferred_load: bool,
     ) -> Result<TabId, Error> {
+        self.restore_tab_in_section(address, title, deferred_load, TabSection::Regular)
+    }
+
+    pub(crate) fn restore_tab_in_section(
+        &mut self,
+        address: &str,
+        title: &str,
+        deferred_load: bool,
+        section: TabSection,
+    ) -> Result<TabId, Error> {
         if let Some(route) = InternalRoute::parse(address) {
-            return Ok(self.insert_internal_tab(route));
+            return Ok(self.insert_internal_tab_in_section(route, section));
         }
         let url = url_for_address(address).map_err(Error::Address)?;
-        Ok(self.insert_tab_with_state(url, title.to_owned(), deferred_load))
+        Ok(self.insert_tab_with_state(url, title.to_owned(), deferred_load, section))
     }
 
     fn insert_internal_tab(&mut self, route: InternalRoute) -> TabId {
+        self.insert_internal_tab_in_section(route, TabSection::Regular)
+    }
+
+    fn insert_internal_tab_in_section(
+        &mut self,
+        route: InternalRoute,
+        section: TabSection,
+    ) -> TabId {
         let id = TabId::from_raw(self.next_id);
         self.next_id += 1;
-        self.tabs.push(Tab::new_internal(id, route));
+        let mut tab = Tab::new_internal(id, route);
+        tab.section = section;
+        let index = self
+            .tabs
+            .iter()
+            .position(|candidate| section_rank(candidate.section()) > section_rank(section))
+            .unwrap_or(self.tabs.len());
+        self.tabs.insert(index, tab);
         self.active.get_or_insert(id);
         id
     }
 
-    fn insert_tab_with_state(&mut self, url: String, title: String, deferred_load: bool) -> TabId {
+    fn insert_tab_with_state(
+        &mut self,
+        url: String,
+        title: String,
+        deferred_load: bool,
+        section: TabSection,
+    ) -> TabId {
         let id = TabId::from_raw(self.next_id);
         self.next_id += 1;
         let mut tab = Tab::new(id, url);
+        tab.section = section;
         tab.title = title;
         tab.engine.deferred_load = deferred_load;
         tab.error.clone_from(&self.engine_error);
@@ -339,7 +437,12 @@ impl Browser {
         {
             engine.send(Command::Open(id, tab.surface.clone()));
         }
-        self.tabs.push(tab);
+        let index = self
+            .tabs
+            .iter()
+            .position(|candidate| section_rank(candidate.section()) > section_rank(section))
+            .unwrap_or(self.tabs.len());
+        self.tabs.insert(index, tab);
         self.active.get_or_insert(id);
         id
     }
@@ -726,6 +829,14 @@ impl Browser {
                 send(ViewCommand::Focus(focused));
             }
         }
+    }
+}
+
+fn section_rank(section: TabSection) -> usize {
+    match section {
+        TabSection::Favourite => 0,
+        TabSection::Pinned => 1,
+        TabSection::Regular => 2,
     }
 }
 

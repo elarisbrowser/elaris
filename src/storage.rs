@@ -25,7 +25,7 @@ use elaris::history::{Entry, History};
 use crate::config::{self, ConfigLoad};
 use crate::settings::SettingsChange;
 
-const SESSION_VERSION: u8 = 1;
+const SESSION_VERSION: u8 = 2;
 const HISTORY_CACHE_LIMIT: usize = 100;
 static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(1);
 static WORKERS: Mutex<Vec<Worker>> = Mutex::new(Vec::new());
@@ -281,6 +281,11 @@ pub(crate) struct Session {
     version: u8,
     pub(crate) tabs: Vec<SessionTab>,
     pub(crate) active_tab: usize,
+    /// Positions in `tabs`, kept in sidebar order. Missing fields in version 1 mean regular tabs.
+    #[serde(default)]
+    pub(crate) favourites: Vec<usize>,
+    #[serde(default)]
+    pub(crate) pinned: Vec<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -291,7 +296,17 @@ pub(crate) struct SessionTab {
 }
 
 impl Session {
+    #[cfg(test)]
     pub(crate) fn new(tabs: Vec<SessionTab>, active_tab: usize) -> Self {
+        Self::new_with_sections(tabs, active_tab, Vec::new(), Vec::new())
+    }
+
+    pub(crate) fn new_with_sections(
+        tabs: Vec<SessionTab>,
+        active_tab: usize,
+        favourites: Vec<usize>,
+        pinned: Vec<usize>,
+    ) -> Self {
         Self {
             version: SESSION_VERSION,
             active_tab: if tabs.is_empty() {
@@ -300,12 +315,30 @@ impl Session {
                 active_tab.min(tabs.len() - 1)
             },
             tabs,
+            favourites,
+            pinned,
+        }
+    }
+
+    pub(crate) fn section_at(&self, index: usize) -> crate::tab::TabSection {
+        if self.favourites.contains(&index) {
+            crate::tab::TabSection::Favourite
+        } else if self.pinned.contains(&index) {
+            crate::tab::TabSection::Pinned
+        } else {
+            crate::tab::TabSection::Regular
         }
     }
 
     fn is_supported(&self) -> bool {
-        self.version == SESSION_VERSION
+        matches!(self.version, 1 | SESSION_VERSION)
             && (self.tabs.is_empty() || self.active_tab < self.tabs.len())
+            && self.favourites.iter().all(|index| *index < self.tabs.len())
+            && self.pinned.iter().all(|index| *index < self.tabs.len())
+            && !self
+                .favourites
+                .iter()
+                .any(|index| self.pinned.contains(index))
     }
 }
 
@@ -414,6 +447,7 @@ impl HistoryHandle {
             .map_err(|_| "history storage worker has stopped".to_owned())
     }
 
+    #[cfg(feature = "ladybird-bridge")]
     fn set_notify(&self, notify: Notify) {
         let _ = self.shared.notify.set(notify);
     }
@@ -515,6 +549,7 @@ impl Storage {
             .map_err(|_| "session storage worker has stopped".to_owned())
     }
 
+    #[cfg(feature = "ladybird-bridge")]
     pub(crate) fn set_notify(&self, notify: Notify) {
         self.history.set_notify(notify);
     }

@@ -37,6 +37,8 @@ pub(crate) struct Theme {
     pub(crate) tab_active_shadow: Color,
     /// A tab lifted for a reorder, including inactive tabs.
     pub(crate) tab_drag: Color,
+    /// A quiet mark for the current tab drop slot.
+    pub(crate) tab_drop_indicator: Color,
     /// The dim layer and raised surface of the omnibox.
     pub(crate) overlay_scrim: Color,
     pub(crate) overlay_panel: Color,
@@ -66,6 +68,7 @@ pub(crate) fn palette(dark: bool) -> Theme {
             tab_active: oklcha(1.0, 0.0, 0.0, 0.15),
             tab_active_shadow: oklcha(0.0, 0.0, 0.0, 0.3),
             tab_drag: oklcha(1.0, 0.0, 0.0, 0.1),
+            tab_drop_indicator: oklcha(0.74, 0.04, HUE, 0.55),
             overlay_scrim: oklcha(0.0, 0.0, 0.0, 0.16),
             overlay_panel: oklch(0.255, 0.006, HUE),
             overlay_border: oklcha(1.0, 0.0, 0.0, 0.11),
@@ -90,6 +93,7 @@ pub(crate) fn palette(dark: bool) -> Theme {
             tab_active: oklch(1.0, 0.0, 0.0),
             tab_active_shadow: oklcha(0.2, 0.02, HUE, 0.18),
             tab_drag: oklcha(0.2, 0.02, HUE, 0.07),
+            tab_drop_indicator: oklcha(0.42, 0.055, HUE, 0.52),
             overlay_scrim: oklcha(0.2, 0.02, HUE, 0.12),
             overlay_panel: oklch(0.995, 0.002, HUE),
             overlay_border: oklcha(0.2, 0.02, HUE, 0.12),
@@ -192,7 +196,16 @@ pub(crate) const TAB_DRAG_SCROLL_EDGE: f32 = 34.0;
 pub(crate) const TAB_DRAG_SCROLL_MAX: f32 = 520.0;
 pub(crate) const TAB_DRAG_SHADOW_Y: f32 = 3.0;
 pub(crate) const TAB_DRAG_SHADOW_BLUR: f32 = 8.0;
+pub(crate) const FAVOURITE_TILE_HEIGHT: f32 = 48.0;
+pub(crate) const FAVOURITE_TILE_MIN_WIDTH: f32 = 40.0;
+pub(crate) const FAVOURITE_TILE_RADIUS: f32 = radius::MD;
+pub(crate) const FAVOURITE_GAP: f32 = space::S2;
+pub(crate) const FAVOURITE_COLUMNS: usize = 4;
+pub(crate) const FAVOURITE_ICON: f32 = 20.0;
 
 /// The web page's container: how far it sits in from the window's edges, and its corners.
 pub(crate) const VIEWPORT_INSET: f32 = space::S1 + space::S1 / 2.0;
 pub(crate) const VIEWPORT_RADIUS: f32 = radius::LG;
+/// The status badge's inset from the web page container's lower-right corner.
+#[cfg(not(feature = "ladybird-bridge"))]
+pub(crate) const VIEWPORT_BADGE_INSET: f32 = space::S3;

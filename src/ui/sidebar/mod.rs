@@ -23,7 +23,7 @@ use super::theme::{self, Theme};
 use crate::app::{self, AppState};
 use crate::appearance::Appearance;
 pub(crate) use drag::MoveResult as TabDragMoveResult;
-pub(crate) use drag::TabDragState;
+pub(crate) use drag::{TabDragState, TabDropTarget};
 
 /// How the sidebar is laid out: what the window shows of it, not of the browser.
 pub(crate) struct SidebarState {
@@ -58,7 +58,12 @@ pub(crate) fn toggle(state: &mut AppState, tx: &mut Tx) {
 
 /// The sidebar below the header's room. Collapsing springs its width to zero; its contents
 /// keep their width meanwhile, clipped, so they slide away rather than reflow.
-pub(crate) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
+pub(crate) fn view(
+    state: &AppState,
+    theme: &Theme,
+    overlays: &mut Vec<El>,
+    reduced_motion: bool,
+) -> El {
     let collapsed = state.sidebar.collapsed;
     #[cfg(target_os = "linux")]
     let header_clearance = 0.0;
@@ -70,7 +75,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> E
         .h_full()
         .clip_soft(0.0)
         .pt(header_clearance)
-        .child(body(state, theme, overlays));
+        .child(body(state, theme, overlays, reduced_motion));
     if collapsed {
         sidebar.a11y_hidden()
     } else {
@@ -79,7 +84,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> E
 }
 
 /// Everything below the header, inset from the sidebar's edges.
-fn body(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
+fn body(state: &AppState, theme: &Theme, overlays: &mut Vec<El>, reduced_motion: bool) -> El {
     let mut body = col()
         .key("sidebar-body")
         .w(state.sidebar.width)
@@ -99,17 +104,17 @@ fn body(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
                 .truncate(),
         );
     }
-    body.child(tabs::view(state, theme, overlays)).child(
-        rune::row()
-            .key("sidebar-bottom-controls")
-            .w_full()
-            .center_y()
-            .child(super::downloads::trigger(state, theme, overlays))
-            .child(rune::el().grow(1.0))
-            .child(appearance(state.settings.appearance, theme)),
-    )
+    body.child(tabs::view(state, theme, overlays, reduced_motion))
+        .child(
+            rune::row()
+                .key("sidebar-bottom-controls")
+                .w_full()
+                .center_y()
+                .child(super::downloads::trigger(state, theme, overlays))
+                .child(rune::el().grow(1.0))
+                .child(appearance(state.settings.appearance, theme)),
+        )
 }
-
 
 fn search_launcher(state: &AppState, theme: &Theme) -> El {
     let address = state

@@ -14,7 +14,9 @@ pub(crate) mod viewport;
 pub(crate) use viewport::menu::PageMenuState;
 
 pub(crate) use sidebar::resize::settle as settle_sidebar;
-pub(crate) use sidebar::{SidebarState, TabDragMoveResult, TabDragState, toggle as toggle_sidebar};
+pub(crate) use sidebar::{
+    SidebarState, TabDragMoveResult, TabDragState, TabDropTarget, toggle as toggle_sidebar,
+};
 pub(crate) use theme::{TAB_REORDER_MOTION, TRAFFIC_LIGHTS, WINDOW_MIN_SIZE};
 
 #[cfg(target_os = "linux")]
@@ -28,6 +30,7 @@ pub(crate) const VIEWPORT: &str = "viewport";
 pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     let dark = state.settings.appearance.is_dark(cx.system_dark());
     let theme = theme::palette(dark);
+    let reduced_motion = cx.is_reduced_motion();
     state.browser.note_scale(cx.env().scale);
     state.browser.note_dark(dark);
     let mut overlays = Vec::new();
@@ -39,7 +42,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
             .w_full()
             .grow(1.0)
             .min_h(0.0)
-            .child(sidebar::view(state, &theme, &mut overlays))
+            .child(sidebar::view(state, &theme, &mut overlays, reduced_motion))
             .child(viewport::view(state, &theme, &mut overlays));
         if !state.sidebar.collapsed {
             content = content.child(sidebar::resize::handle(state.sidebar.width));
@@ -66,7 +69,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
             .system_material(SystemMaterial::Glass)
             .child(window_glass_tint(&theme));
         window = window
-            .child(sidebar::view(state, &theme, &mut overlays))
+            .child(sidebar::view(state, &theme, &mut overlays, reduced_motion))
             .child(viewport::view(state, &theme, &mut overlays))
             .child(sidebar::header::view(state, &theme, cx));
         if !state.sidebar.collapsed {

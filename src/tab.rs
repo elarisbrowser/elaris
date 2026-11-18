@@ -6,6 +6,21 @@
 use crate::engine::{Surface, TabUpdate};
 use crate::internal::InternalRoute;
 use rune::Pixels;
+use serde::{Deserialize, Serialize};
+
+/// A tab's position in the sidebar. Tabs remain the same live objects when this changes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum TabSection {
+    Favourite,
+    Pinned,
+    #[default]
+    Regular,
+}
+
+impl TabSection {
+    pub(crate) const ORDER: [Self; 3] = [Self::Favourite, Self::Pinned, Self::Regular];
+}
 
 /// A tab's identity, stable for as long as the tab is open and never reused afterwards, so a
 /// stale id can only miss, never reach another tab.
@@ -25,6 +40,7 @@ impl TabId {
 
 pub(crate) struct Tab {
     id: TabId,
+    pub(crate) section: TabSection,
     /// The page's address, once Ladybird has committed it; the address asked for until then.
     pub(crate) url: String,
     /// Last top-level URL Ladybird confirmed as committed.
@@ -62,6 +78,7 @@ impl Tab {
     pub(crate) fn new(id: TabId, url: String) -> Self {
         Self {
             id,
+            section: TabSection::Regular,
             url: url.clone(),
             committed_url: "about:blank".to_owned(),
             title: String::new(),
@@ -87,6 +104,7 @@ impl Tab {
         };
         Self {
             id,
+            section: TabSection::Regular,
             url: address,
             committed_url: String::new(),
             title: route.title().to_owned(),
@@ -108,6 +126,10 @@ impl Tab {
 
     pub(crate) fn id(&self) -> TabId {
         self.id
+    }
+
+    pub(crate) fn section(&self) -> TabSection {
+        self.section
     }
 
     /// What the sidebar calls the tab: its title, or its address until it has one.

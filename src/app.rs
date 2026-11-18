@@ -5,20 +5,22 @@
 
 use rune::{Key, KeyEvent, PointerPress, Tx};
 use std::path::PathBuf;
+#[cfg(feature = "ladybird-bridge")]
 use std::sync::Arc;
 
 use crate::address::{self, Destination, SearchEngine};
 use crate::appearance::Appearance;
 use crate::browser::Browser;
 use crate::config::ConfigLoad;
+#[cfg(feature = "ladybird-bridge")]
 use crate::engine::Engine;
 use crate::internal::{InternalPage, InternalRoute};
 use crate::omnibox::{self, Action, Suggestion};
 use crate::settings::{DownloadDirectory, Settings, SettingsChange, StartupMode};
 use crate::storage;
 use crate::storage::{Session, SessionTab, Storage};
-use crate::tab::{Tab, TabId};
-use crate::ui::{SidebarState, VIEWPORT};
+use crate::tab::{Tab, TabId, TabSection};
+use crate::ui::{SidebarState, TabDropTarget, VIEWPORT};
 
 /// How the Linux toolbar stays visible while browsing.
 #[cfg(target_os = "linux")]
@@ -138,11 +140,13 @@ pub(crate) struct AppState {
     #[cfg(target_os = "linux")]
     pub(crate) titlebar: LinuxTitlebar,
     storage: Option<Storage>,
+    #[cfg(feature = "ladybird-bridge")]
     profile_dir: Option<PathBuf>,
     config_file: Option<PathBuf>,
     default_download_directory: PathBuf,
     download_directory_override: Option<PathBuf>,
     pub(crate) configuration_issue: Option<String>,
+    #[cfg(feature = "ladybird-bridge")]
     storage_error: Option<String>,
     last_saved_session: Option<Session>,
     history_revision: u64,
@@ -162,16 +166,16 @@ impl AppState {
     /// Opens the supplied page, or shows the omnibox in an empty window.
     fn new(start: Option<&str>) -> Self {
         #[cfg(test)]
-        let (storage, profile_dir, config_file, config_load, session, storage_error) = (
+        let (storage, _profile_dir, config_file, config_load, session, _storage_error) = (
             None,
-            None,
+            None::<PathBuf>,
             None,
             None::<Result<ConfigLoad, String>>,
             None,
-            None,
+            None::<String>,
         );
         #[cfg(not(test))]
-        let (storage, profile_dir, config_file, config_load, session, storage_error) =
+        let (storage, _profile_dir, config_file, config_load, session, _storage_error) =
             match storage::Paths::resolve() {
                 Ok(paths) => {
                     let profile_dir = Some(paths.profile_dir.clone());
@@ -236,12 +240,14 @@ impl AppState {
             #[cfg(target_os = "linux")]
             titlebar: LinuxTitlebar::default(),
             storage,
-            profile_dir,
+            #[cfg(feature = "ladybird-bridge")]
+            profile_dir: _profile_dir,
             config_file,
             default_download_directory,
             download_directory_override,
             configuration_issue,
-            storage_error,
+            #[cfg(feature = "ladybird-bridge")]
+            storage_error: _storage_error,
             last_saved_session: session.clone(),
             history_revision: 0,
             window_title: None,
@@ -264,8 +270,10 @@ impl AppState {
                 }
             }
         } else if self.settings.startup == StartupMode::BlankWindow {
-            // Keep startup visually blank without creating a web tab; the sidebar launcher
-            // opens a tab when the user submits an address.
+            // Keep the viewport blank while restoring live persistent tabs in the sidebar.
+            if let Some(session) = session {
+                self.restore_persistent_tabs(session);
+            }
         } else if let Some(session) = session {
             self.restore_session(session);
         }
@@ -537,14 +545,54 @@ impl AppState {
         self.tab_drag.cancel()
     }
 
-    pub(crate) fn commit_tab_reorder(
+    pub(crate) fn commit_tab_move(
         &mut self,
         tab: TabId,
+        section: TabSection,
         target_index: usize,
     ) -> Result<(), crate::browser::Error> {
-        self.browser.move_tab(tab, target_index)?;
+        self.browser.move_tab_to(tab, section, target_index)?;
         self.persist_session_if_changed();
         Ok(())
+    }
+
+    pub(crate) fn move_tab_to_section_animated(
+        &mut self,
+        tab: TabId,
+        section: TabSection,
+        tx: &mut Tx,
+    ) {
+        let Some(source_section) = self.browser.tab(tab).map(Tab::section) else {
+            return;
+        };
+        let target_index = self
+            .browser
+            .section_tabs(section)
+            .count()
+            .saturating_sub(usize::from(source_section == section));
+        let target = TabDropTarget {
+            section,
+            index: target_index,
+        };
+        if let (Some(from), Some(to)) = (
+            self.tab_drag.tab_rect(tab),
+            Some(
+                self.tab_drag
+                    .target_rect(self.browser.tabs(), target, source_section),
+            ),
+        ) {
+            self.tab_drag
+                .transition(tab, source_section, section, target_index, from, to);
+        }
+        if let Err(error) = self.browser.move_tab_to(tab, section, target_index) {
+            self.tab_drag.cancel();
+            eprintln!("Elaris: {error}");
+            return;
+        }
+        self.persist_session_if_changed();
+        tx.animated();
+        tx.motion(crate::ui::TAB_REORDER_MOTION);
+        tx.wake_after(std::time::Duration::ZERO);
     }
 
     pub(crate) fn reload(&mut self, tab: TabId) {
@@ -589,7 +637,12 @@ impl AppState {
         for (index, tab) in session.tabs.iter().enumerate() {
             restored.push(
                 self.browser
-                    .restore_tab(&tab.url, &tab.title, index != session.active_tab)
+                    .restore_tab_in_section(
+                        &tab.url,
+                        &tab.title,
+                        index != session.active_tab,
+                        session.section_at(index),
+                    )
                     .ok(),
             );
         }
@@ -601,6 +654,18 @@ impl AppState {
         if let Some(active) = active {
             self.browser.activate_tab(active);
         }
+    }
+
+    fn restore_persistent_tabs(&mut self, session: &Session) {
+        for (index, tab) in session.tabs.iter().enumerate() {
+            let section = session.section_at(index);
+            if section != TabSection::Regular {
+                let _ = self
+                    .browser
+                    .restore_tab_in_section(&tab.url, &tab.title, true, section);
+            }
+        }
+        self.browser.clear_active_tab();
     }
 
     pub(crate) fn persist_session_if_changed(&mut self) {
@@ -616,13 +681,23 @@ impl AppState {
     }
 
     fn session_snapshot(&self) -> Session {
+        let mut favourites = Vec::new();
+        let mut pinned = Vec::new();
         let tabs = self
             .browser
             .tabs()
             .iter()
-            .map(|tab| SessionTab {
-                url: tab.url.clone(),
-                title: tab.title.clone(),
+            .enumerate()
+            .map(|(index, tab)| {
+                match tab.section() {
+                    TabSection::Favourite => favourites.push(index),
+                    TabSection::Pinned => pinned.push(index),
+                    TabSection::Regular => {}
+                }
+                SessionTab {
+                    url: tab.url.clone(),
+                    title: tab.title.clone(),
+                }
             })
             .collect();
         let active_tab = self
@@ -635,7 +710,7 @@ impl AppState {
                     .position(|tab| tab.id() == active.id())
             })
             .unwrap_or_default();
-        Session::new(tabs, active_tab)
+        Session::new_with_sections(tabs, active_tab, favourites, pinned)
     }
 
     fn queue_session(&mut self, session: Session) {
@@ -662,6 +737,7 @@ impl AppState {
 
 /// Starts the browser engine. Native windows do this after Rune's first frame; Ladybird starts on
 /// the engine's thread, and the waker schedules `poll` when it has news.
+#[cfg(feature = "ladybird-bridge")]
 pub(crate) fn start_engine(state: &mut AppState, waker: rune::Waker) {
     let Some(profile_dir) = state.profile_dir.clone() else {
         state.browser.fail(
@@ -680,6 +756,10 @@ pub(crate) fn start_engine(state: &mut AppState, waker: rune::Waker) {
         Err(error) => state.browser.fail(error),
     }
 }
+
+/// UI-only builds render their explanation in the page and have no engine to start.
+#[cfg(not(feature = "ladybird-bridge"))]
+pub(crate) fn start_engine(_state: &mut AppState, _waker: rune::Waker) {}
 
 /// Headless tooling has no native `on_ready`, so start its engine during Rune's setup callback.
 pub(crate) fn setup_headless(state: &mut AppState, waker: rune::Waker) {
@@ -1401,7 +1481,9 @@ mod tests {
         let third = state.browser.open_tab("three.example").unwrap();
         state.activate(second);
 
-        state.commit_tab_reorder(first, 2).unwrap();
+        state
+            .commit_tab_move(first, TabSection::Regular, 2)
+            .unwrap();
 
         assert_eq!(
             state.browser.tabs().iter().map(Tab::id).collect::<Vec<_>>(),
@@ -1422,6 +1504,270 @@ mod tests {
             ]
         );
         assert_eq!(session.active_tab, 0);
+    }
+
+    #[test]
+    fn favourite_tiles_fill_each_responsive_row() {
+        use rune::{Env, Runtime};
+
+        for favourite_count in 0..=9 {
+            let mut candidate = AppState::new(Some("one.example"));
+            let mut candidate_ids = vec![candidate.browser.active_tab().unwrap().id()];
+            for index in 1..9 {
+                candidate_ids.push(
+                    candidate
+                        .browser
+                        .open_tab(&format!("tab-{index}.example"))
+                        .unwrap(),
+                );
+            }
+            for (index, id) in candidate_ids
+                .iter()
+                .take(favourite_count)
+                .copied()
+                .enumerate()
+            {
+                candidate
+                    .browser
+                    .move_tab_to(id, TabSection::Favourite, index)
+                    .unwrap();
+            }
+            let mut runtime = Runtime::new(
+                candidate,
+                crate::ui::view,
+                (960.0, 640.0),
+                Env::new(false, 1.0),
+            );
+            runtime.frame(0.0);
+
+            let elements = runtime.elements();
+            if favourite_count == 0 {
+                assert!(
+                    !elements
+                        .iter()
+                        .any(|element| element.key.as_deref() == Some("favourites-grid"))
+                );
+                assert!(
+                    !elements
+                        .iter()
+                        .any(|element| element.key.as_deref() == Some("pinned-section"))
+                );
+                continue;
+            }
+            let grid = elements
+                .iter()
+                .find(|element| element.key.as_deref() == Some("favourites-grid"))
+                .expect("the favourites grid is visible")
+                .rect;
+            let tiles: Vec<_> = candidate_ids
+                .iter()
+                .take(favourite_count)
+                .map(|id| {
+                    elements
+                        .iter()
+                        .find(|element| {
+                            element.key.as_deref() == Some(&format!("favourite-{}", id.raw()))
+                        })
+                        .expect("each favourite has a tile")
+                        .rect
+                })
+                .collect();
+
+            for (row_index, row) in tiles.chunks(4).enumerate() {
+                let row_count = row.len();
+                let gap = if row_count > 1 {
+                    row[1][0] - row[0][0] - row[0][2]
+                } else {
+                    0.0
+                };
+                let expected_width = (grid[2] - gap * (row_count - 1) as f32) / row_count as f32;
+                assert!((row[0][0] - grid[0]).abs() < 0.1);
+                assert!(
+                    (row[0][1]
+                        - (grid[1]
+                            + row_index as f32 * (48.0 + if row_count > 1 { gap } else { 8.0 })))
+                    .abs()
+                        < 0.1
+                );
+                for (column, tile) in row.iter().enumerate() {
+                    assert!((tile[2] - expected_width).abs() < 0.1);
+                    assert_eq!(tile[3], 48.0);
+                    if column > 0 {
+                        assert!((tile[0] - row[column - 1][0] - expected_width - gap).abs() < 0.1);
+                    }
+                }
+                let last = row.last().unwrap();
+                assert!((last[0] + last[2] - (grid[0] + grid[2])).abs() < 0.1);
+            }
+        }
+
+        // The same count reflows against the narrower sidebar's actual content width.
+        let mut narrow = AppState::new(Some("one.example"));
+        narrow.sidebar.width = 220.0;
+        let mut narrow_ids = vec![narrow.browser.active_tab().unwrap().id()];
+        for index in 1..4 {
+            narrow_ids.push(
+                narrow
+                    .browser
+                    .open_tab(&format!("narrow-{index}.example"))
+                    .unwrap(),
+            );
+        }
+        for (index, id) in narrow_ids.iter().copied().enumerate() {
+            narrow
+                .browser
+                .move_tab_to(id, TabSection::Favourite, index)
+                .unwrap();
+        }
+        let mut runtime = Runtime::new(
+            narrow,
+            crate::ui::view,
+            (960.0, 640.0),
+            Env::new(false, 1.0),
+        );
+        runtime.frame(0.0);
+        let elements = runtime.elements();
+        let grid = elements
+            .iter()
+            .find(|element| element.key.as_deref() == Some("favourites-grid"))
+            .unwrap()
+            .rect;
+        let tile = elements
+            .iter()
+            .find(|element| {
+                element.key.as_deref() == Some(&format!("favourite-{}", narrow_ids[0].raw()))
+            })
+            .unwrap()
+            .rect;
+        let next = elements
+            .iter()
+            .find(|element| {
+                element.key.as_deref() == Some(&format!("favourite-{}", narrow_ids[1].raw()))
+            })
+            .unwrap()
+            .rect;
+        let gap = next[0] - tile[0] - tile[2];
+        assert!((tile[2] - (grid[2] - 3.0 * gap) / 4.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn adding_a_favourite_animates_existing_tile_and_favicon_during_preview() {
+        use rune::{Env, Runtime};
+
+        let mut state = AppState::new(Some("one.example"));
+        let favourite = state.browser.active_tab().unwrap().id();
+        let regular = state.browser.open_tab("two.example").unwrap();
+        state
+            .browser
+            .move_tab_to(favourite, TabSection::Favourite, 0)
+            .unwrap();
+        let mut runtime =
+            Runtime::new(state, crate::ui::view, (960.0, 640.0), Env::new(false, 1.0));
+        runtime.frame(0.0);
+
+        let element = |runtime: &Runtime<AppState>, key: &str| {
+            runtime
+                .elements()
+                .into_iter()
+                .find(|element| element.key.as_deref() == Some(key))
+                .unwrap()
+        };
+        let favourite_tile = format!("favourite-{}", favourite.raw());
+        let initial_tile = element(&runtime, &favourite_tile);
+        let initial_icon = element(&runtime, &format!("favourite-icon-{}", favourite.raw()));
+        let regular_row = element(&runtime, &format!("tab-{}", regular.raw()));
+        let grid = element(&runtime, "favourites-grid").rect;
+        let pointer = [
+            regular_row.rect[0] + 24.0,
+            regular_row.rect[1] + regular_row.rect[3] / 2.0,
+        ];
+        runtime.pointer_move(pointer[0], pointer[1]);
+        runtime.pointer_down(pointer[0], pointer[1]);
+        runtime.frame(0.0);
+
+        let destination = [grid[0] + grid[2] * 0.75, grid[1] + grid[3] / 2.0];
+        runtime.pointer_move(destination[0], destination[1]);
+        runtime.frame(1.0 / 60.0);
+
+        assert!(runtime.state.tab_drag.is_dragging());
+        assert_eq!(
+            runtime.state.browser.tab(regular).unwrap().section(),
+            TabSection::Regular
+        );
+        let preview = element(&runtime, &favourite_tile);
+        let preview_icon = element(&runtime, &format!("favourite-icon-{}", favourite.raw()));
+        assert!(preview.target[2] < initial_tile.rect[2] * 0.75);
+        assert!(
+            preview.rect[2] < initial_tile.rect[2] && preview.rect[2] > preview.target[2],
+            "the existing tile eases to its new width during the drag: {:?} -> {:?}",
+            preview.rect,
+            preview.target
+        );
+        assert!(
+            preview_icon.target[0] < initial_icon.rect[0]
+                && preview_icon.rect[0] < initial_icon.rect[0]
+                && preview_icon.rect[0] > preview_icon.target[0],
+            "the favicon follows the tile's live horizontal layout motion: {:?} -> {:?}",
+            preview_icon.rect,
+            preview_icon.target
+        );
+        assert_eq!(
+            runtime.state.browser.active_tab().map(Tab::id),
+            Some(favourite),
+            "dragging a background tab must not activate it"
+        );
+    }
+
+    #[test]
+    fn favourite_morph_keeps_the_dragged_favicon_moving_inside_the_tile() {
+        use rune::{Env, Runtime};
+
+        let state = AppState::new(Some("one.example"));
+        let tab = state.browser.active_tab().unwrap().id();
+        let mut runtime =
+            Runtime::new(state, crate::ui::view, (960.0, 640.0), Env::new(false, 1.0));
+        runtime.frame(0.0);
+        let rect = |runtime: &Runtime<AppState>, key: &str| {
+            runtime
+                .elements()
+                .into_iter()
+                .find(|element| element.key.as_deref() == Some(key))
+                .unwrap()
+                .rect
+        };
+        let row = rect(&runtime, &format!("tab-{}", tab.raw()));
+        let scroll = rect(&runtime, "tabs-scroll");
+        let (x, y) = (row[0] + 24.0, row[1] + row[3] / 2.0);
+        let destination_y = scroll[1] - 20.0;
+        runtime.pointer_move(x, y);
+        runtime.pointer_down(x, y);
+        runtime.frame(0.0);
+        runtime.pointer_move(x, destination_y);
+        runtime.frame(1.0 / 60.0);
+        assert!(runtime.state.tab_drag.is_dragging());
+
+        let tracking_point = [x + 40.0, destination_y + 4.0];
+        runtime.pointer_move(tracking_point[0], tracking_point[1]);
+        runtime.frame(1.0 / 60.0);
+        let live_visual = rect(&runtime, "tab-drag-visual");
+        assert!((live_visual[0] - (tracking_point[0] - 24.0)).abs() < 0.1);
+        assert!((live_visual[1] - (tracking_point[1] - 17.0)).abs() < 0.1);
+
+        runtime.pointer_up(tracking_point[0], tracking_point[1]);
+        for _ in 0..5 {
+            runtime.frame(1.0 / 60.0);
+        }
+        assert_eq!(
+            runtime.state.browser.tab(tab).map(Tab::section),
+            Some(TabSection::Favourite)
+        );
+
+        let visual = rect(&runtime, "tab-drag-visual");
+        let icon = rect(&runtime, "drag-tab-icon");
+        assert!(
+            icon[0] + icon[2] / 2.0 > visual[0] + visual[2] / 3.0,
+            "the favicon moves toward the tile center during the morph: icon {icon:?}, visual {visual:?}"
+        );
     }
 
     #[test]
@@ -1599,6 +1945,9 @@ mod tests {
             [first, second, third]
         );
         assert!(!runtime.state.tab_drag.is_dragging());
-        assert!(runtime.state.tab_drag.visual().is_none());
+        assert!(
+            runtime.state.tab_drag.visual().is_some(),
+            "cancellation settles the shared visual back to its source"
+        );
     }
 }

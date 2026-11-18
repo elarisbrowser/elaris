@@ -74,7 +74,8 @@ fn page(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
         }
     }
     let page = page.w_full().h_full();
-    page.fill(theme.page)
+    let page = page
+        .fill(theme.page)
         .continuous_corners()
         .clip_rounded(theme::VIEWPORT_RADIUS)
         .focusable(true)
@@ -168,7 +169,37 @@ fn page(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
             } else {
                 state.browser.key(key, false, false, tx.physical_key())
             }
-        })
+        });
+
+    #[cfg(not(feature = "ladybird-bridge"))]
+    let page = page.child(ui_only_badge(theme));
+
+    page
+}
+
+#[cfg(not(feature = "ladybird-bridge"))]
+fn ui_only_badge(theme: &Theme) -> El {
+    use rune::tok::type_;
+    use rune::{row, text};
+
+    row()
+        .key("ui-only-mode")
+        .pin(
+            None,
+            None,
+            Some(theme::VIEWPORT_BADGE_INSET),
+            Some(theme::VIEWPORT_BADGE_INSET),
+        )
+        .px(theme::ROW_PADDING)
+        .py(theme::TAB_GAP)
+        .radius(theme::FIELD_RADIUS)
+        .fill(theme.overlay_panel)
+        .border(theme::OMNIBOX_BORDER_WIDTH, theme.overlay_border)
+        .child(
+            text("UI Only Mode")
+                .font(type_::LABEL)
+                .color(theme.text_muted),
+        )
 }
 
 fn paste(id: TabId, tx: &mut Tx) {

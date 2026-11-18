@@ -10,8 +10,8 @@ connection and writes session files, so neither page work nor browser-data write
 |---|---|
 | `src/main.rs` | Builds the Rune app and installs its lifecycle hooks. |
 | `src/app.rs` | App state, settings actions, tab actions, omnibox actions, startup restoration, persistence scheduling, polling and shutdown. |
-| `src/browser.rs` | Ordered web and native tabs, active-tab selection, input routing and commands sent to the engine. |
-| `src/tab.rs` | Per-tab address, committed address, title, favicon, page state, native route and engine state. |
+| `src/browser.rs` | Ordered web and native tabs, their Favourite/Pinned/Regular classification, active-tab selection, input routing and commands sent to the engine. |
+| `src/tab.rs` | Per-tab address, committed address, title, favicon, section, page state, native route and engine state. |
 | `src/omnibox.rs` | Omnibox state, local suggestion ranking and typed actions. |
 | `src/history.rs` | Public synchronous SQLite history API; the app uses it through the storage worker. |
 | `src/storage.rs` | Native data/config paths, asynchronous history and configuration access, session JSON and atomic replacement. |
@@ -58,8 +58,10 @@ Elaris stores:
 - `history.sqlite`: one row per visited HTTP or HTTPS URL, with its latest title, visit time and
   visit count. Internal, invalid and non-web URLs are excluded. Typed omnibox queries are never
   recorded.
-- `session.json`: a versioned list of open tab URLs and titles plus the active tab index. It is
-  written to a temporary file and atomically renamed into place.
+- `session.json`: a versioned list of open tab URLs and titles plus the active tab index and the
+  indices classified as Favourite or Pinned. Unmarked tabs are Regular. Older sessions without
+  section indices restore as Regular tabs. The file is written to a temporary file and atomically
+  renamed into place.
 - `profile/`: Ladybird's engine-owned profile data, separate from Elaris history and session
   metadata.
 - `config.toml`: appearance, search provider, download directory and startup mode. The settings
@@ -126,6 +128,14 @@ snapshot and never waits for SQLite.
    window. Rune scales the latest complete frame to the viewport.
 
 ## Startup and shutdown
+
+Tabs remain in one stable-ID browser collection, grouped for keyboard navigation in Favourite,
+Pinned, then Regular order. Moving a tab only changes its section and position; it keeps its
+existing Ladybird view and page state. Rune's sidebar owns the transient drag preview and shared
+row-to-tile transition, while the browser commits a move only on release or a context-menu action.
+Only those completed moves queue a session snapshot. With the blank-window startup preference,
+restored Favourite and Pinned tabs remain in the sidebar without activating a page; regular tabs
+from the prior session are not restored into that blank window.
 
 At app construction, Elaris resolves its data/config directories, loads the small settings file,
 and reads the session file. It recreates tabs in saved order and activates the saved tab before the
