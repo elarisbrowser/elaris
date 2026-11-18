@@ -128,6 +128,25 @@ pub(crate) enum ViewCommand {
         request: u64,
         new_tab: bool,
     },
+    /// Searches the page asynchronously and highlights every result.
+    Find {
+        query: String,
+        request_id: u64,
+    },
+    /// Selects the next highlighted match and reports the resulting position.
+    FindNext {
+        request_id: u64,
+    },
+    /// Selects the previous highlighted match and reports the resulting position.
+    FindPrevious {
+        request_id: u64,
+    },
+    /// Clears Ladybird's active match and highlights.
+    FindEnd,
+    /// Reads the current webpage selection without blocking the UI thread.
+    SelectedText {
+        request_id: u64,
+    },
     Focus(bool),
     /// Whether the view is on screen; hidden ones stop painting.
     Visible(bool),
@@ -139,6 +158,8 @@ pub(crate) enum ViewCommand {
 #[cfg_attr(not(feature = "ladybird-bridge"), allow(dead_code))]
 pub(crate) enum Update {
     Tab(TabId, TabUpdate),
+    /// Selected page text for the find bar's guarded initial query.
+    FindSelection(TabId, u64, String),
     NewTab(TabId, String, u64, bool),
     ContextMenu(TabId, elaris::ladybird::PageMenu),
     Clipboard(TabId, String),
@@ -154,6 +175,7 @@ pub(crate) enum Update {
 #[derive(Debug)]
 #[cfg_attr(not(feature = "ladybird-bridge"), allow(dead_code))]
 pub(crate) enum TabUpdate {
+    FindResult { request_id: u64, result: FindResult },
     Navigation(String),
     NavigationCommitted(String),
     ImeCaret(Option<[i32; 4]>),
@@ -162,6 +184,15 @@ pub(crate) enum TabUpdate {
     Favicon(Option<Favicon>),
     History { back: bool, forward: bool },
     Error(String),
+}
+
+/// Ladybird's current match and optional total, reported asynchronously.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct FindResult {
+    /// Zero-based position of the current match.
+    pub(crate) current_match_index: u64,
+    /// Number of matches, when Ladybird reports it.
+    pub(crate) total_match_count: Option<u64>,
 }
 
 /// The browser's handle on the engine thread. Nothing it does blocks.

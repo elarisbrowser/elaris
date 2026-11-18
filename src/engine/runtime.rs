@@ -16,7 +16,7 @@ use elaris::downloads::{
 use elaris::ladybird::{Event, Frame, Ladybird, Waker, WebView};
 
 use super::frames::{FrameGate, Verdict};
-use super::{Command, DownloadAction, Surface, TabUpdate, Update, ViewCommand};
+use super::{Command, DownloadAction, FindResult, Surface, TabUpdate, Update, ViewCommand};
 use crate::perf::{self, Count, Stage};
 use crate::tab::TabId;
 
@@ -235,6 +235,21 @@ impl Runtime {
                 Event::Title(title) => TabUpdate::Title(title),
                 Event::Loading(loading) => TabUpdate::Loading(loading),
                 Event::Favicon(favicon) => TabUpdate::Favicon(favicon),
+                Event::FindResult {
+                    request_id,
+                    current_match_index,
+                    total_match_count,
+                } => TabUpdate::FindResult {
+                    request_id,
+                    result: FindResult {
+                        current_match_index,
+                        total_match_count,
+                    },
+                },
+                Event::SelectedText { request_id, text } => {
+                    updates.push(Update::FindSelection(tab, request_id, text));
+                    continue;
+                }
                 Event::History { back, forward } => TabUpdate::History { back, forward },
                 Event::Download(_) => unreachable!("download events are handled above"),
                 Event::ReadyToPaint => {
@@ -323,6 +338,11 @@ fn apply_to_view(view: &mut View, command: ViewCommand, timing: &mut Timing) -> 
     match command {
         ViewCommand::LoadPrepared { source, request } => web.load_prepared(source.raw(), request),
         ViewCommand::OpenContext { request, new_tab } => web.open_context_target(request, new_tab),
+        ViewCommand::Find { query, request_id } => web.find(&query, request_id),
+        ViewCommand::FindNext { request_id } => web.find_next(request_id),
+        ViewCommand::FindPrevious { request_id } => web.find_previous(request_id),
+        ViewCommand::FindEnd => web.find_end(),
+        ViewCommand::SelectedText { request_id } => web.selected_text(request_id),
         ViewCommand::Edit(edit) => web.edit(&edit),
         ViewCommand::Load(url) => web.load(&url),
         ViewCommand::Reload => web.reload(),

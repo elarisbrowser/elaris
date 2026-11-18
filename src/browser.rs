@@ -39,6 +39,8 @@ pub(crate) enum Error {
     Address(&'static str),
     /// No open tab has this id.
     NoSuchTab(TabId),
+    /// Find in Page is not available on Elaris-owned internal pages.
+    InternalPage(TabId),
     /// The requested position is outside the current tab order.
     #[cfg(test)]
     InvalidTabIndex(usize),
@@ -53,6 +55,7 @@ impl fmt::Display for Error {
         match self {
             Self::Address(reason) => f.write_str(reason),
             Self::NoSuchTab(_) => f.write_str("The tab has closed"),
+            Self::InternalPage(_) => f.write_str("Find in Page is unavailable on internal pages"),
             #[cfg(test)]
             Self::InvalidTabIndex(_) => f.write_str("The tab position is out of range"),
             Self::InvalidSectionIndex(_) => f.write_str("The section position is out of range"),
@@ -76,6 +79,8 @@ pub(crate) struct Polled {
     pub(crate) committed: Vec<(TabId, String, String)>,
     /// Titles reported for a tab's last committed URL.
     pub(crate) titles: Vec<(String, String)>,
+    /// Asynchronously returned webpage selections requested by the open find bar.
+    pub(crate) find_selections: Vec<(TabId, u64, String)>,
     /// The engine could not apply the selected download directory.
     pub(crate) download_directory_error: Option<String>,
 }
@@ -143,6 +148,22 @@ impl Browser {
             if !tab.is_internal() {
                 engine.send(Command::Open(tab.id(), tab.surface.clone()));
             }
+        }
+        for tab in &mut self.tabs {
+            if tab.is_internal() || tab.find.query.is_empty() {
+                continue;
+            }
+            tab.find.invalidate();
+            let Some(request_id) = tab.find.begin_query(&tab.find.query.clone()) else {
+                continue;
+            };
+            engine.send(Command::View(
+                tab.id(),
+                ViewCommand::Find {
+                    query: tab.find.query.clone(),
+                    request_id,
+                },
+            ));
         }
         self.engine = Some(engine);
     }
@@ -469,6 +490,7 @@ impl Browser {
             ));
         }
         let url = url_for_address(address).map_err(Error::Address)?;
+        self.invalidate_find(id);
         let connected = self.engine.is_some();
         let open_view = self.tab(id).ok_or(Error::NoSuchTab(id))?.is_internal();
         let mut load_now = false;
@@ -519,6 +541,7 @@ impl Browser {
 
     pub(crate) fn reload(&mut self, id: TabId) {
         if self.tab(id).is_some_and(|tab| !tab.is_internal()) {
+            self.invalidate_find(id);
             self.send(id, ViewCommand::Reload);
         }
     }
@@ -534,11 +557,99 @@ impl Browser {
     }
 
     pub(crate) fn go_back(&mut self, id: TabId) {
+        self.invalidate_find(id);
         self.send(id, ViewCommand::Traverse(-1));
     }
 
     pub(crate) fn go_forward(&mut self, id: TabId) {
+        self.invalidate_find(id);
         self.send(id, ViewCommand::Traverse(1));
+    }
+
+    /// Searches one web tab with Ladybird's case-insensitive, all-match search.
+    pub(crate) fn find(&mut self, id: TabId, query: &str) -> Result<(), Error> {
+        let tab = self.tab_mut(id).ok_or(Error::NoSuchTab(id))?;
+        if tab.is_internal() {
+            return Err(Error::InternalPage(id));
+        }
+
+        if query.is_empty() {
+            if tab.find.query.is_empty() && !tab.find.pending() && tab.find.result.is_none() {
+                return Ok(());
+            }
+            tab.find.clear_query();
+            let command = ViewCommand::FindEnd;
+            self.send(id, command);
+            return Ok(());
+        }
+
+        let Some(request_id) = tab.find.begin_query(query) else {
+            return Ok(());
+        };
+        let query = tab.find.query.clone();
+        self.send(id, ViewCommand::Find { query, request_id });
+        Ok(())
+    }
+
+    /// Advances the active tab's current find query and wraps as Ladybird does.
+    pub(crate) fn find_next(&mut self, id: TabId) -> Result<(), Error> {
+        self.find_step(id, false)
+    }
+
+    /// Moves to the previous match in the active tab's current find query.
+    pub(crate) fn find_previous(&mut self, id: TabId) -> Result<(), Error> {
+        self.find_step(id, true)
+    }
+
+    /// Requests selected webpage text asynchronously for Find's initial query.
+    pub(crate) fn request_selected_text(&self, id: TabId, request_id: u64) -> Result<(), Error> {
+        let tab = self.tab(id).ok_or(Error::NoSuchTab(id))?;
+        if tab.is_internal() {
+            return Err(Error::InternalPage(id));
+        }
+        self.send(id, ViewCommand::SelectedText { request_id });
+        Ok(())
+    }
+
+    fn find_step(&mut self, id: TabId, previous: bool) -> Result<(), Error> {
+        let tab = self.tab_mut(id).ok_or(Error::NoSuchTab(id))?;
+        if tab.is_internal() {
+            return Err(Error::InternalPage(id));
+        }
+        let Some(request_id) = tab.find.begin_navigation() else {
+            return Ok(());
+        };
+        self.send(
+            id,
+            if previous {
+                ViewCommand::FindPrevious { request_id }
+            } else {
+                ViewCommand::FindNext { request_id }
+            },
+        );
+        Ok(())
+    }
+
+    /// Clears Ladybird's highlights and invalidates pending results, retaining this tab's query.
+    pub(crate) fn clear_find(&mut self, id: TabId) -> Result<(), Error> {
+        let tab = self.tab_mut(id).ok_or(Error::NoSuchTab(id))?;
+        if tab.is_internal() {
+            return Ok(());
+        }
+        tab.find.invalidate();
+        self.send(id, ViewCommand::FindEnd);
+        Ok(())
+    }
+
+    fn invalidate_find(&mut self, id: TabId) {
+        let Some(tab) = self.tab_mut(id).filter(|tab| !tab.is_internal()) else {
+            return;
+        };
+        let clear_highlights = tab.find.pending() || tab.find.result.is_some();
+        tab.find.invalidate();
+        if clear_highlights {
+            self.send(id, ViewCommand::FindEnd);
+        }
     }
 
     /// Closes the tab and its page. Closing the active tab activates the one after it, or the
@@ -667,6 +778,20 @@ impl Browser {
                         }
                         continue;
                     }
+                    if matches!(
+                        &update,
+                        crate::engine::TabUpdate::Navigation(_)
+                            | crate::engine::TabUpdate::NavigationCommitted(_)
+                    ) {
+                        self.invalidate_find(id);
+                    }
+                    if let crate::engine::TabUpdate::FindResult { request_id, .. } = &update
+                        && self
+                            .tab(id)
+                            .is_some_and(|tab| tab.find.request_id() != *request_id)
+                    {
+                        continue;
+                    }
                     if let Some(tab) = self.tab_mut(id) {
                         let committed = match &update {
                             crate::engine::TabUpdate::NavigationCommitted(url) => Some(url.clone()),
@@ -703,6 +828,13 @@ impl Browser {
                         polled.changed = true;
                     }
                 }
+                Update::FindSelection(id, request_id, text)
+                    if self.tab(id).is_some_and(|tab| !tab.is_internal()) =>
+                {
+                    polled.find_selections.push((id, request_id, text));
+                    polled.changed = true;
+                }
+                Update::FindSelection(..) => {}
                 Update::ContextMenu(id, menu) if self.active == Some(id) => {
                     polled.menu = Some((id, menu));
                     polled.changed = true;
@@ -847,7 +979,7 @@ mod tests {
     use rune::{Key as RuneKey, KeyEvent, Mods, PointerButton};
 
     use super::*;
-    use crate::engine::{FakeEngine, Surface, TabUpdate};
+    use crate::engine::{FakeEngine, FindResult, Surface, TabUpdate};
 
     fn connected() -> (Browser, FakeEngine) {
         let mut browser = Browser::default();
@@ -930,6 +1062,146 @@ mod tests {
             height,
             scale,
         }
+    }
+
+    #[test]
+    fn find_commands_and_results_stay_with_the_named_tab() {
+        let (mut browser, fake) = ready();
+        let first = browser.open_tab("example.com").unwrap();
+        let second = browser.open_tab("example.org").unwrap();
+        sent(&fake);
+        browser.find(first, "river").unwrap();
+        browser.find(second, "river").unwrap();
+        browser.find_next(first).unwrap();
+
+        assert_eq!(
+            sent(&fake),
+            [
+                view(
+                    first,
+                    ViewCommand::Find {
+                        query: "river".into(),
+                        request_id: 1,
+                    }
+                ),
+                view(
+                    second,
+                    ViewCommand::Find {
+                        query: "river".into(),
+                        request_id: 1,
+                    }
+                ),
+                view(first, ViewCommand::FindNext { request_id: 2 }),
+            ]
+        );
+
+        fake.updates
+            .send(Update::Tab(
+                first,
+                TabUpdate::FindResult {
+                    request_id: 2,
+                    result: FindResult {
+                        current_match_index: 2,
+                        total_match_count: Some(3),
+                    },
+                },
+            ))
+            .unwrap();
+        fake.updates
+            .send(Update::Tab(
+                second,
+                TabUpdate::FindResult {
+                    request_id: 1,
+                    result: FindResult {
+                        current_match_index: 0,
+                        total_match_count: Some(1),
+                    },
+                },
+            ))
+            .unwrap();
+        browser.poll();
+        assert_eq!(
+            browser.tab(first).unwrap().find.result,
+            Some(FindResult {
+                current_match_index: 2,
+                total_match_count: Some(3),
+            })
+        );
+        assert_eq!(
+            browser.tab(second).unwrap().find.result,
+            Some(FindResult {
+                current_match_index: 0,
+                total_match_count: Some(1),
+            })
+        );
+    }
+
+    #[test]
+    fn navigation_and_close_discard_stale_find_results() {
+        let (mut browser, fake) = ready();
+        let first = browser.open_tab("example.com").unwrap();
+        let request_id = {
+            browser.find(first, "river").unwrap();
+            let ViewCommand::Find { request_id, .. } = sent(&fake)
+                .into_iter()
+                .find_map(|command| match command {
+                    Command::View(_, command @ ViewCommand::Find { .. }) => Some(command),
+                    _ => None,
+                })
+                .expect("find command is queued")
+            else {
+                unreachable!("the queued command is a find request")
+            };
+            request_id
+        };
+
+        browser.navigate(first, "next.example").unwrap();
+        let stale = Update::Tab(
+            first,
+            TabUpdate::FindResult {
+                request_id,
+                result: FindResult {
+                    current_match_index: 0,
+                    total_match_count: Some(9),
+                },
+            },
+        );
+        fake.updates.send(stale).unwrap();
+        assert!(!browser.poll().changed);
+        assert_eq!(browser.tab(first).unwrap().find.result, None);
+        assert!(sent(&fake).contains(&view(first, ViewCommand::FindEnd)));
+
+        browser.close_tab(first);
+        let next = browser.open_tab("other.example").unwrap();
+        fake.updates
+            .send(Update::Tab(
+                first,
+                TabUpdate::FindResult {
+                    request_id: request_id + 1,
+                    result: FindResult {
+                        current_match_index: 0,
+                        total_match_count: Some(1),
+                    },
+                },
+            ))
+            .unwrap();
+        assert!(!browser.poll().changed);
+        assert!(browser.tab(next).unwrap().find.result.is_none());
+    }
+
+    #[test]
+    fn internal_pages_reject_find_requests() {
+        let (mut browser, fake) = ready();
+        let internal = browser.open_tab("elaris://settings").unwrap();
+        assert_eq!(
+            browser.find(internal, "settings"),
+            Err(Error::InternalPage(internal))
+        );
+        assert_eq!(
+            browser.find_next(internal),
+            Err(Error::InternalPage(internal))
+        );
+        assert!(sent(&fake).is_empty());
     }
 
     fn surface(browser: &Browser, id: TabId) -> Surface {

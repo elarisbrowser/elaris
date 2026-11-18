@@ -178,6 +178,19 @@ pub(crate) const OMNIBOX_SEARCH_BUTTON_HEIGHT: f32 = 28.0;
 pub(crate) const OMNIBOX_SEARCH_BUTTON_PADDING: f32 = 6.0;
 pub(crate) const OMNIBOX_SEARCH_BUTTON_GAP: f32 = 4.0;
 
+/// The compact floating Find in Page bar.
+pub(crate) const FIND_WIDTH: f32 = 344.0;
+pub(crate) const FIND_HEIGHT: f32 = 44.0;
+pub(crate) const FIND_INSET: f32 = 16.0;
+pub(crate) const FIND_RADIUS: f32 = radius::LG;
+pub(crate) const FIND_MOTION: Spring = Spring::new(0.22, 0.0);
+pub(crate) const FIND_BUTTON: f32 = 26.0;
+pub(crate) const FIND_PADDING: f32 = 6.0;
+pub(crate) const FIND_GAP: f32 = 4.0;
+pub(crate) const FIND_SHADOW_Y: f32 = 3.0;
+pub(crate) const FIND_SHADOW_BLUR: f32 = 12.0;
+pub(crate) const FIND_INPUT_TEXT: rune::TextStyle = rune::TextStyle::new(14.0, 400.0);
+
 /// Rows in the tab list, and the new-tab and appearance buttons that share their shape.
 pub(crate) const ROW_HEIGHT: f32 = 34.0;
 pub(crate) const ROW_RADIUS: f32 = radius::LG;

@@ -46,6 +46,24 @@ pub(crate) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> E
     viewport.child(page(state, theme, overlays))
 }
 
+/// The webpage's top-left origin in the window, used to anchor its native find overlay.
+pub(crate) fn page_origin(state: &AppState) -> [f32; 2] {
+    let left = if state.sidebar.collapsed {
+        theme::VIEWPORT_INSET
+    } else {
+        state.sidebar.width
+    };
+    #[cfg(target_os = "linux")]
+    let top = theme::HEADER_HEIGHT + theme::VIEWPORT_INSET;
+    #[cfg(not(target_os = "linux"))]
+    let top = if state.sidebar.collapsed {
+        theme::HEADER_HEIGHT
+    } else {
+        theme::VIEWPORT_INSET
+    };
+    [left, top]
+}
+
 /// The page's latest frame fills the viewport over its appearance-aware background. During a live
 /// resize Rune scales a frame to new bounds.
 fn page(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
@@ -73,8 +91,8 @@ fn page(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
             );
         }
     }
-    let page = page.w_full().h_full();
-    let page = page
+    let mut page = page.w_full().h_full();
+    page = page
         .fill(theme.page)
         .continuous_corners()
         .clip_rounded(theme::VIEWPORT_RADIUS)
@@ -84,6 +102,7 @@ fn page(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
         .on_layout(|state: &mut AppState, [_, _, w, h]| state.browser.set_viewport([w, h]))
         .pointer_buttons([PointerButton::Middle])
         .on_secondary_press_local(|state: &mut AppState, p, tx| {
+            state.dismiss_find();
             tx.focus(VIEWPORT, false);
             if state
                 .browser

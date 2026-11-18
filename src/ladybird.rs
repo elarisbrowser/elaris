@@ -51,6 +51,17 @@ pub enum Event {
     },
     /// The page's favicon changed, or was cleared when its active document changed.
     Favicon(Option<Favicon>),
+    /// Ladybird completed a find request for a view.
+    FindResult {
+        request_id: u64,
+        current_match_index: u64,
+        total_match_count: Option<u64>,
+    },
+    /// The selected webpage text returned for a find bar opened on that view.
+    SelectedText {
+        request_id: u64,
+        text: String,
+    },
     /// A copied download snapshot raised by Ladybird's application-level downloader.
     Download(crate::downloads::Update),
 }

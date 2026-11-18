@@ -78,6 +78,10 @@ pub(crate) static CHEVRON_DOWN: Icon = icon(
     "chevron-down",
     r#"<path d="m4.5 6.5 3.5 3 3.5-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>"#,
 );
+pub(crate) static CHEVRON_UP: Icon = icon(
+    "chevron-up",
+    r#"<path d="m4.5 9.5 3.5-3 3.5 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>"#,
+);
 static SEARCH_ENGINE_IMAGES: OnceLock<[Image; 4]> = OnceLock::new();
 
 pub(crate) fn search_engine(engine: SearchEngine, size: f32) -> El {

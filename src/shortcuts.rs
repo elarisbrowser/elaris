@@ -19,6 +19,9 @@ pub(crate) enum Shortcut {
     Close,
     /// Open the omnibox with the active page address selected.
     FocusOmnibox,
+    Find,
+    FindNext,
+    FindPrevious,
     Reload,
     PreviousTab,
     NextTab,
@@ -35,6 +38,10 @@ pub(crate) fn on_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> boo
         state.cancel_tab_drag();
         tx.animated();
         tx.motion(ui::TAB_REORDER_MOTION);
+        return true;
+    }
+    if event.key == Key::Escape && state.find_open {
+        state.close_find(tx);
         return true;
     }
     let Some(shortcut) = shortcut(event) else {
@@ -58,6 +65,20 @@ pub(crate) fn on_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> boo
             }
         }
         Shortcut::FocusOmnibox => focus_omnibox(state, tx),
+        Shortcut::Find => state.open_find(tx),
+        Shortcut::FindNext | Shortcut::FindPrevious => {
+            if !state.find_open {
+                state.open_find(tx);
+            }
+            if let Some(tab) = state.find_tab {
+                if shortcut == Shortcut::FindPrevious {
+                    let _ = state.browser.find_previous(tab);
+                } else {
+                    let _ = state.browser.find_next(tab);
+                }
+                tx.focus(ui::FIND_INPUT, false);
+            }
+        }
         Shortcut::Reload => state.with_active_tab(Browser::reload),
         Shortcut::ToggleSidebar => ui::toggle_sidebar(state, tx),
         Shortcut::OpenSettings => app::open_settings(state, tx),
@@ -98,7 +119,10 @@ pub(crate) fn shortcut(event: &KeyEvent) -> Option<Shortcut> {
         return None;
     };
     let shift = event.mods.shift;
-    Some(match (key, shift) {
+    Some(match (key.to_ascii_lowercase(), shift) {
+        ('f', false) => Shortcut::Find,
+        ('g', false) => Shortcut::FindNext,
+        ('g', true) => Shortcut::FindPrevious,
         ('t', false) => Shortcut::NewTab,
         ('t' | 'T', true) => Shortcut::ReopenClosedTab,
         ('w', false) => Shortcut::Close,
@@ -140,6 +164,9 @@ mod tests {
         assert_eq!(press('w', false), Some(Shortcut::Close));
         assert_eq!(press('l', false), Some(Shortcut::FocusOmnibox));
         assert_eq!(press('r', false), Some(Shortcut::Reload));
+        assert_eq!(press('f', false), Some(Shortcut::Find));
+        assert_eq!(press('g', false), Some(Shortcut::FindNext));
+        assert_eq!(press('G', true), Some(Shortcut::FindPrevious));
         assert_eq!(press('s', false), Some(Shortcut::ToggleSidebar));
         assert_eq!(press(',', false), Some(Shortcut::OpenSettings));
         assert_eq!(press('{', true), Some(Shortcut::PreviousTab));

@@ -25,6 +25,8 @@ typedef enum {
     ELARIS_LADYBIRD_IME_CARET,
     ELARIS_LADYBIRD_NAVIGATION_COMMITTED = 11,
     ELARIS_LADYBIRD_DOWNLOAD = 12,
+    ELARIS_LADYBIRD_FIND_RESULT = 13,
+    ELARIS_LADYBIRD_SELECTED_TEXT = 14,
 } ElarisLadybirdEventKind;
 
 typedef enum {
@@ -58,6 +60,9 @@ typedef struct {
     ElarisLadybirdDownloadStatus download_status;
     const char* destination; /* Borrowed UTF-8 path, valid until the callback returns. */
     const char* error;       /* Borrowed UTF-8 error, valid until the callback returns. */
+    uint64_t current_match_index;
+    uint64_t total_match_count;
+    int32_t has_total_match_count;
 } ElarisLadybirdEvent;
 
 typedef void (*ElarisLadybirdEventCallback)(void* context, const ElarisLadybirdEvent* event);
@@ -212,6 +217,13 @@ typedef enum {
 int32_t elaris_ladybird_edit(ElarisLadybirdView*, ElarisEdit, const uint8_t* text, size_t length);
 int32_t elaris_ladybird_load_prepared(ElarisLadybirdView*, uint64_t source, uint64_t request);
 int32_t elaris_ladybird_open_context_target(ElarisLadybirdView*, uint64_t request, int32_t new_tab);
+/* Searches case-insensitively, highlights all matches, and reports the request ID with the result. */
+int32_t elaris_ladybird_find(ElarisLadybirdView*, const char* query, uint64_t request_id);
+int32_t elaris_ladybird_find_next(ElarisLadybirdView*, uint64_t request_id);
+int32_t elaris_ladybird_find_previous(ElarisLadybirdView*, uint64_t request_id);
+int32_t elaris_ladybird_find_end(ElarisLadybirdView*);
+/* Reads the current webpage selection and returns it asynchronously with the request ID. */
+int32_t elaris_ladybird_selected_text(ElarisLadybirdView*, uint64_t request_id);
 int32_t elaris_ladybird_key_event(ElarisLadybirdView* view, const ElarisLadybirdKeyEvent* event);
 int32_t elaris_ladybird_set_focus(ElarisLadybirdView* view, int32_t focused);
 /* Sets the colour scheme every page sees through prefers-color-scheme: nonzero for dark, zero for light. It is

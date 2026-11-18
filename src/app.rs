@@ -3,7 +3,7 @@
 //! Application state and the hooks Rune calls: starting the engine, each frame's poll, window
 //! focus and shutdown. What the interface does with tabs goes through the [`Browser`].
 
-use rune::{Key, KeyEvent, PointerPress, Tx};
+use rune::{Key, KeyEvent, PointerPress, TextEdit, Tx};
 use std::path::PathBuf;
 #[cfg(feature = "ladybird-bridge")]
 use std::sync::Arc;
@@ -152,6 +152,14 @@ impl RecentlyClosedTab {
 
 pub(crate) struct AppState {
     pub(crate) omnibox: omnibox::State,
+    /// Whether the floating Find in Page bar is mounted.
+    pub(crate) find_open: bool,
+    /// The active tab's find input. Each tab separately remembers its last query.
+    pub(crate) find_input: TextEdit,
+    /// The tab whose query currently backs the floating bar.
+    pub(crate) find_tab: Option<TabId>,
+    /// Identifies asynchronous selected-text reads so previous tabs cannot seed this query.
+    find_selection_request: u64,
     pub(crate) settings: Settings,
     /// Why the last submitted query could not be opened, until the next is.
     pub(crate) address_error: Option<String>,
@@ -255,6 +263,10 @@ impl AppState {
         }
         let mut state = Self {
             omnibox: omnibox::State::default(),
+            find_open: false,
+            find_input: TextEdit::default(),
+            find_tab: None,
+            find_selection_request: 0,
             settings,
             address_error: None,
             browser: Browser::default(),
@@ -321,6 +333,7 @@ impl AppState {
     }
 
     pub(crate) fn open_omnibox(&mut self, mode: omnibox::Mode) {
+        self.dismiss_find();
         self.page_menu = Default::default();
         self.omnibox.mode = mode;
         let use_active_url = mode == omnibox::Mode::Current;
@@ -545,6 +558,7 @@ impl AppState {
         self.cancel_tab_drag();
         self.page_menu = Default::default();
         self.browser.activate_tab(tab);
+        self.sync_find_tab();
         self.address_error = None;
     }
 
@@ -556,6 +570,7 @@ impl AppState {
             self.remember_closed(RecentlyClosedTab::from_tab(tab));
         }
         self.browser.close_tab(tab);
+        self.sync_find_tab();
         if self.browser.tabs().is_empty() {
             self.open_omnibox(omnibox::Mode::New);
         }
@@ -681,6 +696,116 @@ impl AppState {
     pub(crate) fn close_active(&mut self) {
         if let Some(tab) = self.browser.active_tab().map(Tab::id) {
             self.close(tab);
+        }
+    }
+
+    /// Opens Find in Page for the active tab and selects its retained query.
+    pub(crate) fn open_find(&mut self, tx: &mut Tx) {
+        let Some(tab) = self.browser.active_tab() else {
+            return;
+        };
+        let id = tab.id();
+        let internal = tab.is_internal();
+        let query = if internal {
+            String::new()
+        } else {
+            tab.find.query.clone()
+        };
+        self.page_menu = Default::default();
+        self.omnibox.close();
+        self.find_open = true;
+        self.find_tab = Some(id);
+        self.replace_find_input(query, true);
+        if !internal && !self.find_input.text.is_empty() {
+            let query = self.find_input.text.clone();
+            let _ = self.browser.find(id, &query);
+        } else if !internal {
+            self.request_find_selection(id);
+        }
+        tx.animated();
+        tx.motion(crate::ui::FIND_MOTION);
+        tx.focus(crate::ui::FIND_INPUT, false);
+    }
+
+    /// Closes Find, clears highlights, and restores focus to the page.
+    pub(crate) fn close_find(&mut self, tx: &mut Tx) {
+        self.dismiss_find();
+        tx.animated();
+        tx.motion(crate::ui::FIND_MOTION);
+        tx.focus(VIEWPORT, false);
+    }
+
+    /// Ends the visible search without changing the active keyboard target.
+    pub(crate) fn dismiss_find(&mut self) {
+        if !self.find_open {
+            return;
+        }
+        self.find_open = false;
+        self.find_selection_request = self.find_selection_request.wrapping_add(1);
+        if let Some(tab) = self.find_tab.take() {
+            let _ = self.browser.clear_find(tab);
+        }
+    }
+
+    /// Routes the editor's latest value to the tab it was built for.
+    pub(crate) fn find_input_changed(&mut self) {
+        self.find_selection_request = self.find_selection_request.wrapping_add(1);
+        let Some(id) = self.find_tab else {
+            return;
+        };
+        if self.browser.active_tab().map(Tab::id) != Some(id) {
+            return;
+        }
+        let query = self.find_input.text.clone();
+        let _ = self.browser.find(id, &query);
+    }
+
+    /// Rebinds the open bar after a tab switch without carrying another tab's query over.
+    fn sync_find_tab(&mut self) {
+        if !self.find_open {
+            return;
+        }
+        let active = self.browser.active_tab().map(Tab::id);
+        if self.find_tab == active {
+            return;
+        }
+        if let Some(previous) = self.find_tab {
+            let _ = self.browser.clear_find(previous);
+        }
+        self.find_tab = active;
+        let query = active
+            .and_then(|id| self.browser.tab(id))
+            .filter(|tab| !tab.is_internal())
+            .map_or_else(String::new, |tab| tab.find.query.clone());
+        self.replace_find_input(query, true);
+        if let Some(id) = active
+            && !self.find_input.text.is_empty()
+            && self.browser.tab(id).is_some_and(|tab| !tab.is_internal())
+        {
+            let query = self.find_input.text.clone();
+            let _ = self.browser.find(id, &query);
+        } else if let Some(id) = active
+            && self.browser.tab(id).is_some_and(|tab| !tab.is_internal())
+        {
+            self.request_find_selection(id);
+        }
+    }
+
+    fn request_find_selection(&mut self, id: TabId) {
+        if !cfg!(feature = "ladybird-bridge") {
+            return;
+        }
+        self.find_selection_request = self.find_selection_request.wrapping_add(1);
+        let _ = self
+            .browser
+            .request_selected_text(id, self.find_selection_request);
+    }
+
+    fn replace_find_input(&mut self, query: String, select_all: bool) {
+        self.find_input.replace_text(query);
+        if select_all {
+            self.find_input.anchor = 0;
+            self.find_input.focus = self.find_input.text.len();
         }
     }
 
@@ -841,6 +966,18 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         .set_viewport_focus(tx.focused() == Some(VIEWPORT));
     let settling = crate::ui::settle_sidebar(state, tx);
     let polled = state.browser.poll();
+    state.sync_find_tab();
+    for (tab, request_id, text) in &polled.find_selections {
+        if state.find_open
+            && state.find_tab == Some(*tab)
+            && state.find_selection_request == *request_id
+            && state.find_input.text.is_empty()
+            && !text.is_empty()
+        {
+            state.replace_find_input(text.clone(), true);
+            state.find_input_changed();
+        }
+    }
     let mut tab_drag_changed = false;
     if state.tab_drag.is_dragging() {
         match state.tab_drag.refresh_target(state.browser.tabs()) {
@@ -901,6 +1038,14 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
                 eprintln!("Elaris: {error}");
             }
         }
+    }
+    if state.find_open
+        && let Some(id) = state.find_tab
+        && polled.committed.iter().any(|(tab, _, _)| *tab == id)
+        && !state.find_input.text.is_empty()
+    {
+        let query = state.find_input.text.clone();
+        let _ = state.browser.find(id, &query);
     }
     state.persist_session_if_changed();
     let history_changed = if let Some(storage) = &state.storage {
@@ -976,6 +1121,7 @@ pub(crate) fn new_tab(state: &mut AppState, tx: &mut Tx) {
 
 /// Opens the existing settings tab, or creates it once, and returns focus to the native page.
 pub(crate) fn open_settings(state: &mut AppState, tx: &mut Tx) {
+    state.dismiss_find();
     state.omnibox.close();
     state.address_error = None;
     let tab = state.settings_tab();
@@ -1069,6 +1215,262 @@ mod tests {
         assert_eq!(panel.rect, panel.target);
         let [x, y, width, height] = panel.rect;
         assert_eq!((x + width / 2.0, y + height / 2.0), (480.0, 320.0));
+    }
+
+    #[test]
+    fn find_bar_tracks_a_narrow_page_and_uses_reversible_motion() {
+        use rune::{Env, Runtime};
+
+        let mut state = AppState::new(Some("example.com"));
+        state.sidebar.collapsed = true;
+        let mut runtime =
+            Runtime::new(state, crate::ui::view, (420.0, 360.0), Env::new(false, 1.0));
+        runtime.frame(0.0);
+        runtime.update(|state, tx| state.open_find(tx));
+        runtime.frame(1.0 / 120.0);
+
+        let elements = runtime.elements();
+        let page = elements
+            .iter()
+            .find(|element| element.key.as_deref() == Some(crate::ui::VIEWPORT))
+            .expect("page viewport is rendered");
+        let bar = elements
+            .iter()
+            .find(|element| element.key.as_deref() == Some("find-bar"))
+            .expect("find bar is rendered");
+        assert!(bar.rect[0] >= page.rect[0]);
+        assert!(bar.rect[0] + bar.rect[2] <= page.rect[0] + page.rect[2]);
+        assert!(bar.opacity < 1.0, "opening should fade in");
+        #[cfg(feature = "ladybird-bridge")]
+        assert!(elements.iter().any(|element| {
+            element.focused && element.key.as_deref() == Some(crate::ui::FIND_INPUT)
+        }));
+
+        runtime.update(|state, tx| state.close_find(tx));
+        runtime.frame(1.0 / 60.0);
+        let closing = runtime
+            .elements()
+            .into_iter()
+            .find(|element| element.key.as_deref() == Some("find-bar"))
+            .expect("closing bar remains for its exit transition");
+        assert!(closing.exiting);
+        assert!(closing.opacity < 1.0, "closing should fade out");
+        runtime.frame(1.0);
+        assert!(
+            !runtime
+                .elements()
+                .iter()
+                .any(|element| element.key.as_deref() == Some("find-bar") && !element.exiting)
+        );
+    }
+
+    #[test]
+    fn find_bar_reduced_motion_lands_and_closes_without_transition() {
+        use rune::{Env, Runtime};
+
+        let mut runtime = Runtime::new(
+            AppState::new(Some("example.com")),
+            crate::ui::view,
+            (960.0, 640.0),
+            Env::new(false, 1.0),
+        );
+        runtime.set_system_reduced_motion(true);
+        runtime.frame(0.0);
+        runtime.update(|state, tx| state.open_find(tx));
+        runtime.frame(1.0 / 60.0);
+        let bar = runtime
+            .elements()
+            .into_iter()
+            .find(|element| element.key.as_deref() == Some("find-bar"))
+            .expect("find bar is rendered");
+        assert_eq!(bar.rect, bar.target);
+        assert_eq!(bar.opacity, 1.0);
+
+        runtime.update(|state, tx| state.close_find(tx));
+        runtime.frame(1.0);
+        assert!(
+            !runtime
+                .elements()
+                .iter()
+                .any(|element| element.key.as_deref() == Some("find-bar") && !element.exiting)
+        );
+    }
+
+    #[test]
+    fn find_queries_follow_tabs_and_a_closed_tab_cannot_seed_another() {
+        let mut state = AppState::new(Some("first.example"));
+        let first = state.browser.active_tab().unwrap().id();
+        let (engine, _fake) = crate::engine::Engine::fake();
+        state.browser.connect(engine);
+        let second = state.browser.open_tab("second.example").unwrap();
+        state.open_find(&mut Tx::default());
+        state.find_input.replace_text("alpha");
+        state.find_input_changed();
+        assert_eq!(state.browser.tab(first).unwrap().find.query, "alpha");
+
+        state.activate(second);
+        assert!(state.find_input.text.is_empty());
+        state.find_input.replace_text("beta");
+        state.find_input_changed();
+        assert_eq!(state.browser.tab(second).unwrap().find.query, "beta");
+
+        state.activate(first);
+        assert_eq!(state.find_input.text, "alpha");
+        state.close(first);
+        assert_eq!(state.browser.active_tab().unwrap().id(), second);
+        assert_eq!(state.find_input.text, "beta");
+        assert_eq!(state.browser.tab(second).unwrap().find.query, "beta");
+    }
+
+    #[cfg(feature = "ladybird-bridge")]
+    #[test]
+    fn find_shortcuts_buttons_and_escape_keep_input_focus_and_route_to_the_active_tab() {
+        use crate::engine::{Command, ViewCommand};
+        use rune::{Key, KeyEvent, Runtime};
+
+        let state = AppState::new(Some("example.com"));
+        let tab = state.browser.active_tab().unwrap().id();
+        let (engine, fake) = crate::engine::Engine::fake();
+        let mut state = state;
+        state.browser.connect(engine);
+        let mut runtime = Runtime::new(
+            state,
+            crate::ui::view,
+            (960.0, 640.0),
+            rune::Env::new(false, 1.0),
+        );
+        runtime.frame(0.0);
+
+        runtime.update(|state, tx| {
+            crate::shortcuts::on_key(
+                state,
+                &KeyEvent {
+                    key: Key::Command('f'),
+                    mods: Mods {
+                        cmd: true,
+                        ..Mods::default()
+                    },
+                },
+                tx,
+            );
+        });
+        runtime.frame(0.3);
+        assert!(runtime.state.find_open);
+        assert!(runtime.elements().iter().any(|element| {
+            element.focused && element.key.as_deref() == Some(crate::ui::FIND_INPUT)
+        }));
+        let _ = fake.commands.try_iter().collect::<Vec<_>>();
+
+        runtime.key(KeyEvent {
+            key: Key::Text("match".into()),
+            mods: Mods::default(),
+        });
+        runtime.frame(0.0);
+        assert_eq!(runtime.state.find_input.text, "match");
+        let commands = fake.commands.try_iter().collect::<Vec<_>>();
+        assert!(commands.iter().any(|command| matches!(command,
+            Command::View(id, ViewCommand::Find { query, .. }) if *id == tab && query == "match"
+        )));
+
+        for (key, shift, expected_previous) in [
+            (Key::Enter, false, false),
+            (Key::Enter, true, true),
+            (Key::Command('g'), false, false),
+            (Key::Command('G'), true, true),
+        ] {
+            let command = matches!(&key, Key::Command(_));
+            runtime.key(KeyEvent {
+                key,
+                mods: Mods {
+                    cmd: command,
+                    shift,
+                    ..Mods::default()
+                },
+            });
+            runtime.frame(0.0);
+            let commands = fake.commands.try_iter().collect::<Vec<_>>();
+            let has_next = commands.iter().any(|command| {
+                matches!(command,
+                    Command::View(id, ViewCommand::FindNext { .. }) if *id == tab
+                )
+            });
+            let has_previous = commands.iter().any(|command| {
+                matches!(command,
+                    Command::View(id, ViewCommand::FindPrevious { .. }) if *id == tab
+                )
+            });
+            assert_eq!(has_next, !expected_previous);
+            assert_eq!(has_previous, expected_previous);
+        }
+
+        for (button_key, expected_previous) in
+            [("find-previous-button", true), ("find-next-button", false)]
+        {
+            let button = runtime
+                .elements()
+                .into_iter()
+                .find(|element| element.key.as_deref() == Some(button_key))
+                .expect("find navigation button is rendered");
+            let point = [
+                button.rect[0] + button.rect[2] / 2.0,
+                button.rect[1] + button.rect[3] / 2.0,
+            ];
+            runtime.pointer_down(point[0], point[1]);
+            runtime.frame(0.0);
+            runtime.pointer_up(point[0], point[1]);
+            runtime.frame(0.0);
+            let focused = runtime
+                .elements()
+                .into_iter()
+                .filter(|element| element.focused)
+                .map(|element| (element.key, element.label))
+                .collect::<Vec<_>>();
+            assert!(
+                runtime.elements().iter().any(|element| {
+                    element.focused && element.key.as_deref() == Some(crate::ui::FIND_INPUT)
+                }),
+                "focused elements after {button_key}: {focused:?}"
+            );
+            let commands = fake.commands.try_iter().collect::<Vec<_>>();
+            let has_next = commands.iter().any(|command| {
+                matches!(command,
+                    Command::View(id, ViewCommand::FindNext { .. }) if *id == tab
+                )
+            });
+            let has_previous = commands.iter().any(|command| {
+                matches!(command,
+                    Command::View(id, ViewCommand::FindPrevious { .. }) if *id == tab
+                )
+            });
+            assert_eq!(has_next, !expected_previous);
+            assert_eq!(has_previous, expected_previous);
+        }
+
+        runtime.state.find_input.anchor = 2;
+        runtime.state.find_input.focus = 2;
+        runtime.key(KeyEvent {
+            key: Key::Command('f'),
+            mods: Mods {
+                cmd: true,
+                ..Mods::default()
+            },
+        });
+        runtime.frame(0.0);
+        assert_eq!(runtime.state.find_input.anchor, 0);
+        assert_eq!(runtime.state.find_input.focus, "match".len());
+
+        runtime.key(KeyEvent {
+            key: Key::Escape,
+            mods: Mods::default(),
+        });
+        runtime.frame(0.0);
+        assert!(!runtime.state.find_open);
+        assert!(runtime.elements().iter().any(|element| {
+            element.focused && element.key.as_deref() == Some(crate::ui::VIEWPORT)
+        }));
+        assert!(fake.commands.try_iter().any(|command| matches!(command,
+            Command::View(id, ViewCommand::FindEnd) if id == tab
+        )));
     }
 
     #[test]

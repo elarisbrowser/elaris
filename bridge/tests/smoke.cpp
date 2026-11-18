@@ -9,6 +9,13 @@
 #include <thread>
 #include <vector>
 
+struct FindResult {
+    uint64_t request_id{};
+    uint64_t current_match_index{};
+    uint64_t total_match_count{};
+    bool has_total_match_count{};
+};
+
 struct Events {
     unsigned navigation{};
     unsigned committed_navigation{};
@@ -26,10 +33,16 @@ struct Events {
     int32_t favicon_width{};
     int32_t favicon_height{};
     std::string last_title;
+    std::vector<FindResult> find_results;
+    uint64_t selected_text_request{};
+    std::string selected_text;
 };
 
 // Each view's events, by the id the test gave it.
 using EventsByView = std::map<uint64_t, Events>;
+
+static bool check(int32_t result, char const* operation);
+template <typename Done> static bool pump_until(ElarisLadybird* bridge, Done done);
 
 static void on_event(void* context, ElarisLadybirdEvent const* event) {
     auto& events = (*static_cast<EventsByView*>(context))[event->view_id];
@@ -76,7 +89,45 @@ static void on_event(void* context, ElarisLadybirdEvent const* event) {
         break;
     case ELARIS_LADYBIRD_DOWNLOAD:
         break;
+    case ELARIS_LADYBIRD_FIND_RESULT:
+        events.find_results.push_back({event->request_id, event->current_match_index, event->total_match_count,
+                                       event->has_total_match_count != 0});
+        break;
+    case ELARIS_LADYBIRD_SELECTED_TEXT:
+        events.selected_text_request = event->request_id;
+        events.selected_text = event->text;
+        break;
     }
+}
+
+static bool page_find(ElarisLadybird* bridge, ElarisLadybirdView* view, Events& events) {
+    auto expect_result = [&](uint64_t request_id, uint64_t current, uint64_t total) {
+        auto const result_count = events.find_results.size();
+        if (!pump_until(bridge, [&] { return events.find_results.size() > result_count; }))
+            return false;
+        auto const& result = events.find_results.back();
+        return result.request_id == request_id && result.current_match_index == current &&
+               result.has_total_match_count && result.total_match_count == total;
+    };
+
+    uint8_t empty = 0;
+    if (!check(elaris_ladybird_edit(view, ELARIS_EDIT_SELECT_ALL, &empty, 0), "select page text") ||
+        !check(elaris_ladybird_selected_text(view, 700), "read selected page text") ||
+        !pump_until(bridge, [&] { return events.selected_text_request == 700; }) ||
+        events.selected_text.find("Selectable page text") == std::string::npos) {
+        std::cerr << "selected webpage text should be returned asynchronously\n";
+        return false;
+    }
+
+    if (!check(elaris_ladybird_find(view, "needle", 701), "find query") || !expect_result(701, 0, 3) ||
+        !check(elaris_ladybird_find_next(view, 702), "find next") || !expect_result(702, 1, 3) ||
+        !check(elaris_ladybird_find_previous(view, 703), "find previous") || !expect_result(703, 0, 3) ||
+        !check(elaris_ladybird_find_previous(view, 704), "find previous wrap") || !expect_result(704, 2, 3) ||
+        !check(elaris_ladybird_find(view, "absent", 705), "find no matches") || !expect_result(705, 0, 0)) {
+        std::cerr << "Ladybird find results should count, navigate, and wrap actual page text\n";
+        return false;
+    }
+    return check(elaris_ladybird_find_end(view), "clear find highlights");
 }
 
 // Whether the displayed frame has the requested size and scale, and the page's background color.
@@ -322,6 +373,8 @@ int main(int argc, char** argv) {
             std::cerr << "events arrived for a view other than view " << view_id << '\n';
             passed = false;
         }
+        if (passed && cycle == 0)
+            passed = page_find(bridge, view, events);
         if (passed && cycle == 0)
             passed = page_input(bridge, view, events);
         elaris_ladybird_destroy_view(view);

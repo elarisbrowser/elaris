@@ -46,6 +46,9 @@ struct RawEvent {
     download_status: i32,
     destination: *const c_char,
     error: *const c_char,
+    current_match_index: u64,
+    total_match_count: u64,
+    has_total_match_count: i32,
 }
 
 #[repr(C)]
@@ -93,6 +96,8 @@ const KEY_PRESS: i32 = 1;
 const KEY_RELEASE: i32 = 2;
 const HISTORY_BACK: i32 = 1;
 const HISTORY_FORWARD: i32 = 2;
+const FIND_RESULT: i32 = 13;
+const SELECTED_TEXT: i32 = 14;
 
 type EventCallback = unsafe extern "C" fn(*mut c_void, *const RawEvent);
 
@@ -129,6 +134,11 @@ unsafe extern "C" {
     fn elaris_ladybird_mouse_event(view: *mut RawView, event: *const RawMouseEvent) -> i32;
     fn elaris_ladybird_load_prepared(view: *mut RawView, source: u64, request: u64) -> i32;
     fn elaris_ladybird_open_context_target(view: *mut RawView, request: u64, new_tab: i32) -> i32;
+    fn elaris_ladybird_find(view: *mut RawView, query: *const c_char, request_id: u64) -> i32;
+    fn elaris_ladybird_find_next(view: *mut RawView, request_id: u64) -> i32;
+    fn elaris_ladybird_find_previous(view: *mut RawView, request_id: u64) -> i32;
+    fn elaris_ladybird_find_end(view: *mut RawView) -> i32;
+    fn elaris_ladybird_selected_text(view: *mut RawView, request_id: u64) -> i32;
     fn elaris_ladybird_edit(view: *mut RawView, command: i32, bytes: *const u8, len: usize) -> i32;
     fn elaris_ladybird_key_event(view: *mut RawView, event: *const RawKeyEvent) -> i32;
     fn elaris_ladybird_set_focus(view: *mut RawView, focused: i32) -> i32;
@@ -245,6 +255,16 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
                     native_id: raw.download_id,
                 })
             }
+            FIND_RESULT => Event::FindResult {
+                request_id: raw.request_id,
+                current_match_index: raw.current_match_index,
+                total_match_count: (raw.has_total_match_count != 0)
+                    .then_some(raw.total_match_count),
+            },
+            SELECTED_TEXT => Event::SelectedText {
+                request_id: raw.request_id,
+                text,
+            },
             _ => return,
         };
         (state.callback)(raw.view_id, event);
@@ -491,6 +511,40 @@ pub struct WebView {
 }
 
 impl WebView {
+    /// Searches the page case-insensitively and highlights all matches.
+    pub fn find(&mut self, query: &str, request_id: u64) -> Result<(), String> {
+        let query = CString::new(query)
+            .map_err(|_| "find query contains an interior NUL byte".to_owned())?;
+        // SAFETY: The view is live on its owner's thread and the query outlives the call.
+        status_result(unsafe {
+            elaris_ladybird_find(self.raw.as_ptr(), query.as_ptr(), request_id)
+        })
+    }
+
+    /// Selects the next highlighted match and reports its position asynchronously.
+    pub fn find_next(&mut self, request_id: u64) -> Result<(), String> {
+        // SAFETY: The view is live on its owner's thread.
+        status_result(unsafe { elaris_ladybird_find_next(self.raw.as_ptr(), request_id) })
+    }
+
+    /// Selects the previous highlighted match and reports its position asynchronously.
+    pub fn find_previous(&mut self, request_id: u64) -> Result<(), String> {
+        // SAFETY: The view is live on its owner's thread.
+        status_result(unsafe { elaris_ladybird_find_previous(self.raw.as_ptr(), request_id) })
+    }
+
+    /// Clears the active match and all highlights.
+    pub fn find_end(&mut self) -> Result<(), String> {
+        // SAFETY: The view is live on its owner's thread.
+        status_result(unsafe { elaris_ladybird_find_end(self.raw.as_ptr()) })
+    }
+
+    /// Reads the selected webpage text asynchronously without blocking the owner thread.
+    pub fn selected_text(&mut self, request_id: u64) -> Result<(), String> {
+        // SAFETY: The view is live on its owner's thread.
+        status_result(unsafe { elaris_ladybird_selected_text(self.raw.as_ptr(), request_id) })
+    }
+
     pub fn load(&mut self, url: &str) -> Result<(), String> {
         let url = CString::new(url).map_err(|_| "URL contains an interior NUL byte".to_owned())?;
         // SAFETY: The view is live on its owner's thread.
@@ -732,6 +786,9 @@ mod tests {
             download_status: 0,
             destination: std::ptr::null(),
             error: std::ptr::null(),
+            current_match_index: 0,
+            total_match_count: 0,
+            has_total_match_count: 0,
         };
         // SAFETY: Both pointers reference stack values that remain alive through the callback.
         unsafe {

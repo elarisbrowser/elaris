@@ -32,6 +32,7 @@
 #include <array>
 #include <cerrno>
 #include <cstring>
+#include <deque>
 #include <map>
 #include <memory>
 #include <string>
@@ -149,6 +150,8 @@ struct ElarisLadybirdView {
     uint64_t menu_request{};
     Optional<Web::HTML::PreparedNavigationDescriptor> menu_target;
     std::map<uint64_t, Web::HTML::PreparedNavigationDescriptor> pending_tabs;
+    // ViewImplementation reports find callbacks in the order its page IPC handles requests.
+    std::deque<uint64_t> pending_find_requests;
 };
 
 static AK::OwnPtr<ElarisApplication> s_application;
@@ -486,7 +489,7 @@ extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t 
     apply_selection_colors(*theme_buffer.data<Gfx::SystemTheme>());
 
     auto view = ElarisWebView::create(AK::move(theme_buffer), {1024, 768});
-    auto* handle = new ElarisLadybirdView{bridge, view_id, AK::move(view), {}, 0, 0, {}, {}};
+    auto* handle = new ElarisLadybirdView{bridge, view_id, AK::move(view), {}, 0, 0, {}, {}, {}};
     bridge->views.push_back(handle);
     // The callbacks live in the view, which the handle owns, so they never outlive it.
     handle->view->on_url_change = [handle](auto const& url) { emit(handle, ELARIS_LADYBIRD_NAVIGATION, to_utf8(url)); };
@@ -509,6 +512,21 @@ extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t 
     };
     handle->view->on_browser_history_traversal_complete = [handle] {
         emit(handle, ELARIS_LADYBIRD_NAVIGATION_COMMITTED, to_utf8(handle->view->url()));
+    };
+    handle->view->on_find_in_page = [handle](size_t current_match_index, Optional<size_t> const& total_match_count) {
+        if (!handle->bridge->callback || handle->pending_find_requests.empty())
+            return;
+        ElarisLadybirdEvent event{};
+        event.kind = ELARIS_LADYBIRD_FIND_RESULT;
+        event.view_id = handle->id;
+        event.text = "";
+        event.request_id = handle->pending_find_requests.front();
+        handle->pending_find_requests.pop_front();
+        event.current_match_index = static_cast<uint64_t>(current_match_index);
+        event.has_total_match_count = total_match_count.has_value();
+        if (total_match_count.has_value())
+            event.total_match_count = static_cast<uint64_t>(*total_match_count);
+        handle->bridge->callback(handle->bridge->context, &event);
     };
     handle->view->on_open_tab = [handle](auto navigation, auto activate) {
         if (!handle->bridge->callback)
@@ -597,6 +615,66 @@ extern "C" int32_t elaris_ladybird_open_context_target(ElarisLadybirdView* handl
         else
             handle->view->load(AK::move(navigation));
     }
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_find(ElarisLadybirdView* handle, char const* query, uint64_t request_id) {
+    if (!handle || !query)
+        return fail("view and find query are required");
+    if (!on_owner_thread(handle->bridge))
+        return fail("find requests must run on the initialization thread");
+    handle->pending_find_requests.push_back(request_id);
+    auto utf8_query = AK::StringView(query, std::char_traits<char>::length(query));
+    handle->view->find_in_page(Utf16String::from_utf8(utf8_query), CaseSensitivity::CaseInsensitive, true);
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_find_next(ElarisLadybirdView* handle, uint64_t request_id) {
+    if (!handle)
+        return fail("view is required");
+    if (!on_owner_thread(handle->bridge))
+        return fail("find navigation must run on the initialization thread");
+    handle->pending_find_requests.push_back(request_id);
+    handle->view->find_in_page_next_match();
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_find_previous(ElarisLadybirdView* handle, uint64_t request_id) {
+    if (!handle)
+        return fail("view is required");
+    if (!on_owner_thread(handle->bridge))
+        return fail("find navigation must run on the initialization thread");
+    handle->pending_find_requests.push_back(request_id);
+    handle->view->find_in_page_previous_match();
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_find_end(ElarisLadybirdView* handle) {
+    if (!handle)
+        return fail("view is required");
+    if (!on_owner_thread(handle->bridge))
+        return fail("find dismissal must run on the initialization thread");
+    handle->view->find_in_page_end();
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_selected_text(ElarisLadybirdView* handle, uint64_t request_id) {
+    if (!handle)
+        return fail("view is required");
+    if (!on_owner_thread(handle->bridge))
+        return fail("selected text must be read on the initialization thread");
+    auto weak_view = handle->view->make_weak_ptr();
+    handle->view->selected_text()->when_resolved(
+        [weak_view = AK::move(weak_view), handle, request_id](ByteString const& selection) {
+            if (!weak_view || !handle->bridge->callback)
+                return;
+            ElarisLadybirdEvent event{};
+            event.kind = ELARIS_LADYBIRD_SELECTED_TEXT;
+            event.view_id = handle->id;
+            event.text = selection.is_empty() ? "" : selection.characters();
+            event.request_id = request_id;
+            handle->bridge->callback(handle->bridge->context, &event);
+        });
     return succeed();
 }
 

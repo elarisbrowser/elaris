@@ -9,9 +9,9 @@ connection and writes session files, so neither page work nor browser-data write
 | Module | Responsibility |
 |---|---|
 | `src/main.rs` | Builds the Rune app and installs its lifecycle hooks. |
-| `src/app.rs` | App state, settings actions, tab actions, omnibox actions, startup restoration, persistence scheduling, polling and shutdown. |
-| `src/browser.rs` | Ordered web and native tabs, their Favourite/Pinned/Regular classification, active-tab selection, input routing and commands sent to the engine. |
-| `src/tab.rs` | Per-tab address, committed address, title, favicon, section, page state, native route and engine state. |
+| `src/app.rs` | App state, settings actions, tab actions, omnibox and find actions, startup restoration, persistence scheduling, polling and shutdown. |
+| `src/browser.rs` | Ordered web and native tabs, their Favourite/Pinned/Regular classification, active-tab selection, input routing and commands sent to the engine, including tab-targeted find requests. |
+| `src/tab.rs` | Per-tab address, committed address, title, favicon, section, page state, native route, engine state and transient find query/results. |
 | `src/omnibox.rs` | Omnibox state, local suggestion ranking and typed actions. |
 | `src/history.rs` | Public synchronous SQLite history API; the app uses it through the storage worker. |
 | `src/storage.rs` | Native data/config paths, asynchronous history and configuration access, session JSON and atomic replacement. |
@@ -23,7 +23,7 @@ connection and writes session files, so neither page work nor browser-data write
 | `src/address.rs` | Classifies omnibox input and builds navigation or search URLs. |
 | `src/appearance.rs` | System, light and dark appearance preference. |
 | `src/perf.rs` | Development timing, printed when `ELARIS_PERF=1`. |
-| `src/ui/` | Rune components for the toolbar, sidebar, omnibox, viewport, native settings page and shared theme. |
+| `src/ui/` | Rune components for the toolbar, sidebar, omnibox, floating find bar, viewport, native settings page and shared theme. |
 | `src/ladybird/` (library) | Safe Rust wrappers around the bridge's C ABI. Plain event, frame and input types build without the bridge feature. |
 | `bridge/` | The C++ bridge and its headless Ladybird views. |
 
@@ -145,6 +145,35 @@ page. A webpage's navigation to an `elaris:` URL is rejected at the browser/engi
 The active web view's first load waits for the viewport and colour scheme; restored background web
 views stay lazy. History database opening, configuration saves/reloads and subsequent history
 queries/writes happen on the storage worker.
+
+## Find in Page
+
+The floating bar is rendered through Rune's root overlay layer. Its anchor uses the viewport's
+sidebar and platform header geometry, so its right and top insets are measured from the webpage
+area while it remains above the Ladybird surface. `Cmd+F` on macOS and `Ctrl+F` on Linux focus that field;
+`Enter`/`Shift+Enter` and the platform `Cmd+G`/`Ctrl+G` shortcuts route to the active tab's next
+or previous match. The omnibox and page context menu dismiss the bar before taking focus.
+
+Each web `Tab` owns its last query, latest Ladybird result, and a monotonically advanced request
+generation. `Browser` validates the stable `TabId` and sends typed find commands through the engine
+queue. `Runtime` invokes `WebView::find_in_page`, `find_in_page_next_match`,
+`find_in_page_previous_match`, and `find_in_page_end`; Ladybird performs text matching, paints all
+match highlights, distinguishes the active range, and scrolls it into view. The Elaris bridge
+reports Ladybird's current index and optional total asynchronously. The UI clears displayed counts
+as soon as a query or page changes, and drops results whose generation no longer matches.
+
+Ladybird's existing callback does not include a request token. The Elaris bridge tags its result
+callbacks with each view's queued request IDs; the pinned engine processes these requests and
+callbacks in order on the view's IPC path. Navigation invalidates pending Rust generations before
+the retained query is issued again after commit. Closing a tab drops every later event for its
+never-reused ID. Switching tabs clears the previous page's highlights while keeping its query in
+memory, then restores the new active tab's query. Dismissing Find clears highlights and counts but
+keeps that tab's query for the next open. Queries are never written to disk or history.
+
+When Find opens with an empty query, the bridge reads the selected webpage text through
+`ViewImplementation::selected_text()`'s asynchronous promise. The app accepts it only if the same
+tab and request are still active and the user has not started typing. Elaris-owned internal pages
+do not have Ladybird views; the bar states that Find is unavailable on those pages.
 
 On normal close, the current tab list and active index are queued before Ladybird shutdown. Session
 replacement is atomic. A process-exit handler drains and joins the storage worker after queued

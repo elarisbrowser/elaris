@@ -3,7 +3,7 @@
 //! A tab: its stable identity, what the interface shows about its page, and what the engine was
 //! last told about it. The browser owns every tab and is the only one to change them.
 
-use crate::engine::{Surface, TabUpdate};
+use crate::engine::{FindResult, Surface, TabUpdate};
 use crate::internal::InternalRoute;
 use rune::Pixels;
 use serde::{Deserialize, Serialize};
@@ -53,6 +53,8 @@ pub(crate) struct Tab {
     pub(crate) internal: Option<InternalRoute>,
     pub(crate) can_go_back: bool,
     pub(crate) can_go_forward: bool,
+    /// The query and latest acknowledged Ladybird result for this tab.
+    pub(crate) find: FindState,
     /// Where the engine shows the page's frames, which the viewport scales to its bounds.
     pub(crate) surface: Surface,
     pub(crate) engine: Applied,
@@ -89,6 +91,7 @@ impl Tab {
             internal: None,
             can_go_back: false,
             can_go_forward: false,
+            find: FindState::default(),
             surface: Surface::default(),
             engine: Applied {
                 pending_load: Some(url),
@@ -115,6 +118,7 @@ impl Tab {
             internal: Some(route),
             can_go_back: false,
             can_go_forward: false,
+            find: FindState::default(),
             surface: Surface::default(),
             engine: Default::default(),
         }
@@ -144,6 +148,9 @@ impl Tab {
     /// Takes in what the engine reported about the tab.
     pub(crate) fn update(&mut self, update: TabUpdate) {
         match update {
+            TabUpdate::FindResult { request_id, result } => {
+                self.find.apply_result(request_id, result);
+            }
             TabUpdate::ImeCaret(rect) => self.ime_caret = rect,
             TabUpdate::Navigation(url) => {
                 self.url = url;
@@ -172,9 +179,77 @@ impl Tab {
     }
 }
 
+/// Per-tab find state. Request IDs make late engine results harmless after edits or navigation.
+#[derive(Debug, Default)]
+pub(crate) struct FindState {
+    pub(crate) query: String,
+    pub(crate) result: Option<FindResult>,
+    request_id: u64,
+    pending: bool,
+}
+
+impl FindState {
+    /// Starts a query only when it differs from the current or in-flight query.
+    pub(crate) fn begin_query(&mut self, query: &str) -> Option<u64> {
+        if self.query == query && (self.pending || self.result.is_some()) {
+            return None;
+        }
+        self.query.clear();
+        self.query.push_str(query);
+        self.begin_request()
+    }
+
+    /// Starts a navigation request for the current non-empty query.
+    pub(crate) fn begin_navigation(&mut self) -> Option<u64> {
+        if self.query.is_empty() {
+            None
+        } else {
+            self.begin_request()
+        }
+    }
+
+    /// Invalidates counts and any outstanding result without forgetting the query.
+    pub(crate) fn invalidate(&mut self) {
+        self.request_id = self.request_id.wrapping_add(1);
+        self.pending = false;
+        self.result = None;
+    }
+
+    /// Clears query and result state while leaving request IDs monotonic.
+    pub(crate) fn clear_query(&mut self) {
+        self.invalidate();
+        self.query.clear();
+    }
+
+    pub(crate) fn apply_result(&mut self, request_id: u64, result: FindResult) -> bool {
+        if request_id != self.request_id {
+            return false;
+        }
+        self.result = Some(result);
+        self.pending = false;
+        true
+    }
+
+    fn begin_request(&mut self) -> Option<u64> {
+        self.request_id = self.request_id.wrapping_add(1);
+        self.pending = true;
+        self.result = None;
+        Some(self.request_id)
+    }
+
+    pub(crate) fn pending(&self) -> bool {
+        self.pending
+    }
+
+    pub(crate) fn request_id(&self) -> u64 {
+        self.request_id
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::FindResult;
 
     fn tab(url: &str) -> Tab {
         Tab::new(TabId::from_raw(1), url.to_owned())
@@ -204,5 +279,56 @@ mod tests {
         assert_eq!(tab.url, "https://example.com/a");
         assert_eq!(tab.error, None);
         assert!(tab.can_go_back && !tab.can_go_forward);
+    }
+
+    #[test]
+    fn find_state_skips_identical_queries_and_ignores_old_results() {
+        let mut find = FindState::default();
+        let first = find.begin_query("match").expect("first query starts");
+        assert!(find.pending());
+        assert_eq!(find.begin_query("match"), None);
+
+        let second = find.begin_query("changed").expect("changed query starts");
+        assert!(second > first);
+        assert!(!find.apply_result(
+            first,
+            FindResult {
+                current_match_index: 0,
+                total_match_count: Some(4),
+            }
+        ));
+        assert!(find.pending());
+        assert!(find.apply_result(
+            second,
+            FindResult {
+                current_match_index: 0,
+                total_match_count: Some(1),
+            }
+        ));
+        assert_eq!(find.result.unwrap().total_match_count, Some(1));
+    }
+
+    #[test]
+    fn empty_query_and_navigation_invalidate_count_state_without_losing_tab_identity() {
+        let mut find = FindState::default();
+        assert_eq!(find.begin_navigation(), None);
+        let request = find.begin_query("same").expect("query starts");
+        find.apply_result(
+            request,
+            FindResult {
+                current_match_index: 1,
+                total_match_count: Some(2),
+            },
+        );
+        assert_eq!(find.query, "same");
+        assert!(find.begin_navigation().is_some());
+        find.invalidate();
+        assert_eq!(find.query, "same");
+        assert_eq!(find.result, None);
+        assert!(!find.pending());
+
+        find.clear_query();
+        assert!(find.query.is_empty());
+        assert_eq!(find.begin_navigation(), None);
     }
 }

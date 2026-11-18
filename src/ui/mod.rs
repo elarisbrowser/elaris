@@ -5,6 +5,7 @@
 
 mod controls;
 mod downloads;
+mod find;
 mod icons;
 pub(crate) mod internal;
 mod omnibox;
@@ -27,10 +28,12 @@ use crate::app::AppState;
 
 /// The focus key of the page viewport.
 pub(crate) const VIEWPORT: &str = "viewport";
+pub(crate) const FIND_INPUT: &str = "find-input";
+pub(crate) use theme::FIND_MOTION;
 pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     let dark = state.settings.appearance.is_dark(cx.system_dark());
     let theme = theme::palette(dark);
-    let reduced_motion = cx.is_reduced_motion();
+    let reduced_motion = cx.system_reduced_motion() || cx.is_reduced_motion();
     state.browser.note_scale(cx.env().scale);
     state.browser.note_dark(dark);
     let mut overlays = Vec::new();
@@ -77,12 +80,15 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         }
         window
     };
+    if let Some(find) = find::view(state, &theme, reduced_motion, viewport::page_origin(state)) {
+        overlays.push(find);
+    }
     if let Some(overlay) = omnibox::view(
         state,
         &theme,
         cx.layout_size("window")
             .map_or(WINDOW_MIN_SIZE.1, |size| size[1]),
-        cx.is_reduced_motion(),
+        reduced_motion,
         &mut overlays,
     ) {
         window = window.child(overlay);
