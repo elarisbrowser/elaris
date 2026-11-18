@@ -46,6 +46,10 @@ export PKG_CONFIG_PATH="$CMAKE_PREFIX_PATH/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG
 
 The setup command never adds a Ladybird fork or changes its pinned revision.
 
+## Optional Linux devcontainer
+
+Open the repository in a Dev Container to use the same Ladybird CI image as the Linux bridge workflow. First creation downloads the image and runs `./elaris setup --skip-system-deps`. Cargo and Rust toolchains persist in Docker volumes, and build artifacts stay in the workspace. Run `./elaris check` or `./elaris build` inside the container. It is intended for Linux builds and checks, not native desktop or GPU testing.
+
 ## Build and run
 
 After setup:

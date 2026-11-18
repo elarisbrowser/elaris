@@ -1,0 +1,24 @@
+{
+  "name": "elaris Linux",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "."
+  },
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
+  "mounts": [
+    "source=elaris-cargo,target=/home/vscode/.cargo,type=volume",
+    "source=elaris-rustup,target=/home/vscode/.rustup,type=volume"
+  ],
+  "containerEnv": {
+    "ELARIS_JOBS": "4"
+  },
+  "runArgs": ["--init", "--shm-size=2g"],
+  "postCreateCommand": "./elaris setup --skip-system-deps",
+  "customizations": {
+    "vscode": {
+      "extensions": ["rust-lang.rust-analyzer"]
+    }
+  }
+}
