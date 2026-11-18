@@ -64,6 +64,20 @@ After setup:
 
 The first build bootstraps Ladybird's pinned vcpkg checkout and compiles its third-party dependencies and runtime helper processes. It requires an internet connection and can take a while; allow several gigabytes for source and build artifacts. The default build parallelism is four jobs. Set `ELARIS_JOBS=8` or pass `--jobs 8` to `build` or `run` to change it.
 
+For an isolated development or test run, point Elaris and Ladybird at an absolute temporary data
+directory. This remains isolated even if your shell already sets a Ladybird profile override:
+
+```sh
+isolated_data_dir="$(mktemp -d)"
+ELARIS_DATA_DIR="$isolated_data_dir" \
+ELARIS_LADYBIRD_PROFILE_DIR="$isolated_data_dir/profile" \
+./elaris run https://example.com
+```
+
+For ordinary runs, `ELARIS_DATA_DIR` also supplies the default Ladybird profile root. The explicit
+`ELARIS_LADYBIRD_PROFILE_DIR` override remains available when an engine profile should live
+elsewhere.
+
 To work on Rune UI without compiling Ladybird:
 
 ```sh

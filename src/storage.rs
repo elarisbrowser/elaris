@@ -40,26 +40,52 @@ impl Paths {
     pub(crate) fn resolve() -> io::Result<Self> {
         let home = std::env::var_os("HOME").map(PathBuf::from);
         let xdg_data_home = std::env::var_os("XDG_DATA_HOME").map(PathBuf::from);
+        let data_dir = std::env::var_os("ELARIS_DATA_DIR")
+            .filter(|path| !path.is_empty())
+            .map(PathBuf::from);
+        let explicit_profile_dir = std::env::var_os("ELARIS_LADYBIRD_PROFILE_DIR")
+            .filter(|path| !path.is_empty())
+            .map(PathBuf::from);
         #[cfg(target_os = "macos")]
         let platform = Platform::MacOs;
         #[cfg(not(target_os = "macos"))]
         let platform = Platform::Linux;
-        let application_dir = application_dir(
+
+        Self::resolve_with(
             platform,
+            data_dir.as_deref(),
             home.as_deref(),
             xdg_data_home.as_deref(),
+            explicit_profile_dir.as_deref(),
             cfg!(debug_assertions),
         )
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::NotFound,
-                "cannot locate Elaris data directory",
-            )
-        })?;
-        let explicit_profile_dir = std::env::var_os("ELARIS_LADYBIRD_PROFILE_DIR")
-            .filter(|path| !path.is_empty())
-            .map(PathBuf::from);
-        let profile_dir = profile_directory(&application_dir, explicit_profile_dir.as_deref());
+    }
+
+    fn resolve_with(
+        platform: Platform,
+        data_dir: Option<&Path>,
+        home: Option<&Path>,
+        xdg_data_home: Option<&Path>,
+        explicit_profile_dir: Option<&Path>,
+        development: bool,
+    ) -> io::Result<Self> {
+        let application_dir = if let Some(data_dir) = data_dir {
+            if !data_dir.is_absolute() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "ELARIS_DATA_DIR must be an absolute path",
+                ));
+            }
+            data_dir.to_path_buf()
+        } else {
+            application_dir(platform, home, xdg_data_home, development).ok_or_else(|| {
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    "cannot locate Elaris data directory",
+                )
+            })?
+        };
+        let profile_dir = profile_directory(&application_dir, explicit_profile_dir);
         Ok(Self {
             history_file: application_dir.join("history.sqlite"),
             session_file: application_dir.join("session.json"),
@@ -613,6 +639,68 @@ mod tests {
         let release = application_dir(Platform::Linux, Some(home), None, false).unwrap();
         let development = application_dir(Platform::Linux, Some(home), None, true).unwrap();
         assert_eq!(development, release.join("development"));
+    }
+
+    #[test]
+    fn data_directory_override_is_exact_and_sets_the_default_profile() {
+        let temp = TempDir::new();
+        let data_dir = temp.0.join("isolated-data");
+        let paths = Paths::resolve_with(
+            Platform::MacOs,
+            Some(&data_dir),
+            Some(Path::new("/Users/tester")),
+            None,
+            None,
+            true,
+        )
+        .expect("resolve explicit data directory");
+
+        assert_eq!(paths.application_dir, data_dir);
+        assert_eq!(paths.profile_dir, paths.application_dir.join("profile"));
+        assert_eq!(
+            paths.history_file,
+            paths.application_dir.join("history.sqlite")
+        );
+        assert_eq!(
+            paths.session_file,
+            paths.application_dir.join("session.json")
+        );
+        assert!(!paths.application_dir.exists());
+    }
+
+    #[test]
+    fn data_directory_override_keeps_the_ladybird_profile_override() {
+        let temp = TempDir::new();
+        let data_dir = temp.0.join("isolated-data");
+        let explicit_profile = temp.0.join("ladybird-profile");
+        let paths = Paths::resolve_with(
+            Platform::Linux,
+            Some(&data_dir),
+            Some(Path::new("/home/tester")),
+            Some(Path::new("/xdg-data")),
+            Some(&explicit_profile),
+            true,
+        )
+        .expect("resolve explicit paths");
+
+        assert_eq!(paths.application_dir, data_dir);
+        assert_eq!(paths.profile_dir, explicit_profile);
+        assert!(!paths.application_dir.exists());
+        assert!(!paths.profile_dir.exists());
+    }
+
+    #[test]
+    fn relative_data_directory_overrides_are_rejected() {
+        let error = Paths::resolve_with(
+            Platform::Linux,
+            Some(Path::new("relative-data")),
+            Some(Path::new("/home/tester")),
+            None,
+            None,
+            true,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
     }
 
     #[test]

@@ -38,10 +38,12 @@ Release data lives in the native application-data directory:
 | Linux | `$XDG_DATA_HOME/Elaris/`, or `~/.local/share/Elaris/` when `XDG_DATA_HOME` is unset or relative |
 
 Debug builds use a `development/` subdirectory under that root, keeping development profiles
-separate from release data. The default Ladybird profile is `profile/`. The existing
-`ELARIS_LADYBIRD_PROFILE_DIR` override still selects Ladybird's profile directory; history and
-session files remain in Elaris's application-data directory. `ELARIS_LADYBIRD_RESOURCE_DIR`
-continues to select Ladybird resources.
+separate from release data. Set `ELARIS_DATA_DIR` to select an exact application-data root for
+development or tests; it must be absolute and bypasses the platform default and build-mode suffix.
+The default Ladybird profile is `profile/` under the selected data root. The existing
+`ELARIS_LADYBIRD_PROFILE_DIR` override still selects Ladybird's profile directory independently;
+history and session files remain under `ELARIS_DATA_DIR` or the native application-data root.
+`ELARIS_LADYBIRD_RESOURCE_DIR` continues to select Ladybird resources.
 
 Elaris stores:
 
