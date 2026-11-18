@@ -69,6 +69,24 @@ pub(crate) fn search_url(query: &str) -> String {
     url
 }
 
+/// A compact sidebar label for web pages. Keep the port and subdomains that identify the site.
+pub(crate) fn compact_address(url: &str) -> &str {
+    let Some((scheme, rest)) = url.split_once("://") else {
+        return url;
+    };
+    if !scheme.eq_ignore_ascii_case("http") && !scheme.eq_ignore_ascii_case("https") {
+        return url;
+    }
+    let authority = rest.split(['/', '?', '#', '\\']).next().unwrap_or_default();
+    let host = authority.rsplit('@').next().unwrap_or_default();
+    if host.is_empty() {
+        return url;
+    }
+    host.strip_prefix("www.")
+        .filter(|name| !name.is_empty())
+        .unwrap_or(host)
+}
+
 /// The host portion used for local-address detection and tab matching.
 pub(crate) fn host_for_address(input: &str) -> &str {
     let input = input.split_once("://").map_or(input, |(_, rest)| rest);
@@ -104,6 +122,19 @@ fn is_local_host(host: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{Destination, destination_for_input, search_url, url_for_address};
+
+    #[test]
+    fn sidebar_addresses_keep_the_site_and_port() {
+        for (url, label) in [
+            ("https://www.google.com/search?q=hi#top", "google.com"),
+            ("https://accounts.google.com/login", "accounts.google.com"),
+            ("http://user@example.org:8080/a", "example.org:8080"),
+            ("http://[::1]:8000/path", "[::1]:8000"),
+            ("file:///tmp/example.html", "file:///tmp/example.html"),
+        ] {
+            assert_eq!(super::compact_address(url), label);
+        }
+    }
 
     #[test]
     fn classifies_urls_domains_and_searches() {

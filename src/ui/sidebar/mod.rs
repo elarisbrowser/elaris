@@ -98,10 +98,16 @@ fn search_launcher(state: &AppState, theme: &Theme) -> El {
         .active_tab()
         .map(|tab| tab.url.as_str())
         .filter(|url| !url.is_empty() && *url != "about:blank");
-    let label = address.unwrap_or("Search or type a URL");
+    let label = address
+        .map(crate::address::compact_address)
+        .unwrap_or("Search or type a URL");
     row_button(
         "omnibox-launcher",
-        icon(&icons::SEARCH, theme::ICON).color(theme.text_muted),
+        address.is_none().then(|| {
+            icon(&icons::SEARCH, theme::ICON)
+                .key("search-icon")
+                .color(theme.text_muted)
+        }),
         label,
         if address.is_some() {
             theme.text
@@ -110,6 +116,7 @@ fn search_launcher(state: &AppState, theme: &Theme) -> El {
         },
         theme,
     )
+    .token_motion(theme::OMNIBOX_MOTION)
     .h(theme::FIELD_HEIGHT)
     .radius(theme::FIELD_RADIUS)
     .continuous_corners()
