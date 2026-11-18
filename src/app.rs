@@ -42,7 +42,7 @@ impl Default for AppState {
 }
 
 impl AppState {
-    /// The state for a window with one tab opening `start`, or a blank page.
+    /// Opens the supplied page, or shows the omnibox in an empty window.
     fn new(start: Option<&str>) -> Self {
         let mut state = Self {
             omnibox: omnibox::State::default(),
@@ -55,11 +55,16 @@ impl AppState {
             window_title: None,
             context_menu: None,
         };
-        let opened = start.map(|start| state.browser.open_tab(start));
-        state.ensure_a_tab();
-        state.show_active_tab();
-        if let Some(Err(error)) = opened {
-            state.address_error = Some(error.to_string());
+        if let Some(start) = start {
+            match state.browser.open_tab(start) {
+                Ok(_) => state.show_active_tab(),
+                Err(error) => {
+                    state.open_omnibox(omnibox::Mode::New);
+                    state.address_error = Some(error.to_string());
+                }
+            }
+        } else {
+            state.open_omnibox(omnibox::Mode::New);
         }
         state
     }
@@ -348,13 +353,37 @@ mod tests {
     }
 
     #[test]
-    fn opens_one_blank_tab_without_opening_the_omnibox() {
+    fn starts_with_an_empty_omnibox_and_no_tabs() {
         let state = AppState::new(None);
-        assert_eq!(state.browser.tabs().len(), 1);
-        assert_eq!(active_url(&state), "about:blank");
-        assert!(!state.omnibox.open);
+        assert!(state.browser.tabs().is_empty());
+        assert!(state.omnibox.open);
         assert_eq!(state.omnibox.input.text, "");
         assert_eq!(state.address_error, None);
+    }
+
+    #[test]
+    fn startup_omnibox_accepts_typing_and_opens_the_first_tab_on_enter() {
+        let mut runtime = rune::Runtime::new(
+            AppState::new(None),
+            crate::ui::view,
+            (960.0, 640.0),
+            rune::Env::new(false, 1.0),
+        );
+        runtime.frame(0.0);
+        runtime.key(KeyEvent {
+            key: Key::Text("example.com".into()),
+            mods: Mods::default(),
+        });
+        runtime.frame(0.0);
+        assert!(runtime.state.browser.tabs().is_empty());
+        runtime.key(KeyEvent {
+            key: Key::Enter,
+            mods: Mods::default(),
+        });
+        runtime.frame(0.0);
+        assert_eq!(runtime.state.browser.tabs().len(), 1);
+        assert_eq!(active_url(&runtime.state), "https://example.com");
+        assert!(!runtime.state.omnibox.open);
     }
 
     #[test]
@@ -377,7 +406,7 @@ mod tests {
 
     #[test]
     fn submitting_navigates_the_current_tab_for_urls_and_searches() {
-        let mut state = AppState::new(None);
+        let mut state = AppState::new(Some("example.org"));
         state.omnibox.input.replace_text("example.com/a".to_owned());
         state.submit_omnibox();
         assert_eq!(active_url(&state), "https://example.com/a");
