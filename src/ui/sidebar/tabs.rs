@@ -743,6 +743,22 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
             },
         ));
     }
+    menu = menu.separator().group_label("Recently Closed");
+    if state.recently_closed().is_empty() {
+        menu = menu.item(MenuItem::new("No recently closed tabs").disabled(true));
+    } else {
+        for (index, closed) in state.recently_closed().iter().take(5).enumerate() {
+            let label = closed.label().to_owned();
+            menu = menu.item(MenuItem::new(label).on_select_tx(
+                move |state: &mut AppState, tx: &mut Tx| {
+                    state.dismiss_context_menu();
+                    if state.reopen_recently_closed(index).is_some() {
+                        tx.focus(crate::ui::VIEWPORT, false);
+                    }
+                },
+            ));
+        }
+    }
     menu = menu
         .separator()
         .item(

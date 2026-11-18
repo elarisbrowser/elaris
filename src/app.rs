@@ -123,6 +123,32 @@ impl LinuxTitlebar {
 
 /// The window's title when the page has none.
 pub(crate) const APP_NAME: &str = "Elaris";
+const RECENTLY_CLOSED_LIMIT: usize = 10;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RecentlyClosedTab {
+    url: String,
+    title: String,
+    section: TabSection,
+}
+
+impl RecentlyClosedTab {
+    fn from_tab(tab: &Tab) -> Self {
+        Self {
+            url: tab.url.clone(),
+            title: tab.title.clone(),
+            section: tab.section(),
+        }
+    }
+
+    pub(crate) fn label(&self) -> &str {
+        match (self.title.trim(), self.url.as_str()) {
+            ("", "" | "about:blank") => "New Tab",
+            ("", url) => url,
+            (title, _) => title,
+        }
+    }
+}
 
 pub(crate) struct AppState {
     pub(crate) omnibox: omnibox::State,
@@ -153,6 +179,7 @@ pub(crate) struct AppState {
     /// The page title the window shows.
     window_title: Option<String>,
     context_menu: Option<(Option<TabId>, PointerPress)>,
+    recently_closed: Vec<RecentlyClosedTab>,
 }
 
 impl Default for AppState {
@@ -252,6 +279,7 @@ impl AppState {
             history_revision: 0,
             window_title: None,
             context_menu: None,
+            recently_closed: Vec::new(),
         };
         state.open_start_page(start, session.as_ref());
         state
@@ -524,10 +552,30 @@ impl AppState {
     pub(crate) fn close(&mut self, tab: TabId) {
         self.cancel_tab_drag();
         self.page_menu = Default::default();
+        if let Some(tab) = self.browser.tab(tab) {
+            self.remember_closed(RecentlyClosedTab::from_tab(tab));
+        }
         self.browser.close_tab(tab);
         if self.browser.tabs().is_empty() {
             self.open_omnibox(omnibox::Mode::New);
         }
+    }
+
+    pub(crate) fn recently_closed(&self) -> &[RecentlyClosedTab] {
+        &self.recently_closed
+    }
+
+    /// Reopens a recently closed tab and returns its new identity.
+    pub(crate) fn reopen_recently_closed(&mut self, index: usize) -> Option<TabId> {
+        let closed = self.recently_closed.get(index)?.clone();
+        let tab = self
+            .browser
+            .restore_tab_in_section(&closed.url, &closed.title, false, closed.section)
+            .ok()?;
+        self.recently_closed.remove(index);
+        self.omnibox.close();
+        self.activate(tab);
+        Some(tab)
     }
 
     pub(crate) fn duplicate(&mut self, tab: TabId) {
@@ -538,7 +586,25 @@ impl AppState {
 
     pub(crate) fn close_others(&mut self, tab: TabId) {
         self.cancel_tab_drag();
+        if self.browser.tab(tab).is_none() {
+            return;
+        }
+        let closed: Vec<RecentlyClosedTab> = self
+            .browser
+            .tabs()
+            .iter()
+            .filter(|candidate| candidate.id() != tab)
+            .map(RecentlyClosedTab::from_tab)
+            .collect();
+        for closed_tab in closed.into_iter().rev() {
+            self.remember_closed(closed_tab);
+        }
         self.browser.close_other_tabs(tab);
+    }
+
+    fn remember_closed(&mut self, tab: RecentlyClosedTab) {
+        self.recently_closed.insert(0, tab);
+        self.recently_closed.truncate(RECENTLY_CLOSED_LIMIT);
     }
 
     pub(crate) fn cancel_tab_drag(&mut self) -> bool {
@@ -1060,6 +1126,61 @@ mod tests {
         let state = AppState::new(Some("example.com"));
         assert_eq!(active_url(&state), "https://example.com");
         assert_eq!(state.address_error, None);
+    }
+
+    #[test]
+    fn cmd_shift_t_reopens_the_last_closed_tab_in_its_original_section() {
+        let mut state = AppState::new(Some("example.com"));
+        let original = state.browser.active_tab().unwrap().id();
+        state
+            .browser
+            .move_tab_to(original, TabSection::Favourite, 0)
+            .unwrap();
+        state.close(original);
+        assert!(state.omnibox.open);
+
+        let event = KeyEvent {
+            key: Key::Command('t'),
+            mods: Mods {
+                cmd: true,
+                shift: true,
+                ..Mods::default()
+            },
+        };
+        assert!(crate::shortcuts::on_key(
+            &mut state,
+            &event,
+            &mut Tx::default()
+        ));
+
+        let reopened = state.browser.active_tab().unwrap();
+        assert_ne!(reopened.id(), original);
+        assert_eq!(reopened.url, "https://example.com");
+        assert_eq!(reopened.section(), TabSection::Favourite);
+        assert!(!state.omnibox.open);
+        assert!(state.recently_closed().is_empty());
+    }
+
+    #[test]
+    fn close_others_keeps_recently_closed_pinned_tabs_reopenable() {
+        let mut state = AppState::new(Some("pinned.example"));
+        let pinned = state.browser.active_tab().unwrap().id();
+        state
+            .browser
+            .move_tab_to(pinned, TabSection::Pinned, 0)
+            .unwrap();
+        let kept = state.browser.open_tab("kept.example").unwrap();
+        state.activate(kept);
+
+        state.close_others(kept);
+        assert_eq!(state.browser.tabs().len(), 1);
+        assert_eq!(state.recently_closed().len(), 1);
+
+        let reopened = state.reopen_recently_closed(0).unwrap();
+        let tab = state.browser.tab(reopened).unwrap();
+        assert_eq!(tab.url, "https://pinned.example");
+        assert_eq!(tab.section(), TabSection::Pinned);
+        assert_eq!(state.browser.active_tab().map(Tab::id), Some(reopened));
     }
 
     #[test]
