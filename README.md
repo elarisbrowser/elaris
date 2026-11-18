@@ -13,6 +13,10 @@
   </p>
 </div>
 
+<p align="center">
+  <img src="assets/elaris-pre-alpha-demo.png" alt="Elaris pre-alpha demo" width="900" />
+</p>
+
 ## Quick start
 
 You need Python 3.9+ and Git. macOS also needs [Homebrew](https://brew.sh/) and Xcode 26+. Linux setup supports apt, dnf, pacman, and zypper.
