@@ -1057,7 +1057,7 @@ mod tests {
         );
         assert_eq!(
             loaded.settings.startup,
-            crate::settings::StartupMode::NewTab
+            crate::settings::StartupMode::BlankWindow
         );
     }
 

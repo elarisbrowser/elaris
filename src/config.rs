@@ -87,7 +87,7 @@ pub(crate) fn parse(contents: &str) -> Result<ConfigLoad, String> {
     if let Some(value) = string_value(&document, "startup", "mode", &mut issues) {
         settings.startup = match value.as_str() {
             "restore" => StartupMode::RestoreSession,
-            "blank" => StartupMode::NewTab,
+            "blank" => StartupMode::BlankWindow,
             _ => {
                 issues.push(format!(
                     "Invalid value for [startup].mode: {value:?}; expected restore or blank"
@@ -159,7 +159,7 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
             "mode",
             match value {
                 StartupMode::RestoreSession => "restore".to_owned(),
-                StartupMode::NewTab => "blank".to_owned(),
+                StartupMode::BlankWindow => "blank".to_owned(),
             },
         ),
     };
@@ -242,7 +242,7 @@ mod tests {
             config.settings.download_directory,
             DownloadDirectory::Custom(PathBuf::from("/tmp/files"))
         );
-        assert_eq!(config.settings.startup, StartupMode::NewTab);
+        assert_eq!(config.settings.startup, StartupMode::BlankWindow);
     }
 
     #[test]
@@ -327,7 +327,7 @@ mod tests {
             SettingsChange::DownloadDirectory(DownloadDirectory::Custom(PathBuf::from(
                 "/tmp/elaris-downloads",
             ))),
-            SettingsChange::Startup(StartupMode::NewTab),
+            SettingsChange::Startup(StartupMode::BlankWindow),
         ] {
             write_change(&path, &change).expect("persist one setting");
         }
@@ -339,7 +339,7 @@ mod tests {
             loaded.settings.download_directory,
             DownloadDirectory::Custom(PathBuf::from("/tmp/elaris-downloads"))
         );
-        assert_eq!(loaded.settings.startup, StartupMode::NewTab);
+        assert_eq!(loaded.settings.startup, StartupMode::BlankWindow);
         fs::remove_file(path).expect("remove round-trip config");
     }
 
@@ -369,7 +369,7 @@ mod tests {
         let path = directory.join("config.toml");
         fs::create_dir_all(&directory).expect("create temporary config directory");
         fs::write(&path, DEFAULT_CONFIG).expect("write initial config");
-        write_change(&path, &SettingsChange::Startup(StartupMode::NewTab))
+        write_change(&path, &SettingsChange::Startup(StartupMode::BlankWindow))
             .expect("atomically replace config");
         assert!(
             fs::read_to_string(path)

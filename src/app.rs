@@ -247,31 +247,28 @@ impl AppState {
             window_title: None,
             context_menu: None,
         };
+        state.open_start_page(start, session.as_ref());
+        state
+    }
+
+    fn open_start_page(&mut self, start: Option<&str>, session: Option<&Session>) {
         if let Some(start) = start {
-            match state.browser.open_tab(start) {
+            match self.browser.open_tab(start) {
                 Ok(_) => {}
                 Err(error) => {
-                    if let Some(session) = &session {
-                        state.restore_session(session);
+                    if let Some(session) = session {
+                        self.restore_session(session);
                     }
-                    state.open_omnibox(omnibox::Mode::New);
-                    state.address_error = Some(error.to_string());
+                    self.open_omnibox(omnibox::Mode::New);
+                    self.address_error = Some(error.to_string());
                 }
             }
-        } else if state.settings.startup == StartupMode::NewTab {
-            if let Ok(tab) = state.browser.open_tab("about:blank") {
-                state.browser.activate_tab(tab);
-            }
-            state.open_omnibox(omnibox::Mode::New);
+        } else if self.settings.startup == StartupMode::BlankWindow {
+            // Keep startup visually blank without creating a web tab; the sidebar launcher
+            // opens a tab when the user submits an address.
         } else if let Some(session) = session {
-            state.restore_session(&session);
-            if state.browser.tabs().is_empty() {
-                state.open_omnibox(omnibox::Mode::New);
-            }
-        } else {
-            state.open_omnibox(omnibox::Mode::New);
+            self.restore_session(session);
         }
-        state
     }
 
     /// Loads what the omnibox holds in the active tab.
@@ -884,18 +881,29 @@ mod tests {
     }
 
     #[test]
-    fn starts_with_an_empty_omnibox_and_no_tabs() {
+    fn starts_with_an_empty_window_without_an_about_blank_tab() {
         let state = AppState::new(None);
         assert!(state.browser.tabs().is_empty());
-        assert!(state.omnibox.open);
+        assert!(!state.omnibox.open);
         assert_eq!(state.omnibox.input.text, "");
         assert_eq!(state.address_error, None);
     }
 
     #[test]
+    fn blank_window_startup_does_not_create_a_web_tab() {
+        let mut state = AppState::new(None);
+        state.settings.set_startup(StartupMode::BlankWindow);
+        state.open_start_page(None, None);
+        assert!(state.browser.tabs().is_empty());
+        assert!(!state.omnibox.open);
+    }
+
+    #[test]
     fn reduced_motion_centers_the_resized_omnibox_immediately() {
+        let mut state = AppState::new(None);
+        state.open_omnibox(omnibox::Mode::New);
         let mut runtime = rune::Runtime::new(
-            AppState::new(None),
+            state,
             crate::ui::view,
             (960.0, 640.0),
             rune::Env::new(false, 1.0),
@@ -923,6 +931,7 @@ mod tests {
         for address in ["example.org", "example.com"] {
             state.browser.open_tab(address).unwrap();
         }
+        state.open_omnibox(omnibox::Mode::New);
         assert_eq!(state.suggestions().len(), 2);
         let mut runtime = rune::Runtime::new(
             state,
@@ -941,8 +950,10 @@ mod tests {
 
     #[test]
     fn startup_omnibox_accepts_typing_and_opens_the_first_tab_on_enter() {
+        let mut state = AppState::new(None);
+        state.open_omnibox(omnibox::Mode::New);
         let mut runtime = rune::Runtime::new(
-            AppState::new(None),
+            state,
             crate::ui::view,
             (960.0, 640.0),
             rune::Env::new(false, 1.0),
@@ -1020,13 +1031,13 @@ mod tests {
         let mut state = AppState::new(Some("example.com"));
         state.set_appearance(Appearance::Dark);
         state.set_search_engine(SearchEngine::Brave);
-        state.set_startup(StartupMode::NewTab);
+        state.set_startup(StartupMode::BlankWindow);
         let download_path = PathBuf::from("/tmp/elaris-test-downloads");
         state.set_download_directory(DownloadDirectory::Custom(download_path.clone()));
 
         assert_eq!(state.settings.appearance, Appearance::Dark);
         assert_eq!(state.settings.search_engine, SearchEngine::Brave);
-        assert_eq!(state.settings.startup, StartupMode::NewTab);
+        assert_eq!(state.settings.startup, StartupMode::BlankWindow);
         assert_eq!(state.download_directory(), download_path);
 
         state.open_omnibox(omnibox::Mode::Current);
@@ -1353,7 +1364,7 @@ mod tests {
         let mut state = AppState::new(None);
         state.restore_session(&Session::new(Vec::new(), 0));
         assert!(state.browser.tabs().is_empty());
-        assert!(state.omnibox.open);
+        assert!(!state.omnibox.open);
     }
 
     #[test]

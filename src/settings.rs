@@ -11,14 +11,14 @@ use crate::appearance::Appearance;
 pub(crate) enum StartupMode {
     #[default]
     RestoreSession,
-    NewTab,
+    BlankWindow,
 }
 
 impl StartupMode {
     pub(crate) fn label(self) -> &'static str {
         match self {
             Self::RestoreSession => "Restore previous session",
-            Self::NewTab => "Open a new blank tab",
+            Self::BlankWindow => "Open a blank window",
         }
     }
 }

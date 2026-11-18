@@ -196,7 +196,7 @@ fn startup_section(state: &AppState, theme: &Theme, kit: &Kit, overlays: &mut Ve
         .on_choose(|state: &mut AppState, value, _| {
             let startup = match value {
                 "Restore previous session" => Some(StartupMode::RestoreSession),
-                "Open a new blank tab" => Some(StartupMode::NewTab),
+                "Open a blank window" => Some(StartupMode::BlankWindow),
                 _ => None,
             };
             if let Some(startup) = startup {
