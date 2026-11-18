@@ -5,8 +5,6 @@
 
 use rune::{Key, KeyEvent, PointerPress, TextEdit, Tx};
 use std::path::PathBuf;
-#[cfg(feature = "ladybird-bridge")]
-use std::sync::Arc;
 
 use crate::address::{self, Destination, SearchEngine};
 use crate::appearance::Appearance;
@@ -928,10 +926,18 @@ impl AppState {
     }
 }
 
-/// Starts the browser engine. Native windows do this after Rune's first frame; Ladybird starts on
-/// the engine's thread, and the waker schedules `poll` when it has news.
+/// Connect worker notifications once Rune can schedule a poll.
+pub(crate) fn start_workers(state: &mut AppState, waker: rune::Waker) {
+    if let Some(storage) = &state.storage {
+        storage.set_notify(waker.clone());
+    }
+    #[cfg(feature = "ladybird-bridge")]
+    start_engine(state, waker);
+}
+
+/// Ladybird starts on its own thread after Rune's first frame.
 #[cfg(feature = "ladybird-bridge")]
-pub(crate) fn start_engine(state: &mut AppState, waker: rune::Waker) {
+fn start_engine(state: &mut AppState, waker: rune::Waker) {
     let Some(profile_dir) = state.profile_dir.clone() else {
         state.browser.fail(
             state
@@ -941,23 +947,16 @@ pub(crate) fn start_engine(state: &mut AppState, waker: rune::Waker) {
         );
         return;
     };
-    if let Some(storage) = &state.storage {
-        storage.set_notify(Arc::clone(&waker));
-    }
     match Engine::start(waker, profile_dir, state.engine_download_directory()) {
         Ok(engine) => state.browser.connect(engine),
         Err(error) => state.browser.fail(error),
     }
 }
 
-/// UI-only builds render their explanation in the page and have no engine to start.
-#[cfg(not(feature = "ladybird-bridge"))]
-pub(crate) fn start_engine(_state: &mut AppState, _waker: rune::Waker) {}
-
-/// Headless tooling has no native `on_ready`, so start its engine during Rune's setup callback.
+/// Headless tooling has no native `on_ready`, so connect workers during Rune's setup callback.
 pub(crate) fn setup_headless(state: &mut AppState, waker: rune::Waker) {
     if rune::is_headless() {
-        start_engine(state, waker);
+        start_workers(state, waker);
     }
 }
 

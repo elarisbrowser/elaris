@@ -26,7 +26,7 @@ use rune::{App, AppSpec, Chrome, WindowOptions};
 
 fn main() {
     let spec = AppSpec {
-        // Headless tooling has no native `on_ready`; keep engine startup there.
+        // Headless tooling has no native `on_ready`; connect workers there.
         setup: Some(app::setup_headless),
         poll: Some(app::poll),
         on_key: Some(shortcuts::on_key),
@@ -66,18 +66,18 @@ fn main() {
         })
     };
     let app_handle = app.handle();
-    let mut engine_started = false;
+    let mut workers_started = false;
     let app = app.on_ready(move |_| {
-        if engine_started {
+        if workers_started {
             return;
         }
-        engine_started = true;
+        workers_started = true;
 
         let wake_handle = app_handle.clone();
         let waker: rune::Waker = Arc::new(move || wake_handle.wake());
         let app_handle = app_handle.clone();
         app_handle.update(move |state, _| {
-            app::start_engine(state, waker);
+            app::start_workers(state, waker);
         });
     });
     #[cfg(target_os = "macos")]

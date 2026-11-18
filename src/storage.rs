@@ -446,11 +446,6 @@ impl HistoryHandle {
             .send(command)
             .map_err(|_| "history storage worker has stopped".to_owned())
     }
-
-    #[cfg(feature = "ladybird-bridge")]
-    fn set_notify(&self, notify: Notify) {
-        let _ = self.shared.notify.set(notify);
-    }
 }
 
 pub(crate) struct Storage {
@@ -549,9 +544,8 @@ impl Storage {
             .map_err(|_| "session storage worker has stopped".to_owned())
     }
 
-    #[cfg(feature = "ladybird-bridge")]
     pub(crate) fn set_notify(&self, notify: Notify) {
-        self.history.set_notify(notify);
+        let _ = self.history.shared.notify.set(notify);
     }
 }
 
