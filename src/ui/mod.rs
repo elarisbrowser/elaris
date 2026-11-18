@@ -15,7 +15,6 @@ pub(crate) use sidebar::{SidebarState, toggle as toggle_sidebar};
 pub(crate) use theme::{TRAFFIC_LIGHTS, WINDOW_MIN_SIZE};
 
 use rune::{Cx, El, row};
-use rune_kit::{Kit, PaletteSeed};
 
 use crate::app::AppState;
 
@@ -49,11 +48,6 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         window = window.child(overlay);
     }
     let mut overlays = Vec::new();
-    let kit = Kit::from_palette(PaletteSeed {
-        bg: theme.window,
-        fg: theme.text,
-        accent: theme.icon,
-    });
-    sidebar::context_menu(state, &kit, &mut overlays);
+    sidebar::context_menu(state, &theme, &mut overlays);
     rune_kit::root(window, overlays)
 }

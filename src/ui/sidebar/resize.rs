@@ -25,8 +25,10 @@ pub(crate) fn handle(width: f32) -> El {
             // move in the same frame as the release would land the settle too.
             rune::Phase::Up => {
                 state.sidebar.width = stretched(drag.data + drag.dx);
-                state.sidebar.settling = true;
-                tx.wake_after(std::time::Duration::ZERO);
+                state.sidebar.settling = settled(state.sidebar.width) != state.sidebar.width;
+                if state.sidebar.settling {
+                    tx.wake_after(std::time::Duration::ZERO);
+                }
             }
         })
 }

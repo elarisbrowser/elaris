@@ -3,7 +3,7 @@
 //! The open tabs, scrolling once they outgrow the sidebar, then the new-tab button.
 
 use rune::{El, ScrollSpec, Tx, col, el, icon};
-use rune_kit::{Kit, MenuItem, context_menu as menu_at};
+use rune_kit::{Kit, MenuItem, PaletteSeed, context_menu as menu_at};
 
 use crate::app::{self, AppState};
 use crate::tab::Tab;
@@ -96,7 +96,7 @@ fn tab_row(tab: &Tab, active: bool, theme: &Theme) -> El {
     }
 }
 
-pub(super) fn context_menu(state: &AppState, kit: &Kit, layer: &mut Vec<El>) {
+pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
     let Some((tab, point)) = state.context_menu() else {
         return;
     };
@@ -137,5 +137,10 @@ pub(super) fn context_menu(state: &AppState, kit: &Kit, layer: &mut Vec<El>) {
             },
         ));
     }
-    menu.build(kit, layer);
+    let kit = Kit::from_palette(PaletteSeed {
+        bg: theme.window,
+        fg: theme.text,
+        accent: theme.icon,
+    });
+    menu.build(&kit, layer);
 }

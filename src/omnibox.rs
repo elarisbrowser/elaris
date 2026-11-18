@@ -129,8 +129,10 @@ pub(crate) fn update_title(history: &mut [HistoryEntry], title: &str, url: &str)
     if title.is_empty() {
         return;
     }
-    if let Some(entry) = history.iter_mut().find(|entry| entry.url == url) {
-        entry.title = title.to_owned();
+    if let Some(entry) = history.iter_mut().find(|entry| entry.url == url)
+        && entry.title != title
+    {
+        title.clone_into(&mut entry.title);
     }
 }
 
@@ -165,11 +167,12 @@ pub(crate) fn suggestions(
         }
     }
 
+    let folded = query.to_ascii_lowercase();
     let mut matching_tabs: Vec<_> = tabs
         .iter()
         .filter(|tab| tab.url != "about:blank")
         .filter_map(|tab| {
-            let score = match_score(query, &tab.title, &tab.url);
+            let score = match_score(&folded, &tab.title, &tab.url);
             score.map(|score| (score, tab))
         })
         .collect();
@@ -185,7 +188,7 @@ pub(crate) fn suggestions(
             .map(|(_, tab)| Suggestion {
                 section: Section::OpenTabs,
                 title: tab.label().to_owned(),
-                detail: format!("Open tab · {}", address::host_for_address(&tab.url)),
+                detail: site_detail(tab.label(), &tab.url),
                 glyph: Glyph::Page,
                 action: Action::SwitchTab(tab.id()),
             }),
@@ -195,7 +198,7 @@ pub(crate) fn suggestions(
         .iter()
         .filter(|entry| !tabs.iter().any(|tab| tab.url == entry.url))
         .filter_map(|entry| {
-            match_score(query, &entry.title, &entry.url).map(|score| (score, entry))
+            match_score(&folded, &entry.title, &entry.url).map(|score| (score, entry))
         })
         .collect();
     matching_history.sort_by_key(|(score, _)| *score);
@@ -206,7 +209,7 @@ pub(crate) fn suggestions(
             .map(|(_, entry)| Suggestion {
                 section: Section::Recent,
                 title: entry.title.clone(),
-                detail: address::host_for_address(&entry.url).to_owned(),
+                detail: site_detail(&entry.title, &entry.url),
                 glyph: Glyph::History,
                 action: Action::VisitRecent(entry.url.clone()),
             }),
@@ -247,7 +250,7 @@ pub(crate) fn suggestions(
             .into_iter()
             .filter(|(title, _, _, action)| {
                 !query.is_empty()
-                    && action_matches(query, title)
+                    && action_matches(&folded, title)
                     && (!tabs.is_empty()
                         || !matches!(action, Action::CloseTab | Action::ReloadPage))
             })
@@ -266,21 +269,29 @@ pub(crate) fn suggestions(
     suggestions
 }
 
+fn site_detail(title: &str, url: &str) -> String {
+    let host = address::host_for_address(url);
+    if title == url || title.eq_ignore_ascii_case(host) {
+        String::new()
+    } else {
+        host.to_owned()
+    }
+}
+
 fn match_score(query: &str, title: &str, url: &str) -> Option<u8> {
     if query.is_empty() {
         return Some(0);
     }
-    let query = query.to_ascii_lowercase();
     let title = title.to_ascii_lowercase();
     let url_lower = url.to_ascii_lowercase();
-    let domain = address::host_for_address(url).to_ascii_lowercase();
+    let domain = address::host_for_address(&url_lower);
     if title == query || domain == query {
         Some(0)
-    } else if title.starts_with(&query) || domain.starts_with(&query) {
+    } else if title.starts_with(query) || domain.starts_with(query) {
         Some(1)
-    } else if title.contains(&query) || domain.contains(&query) {
+    } else if title.contains(query) || domain.contains(query) {
         Some(2)
-    } else if url_lower.contains(&query) {
+    } else if url_lower.contains(query) {
         Some(3)
     } else {
         None
@@ -290,7 +301,6 @@ fn match_score(query: &str, title: &str, url: &str) -> Option<u8> {
 fn action_matches(query: &str, label: &str) -> bool {
     let label = label.to_ascii_lowercase();
     query
-        .to_ascii_lowercase()
         .split_whitespace()
         .all(|part| label.split_whitespace().any(|word| word.starts_with(part)))
 }

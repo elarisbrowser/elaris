@@ -92,7 +92,7 @@ pub(crate) const SIDEBAR_WIDTH: f32 = 260.0;
 pub(crate) const SIDEBAR_MIN_WIDTH: f32 = HEADER_MIN_WIDTH;
 pub(crate) const SIDEBAR_MAX_WIDTH: f32 = 400.0;
 /// How the sidebar slides away and back: short, without bounce, so the page settles quickly.
-pub(crate) const SIDEBAR_TOGGLE: Spring = Spring::new(0.3, 0.0);
+pub(crate) const SIDEBAR_TOGGLE: Spring = Spring::new(0.25, 0.0);
 /// The header's narrowest: room for the window controls, the sidebar toggle and the navigation
 /// buttons.
 pub(crate) const HEADER_MIN_WIDTH: f32 = 220.0;

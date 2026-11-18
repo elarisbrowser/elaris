@@ -208,17 +208,15 @@ impl AppState {
     }
 
     /// Why the address or the active page failed, or that the page is loading.
-    pub(crate) fn status(&self) -> Option<String> {
+    pub(crate) fn status(&self) -> Option<&str> {
         let tab = self.browser.active_tab();
         let error = self
             .address_error
             .as_ref()
             .or_else(|| tab.and_then(|tab| tab.error.as_ref()));
         match error {
-            Some(error) => Some(error.clone()),
-            None => tab
-                .is_some_and(|tab| tab.loading)
-                .then(|| "Loading…".to_owned()),
+            Some(error) => Some(error.as_str()),
+            None => tab.is_some_and(|tab| tab.loading).then_some("Loading…"),
         }
     }
 
@@ -227,10 +225,13 @@ impl AppState {
         let Some(tab) = self.browser.active_tab() else {
             return;
         };
-        let now = (tab.id(), tab.url.clone());
-        if self.shown.as_ref() != Some(&now) {
+        if !self
+            .shown
+            .as_ref()
+            .is_some_and(|(id, url)| *id == tab.id() && url == &tab.url)
+        {
             omnibox::record_visit(&mut self.history, &tab.title, &tab.url);
-            self.shown = Some(now);
+            self.shown = Some((tab.id(), tab.url.clone()));
         } else {
             omnibox::update_title(&mut self.history, &tab.title, &tab.url);
         }
@@ -241,11 +242,10 @@ impl AppState {
         let title = self
             .browser
             .active_tab()
-            .map(|tab| tab.title.clone())
-            .unwrap_or_default();
-        (self.window_title.as_ref() != Some(&title)).then(|| {
-            self.window_title = Some(title.clone());
-            title
+            .map_or("", |tab| tab.title.as_str());
+        (self.window_title.as_deref() != Some(title)).then(|| {
+            self.window_title = Some(title.to_owned());
+            title.to_owned()
         })
     }
 }
@@ -271,7 +271,9 @@ pub(crate) fn poll(state: &mut AppState, _clock: f64, tx: &mut Tx) -> bool {
     if polled.animating {
         tx.wake_after(std::time::Duration::ZERO);
     }
-    state.show_active_tab();
+    if polled.changed {
+        state.show_active_tab();
+    }
     if let Some(title) = state.new_window_title() {
         tx.set_title(if title.is_empty() {
             APP_NAME.to_owned()

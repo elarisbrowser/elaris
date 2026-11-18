@@ -14,17 +14,13 @@ mod tabs;
 
 use rune::tok::type_;
 use rune::{El, Tx, col, icon, text};
-use rune_kit::Kit;
+pub(crate) use tabs::context_menu;
 
 use super::controls::row_button;
 use super::icons;
 use super::theme::{self, Theme};
 use crate::app::{self, AppState};
 use crate::appearance::Appearance;
-
-pub(crate) fn context_menu(state: &AppState, kit: &Kit, layer: &mut Vec<El>) {
-    tabs::context_menu(state, kit, layer);
-}
 
 /// How the sidebar is laid out: what the window shows of it, not of the browser.
 pub(crate) struct SidebarState {
@@ -81,7 +77,7 @@ fn body(state: &AppState, theme: &Theme) -> El {
         .px(theme::SIDEBAR_PADDING)
         .pb(theme::SIDEBAR_PADDING)
         .gap(theme::SIDEBAR_GAP)
-        .child(search_launcher(theme));
+        .child(search_launcher(state, theme));
     if let Some(status) = state.status() {
         body = body.child(
             text(status)
@@ -96,12 +92,22 @@ fn body(state: &AppState, theme: &Theme) -> El {
         .child(appearance(state.appearance, theme))
 }
 
-fn search_launcher(theme: &Theme) -> El {
+fn search_launcher(state: &AppState, theme: &Theme) -> El {
+    let address = state
+        .browser
+        .active_tab()
+        .map(|tab| tab.url.as_str())
+        .filter(|url| !url.is_empty() && *url != "about:blank");
+    let label = address.unwrap_or("Search or type a URL");
     row_button(
         "omnibox-launcher",
         icon(&icons::SEARCH, theme::ICON).color(theme.text_muted),
-        "Search or type a URL",
-        theme.text_muted,
+        label,
+        if address.is_some() {
+            theme.text
+        } else {
+            theme.text_muted
+        },
         theme,
     )
     .h(theme::FIELD_HEIGHT)
@@ -109,7 +115,7 @@ fn search_launcher(theme: &Theme) -> El {
     .continuous_corners()
     .fill(theme.address_field)
     .label("Search or type a URL")
-    .help("Open search and address suggestions")
+    .help(address.unwrap_or("Open search and address suggestions"))
     .shortcut_hint("cmd+l")
     .focusable(true)
     .on_press_tx(app::open_from_launcher)

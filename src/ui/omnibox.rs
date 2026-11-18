@@ -60,6 +60,7 @@ pub(crate) fn view(
     let results_limit = available - theme::OMNIBOX_INPUT_HEIGHT - theme::OMNIBOX_FOOTER_HEIGHT;
     let mut results = col()
         .key("omnibox-results")
+        .instant_changes()
         .w_full()
         .max_h(results_limit.max(0.0))
         .px(theme::ROW_PADDING)
@@ -93,7 +94,9 @@ pub(crate) fn view(
     }
     let hints = match suggestions.len() {
         0 => state.address_error.as_deref().unwrap_or("Esc  Close"),
-        1 => "↵  Open     Esc  Close",
+        1 if !state.omnibox.input.text.trim().is_empty() || state.omnibox.selection_moved => {
+            "↵  Open     Esc  Close"
+        }
         _ => "↑↓  Navigate     ↵  Open     Esc  Close",
     };
     let footer = row()
@@ -165,7 +168,11 @@ fn result_row(state: &AppState, suggestion: &Suggestion, index: usize, theme: &T
         .radius(theme::ROW_RADIUS)
         .continuous_corners()
         .hover(theme.hover)
-        .label(format!("{}, {}", suggestion.title, suggestion.detail))
+        .label(if suggestion.detail.is_empty() {
+            suggestion.title.clone()
+        } else {
+            format!("{}, {}", suggestion.title, suggestion.detail)
+        })
         .role("option")
         .on_hover_change(move |state: &mut AppState, inside, _| {
             if inside {
@@ -178,21 +185,25 @@ fn result_row(state: &AppState, suggestion: &Suggestion, index: usize, theme: &T
     if selected {
         row = row.fill(theme.overlay_selected);
     }
+    row = row
+        .child(
+            el().size(theme::CLOSE_BUTTON, theme::CLOSE_BUTTON)
+                .center()
+                .radius(theme::ICON_BUTTON_RADIUS)
+                .fill(theme.hover)
+                .child(glyph),
+        )
+        .child(
+            text(&suggestion.title)
+                .font(type_::BODY)
+                .color(theme.text)
+                .single_line()
+                .truncate(),
+        );
+    if suggestion.detail.is_empty() {
+        return row;
+    }
     row.child(
-        el().size(theme::CLOSE_BUTTON, theme::CLOSE_BUTTON)
-            .center()
-            .radius(theme::ICON_BUTTON_RADIUS)
-            .fill(theme.hover)
-            .child(glyph),
-    )
-    .child(
-        text(&suggestion.title)
-            .font(type_::BODY)
-            .color(theme.text)
-            .single_line()
-            .truncate(),
-    )
-    .child(
         text(&suggestion.detail)
             .font(type_::LABEL)
             .color(theme.text_muted)
