@@ -8,7 +8,7 @@ thread of its own behind a small C++ bridge. Nothing on the UI thread waits for 
 | Module | Responsibility |
 |---|---|
 | `src/main.rs` | Hands Rune the app's state, view and hooks. |
-| `src/app.rs` | Application state (address bar, page, appearance) and the Rune hooks: `setup` starts the engine, `poll` runs each frame, and window focus and shutdown go to the page. |
+| `src/app.rs` | Application state and Rune hooks: native engine startup from `on_ready`, headless startup from `setup`, plus polling, focus and shutdown. |
 | `src/page.rs` | One page: its latest frame, loading state and error. It turns UI changes (viewport size, scale, focus, colour scheme, input) into engine commands, sending only what changed, and reads back engine updates. |
 | `src/engine/` | The engine thread and everything it owns (see below). |
 | `src/input.rs` | Translates Rune pointer, wheel and key input into Ladybird's, from points to device pixels. |
@@ -59,7 +59,7 @@ Without the `ladybird-bridge` feature, `Engine::start` returns an error the tool
    and which wakes the window. Rune scales the latest complete frame to the current viewport, so
    it stays pinned during a live resize until the next frame arrives.
 4. Navigation, title, loading, history, favicon and error updates go through the update channel,
-   followed by the waker Rune gave `setup`.
+   followed by the waker installed at native `on_ready` or supplied through headless `setup`.
 5. While frames keep arriving, `poll` asks Rune for the next display frame, which keeps Rune
    drawing at the display's rate.
 
