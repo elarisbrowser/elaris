@@ -178,8 +178,8 @@ fn search_engine_selector(state: &AppState, theme: &Theme, overlays: &mut Vec<El
         .on_press(|state: &mut AppState| {
             state.omnibox.search_engine_menu_open = !state.omnibox.search_engine_menu_open;
         })
-        .child(icon(
-            super::icons::search_engine(engine),
+        .child(super::icons::search_engine(
+            engine,
             theme::OMNIBOX_SEARCH_ICON,
         ))
         .child(icon(&super::icons::CHEVRON_DOWN, theme::OMNIBOX_SEARCH_CHEVRON).color(theme.icon));
@@ -194,7 +194,7 @@ fn search_engine_selector(state: &AppState, theme: &Theme, overlays: &mut Vec<El
     for option in SearchEngine::ALL {
         menu = menu.item(
             MenuItem::new(option.label())
-                .lead(icon(super::icons::search_engine(option), theme::ICON))
+                .lead(super::icons::search_engine(option, theme::ICON))
                 .checked(option == engine)
                 .on_select_tx(move |state: &mut AppState, tx: &mut Tx| {
                     state.search_engine = option;

@@ -2,7 +2,9 @@
 
 //! Interface icons: plain strokes and the search providers' coloured brand marks.
 
-use rune::Icon;
+use std::sync::{Arc, OnceLock};
+
+use rune::{El, Icon, Image, ImageCache, Pixels, el};
 
 use crate::address::SearchEngine;
 
@@ -66,34 +68,38 @@ pub(crate) static CHEVRON_DOWN: Icon = icon(
     "chevron-down",
     r#"<path d="m4.5 6.5 3.5 3 3.5-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>"#,
 );
-pub(crate) static GOOGLE: Icon = Icon {
-    name: "google",
-    view: 24.0,
-    body: r##"<circle cx="12" cy="12" r="12" fill="#fff"/><path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.2-2.27H12v4.51h6.44c-.28 1.45-1.08 2.68-2.29 3.5v2.91h3.71c2.17-2 3.43-4.96 3.43-8.65z"/><path fill="#34A853" d="M12 24c3.11 0 5.72-1.03 7.63-2.79l-3.71-2.91c-1.03.69-2.35 1.1-3.92 1.1-3.01 0-5.56-2.03-6.47-4.76H1.7v3C3.6 21.02 7.48 24 12 24z"/><path fill="#FBBC05" d="M5.53 14.64A7.2 7.2 0 0 1 5.15 12c0-.92.16-1.8.38-2.64v-3H1.7A12 12 0 0 0 0 12c0 1.94.46 3.77 1.27 5.4l4.26-2.76z"/><path fill="#EA4335" d="M12 4.6c1.7 0 3.23.58 4.43 1.73l3.32-3.32C17.72 1.15 15.11 0 12 0 7.48 0 3.6 2.98 1.7 6.36l3.83 3C6.44 6.63 8.99 4.6 12 4.6z"/>"##,
-};
-pub(crate) static BING: Icon = Icon {
-    name: "bing",
-    view: 24.0,
-    body: r##"<path fill="#008373" d="M4 2v20l7.2-2.6V6L4 2z"/><path fill="#008373" d="M11.2 8.4v4.1l5.2 2.1-5.2 1.7v4.4l9.6-4.2v-4.2z"/>"##,
-};
-pub(crate) static DUCKDUCKGO: Icon = Icon {
-    name: "duckduckgo",
-    view: 24.0,
-    body: r##"<circle cx="12" cy="12" r="11" fill="#DE5833"/><path fill="#fff" d="M6.4 14.4c-.9-1.8.2-4.1 2.6-4.7 1.1-2.4 4.1-3.2 6.5-1.8l1.2 2.7 2.1 1.2-1.6 1.3c-.2 2.7-2.6 4.5-5.8 4.5-2.3 0-4.1-1-5-3.2z"/><circle cx="14.5" cy="10.5" r=".65" fill="#DE5833"/><path d="m16.1 11.7 2.7.2-2.1 1.1" fill="none" stroke="#DE5833" stroke-width=".8" stroke-linecap="round" stroke-linejoin="round"/>"##,
-};
-pub(crate) static BRAVE: Icon = Icon {
-    name: "brave-search",
-    view: 24.0,
-    body: r##"<path fill="#FB542B" d="m5.2 2.6 2.1 1.1 1.1-.8h7.2l1.1.8 2.1-1.1 2.4 5.1-1.3 1.4.7 4.2-1.7 2.3-1.1 4.1L12 22l-5.8-4.3-1.1-4.1-1.7-2.3.7-4.2-1.3-1.4 2.4-5.1z"/><path fill="#fff" d="m7.1 7.2 2.2 1.1 2.7-1.1 2.7 1.1 2.2-1.1-.5 3.1 1.4 1.5-1.1 1.1-1.4-.7-1.7 1-1.6-1-1.7 1-1.6-1-1.4.7-1.1-1.1 1.4-1.5-.5-3.1z"/>"##,
-};
+static SEARCH_ENGINE_IMAGES: OnceLock<[Image; 4]> = OnceLock::new();
 
-pub(crate) fn search_engine(engine: SearchEngine) -> &'static Icon {
-    match engine {
-        SearchEngine::Google => &GOOGLE,
-        SearchEngine::Bing => &BING,
-        SearchEngine::DuckDuckGo => &DUCKDUCKGO,
-        SearchEngine::Brave => &BRAVE,
-    }
+pub(crate) fn search_engine(engine: SearchEngine, size: f32) -> El {
+    el().size(size, size)
+        .center()
+        .pixels(search_engine_pixels(engine))
+}
+
+fn search_engine_pixels(engine: SearchEngine) -> &'static Pixels {
+    let images = SEARCH_ENGINE_IMAGES.get_or_init(|| {
+        let cache = ImageCache::new(Arc::new(|| {}));
+        let images = [
+            cache.load(include_bytes!("../../assets/search-engines/google.svg").as_slice()),
+            cache.load(include_bytes!("../../assets/search-engines/bing.png").as_slice()),
+            cache.load(include_bytes!("../../assets/search-engines/duckduckgo.svg").as_slice()),
+            cache.load(include_bytes!("../../assets/search-engines/brave.png").as_slice()),
+        ];
+        for image in &images {
+            image
+                .wait()
+                .expect("bundled search engine icon must decode");
+        }
+        images
+    });
+
+    let index = match engine {
+        SearchEngine::Google => 0,
+        SearchEngine::Bing => 1,
+        SearchEngine::DuckDuckGo => 2,
+        SearchEngine::Brave => 3,
+    };
+    images[index].pixels()
 }
 pub(crate) static HISTORY: Icon = icon(
     "history",
