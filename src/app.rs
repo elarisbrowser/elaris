@@ -1169,6 +1169,11 @@ pub(crate) fn on_window_focus(state: &mut AppState, focused: bool, tx: &mut Tx) 
 
 pub(crate) fn shut_down(state: &mut AppState, _: &mut Tx) {
     state.persist_session();
+    if let Some(storage) = &state.storage
+        && let Err(error) = storage.flush_on_close()
+    {
+        eprintln!("Elaris: {error}");
+    }
     state.browser.shut_down();
 }
 

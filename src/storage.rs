@@ -544,6 +544,17 @@ impl Storage {
             .map_err(|_| "session storage worker has stopped".to_owned())
     }
 
+    /// Give pending saves a chance to finish before the native host exits.
+    pub(crate) fn flush_on_close(&self) -> Result<(), String> {
+        let (finished, pending) = mpsc::channel();
+        self.commands
+            .send(Command::Flush(finished))
+            .map_err(|_| "storage worker has stopped".to_owned())?;
+        pending
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .map_err(|error| format!("waiting for pending storage writes: {error}"))
+    }
+
     pub(crate) fn set_notify(&self, notify: Notify) {
         let _ = self.history.shared.notify.set(notify);
     }
@@ -564,6 +575,7 @@ enum Command {
     SaveSession(Session),
     SaveSetting(SettingsChange),
     ReloadConfig,
+    Flush(Sender<()>),
     Shutdown,
 }
 
@@ -681,6 +693,9 @@ fn run_worker(
                     .expect("configuration event lock poisoned")
                     .push(ConfigEvent::Reloaded(result));
                 notify(&shared);
+            }
+            Command::Flush(finished) => {
+                let _ = finished.send(());
             }
             Command::Shutdown => break,
         }
@@ -1107,6 +1122,40 @@ mod tests {
         );
         fs::write(&path, r#"{"version":9,"tabs":[],"active_tab":0}"#).unwrap();
         assert!(load_session(&path).unwrap().is_none());
+    }
+
+    #[test]
+    fn closing_waits_for_the_latest_session_snapshot() {
+        let temp = TempDir::new();
+        let paths = Paths::resolve_with(
+            Platform::Linux,
+            Some(&temp.0),
+            None,
+            None,
+            None,
+            None,
+            false,
+        )
+        .expect("resolve isolated storage paths");
+        let session_file = paths.session_file.clone();
+        let storage = Storage::open(paths).expect("open isolated storage");
+        let before = Session::new(
+            vec![SessionTab {
+                url: "about:blank".into(),
+                title: "Closing tab".into(),
+            }],
+            0,
+        );
+        let after = Session::new(Vec::new(), 0);
+        storage.save_session(before).expect("queue open tab");
+        storage
+            .save_session(after.clone())
+            .expect("queue closed tab");
+        storage.flush_on_close().expect("wait for queued writes");
+        assert_eq!(
+            load_session(&session_file).expect("read saved session"),
+            Some(after)
+        );
     }
 
     #[test]
