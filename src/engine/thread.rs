@@ -85,39 +85,6 @@ pub(super) fn start(notify: Notify) -> Result<Engine, String> {
     })
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::time::Duration;
-
-    #[test]
-    fn shutdown_wakes_a_waiting_engine_and_joins_cleanly() {
-        let (commands, received) = channel();
-        let wake: Wake = Arc::new(std::sync::OnceLock::new());
-        let woke = Arc::new(AtomicBool::new(false));
-        let wake_flag = Arc::clone(&woke);
-        wake.set(Box::new(move || wake_flag.store(true, Ordering::SeqCst)))
-            .unwrap();
-
-        let thread = std::thread::spawn(move || {
-            received.recv_timeout(Duration::from_secs(1)).unwrap();
-            !drain(&received, |_| {})
-        });
-        request_shutdown(&commands, &wake);
-        assert!(woke.load(Ordering::SeqCst));
-        assert!(thread.join().unwrap());
-    }
-
-    #[test]
-    fn shutdown_before_waker_installation_stays_queued() {
-        let (commands, received) = channel();
-        let wake: Wake = Arc::new(std::sync::OnceLock::new());
-        request_shutdown(&commands, &wake);
-        assert!(matches!(received.try_recv(), Ok(Command::Shutdown)));
-    }
-}
-
 /// The engine thread: starts Ladybird, runs its work as it comes, between commands, and closes
 /// every view gracefully however it stops.
 fn run(
@@ -163,5 +130,40 @@ fn serve(
         for update in perf::time(Stage::Pump, || runtime.handle_events()) {
             report(update);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::time::Duration;
+
+    #[test]
+    fn shutdown_wakes_a_waiting_engine_and_joins_cleanly() {
+        let (commands, received) = channel();
+        let wake: Wake = Arc::new(std::sync::OnceLock::new());
+        let woke = Arc::new(AtomicBool::new(false));
+        let wake_flag = Arc::clone(&woke);
+        assert!(
+            wake.set(Box::new(move || wake_flag.store(true, Ordering::SeqCst)))
+                .is_ok()
+        );
+
+        let thread = std::thread::spawn(move || {
+            received.recv_timeout(Duration::from_secs(1)).unwrap();
+            !drain(&received, |_| {})
+        });
+        request_shutdown(&commands, &wake);
+        assert!(woke.load(Ordering::SeqCst));
+        assert!(!thread.join().unwrap());
+    }
+
+    #[test]
+    fn shutdown_before_waker_installation_stays_queued() {
+        let (commands, received) = channel();
+        let wake: Wake = Arc::new(std::sync::OnceLock::new());
+        request_shutdown(&commands, &wake);
+        assert!(matches!(received.try_recv(), Ok(Command::Shutdown)));
     }
 }

@@ -597,6 +597,13 @@ mod tests {
             view_id: 1,
             text: std::ptr::null(),
             value: 0,
+            favicon_rgba: std::ptr::null(),
+            favicon_width: 0,
+            favicon_height: 0,
+            favicon_stride: 0,
+            request_id: 0,
+            selection: std::ptr::null(),
+            caret: [0; 4],
         };
         // SAFETY: Both pointers reference stack values that remain alive through the callback.
         unsafe {
