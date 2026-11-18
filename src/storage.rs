@@ -20,7 +20,7 @@ use std::thread::JoinHandle;
 
 use serde::{Deserialize, Serialize};
 
-use elaris::history::{Entry, History};
+use elaris::history::{Cursor, Entry, History, Page};
 
 use crate::config::{self, ConfigLoad};
 use crate::settings::SettingsChange;
@@ -357,6 +357,20 @@ pub(crate) type Notify = Arc<dyn Fn() + Send + Sync>;
 struct SharedHistory {
     snapshot: RwLock<HistorySnapshot>,
     notify: OnceLock<Notify>,
+    page_revision: AtomicU64,
+    history_events: Mutex<Vec<HistoryEvent>>,
+}
+
+#[derive(Debug)]
+pub(crate) enum HistoryEvent {
+    Page(u64, Result<Page, String>),
+    Mutation(Result<HistoryMutation, String>),
+}
+
+#[derive(Debug)]
+pub(crate) enum HistoryMutation {
+    Remove(String),
+    Clear,
 }
 
 pub(crate) struct HistoryHandle {
@@ -425,20 +439,28 @@ impl HistoryHandle {
             .revision
     }
 
-    #[expect(
-        dead_code,
-        reason = "History management can use this without adding UI in this milestone"
-    )]
-    pub(crate) fn remove(&self, url: &str) -> Result<(), String> {
-        self.send(Command::Remove(url.to_owned()))
+    pub(crate) fn request_page(
+        &self,
+        revision: u64,
+        query: &str,
+        after: Option<Cursor>,
+    ) -> Result<(), String> {
+        self.shared.page_revision.store(revision, Ordering::Relaxed);
+        self.send(Command::HistoryPage(revision, query.to_owned(), after))
     }
 
-    #[expect(
-        dead_code,
-        reason = "History management can use this without adding UI in this milestone"
-    )]
-    pub(crate) fn clear(&self) -> Result<(), String> {
-        self.send(Command::Clear)
+    pub(crate) fn mutate(&self, mutation: HistoryMutation) -> Result<(), String> {
+        self.send(Command::HistoryMutation(mutation))
+    }
+
+    pub(crate) fn take_events(&self) -> Vec<HistoryEvent> {
+        std::mem::take(
+            &mut *self
+                .shared
+                .history_events
+                .lock()
+                .expect("history events lock poisoned"),
+        )
     }
 
     fn send(&self, command: Command) -> Result<(), String> {
@@ -570,8 +592,8 @@ enum Command {
     RecordVisit(String, String),
     UpdateTitle(String, String),
     Search(String),
-    Remove(String),
-    Clear,
+    HistoryPage(u64, String, Option<Cursor>),
+    HistoryMutation(HistoryMutation),
     SaveSession(Session),
     SaveSetting(SettingsChange),
     ReloadConfig,
@@ -623,7 +645,7 @@ fn run_worker(
     config_file: PathBuf,
     config_events: Arc<Mutex<Vec<ConfigEvent>>>,
 ) {
-    let history = match History::open(&history_file) {
+    let mut history = match History::open(&history_file) {
         Ok(history) => Some(history),
         Err(error) => {
             eprintln!(
@@ -657,21 +679,45 @@ fn run_worker(
             Command::Search(query) => {
                 update_search_cache(history.as_ref(), &shared, query);
             }
-            Command::Remove(url) => {
-                if let Some(history) = &history {
-                    if let Err(error) = history.remove(&url) {
-                        eprintln!("Elaris: cannot remove history entry: {error}");
+            Command::HistoryPage(revision, query, after) => {
+                if revision != shared.page_revision.load(Ordering::Relaxed) {
+                    continue;
+                }
+                if history.is_none() {
+                    history = History::open(&history_file).ok();
+                    if let Some(history) = &history {
+                        refresh_history(history, &shared);
                     }
-                    refresh_history(history, &shared);
+                }
+                let result = history
+                    .as_ref()
+                    .and_then(|history| history.page(&query, after.as_ref()).ok())
+                    .ok_or_else(|| "Could not load browsing history.".to_owned());
+                if revision == shared.page_revision.load(Ordering::Relaxed) {
+                    publish_history(&shared, HistoryEvent::Page(revision, result));
                 }
             }
-            Command::Clear => {
-                if let Some(history) = &history {
-                    if let Err(error) = history.clear() {
-                        eprintln!("Elaris: cannot clear history: {error}");
+            Command::HistoryMutation(mutation) => {
+                let result = history.as_ref().and_then(|history| {
+                    let result = match &mutation {
+                        HistoryMutation::Remove(url) => history.remove(url).map(|_| ()),
+                        HistoryMutation::Clear => history.clear(),
+                    };
+                    if result.is_ok() {
+                        refresh_history(history, &shared);
                     }
-                    refresh_history(history, &shared);
-                }
+                    result.ok()
+                });
+                let message = match mutation {
+                    HistoryMutation::Remove(_) => "Could not remove this address from history.",
+                    HistoryMutation::Clear => "Could not clear browsing history.",
+                };
+                publish_history(
+                    &shared,
+                    HistoryEvent::Mutation(
+                        result.map(|()| mutation).ok_or_else(|| message.to_owned()),
+                    ),
+                );
             }
             Command::SaveSession(session) => {
                 if let Err(error) = write_session_atomic(&session_file, &session) {
@@ -700,6 +746,15 @@ fn run_worker(
             Command::Shutdown => break,
         }
     }
+}
+
+fn publish_history(shared: &SharedHistory, event: HistoryEvent) {
+    shared
+        .history_events
+        .lock()
+        .expect("history events lock poisoned")
+        .push(event);
+    notify(shared);
 }
 
 fn refresh_history(history: &History, shared: &SharedHistory) {
@@ -832,6 +887,91 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn history_worker_reports_failed_writes_and_refreshes_omnibox_after_success() {
+        let temp = TempDir::new();
+        let paths = Paths::resolve_with(
+            Platform::MacOs,
+            Some(&temp.0),
+            None,
+            None,
+            None,
+            None,
+            false,
+        )
+        .unwrap();
+        paths.create_directories().unwrap();
+        let database = rusqlite::Connection::open(&paths.history_file).unwrap();
+        History::open(&paths.history_file)
+            .unwrap()
+            .record_visit("https://github.com/", "GitHub")
+            .unwrap();
+        database
+            .execute_batch(
+                "CREATE TRIGGER block_delete BEFORE DELETE ON history BEGIN
+                SELECT RAISE(ABORT, 'test failure');
+             END;",
+            )
+            .unwrap();
+        let storage = Storage::open(paths.clone()).unwrap();
+        let history = storage.history();
+        history.request_search("github").unwrap();
+        history.request_page(1, "", None).unwrap();
+        storage.flush_on_close().unwrap();
+        assert!(
+            matches!(history.take_events().as_slice(), [HistoryEvent::Page(1, Ok(page))]
+            if page.entries.len() == 1)
+        );
+        assert_eq!(history.search("github", 10).len(), 1);
+
+        for operation in [
+            HistoryMutation::Remove("https://github.com/".into()),
+            HistoryMutation::Clear,
+        ] {
+            history.mutate(operation).unwrap();
+            storage.flush_on_close().unwrap();
+            assert!(matches!(
+                history.take_events().as_slice(),
+                [HistoryEvent::Mutation(Err(_))]
+            ));
+            assert_eq!(history.recent(10).len(), 1);
+            assert_eq!(history.search("github", 10).len(), 1);
+        }
+
+        database.execute_batch("DROP TRIGGER block_delete").unwrap();
+        history
+            .mutate(HistoryMutation::Remove("https://github.com/".into()))
+            .unwrap();
+        storage.flush_on_close().unwrap();
+        assert!(matches!(
+            history.take_events().as_slice(),
+            [HistoryEvent::Mutation(Ok(HistoryMutation::Remove(_)))]
+        ));
+        assert!(history.search("github", 10).is_empty());
+        assert!(history.frequent(10).is_empty());
+
+        history
+            .record_visit("https://github.com/", "GitHub")
+            .unwrap();
+        history
+            .record_visit("https://example.org/", "Example")
+            .unwrap();
+        history.mutate(HistoryMutation::Clear).unwrap();
+        history.request_page(2, "github", None).unwrap();
+        storage.flush_on_close().unwrap();
+        assert!(matches!(history.take_events().as_slice(), [
+            HistoryEvent::Mutation(Ok(HistoryMutation::Clear)), HistoryEvent::Page(2, Ok(page))
+        ] if page.entries.is_empty()));
+        assert!(history.search("github", 10).is_empty());
+        assert!(
+            History::open(&paths.history_file)
+                .unwrap()
+                .recent(10)
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]

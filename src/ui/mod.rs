@@ -29,6 +29,8 @@ use crate::app::AppState;
 
 /// The focus key of the page viewport.
 pub(crate) const VIEWPORT: &str = "viewport";
+pub(crate) const HISTORY_SEARCH: &str = "history-search";
+pub(crate) const HISTORY_SCROLL: &str = "history-scroll";
 pub(crate) const FIND_INPUT: &str = "find-input";
 pub(crate) use theme::FIND_MOTION;
 pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
@@ -47,7 +49,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
             .grow(1.0)
             .min_h(0.0)
             .child(sidebar::view(state, &theme, &mut overlays, reduced_motion))
-            .child(viewport::view(state, &theme, &mut overlays));
+            .child(viewport::view(state, &theme, &mut overlays, reduced_motion));
         if !state.sidebar.collapsed {
             content = content.child(sidebar::resize::handle(state.sidebar.width));
         }
@@ -62,7 +64,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         let mut window = row().key("window").w_full().h_full().fill(theme.window);
         window = window
             .child(sidebar::view(state, &theme, &mut overlays, reduced_motion))
-            .child(viewport::view(state, &theme, &mut overlays))
+            .child(viewport::view(state, &theme, &mut overlays, reduced_motion))
             .child(sidebar::header::view(state, &theme, cx));
         if !state.sidebar.collapsed {
             window = window.child(sidebar::resize::handle(state.sidebar.width));

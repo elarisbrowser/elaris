@@ -526,6 +526,7 @@ impl Browser {
             let tab = self.tab_mut(id).ok_or(Error::NoSuchTab(id))?;
             if open_view {
                 tab.internal = None;
+                tab.title.clear();
                 tab.surface = Surface::default();
                 tab.engine = Default::default();
                 tab.committed_url.clear();

@@ -3,6 +3,9 @@
 //! Application state and the hooks Rune calls: starting the engine, each frame's poll, window
 //! focus and shutdown. What the interface does with tabs goes through the [`Browser`].
 
+mod history;
+
+use history::HistoryPage;
 use rune::{Key, KeyEvent, PointerPress, TextEdit, Tx};
 use std::path::PathBuf;
 
@@ -173,6 +176,7 @@ pub(crate) struct AppState {
     #[cfg(target_os = "linux")]
     pub(crate) titlebar: LinuxTitlebar,
     storage: Option<Storage>,
+    workers_started: bool,
     #[cfg(feature = "ladybird-bridge")]
     profile_dir: Option<PathBuf>,
     config_file: Option<PathBuf>,
@@ -183,6 +187,7 @@ pub(crate) struct AppState {
     storage_error: Option<String>,
     last_saved_session: Option<Session>,
     history_revision: u64,
+    pub(crate) history_page: HistoryPage,
     /// The page title the window shows.
     window_title: Option<String>,
     context_menu: Option<(Option<TabId>, PointerPress)>,
@@ -279,6 +284,7 @@ impl AppState {
             #[cfg(target_os = "linux")]
             titlebar: LinuxTitlebar::default(),
             storage,
+            workers_started: false,
             #[cfg(feature = "ladybird-bridge")]
             profile_dir: _profile_dir,
             config_file,
@@ -289,6 +295,7 @@ impl AppState {
             storage_error: _storage_error,
             last_saved_session: session.clone(),
             history_revision: 0,
+            history_page: HistoryPage::default(),
             window_title: None,
             context_menu: None,
             recently_closed: Vec::new(),
@@ -704,6 +711,14 @@ impl AppState {
         let Some(tab) = self.browser.active_tab() else {
             return;
         };
+        if self.active_history_tab().is_some() {
+            self.dismiss_find();
+            self.omnibox.close();
+            self.history_page.input.anchor = 0;
+            self.history_page.input.focus = self.history_page.input.text.len();
+            tx.focus(crate::ui::HISTORY_SEARCH, false);
+            return;
+        }
         let id = tab.id();
         let internal = tab.is_internal();
         let query = if internal {
@@ -773,6 +788,10 @@ impl AppState {
             let _ = self.browser.clear_find(previous);
         }
         self.find_tab = active;
+        if self.active_history_tab().is_some() {
+            self.dismiss_find();
+            return;
+        }
         let query = active
             .and_then(|id| self.browser.tab(id))
             .filter(|tab| !tab.is_internal())
@@ -928,6 +947,10 @@ impl AppState {
 
 /// Connect worker notifications once Rune can schedule a poll.
 pub(crate) fn start_workers(state: &mut AppState, waker: rune::Waker) {
+    // Rune's real-time replays call both the headless setup and the native ready hook.
+    if std::mem::replace(&mut state.workers_started, true) {
+        return;
+    }
     if let Some(storage) = &state.storage {
         storage.set_notify(waker.clone());
     }
@@ -1050,6 +1073,10 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         let _ = state.browser.find(id, &query);
     }
     state.persist_session_if_changed();
+    let history_page_changed = state.poll_history_page(
+        tx,
+        !polled.committed.is_empty() || !polled.titles.is_empty(),
+    );
     let history_changed = if let Some(storage) = &state.storage {
         let revision = storage.history().revision();
         let changed = state.history_revision != revision;
@@ -1080,6 +1107,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     }
     polled.changed
         || history_changed
+        || history_page_changed
         || settling
         || focus_changed
         || configuration_changed
@@ -1132,6 +1160,22 @@ pub(crate) fn open_settings(state: &mut AppState, tx: &mut Tx) {
     tx.focus(VIEWPORT, false);
 }
 
+pub(crate) fn open_history(state: &mut AppState, tx: &mut Tx) {
+    state.dismiss_find();
+    state.omnibox.close();
+    let tab = state
+        .active_history_tab()
+        .or_else(|| state.browser.internal_tab(InternalPage::History))
+        .unwrap_or_else(|| {
+            state
+                .browser
+                .open_tab(InternalPage::History.address())
+                .expect("valid built-in History route")
+        });
+    state.activate(tab);
+    tx.focus(crate::ui::HISTORY_SEARCH, false);
+}
+
 /// Keyboard input the omnibox uses before the text editor handles it.
 pub(crate) fn omnibox_input_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> bool {
     if crate::ui::tab_switcher::cycle_key(state, event, tx) {
@@ -1180,6 +1224,7 @@ pub(crate) fn shut_down(state: &mut AppState, _: &mut Tx) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::storage::HistoryMutation;
     use rune::Mods;
 
     fn active_url(state: &AppState) -> &str {
@@ -1695,6 +1740,195 @@ mod tests {
         assert!(state.browser.active_tab().unwrap().is_internal());
         assert!(state.browser.tabs()[0].engine.deferred_load);
         assert!(state.browser.tabs()[2].engine.deferred_load);
+    }
+
+    #[test]
+    fn history_shortcut_restores_native_tab_and_keyboard_opens_a_result() {
+        use crate::engine::Command;
+
+        let url = "https://example.org/guide";
+        let db = elaris::history::History::open(std::path::Path::new(":memory:")).unwrap();
+        db.record_visit(url, "Example guide").unwrap();
+        let mut state = AppState::new(Some("elaris://history"));
+        let restored = state.session_snapshot();
+        state = AppState::new(None);
+        state.restore_session(&restored);
+        let tab = state.active_history_tab().unwrap();
+        let (engine, fake) = crate::engine::Engine::fake();
+        state.browser.connect(engine);
+        assert!(
+            !fake
+                .commands
+                .try_iter()
+                .any(|command| matches!(command, Command::Open(..)))
+        );
+
+        let mut runtime =
+            rune::Runtime::new(state, crate::ui::view, (880.0, 600.0), rune::Env::default());
+        runtime.on_key = Some(crate::shortcuts::on_key);
+        runtime.frame(0.0);
+        let key = if cfg!(target_os = "macos") { 'y' } else { 'h' };
+        for key in [key, key, 'f'] {
+            runtime.key(KeyEvent {
+                key: Key::Command(key),
+                mods: Mods {
+                    cmd: true,
+                    ..Mods::default()
+                },
+            });
+            runtime.frame(0.0);
+            assert_eq!(runtime.state.browser.tabs().len(), 1);
+            assert_eq!(runtime.state.active_history_tab(), Some(tab));
+            assert!(!runtime.state.find_open);
+            assert!(runtime.elements().iter().any(|element| {
+                element.focused && element.key.as_deref() == Some(crate::ui::HISTORY_SEARCH)
+            }));
+        }
+        runtime.update(move |state, _| {
+            state.history_page.page = Some(db.page("guide", None).unwrap());
+        });
+        runtime.frame(0.0);
+        runtime.key(KeyEvent {
+            key: Key::Down,
+            mods: Mods::default(),
+        });
+        runtime.frame(0.0);
+        assert!(runtime.elements().iter().any(|element| {
+            element.focused
+                && element
+                    .label
+                    .as_deref()
+                    .is_some_and(|label| label.contains("Example guide"))
+        }));
+        runtime.key(KeyEvent {
+            key: Key::Enter,
+            mods: Mods::default(),
+        });
+        runtime.frame(0.0);
+        assert_eq!(runtime.state.browser.active_tab().unwrap().id(), tab);
+        assert_eq!(active_url(&runtime.state), url);
+        assert!(runtime.state.active_history_tab().is_none());
+        assert_eq!(
+            fake.commands
+                .try_iter()
+                .filter(|command| matches!(command, Command::Open(id, _) if *id == tab))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn removing_a_history_row_collapses_with_motion_and_snaps_with_reduced_motion() {
+        for reduced_motion in [false, true] {
+            let db = elaris::history::History::open(std::path::Path::new(":memory:")).unwrap();
+            db.record_visit("https://older.example/", "Older").unwrap();
+            db.record_visit("https://recent.example/", "Recent")
+                .unwrap();
+            let mut state = AppState::new(Some("elaris://history"));
+            state.history_page.page = Some(db.page("", None).unwrap());
+            let mut runtime =
+                rune::Runtime::new(state, crate::ui::view, (880.0, 600.0), rune::Env::default());
+            runtime.set_system_reduced_motion(reduced_motion);
+            runtime.frame(0.0);
+            let y = |runtime: &rune::Runtime<AppState>| {
+                runtime
+                    .elements()
+                    .into_iter()
+                    .find(|node| {
+                        node.key.as_deref() == Some("history-entry:https://older.example/")
+                    })
+                    .unwrap()
+                    .rect[1]
+            };
+            let before = y(&runtime);
+            runtime.update(|state, tx| {
+                state.history_page.page.as_mut().unwrap().entries.remove(0);
+                tx.animated();
+            });
+            runtime.frame(1.0 / 60.0);
+            let mid = y(&runtime);
+            let exiting = runtime.elements().iter().any(|node| {
+                node.key.as_deref() == Some("history-entry:https://recent.example/") && node.exiting
+            });
+            runtime.frame(1.0);
+            let after = y(&runtime);
+            assert!(before > after);
+            assert_eq!(exiting, !reduced_motion);
+            if reduced_motion {
+                assert_eq!(mid, after);
+            } else {
+                assert!(mid <= before && mid > after, "{before}, {mid}, {after}");
+            }
+        }
+    }
+
+    #[test]
+    fn history_mutation_preserves_tabs_and_query_on_success_or_failure() {
+        let data = std::env::temp_dir().join(format!("elaris-app-history-{}", std::process::id()));
+        let paths = storage::Paths {
+            application_dir: data.clone(),
+            profile_dir: data.join("profile"),
+            history_file: data.join("history.sqlite"),
+            session_file: data.join("session.json"),
+            config_file: data.join("config.toml"),
+        };
+        let mut state = AppState::new(Some("elaris://history"));
+        state.storage = Some(Storage::open(paths.clone()).unwrap());
+        for (url, section) in [
+            ("https://favourite.example/", TabSection::Favourite),
+            ("https://pinned.example/", TabSection::Pinned),
+        ] {
+            state
+                .browser
+                .restore_tab_in_section(url, "", true, section)
+                .unwrap();
+        }
+        let session = state.session_snapshot();
+
+        let record = |state: &AppState, url: &str| {
+            state
+                .storage
+                .as_ref()
+                .unwrap()
+                .history()
+                .record_visit(url, "Example")
+                .unwrap();
+        };
+        let pump = |state: &mut AppState| {
+            state.storage.as_ref().unwrap().flush_on_close().unwrap();
+            state.poll_history_page(&mut Tx::default(), false);
+        };
+
+        let url = "https://example.com/";
+        record(&state, url);
+        record(&state, "https://example.org/");
+        state.history_page.input.replace_text("example");
+        state.poll_history_page(&mut Tx::default(), false);
+        pump(&mut state);
+        assert_eq!(state.history_page.page.as_ref().unwrap().entries.len(), 2);
+
+        let db = rusqlite::Connection::open(&paths.history_file).unwrap();
+        db.execute_batch("CREATE TRIGGER prevent_delete BEFORE DELETE ON history BEGIN SELECT RAISE(ABORT, 'test failure'); END;").unwrap();
+        state.mutate_history(HistoryMutation::Remove(url.into()));
+        pump(&mut state);
+        assert!(state.history_page.action_error.is_some());
+        assert_eq!(state.history_page.page.as_ref().unwrap().entries.len(), 2);
+        db.execute_batch("DROP TRIGGER prevent_delete").unwrap();
+
+        state.mutate_history(HistoryMutation::Remove(url.into()));
+        pump(&mut state);
+        pump(&mut state);
+        assert_eq!(state.history_page.page.as_ref().unwrap().entries.len(), 1);
+        assert!(state.history_page.action_error.is_none());
+
+        state.history_page.confirming = true;
+        state.mutate_history(HistoryMutation::Clear);
+        pump(&mut state);
+        pump(&mut state);
+        assert!(state.history_page.page.as_ref().unwrap().entries.is_empty());
+        assert_eq!(state.history_page.input.text, "example");
+        assert_eq!(state.session_snapshot(), session);
+        std::fs::remove_dir_all(data).unwrap();
     }
 
     #[test]

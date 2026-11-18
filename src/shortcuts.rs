@@ -30,6 +30,7 @@ pub(crate) enum Shortcut {
     SelectLastTab,
     ToggleSidebar,
     OpenSettings,
+    OpenHistory,
 }
 
 /// Rune's hook for keys nothing focused took: runs the shortcut the key is, if any.
@@ -86,6 +87,7 @@ pub(crate) fn on_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> boo
         Shortcut::Reload => state.with_active_tab(Browser::reload),
         Shortcut::ToggleSidebar => ui::toggle_sidebar(state, tx),
         Shortcut::OpenSettings => app::open_settings(state, tx),
+        Shortcut::OpenHistory => app::open_history(state, tx),
         Shortcut::PreviousTab
         | Shortcut::NextTab
         | Shortcut::SelectTab(_)
@@ -133,6 +135,10 @@ pub(crate) fn shortcut(event: &KeyEvent) -> Option<Shortcut> {
         ('l', false) => Shortcut::FocusOmnibox,
         ('r', false) => Shortcut::Reload,
         ('s', false) => Shortcut::ToggleSidebar,
+        #[cfg(target_os = "macos")]
+        ('y', false) => Shortcut::OpenHistory,
+        #[cfg(target_os = "linux")]
+        ('h', false) => Shortcut::OpenHistory,
         (',', false) => Shortcut::OpenSettings,
         // Shift turns [ and ] into { and } on most layouts.
         ('[' | '{', true) => Shortcut::PreviousTab,

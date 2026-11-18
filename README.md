@@ -34,6 +34,13 @@ For shell-only work, use `./elaris run --ui`. See [Development setup](SETUP.md) 
 On Linux, the browser toolbar slides down and pushes the page when the pointer reaches the top of
 the app. Set `ELARIS_LINUX_TITLEBAR=always` to keep it visible.
 
+## Browsing history
+
+Open `elaris://history` with **Command+Y** on macOS or **Control+H** on Linux. Search by page
+title or address, or use **Older** to browse past results. History shows the most recent visit
+to each address. Use the row’s remove button to erase that address or **Clear History** to erase
+all saved browsing history.
+
 ## Development
 
 Run `./elaris check` before opening a pull request. Use `./elaris format` to format Rust and bridge C++ code. Run `./elaris linux-build` to build in Docker and stream Linux build output in the terminal.

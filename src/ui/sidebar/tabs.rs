@@ -8,6 +8,7 @@ use rune_kit::{MenuItem, context_menu as menu_at};
 
 use super::drag::{PreviewItem, favourite_columns, favourite_row_ranges, favourite_tile_width};
 use crate::app::{self, AppState};
+use crate::internal::{InternalPage, InternalRoute};
 use crate::tab::{Tab, TabId, TabSection};
 use crate::ui::TabDragMoveResult;
 use crate::ui::controls::{icon_button, row_button};
@@ -442,6 +443,8 @@ fn tab_icon(tab: &Tab, active: bool, size: f32, theme: &Theme) -> El {
             .color(color)
             .label("Loading")
             .looping(rune::LoopSpec::rotation(theme::LOADING_PERIOD))
+    } else if tab.internal == Some(InternalRoute::Page(InternalPage::History)) {
+        icon(&icons::HISTORY, size).color(color)
     } else {
         icon(&icons::PAGE, size).color(color)
     }

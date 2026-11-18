@@ -66,13 +66,7 @@ fn main() {
         })
     };
     let app_handle = app.handle();
-    let mut workers_started = false;
     let app = app.on_ready(move |_| {
-        if workers_started {
-            return;
-        }
-        workers_started = true;
-
         let wake_handle = app_handle.clone();
         let waker: rune::Waker = Arc::new(move || wake_handle.wake());
         let app_handle = app_handle.clone();

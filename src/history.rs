@@ -17,6 +17,7 @@ const SCHEMA: &str = "
         visit_count INTEGER NOT NULL CHECK (visit_count > 0)
     );
     CREATE INDEX IF NOT EXISTS history_recent ON history(last_visited DESC);
+    CREATE INDEX IF NOT EXISTS history_page ON history(last_visited DESC, url DESC);
     CREATE INDEX IF NOT EXISTS history_frequent ON history(visit_count DESC, last_visited DESC);
 ";
 
@@ -32,6 +33,43 @@ pub struct Entry {
     /// How many committed visits were recorded for this URL.
     pub visit_count: u64,
 }
+
+/// Stable position in the latest-visited ordering.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Cursor {
+    last_visited: i64,
+    url: String,
+}
+
+/// A saved URL with the calendar date and time of its latest visit in the local timezone.
+#[derive(Debug)]
+pub struct PageEntry {
+    pub entry: Entry,
+    pub date: String,
+    pub time: String,
+}
+
+impl PageEntry {
+    fn cursor(&self) -> Cursor {
+        Cursor {
+            last_visited: self.entry.last_visited,
+            url: self.entry.url.clone(),
+        }
+    }
+}
+
+/// One bounded result window, with local calendar anchors evaluated on the same connection.
+#[derive(Debug)]
+pub struct Page {
+    pub entries: Vec<PageEntry>,
+    pub next: Option<Cursor>,
+    pub today: String,
+    pub yesterday: String,
+    /// Unix timestamp in seconds when the relative date labels need refreshing.
+    pub next_midnight: u64,
+}
+
+const PAGE_SIZE: usize = 40;
 
 /// One connection, owned by the storage worker or a caller doing synchronous history work.
 pub struct History {
@@ -113,6 +151,58 @@ impl History {
         )?;
         let rows = statement.query_map(params![pattern, limit as i64], entry_from_row)?;
         rows.collect()
+    }
+
+    /// Reads the next batch in latest-visit order. Search matches literal title and URL substrings.
+    pub fn page(&self, query: &str, after: Option<&Cursor>) -> rusqlite::Result<Page> {
+        // Separate the initial query so SQLite can seek directly into the index for older pages.
+        let boundary = if after.is_some() {
+            "AND (last_visited, url) < (?2, ?3)"
+        } else {
+            ""
+        };
+        let mut statement = self.connection.prepare_cached(&format!(
+            "SELECT url, title, last_visited, visit_count,
+                    coalesce(date(last_visited / 1000000, 'unixepoch', 'localtime'), ''),
+                    coalesce(strftime('%H:%M', last_visited / 1000000, 'unixepoch', 'localtime'), '')
+             FROM history
+             WHERE (?1 IS NULL OR url LIKE ?1 ESCAPE '\\' OR title LIKE ?1 ESCAPE '\\')
+               {boundary}
+             ORDER BY last_visited DESC, url DESC LIMIT {}",
+            PAGE_SIZE + 1
+        ))?;
+        let query = query.trim();
+        let pattern = (!query.is_empty()).then(|| format!("%{}%", escape_like(query)));
+        let mut rows = match after {
+            Some(cursor) => statement.query(params![pattern, cursor.last_visited, cursor.url])?,
+            None => statement.query([pattern])?,
+        };
+        let mut entries = Vec::with_capacity(PAGE_SIZE);
+        let mut next = None;
+        while let Some(row) = rows.next()? {
+            if entries.len() == PAGE_SIZE {
+                next = entries.last().map(PageEntry::cursor);
+                break;
+            }
+            entries.push(PageEntry {
+                entry: entry_from_row(row)?,
+                date: row.get(4)?,
+                time: row.get(5)?,
+            });
+        }
+        let (today, yesterday, next_midnight) = self.connection.query_row(
+            "SELECT date('now', 'localtime'), date('now', 'localtime', '-1 day'),
+                    unixepoch(date('now', 'localtime', '+1 day'), 'utc')",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        Ok(Page {
+            entries,
+            next,
+            today,
+            yesterday,
+            next_midnight,
+        })
     }
 
     /// Removes the entry for `url`, returning whether a row was deleted.
@@ -258,6 +348,7 @@ mod tests {
         let history = History::open(&temp.file()).expect("open history");
         for url in [
             "about:blank",
+            "elaris://history",
             "data:text/plain,private",
             "https://",
             "https://bad host/",
@@ -291,6 +382,134 @@ mod tests {
         assert!(history.search("github", 10).unwrap().is_empty());
         history.clear().unwrap();
         assert!(history.recent(10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn latest_visited_pages_seek_across_ties_and_match_literal_substrings() {
+        let temp = TempDir::new();
+        let file = temp.file();
+        // Create the original schema before the pagination index existed.
+        let legacy = Connection::open(&file).unwrap();
+        legacy
+            .execute_batch(
+                "CREATE TABLE history (
+            url TEXT PRIMARY KEY NOT NULL, title TEXT NOT NULL,
+            last_visited INTEGER NOT NULL, visit_count INTEGER NOT NULL CHECK (visit_count > 0)
+        );
+        INSERT INTO history VALUES ('https://legacy.example/100_percent', 'Saved title', 3, 2);",
+            )
+            .unwrap();
+        drop(legacy);
+
+        let history = History::open(&file).unwrap();
+        for i in 0..84 {
+            history
+                .record_visit_at(
+                    &format!("https://docs.example/guide/{i:02}"),
+                    "Handbook",
+                    10,
+                )
+                .unwrap();
+        }
+        history
+            .record_visit_at("https://latest.example/", "Latest", 20)
+            .unwrap();
+        let mut result = history.page("", None).unwrap();
+        assert_eq!(result.entries.len(), PAGE_SIZE);
+        assert_eq!(result.entries[0].entry.title, "Latest");
+        let mut all = Vec::new();
+        loop {
+            all.extend(result.entries.into_iter().map(|row| row.cursor()));
+            let Some(cursor) = result.next else { break };
+            result = history.page("", Some(&cursor)).unwrap();
+        }
+        assert_eq!(all.len(), 86);
+        assert!(all.windows(2).all(|pair| {
+            (pair[0].last_visited, &pair[0].url) > (pair[1].last_visited, &pair[1].url)
+        }));
+
+        for query in ["SAVED TITLE", "legacy.example", "/100_", "_"] {
+            let page = history.page(query, None).unwrap();
+            assert_eq!(page.entries.len(), 1);
+            assert_eq!(page.entries[0].entry.visit_count, 2);
+        }
+        assert!(history.page("missing", None).unwrap().entries.is_empty());
+        let page = history.page("handbook", None).unwrap();
+        let older = history.page("handbook", page.next.as_ref()).unwrap();
+        assert_eq!(older.entries.len(), PAGE_SIZE);
+        assert!(older.next.is_some());
+        drop(history);
+        assert_eq!(
+            History::open(&file)
+                .unwrap()
+                .page("saved title", None)
+                .unwrap()
+                .entries
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn local_visit_times_cross_midnight_and_daylight_saving() {
+        // Give SQLite a real OS timezone without changing it in the parallel test process.
+        const CHILD: &str = "ELARIS_TEST_HISTORY_TZ";
+        if std::env::var_os(CHILD).is_none() {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "history::tests::local_visit_times_cross_midnight_and_daylight_saving",
+                ])
+                .env(CHILD, "1")
+                .env("TZ", "America/New_York")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stdout)
+            );
+            return;
+        }
+        let temp = TempDir::new();
+        let history = History::open(&temp.file()).unwrap();
+        for (i, time) in [
+            "2025-03-09 04:59:59",
+            "2025-03-09 05:00:00",
+            "2025-03-09 06:59:00",
+            "2025-03-09 07:00:00",
+            "2025-11-02 05:30:00",
+            "2025-11-02 06:30:00",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let timestamp: i64 = history
+                .connection
+                .query_row("SELECT unixepoch(?1) * 1000000", [time], |row| row.get(0))
+                .unwrap();
+            history
+                .record_visit_at(&format!("https://example.org/{i}"), "", timestamp)
+                .unwrap();
+        }
+        let page = history.page("", None).unwrap();
+        let local: Vec<_> = page
+            .entries
+            .iter()
+            .rev()
+            .map(|row| (row.date.as_str(), row.time.as_str()))
+            .collect();
+        assert_eq!(
+            local,
+            [
+                ("2025-03-08", "23:59"),
+                ("2025-03-09", "00:00"),
+                ("2025-03-09", "01:59"),
+                ("2025-03-09", "03:00"),
+                ("2025-11-02", "01:30"),
+                ("2025-11-02", "01:30"),
+            ]
+        );
     }
 
     #[test]

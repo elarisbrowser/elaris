@@ -17,7 +17,12 @@ use rune::PointerButton;
 /// The container's padding holds the page in from the window's edges, the sidebar being its
 /// left; the page's own element clips to rounded corners and takes input in the page's
 /// coordinates.
-pub(crate) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
+pub(crate) fn view(
+    state: &AppState,
+    theme: &Theme,
+    overlays: &mut Vec<El>,
+    reduced_motion: bool,
+) -> El {
     #[cfg(target_os = "linux")]
     let top_padding = theme::VIEWPORT_INSET;
     #[cfg(not(target_os = "linux"))]
@@ -43,7 +48,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> E
         })
         .pr(theme::VIEWPORT_INSET)
         .pb(theme::VIEWPORT_INSET);
-    viewport.child(page(state, theme, overlays))
+    viewport.child(page(state, theme, overlays, reduced_motion))
 }
 
 /// The webpage's top-left origin in the window, used to anchor its native find overlay.
@@ -66,13 +71,19 @@ pub(crate) fn page_origin(state: &AppState) -> [f32; 2] {
 
 /// The page's latest frame fills the viewport over its appearance-aware background. During a live
 /// resize Rune scales a frame to new bounds.
-fn page(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
+fn page(state: &AppState, theme: &Theme, overlays: &mut Vec<El>, reduced_motion: bool) -> El {
     let mut page = el().key(VIEWPORT);
     let mut internal = false;
     if let Some(tab) = state.browser.active_tab() {
         if let Some(route) = &tab.internal {
             internal = true;
-            page = page.child(super::internal::view(state, route, theme, overlays));
+            page = page.child(super::internal::view(
+                state,
+                route,
+                theme,
+                overlays,
+                reduced_motion,
+            ));
         } else {
             page = page.pixels(&tab.surface.pixels);
         }

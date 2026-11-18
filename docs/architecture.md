@@ -13,7 +13,8 @@ connection and writes session files, so neither page work nor browser-data write
 | `src/browser.rs` | Ordered web and native tabs, their Favourite/Pinned/Regular classification, active-tab selection, input routing and commands sent to the engine, including tab-targeted find requests. |
 | `src/tab.rs` | Per-tab address, committed address, title, favicon, section, page state, native route, engine state and transient find query/results. |
 | `src/omnibox.rs` | Omnibox state, local suggestion ranking and typed actions. |
-| `src/history.rs` | Public synchronous SQLite history API; the app uses it through the storage worker. |
+| `src/history.rs` | Synchronous SQLite history API used by the storage worker. |
+| `src/app/history.rs` | Native History search, pagination, mutation acknowledgements and navigation. |
 | `src/storage.rs` | Native data/config paths, asynchronous history and configuration access, session JSON and atomic replacement. |
 | `src/config.rs` | Typed TOML loading, validation, comment-preserving edits and atomic configuration writes. |
 | `src/settings.rs` | The single typed settings model shared by the app, settings page and TOML file. |
@@ -23,7 +24,7 @@ connection and writes session files, so neither page work nor browser-data write
 | `src/address.rs` | Classifies omnibox input and builds navigation or search URLs. |
 | `src/appearance.rs` | System, light and dark appearance preference. |
 | `src/perf.rs` | Development timing, printed when `ELARIS_PERF=1`. |
-| `src/ui/` | Rune components for the toolbar, sidebar, omnibox, floating find bar, viewport, native settings page and shared theme. |
+| `src/ui/` | Rune components for the toolbar, sidebar, omnibox, floating find bar, viewport, native pages and shared theme. |
 | `src/ladybird/` (library) | Safe Rust wrappers around the bridge's C ABI. Plain event, frame and input types build without the bridge feature. |
 | `bridge/` | The C++ bridge and its headless Ladybird views. |
 
@@ -74,9 +75,8 @@ search results to the UI from memory; searches are sent to SQLite off the UI thr
 history API supports recording visits, title updates, recent/frequent lists, search, individual
 deletion and clearing. No remote autocomplete requests, telemetry or analytics are used.
 
-History currently keeps the latest row for each URL and increments its visit count on each
-committed visit. Elaris does not yet expose a history-management screen. Session metadata does not
-include scroll position, form state, cookies or Ladybird's internal per-view navigation stack.
+Session metadata does not include scroll position, form state, cookies or Ladybird's internal
+per-view navigation stack.
 Restored background tabs are created in order but are not laid out or loaded until selected.
 
 ## The engine
@@ -113,6 +113,35 @@ The omnibox combines a compact recent list or local database matches with existi
 suggestions. Matching considers title and URL/domain, then favors stronger text matches, visit
 count and recency. Query work runs on the storage worker; the UI reads a small in-memory result
 snapshot and never waits for SQLite.
+
+### Native History
+
+`elaris://history` is a Rune page. Command+Y on macOS and Control+H on Linux activate an existing
+History tab or open one. Find focuses the native History search field. Both the route and the
+active tab restore through the ordinary session file.
+
+The database stores the most recent committed visit to each HTTP or HTTPS URL and a count of
+visits to that address. The page shows one result per URL, most recent first, and groups results
+by the local date of that visit. Date and time conversion uses the host timezone for each stored
+timestamp. Today and Yesterday are based on local calendar dates and refresh at local midnight.
+
+The storage worker searches title and full URL, including the domain, as the user types.
+Substring matching is literal, with SQLite's default case folding for ASCII. The composite
+timestamp and URL index provides stable cursor pagination in batches of 40. Newer and Older
+replace the visible batch and keep the Rune tree bounded. Arbitrary substring searches can scan
+the index when matches are sparse. Request revisions let the worker skip superseded searches and
+let the app discard results for older queries.
+
+Opening a result replaces the current History tab. Middle-click or a platform shortcut-modifier
+click opens a background tab. Adding Shift to the shortcut-modifier click opens a foreground tab.
+History uses favicons from matching live tabs and a generic website icon for other entries.
+Persisting favicons would require extending the history store.
+
+Removing a result deletes its URL row and the visit count for that address. Clear History requires
+confirmation and deletes all rows in a single SQLite transaction. The worker refreshes the
+omnibox snapshots before acknowledging a successful mutation. The History page keeps the search
+term and refreshes the results. Open tabs, Favourites, Pinned Tabs, session metadata and
+Ladybird's profile data are outside these operations.
 
 ## From Rune to Ladybird
 
@@ -171,8 +200,8 @@ keeps that tab's query for the next open. Queries are never written to disk or h
 
 When Find opens with an empty query, the bridge reads the selected webpage text through
 `ViewImplementation::selected_text()`'s asynchronous promise. The app accepts it only if the same
-tab and request are still active and the user has not started typing. Elaris-owned internal pages
-do not have Ladybird views; the bar states that Find is unavailable on those pages.
+tab and request are still active and the user has not started typing. History routes Find to its
+own search field. Other internal pages show the Find unavailable message.
 
 Rune connects the storage wake callback when the window is ready, including UI-only builds.
 The callback schedules a poll after the worker publishes configuration or history updates.

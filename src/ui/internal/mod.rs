@@ -2,6 +2,7 @@
 
 //! Native Rune pages for routes owned by Elaris.
 
+mod history;
 mod settings;
 
 use rune::tok::type_;
@@ -16,9 +17,13 @@ pub(crate) fn view(
     route: &InternalRoute,
     theme: &Theme,
     overlays: &mut Vec<El>,
+    reduced_motion: bool,
 ) -> El {
     match route {
         InternalRoute::Page(InternalPage::Settings) => settings::view(state, theme, overlays),
+        InternalRoute::Page(InternalPage::History) => {
+            history::view(state, theme, overlays, reduced_motion)
+        }
         InternalRoute::Page(page) => message_page(
             page.title(),
             "This page is reserved for a future release.",
