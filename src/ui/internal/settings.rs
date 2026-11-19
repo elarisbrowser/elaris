@@ -86,6 +86,7 @@ fn appearance_section(state: &AppState, theme: &Theme, kit: &Kit, compact: bool)
     .build(kit);
 
     let glass = rune_kit::Switch::new(state.settings.glass_enabled)
+        .standard()
         .label("Liquid glass background")
         .on_toggle(|state: &mut AppState| state.set_glass_enabled(!state.settings.glass_enabled))
         .build(kit);
