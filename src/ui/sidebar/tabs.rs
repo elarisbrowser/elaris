@@ -432,7 +432,7 @@ fn favourite_tile(
                 tx.live_only();
             }
         });
-    tile = tab_drag_handler(tile, id);
+    tile = tab_drag_handler(tile, id, vec![id]);
     if active {
         tile = tile.fill(theme.tab_active);
     } else {
@@ -503,7 +503,21 @@ fn tab_row(
     if hidden {
         row = row.opacity(0.0).opacity_motion(rune::Anim::INSTANT);
     }
-    row = tab_drag_handler(row, id);
+    let drag_members = state
+        .browser
+        .split
+        .filter(|split| split.panes.contains(&Some(id)))
+        .and_then(|split| Some([split.panes[0]?, split.panes[1]?]))
+        .filter(|pair| {
+            pair.iter().all(|member| {
+                state
+                    .browser
+                    .tab(*member)
+                    .is_some_and(|member| member.section() == section)
+            })
+        })
+        .map_or_else(|| vec![id], |pair| pair.to_vec());
+    row = tab_drag_handler(row, id, drag_members);
     let row = row.on_layout_tx(move |state: &mut AppState, rect, tx| {
         let target_ready = state.tab_drag.record_tab_rect(section, id, rect);
         if target_ready {
@@ -563,7 +577,7 @@ fn drop_placeholder(
                 tx.live_only();
             });
         if same_section {
-            slot = tab_drag_handler(slot, tab);
+            slot = tab_drag_handler(slot, tab, vec![tab]);
         }
         slot
     } else {
@@ -587,7 +601,7 @@ fn drop_placeholder(
                 tx.live_only();
             });
         if same_section {
-            slot = tab_drag_handler(slot, tab);
+            slot = tab_drag_handler(slot, tab, vec![tab]);
         }
         slot
     }
@@ -615,19 +629,20 @@ fn source_placeholder(
     } else {
         slot.w_full()
     };
-    tab_drag_handler(slot, tab)
+    tab_drag_handler(slot, tab, vec![tab])
 }
 
 fn dragging_single_page(state: &AppState, id: TabId) -> bool {
     state.browser.split.is_none() && state.browser.visible_tabs()[0] == Some(id)
 }
 
-fn tab_drag_handler(row: El, id: TabId) -> El {
+fn tab_drag_handler(row: El, id: TabId, members: Vec<TabId>) -> El {
     row.on_drag(move |state: &mut AppState, drag, tx| match drag.phase {
         rune::Phase::Down => {
             super::hover::dismiss(state);
-            state.tab_drag.press(
+            state.tab_drag.press_members(
                 id,
+                members.clone(),
                 state.browser.tabs(),
                 drag.window_point(),
                 [drag.start_x, drag.start_y],
@@ -683,7 +698,7 @@ fn tab_drag_handler(row: El, id: TabId) -> El {
             }
             if let Some(drop) = drop
                 && let Err(error) =
-                    state.commit_tab_move(drop.tab, drop.target.section, drop.target.index)
+                    state.commit_tab_move_group(&drop.tabs, drop.target.section, drop.target.index)
             {
                 eprintln!("Elaris: {error}");
                 state.tab_drag.cancel();

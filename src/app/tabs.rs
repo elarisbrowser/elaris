@@ -123,6 +123,7 @@ impl super::AppState {
         self.split_preview.take().is_some() | self.tab_drag.cancel()
     }
 
+    #[cfg(test)]
     pub(crate) fn commit_tab_move(
         &mut self,
         tab: TabId,
@@ -130,6 +131,20 @@ impl super::AppState {
         target_index: usize,
     ) -> Result<(), crate::browser::Error> {
         self.browser.move_tab_to(tab, section, target_index)?;
+        self.persist_session_if_changed();
+        Ok(())
+    }
+
+    pub(crate) fn commit_tab_move_group(
+        &mut self,
+        tabs: &[TabId],
+        section: TabSection,
+        target_index: usize,
+    ) -> Result<(), crate::browser::Error> {
+        for (offset, tab) in tabs.iter().copied().enumerate() {
+            self.browser
+                .move_tab_to(tab, section, target_index + offset)?;
+        }
         self.persist_session_if_changed();
         Ok(())
     }

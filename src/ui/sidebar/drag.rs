@@ -75,6 +75,7 @@ enum Gesture {
 
 struct Pressed {
     tab: TabId,
+    members: Vec<TabId>,
     source: TabDropTarget,
     order: Vec<(TabId, TabSection)>,
     start: [f32; 2],
@@ -121,9 +122,9 @@ pub(crate) enum MoveResult {
     Cancelled,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Drop {
-    pub(crate) tab: TabId,
+    pub(crate) tabs: Vec<TabId>,
     pub(crate) target: TabDropTarget,
 }
 
@@ -237,9 +238,22 @@ impl TabDragState {
         self.scroll.clone()
     }
 
+    #[cfg(test)]
     pub(crate) fn press(
         &mut self,
         tab: TabId,
+        tabs: &[Tab],
+        pointer: [f32; 2],
+        grab: [f32; 2],
+        size: [f32; 2],
+    ) {
+        self.press_members(tab, vec![tab], tabs, pointer, grab, size);
+    }
+
+    pub(crate) fn press_members(
+        &mut self,
+        tab: TabId,
+        members: Vec<TabId>,
         tabs: &[Tab],
         pointer: [f32; 2],
         grab: [f32; 2],
@@ -251,13 +265,18 @@ impl TabDragState {
             return;
         };
         let section = tabs[tab_index].section();
-        let index = tabs[..tab_index]
+        let first_member_index = tabs
+            .iter()
+            .position(|candidate| members.contains(&candidate.id()))
+            .unwrap_or(tab_index);
+        let index = tabs[..first_member_index]
             .iter()
             .filter(|candidate| candidate.section() == section)
             .count();
         let origin = [pointer[0] - grab[0], pointer[1] - grab[1]];
         self.gesture = Some(Gesture::Pressed(Pressed {
             tab,
+            members,
             source: TabDropTarget { section, index },
             order: tabs
                 .iter()
@@ -351,6 +370,17 @@ impl TabDragState {
                     .iter()
                     .filter(|tab| tab.section() == target.section)
                     .count()
+                    .saturating_sub(
+                        dragging
+                            .pressed
+                            .members
+                            .iter()
+                            .filter(|id| {
+                                tabs.iter()
+                                    .any(|tab| tab.id() == **id && tab.section() == target.section)
+                            })
+                            .count(),
+                    )
         });
         let placeholder = target.and_then(|target| {
             self.placeholder
@@ -380,7 +410,7 @@ impl TabDragState {
             return (
                 true,
                 Some(Drop {
-                    tab: dragging.pressed.tab,
+                    tabs: dragging.pressed.members.clone(),
                     target,
                 }),
             );
@@ -440,7 +470,7 @@ impl TabDragState {
     }
 
     pub(crate) fn is_hidden(&self, tab: TabId) -> bool {
-        matches!(&self.gesture, Some(Gesture::Dragging(dragging)) if dragging.pressed.tab == tab)
+        matches!(&self.gesture, Some(Gesture::Dragging(dragging)) if dragging.pressed.members.contains(&tab))
             || self
                 .settling
                 .as_ref()
@@ -458,7 +488,9 @@ impl TabDragState {
             return items;
         };
         if dragging.pressed.source.section == section {
-            items.retain(|item| *item != PreviewItem::Tab(dragging.pressed.tab));
+            items.retain(|item| {
+                !matches!(item, PreviewItem::Tab(id) if dragging.pressed.members.contains(id))
+            });
         }
         let target = dragging.target.filter(|_| dragging.valid);
         if dragging.pressed.source.section == section {
@@ -669,7 +701,7 @@ impl TabDragState {
         };
         let index = self.insertion_index(
             tabs,
-            dragging.pressed.tab,
+            &dragging.pressed.members,
             section,
             pointer,
             dragging.target,
@@ -694,7 +726,7 @@ impl TabDragState {
     fn insertion_index(
         &self,
         tabs: &[Tab],
-        dragged: TabId,
+        dragged: &[TabId],
         section: TabSection,
         pointer: [f32; 2],
         previous: Option<TabDropTarget>,
@@ -707,7 +739,7 @@ impl TabDragState {
         let mut index = 0;
         for tab in tabs
             .iter()
-            .filter(|tab| tab.section() == section && tab.id() != dragged)
+            .filter(|tab| tab.section() == section && !dragged.contains(&tab.id()))
         {
             let Some(rect) = self.tab_rects.get(&tab.id()) else {
                 continue;
@@ -728,14 +760,14 @@ impl TabDragState {
     fn favourite_insertion_index(
         &self,
         tabs: &[Tab],
-        dragged: TabId,
+        dragged: &[TabId],
         pointer: [f32; 2],
         previous: Option<TabDropTarget>,
         grid: [f32; 4],
     ) -> usize {
         let existing_count = tabs
             .iter()
-            .filter(|tab| tab.section() == TabSection::Favourite && tab.id() != dragged)
+            .filter(|tab| tab.section() == TabSection::Favourite && !dragged.contains(&tab.id()))
             .count();
         let final_count = existing_count + 1;
         let columns = favourite_columns(grid[2]);
