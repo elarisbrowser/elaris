@@ -72,9 +72,11 @@ memory changes track frame retention.
 
 ### Hidden-frame eviction
 
-Elaris keeps the two most recently hidden full-resolution frames by default. Older
-hidden views keep a full-page fallback with a maximum side of 160 pixels. Set
-`ELARIS_EVICT_HIDDEN_FRAMES=0` for a baseline run with eviction disabled.
+The hidden-frame eviction experiment is off by default. When enabled, Elaris keeps
+the two most recently hidden full-resolution frames; older hidden views keep a
+full-page fallback with a maximum side of 160 pixels. Set
+`ELARIS_EVICT_HIDDEN_FRAMES=1` to enable eviction; leave it unset or set it to `0`
+for a baseline run with eviction disabled.
 
 Run the same sequence in both modes with fresh profiles and `ELARIS_PERF=1`. Confirm the
 number of live views in the log before comparing RSS. Add `fallback_rgba_bytes` to

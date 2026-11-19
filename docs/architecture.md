@@ -9,18 +9,24 @@ connection and writes session files, so neither page work nor browser-data write
 | Module | Responsibility |
 |---|---|
 | `src/main.rs` | Builds the Rune app and installs its lifecycle hooks. |
-| `src/app.rs` | App state, settings actions, tab actions, omnibox and find actions, startup restoration, persistence scheduling, polling and shutdown. |
-| `src/browser.rs` | Ordered web and native tabs, their Favourite/Pinned/Regular classification, active-tab selection, input routing and commands sent to the engine, including tab-targeted find requests. |
+| `src/app.rs` | `AppState`, construction and startup policy. |
+| `src/app/` | Omnibox, settings, tab, find and session actions; `lifecycle/poll.rs` coordinates per-frame updates. |
+| `src/browser.rs` | Ordered web and native tabs, section ordering, activation and browser state. |
+| `src/browser/` | Download commands, engine polling and synchronization, input routing, Peek and Split View. |
+| `src/browser/tests/` | Browser regressions grouped by downloads, engine lifecycle, find, navigation, tabs and views. |
 | `src/tab.rs` | Per-tab address, committed address, title, favicon, section, page state, native route, engine state and transient find query/results. |
 | `src/omnibox.rs` | Omnibox state, local suggestion ranking and typed actions. |
 | `src/history.rs` | Synchronous SQLite history API used by the storage worker. |
 | `src/app/history.rs` | Native History search, pagination, mutation acknowledgements and navigation. |
-| `src/storage.rs` | Native data/config paths, asynchronous history and configuration access, session JSON and atomic replacement. |
+| `src/storage.rs` | Asynchronous history/configuration API, storage worker and command protocol. |
+| `src/storage/` | Platform paths, session JSON validation and atomic replacement, and storage regressions. |
 | `src/config.rs` | Typed TOML loading, validation, comment-preserving edits and atomic configuration writes. |
 | `src/settings.rs` | The single typed settings model shared by the app, settings page and TOML file. |
 | `src/permissions.rs` | Per-origin permission overrides, defaults and decisions used by the app and site controls. |
 | `src/internal.rs` | Explicit `elaris://` route parsing for Elaris-owned native pages. |
 | `src/engine/` | The engine thread and everything it owns (see below). |
+| `src/ui/sidebar/drag.rs` and `drag/` | Tab drag state transitions, drop-target geometry and behavior tests. |
+| `src/ui/sidebar/tabs.rs` and `tabs/` | Tab section rendering and sidebar tab context actions. |
 | `src/input.rs` | Translates Rune pointer, wheel and key input into Ladybird input. |
 | `src/address.rs` | Classifies omnibox input and builds navigation or search URLs. |
 | `src/appearance.rs` | System, light and dark appearance preference. |
@@ -88,8 +94,12 @@ Restored background tabs are created in order but are not laid out or loaded unt
   and reads `Update`s (display URL, committed navigation, title, loading, history, favicon and
   error).
 - `thread.rs`: starts the thread, runs its loop and joins it during process exit.
-- `runtime.rs`: Ladybird and its views. They stay on the engine thread and are neither `Send` nor
-  `Sync`.
+- `runtime.rs`: Ladybird view ownership, commands and event dispatch. Views stay on the engine
+  thread and are neither `Send` nor `Sync`.
+- `runtime/downloads.rs`: engine-owned download lifecycle and operating-system file actions.
+- `runtime/presentation.rs`: copied frames, frame timing and hidden-frame fallback policy. Frame
+  eviction is off by default; any `ELARIS_EVICT_HIDDEN_FRAMES` value other than `0` enables it.
+- `runtime/tests.rs`: bridge-backed runtime smoke tests.
 - `frames.rs`: which presented frames are worth copying.
 
 Without `ladybird-bridge`, `Engine::start` reports the missing feature and `cargo run` still works
