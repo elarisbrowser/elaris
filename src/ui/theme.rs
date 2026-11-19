@@ -15,6 +15,8 @@ use crate::appearance::AccentColor;
 const HUE: f32 = 265.0;
 
 pub(crate) struct Theme {
+    /// Whether this palette represents the dark appearance.
+    pub(crate) dark: bool,
     /// The window behind the sidebar and around the page.
     pub(crate) window: Color,
     /// The page's container, seen before a page draws.
@@ -98,6 +100,7 @@ pub(crate) fn palette(
     };
     if dark {
         Theme {
+            dark: true,
             window: oklch(0.185, 0.004, HUE).alpha(alpha),
             page: oklch(0.232, 0.005, HUE),
             settings_surface: oklch(0.255, 0.006, HUE),
@@ -126,6 +129,7 @@ pub(crate) fn palette(
         }
     } else {
         Theme {
+            dark: false,
             window: oklch(0.947, 0.008, HUE).alpha(alpha),
             page: oklch(1.0, 0.0, 0.0),
             settings_surface: oklch(0.975, 0.004, HUE),

@@ -48,8 +48,8 @@ pub(crate) fn on_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> boo
         state.close_find(tx);
         return true;
     }
-    if event.key == Key::Escape && state.site_permissions_open {
-        state.site_permissions_open = false;
+    #[cfg(target_os = "linux")]
+    if crate::ui::site_permissions::escape(state, event) {
         return true;
     }
     let Some(shortcut) = shortcut(event) else {

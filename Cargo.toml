@@ -30,8 +30,9 @@ version = "1"
 version = "0.25"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.5.1"
 objc2_05 = { package = "objc2", version = "0.5.3" }
-objc2_foundation_02 = { package = "objc2-foundation", version = "0.2.2" }
+objc2_foundation_02 = { package = "objc2-foundation", version = "0.2.2", features = ["NSArray", "NSGeometry", "NSString"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 x11-dl = "2.21.0"
@@ -42,12 +43,29 @@ version = "0.2.2"
 features = [
     "NSAnimation",
     "NSAnimationContext",
+    "NSAccessibilityProtocols",
+    "NSAppearance",
     "NSButton",
+    "NSButtonCell",
+    "NSBox",
+    "NSColor",
+    "NSControl",
     "NSEvent",
+    "NSFont",
+    "NSFontDescriptor",
+    "NSImage",
+    "NSImageView",
+    "NSMenu",
+    "NSMenuItem",
+    "block2",
+    "NSParagraphStyle",
     "NSScreen",
     "NSResponder",
+    "NSPopover",
+    "NSTextField",
     "NSTrackingArea",
     "NSView",
+    "NSViewController",
     "NSWindow",
 ]
 

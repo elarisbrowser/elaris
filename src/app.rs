@@ -19,6 +19,7 @@ use crate::internal::{InternalPage, InternalRoute};
 use crate::omnibox::{self, Action, Suggestion};
 use crate::permissions::{PermissionDecision, PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{DownloadDirectory, Settings, SettingsChange, StartupMode};
+use crate::site_controls::SiteControlPresentation;
 use crate::storage;
 use crate::storage::{Session, SessionTab, Storage};
 use crate::tab::{Tab, TabId, TabSection};
@@ -165,6 +166,18 @@ pub(crate) struct AppState {
     pub(crate) downloads_open: bool,
     /// Whether the site controls popover is mounted.
     pub(crate) site_permissions_open: bool,
+    /// Rune-space bounds of the URL-bar control, used as AppKit's popover anchor.
+    pub(crate) site_controls_anchor: Option<[f32; 4]>,
+    /// Layout bounds for each Rune permission row, in `PermissionKind::index()` order.
+    #[cfg(target_os = "linux")]
+    pub(crate) permission_row_anchors: [Option<[f32; 4]>; 4],
+    /// The open permission choice menu, if any.
+    pub(crate) permission_menu: Option<PermissionKind>,
+    /// Whether the compact site overflow menu is open.
+    pub(crate) site_overflow_open: bool,
+    /// The site footer's overflow-button position for the Rune menu host.
+    #[cfg(target_os = "linux")]
+    pub(crate) site_overflow_anchor: Option<PointerPress>,
     /// Per-origin permission choices loaded from config.toml.
     pub(crate) permission_store: PermissionStore,
     pub(crate) page_menu: crate::ui::PageMenuState,
@@ -287,6 +300,13 @@ impl AppState {
             browser: Browser::default(),
             downloads_open: false,
             site_permissions_open: false,
+            site_controls_anchor: None,
+            #[cfg(target_os = "linux")]
+            permission_row_anchors: [None; 4],
+            permission_menu: None,
+            site_overflow_open: false,
+            #[cfg(target_os = "linux")]
+            site_overflow_anchor: None,
             permission_store,
             page_menu: Default::default(),
             sidebar: SidebarState::default(),
@@ -449,6 +469,9 @@ impl AppState {
     }
 
     fn navigate_destination(&mut self, url: &str) -> Result<(), crate::browser::Error> {
+        #[cfg(target_os = "macos")]
+        crate::site_popover_macos::close();
+        self.site_permissions_open = false;
         let route = InternalRoute::parse(url);
         match (
             self.omnibox.mode,
@@ -605,6 +628,10 @@ impl AppState {
             .and_then(|tab| PermissionStore::origin(&tab.url))
     }
 
+    pub(crate) fn site_control_presentation(&self) -> SiteControlPresentation {
+        SiteControlPresentation::from_state(self)
+    }
+
     /// Returns the saved decision for a request; `Prompt` means the engine must ask the user.
     pub(crate) fn permission_decision(
         &self,
@@ -647,6 +674,8 @@ impl AppState {
 
     pub(crate) fn activate(&mut self, tab: TabId) {
         self.cancel_tab_drag();
+        #[cfg(target_os = "macos")]
+        crate::site_popover_macos::close();
         self.site_permissions_open = false;
         self.page_menu = Default::default();
         self.browser.activate_tab(tab);
@@ -657,6 +686,9 @@ impl AppState {
     /// Closes the tab and opens the omnibox when the window becomes empty.
     pub(crate) fn close(&mut self, tab: TabId) {
         self.cancel_tab_drag();
+        #[cfg(target_os = "macos")]
+        crate::site_popover_macos::close();
+        self.site_permissions_open = false;
         self.page_menu = Default::default();
         if let Some(tab) = self.browser.tab(tab) {
             self.remember_closed(RecentlyClosedTab::from_tab(tab));
@@ -1105,6 +1137,17 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         .set_viewport_focus(tx.focused() == Some(VIEWPORT));
     let settling = crate::ui::settle_sidebar(state, tx);
     let polled = state.browser.poll();
+    if state.site_permissions_open
+        && let Some(active_tab) = state.browser.active_tab().map(Tab::id)
+        && polled
+            .committed
+            .iter()
+            .any(|(tab, _, _)| *tab == active_tab)
+    {
+        #[cfg(target_os = "macos")]
+        crate::site_popover_macos::close();
+        state.site_permissions_open = false;
+    }
     let switcher_changed = crate::ui::tab_switcher::reconcile(state, tx);
     state.sync_find_tab();
     for (tab, request_id, text) in &polled.find_selections {

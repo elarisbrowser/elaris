@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         _ => {}
     })?;
     browser.set_download_directory(&download_dir)?;
-    let mut view = browser.create_view(1)?;
+    let mut view = browser.create_view(1, 60.0)?;
     view.load(&file_url)?;
     view.resize(900, 650, 2.0)?;
 

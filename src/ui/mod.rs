@@ -10,7 +10,9 @@ mod icons;
 pub(crate) mod internal;
 mod omnibox;
 mod sidebar;
-mod site_permissions;
+pub(crate) mod site_control_style;
+#[cfg(target_os = "linux")]
+pub(crate) mod site_permissions;
 pub(crate) mod tab_switcher;
 mod theme;
 pub(crate) mod viewport;
@@ -116,6 +118,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     }
     viewport::menu::view(state, &theme, &mut overlays);
     sidebar::context_menu(state, &theme, &mut overlays);
+    #[cfg(target_os = "linux")]
     site_permissions::view(state, &theme, &mut overlays, reduced_motion);
     #[cfg(target_os = "linux")]
     overlays.push(sidebar::header::hover_zone());

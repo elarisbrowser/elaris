@@ -231,9 +231,12 @@ Browser, so cycling leaves the page, session, and lazy loads untouched.
 
 ### Site Permissions
 
-The site controls button beside the sidebar address launcher opens a Rune overlay shared by macOS
-and Linux. It is positioned from sidebar geometry, so it follows sidebar resizing without a
-platform-specific native popover implementation. Clicking outside or pressing Escape closes it.
+The site controls button inside the sidebar address field opens the Site Control Centre. macOS
+uses a transient AppKit `NSPopover` anchored to Rune's current button bounds; Linux renders the
+matching Rune popover in the overlay layer. Both hosts consume the same presentation data and
+permission actions, and use shared measurements with the semantic theme palette. The native host
+converts Rune's flipped logical-point bounds into the AppKit view coordinate space, and updates
+the positioning rectangle after layout changes. Clicking outside or pressing Escape closes it.
 `PermissionStore` keys overrides by normalized HTTP(S) origin; Ask removes an override, while
 Allow and Block are persisted under `[permissions."https://example.com"]` in `config.toml`.
 `AppState::permission_decision` is the request-facing boundary and returns Prompt for Ask. The

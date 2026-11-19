@@ -1,227 +1,401 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The compact site controls popover and its Rune overlay host.
+//! Site Control Centre for Linux, hosted as a Rune popover below the URL bar.
 
 use rune::tok::type_;
-use rune::{El, Spring, Transition, Tx, el, icon, row, text};
+use rune::{El, Key, KeyEvent, PointerPress, Spring, Transition, Tx, el, icon, row, text};
+use rune_kit::{MenuItem, context_menu};
 
-use crate::app::AppState;
-use crate::permissions::{PermissionKind, PermissionState, PermissionStore};
-use crate::ui::controls::icon_button;
+use crate::app::{self, AppState};
+use crate::permissions::{PermissionKind, PermissionState};
+use crate::site_controls::{SiteControlAction, SiteControlPresentation};
 use crate::ui::icons;
+use crate::ui::site_control_style as design;
 use crate::ui::theme::{self, Theme};
-
-const WIDTH: f32 = 356.0;
-const RADIUS: f32 = 20.0;
 
 pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>, reduced_motion: bool) {
     if !state.site_permissions_open {
         return;
     }
+    let presentation = SiteControlPresentation::from_state(state);
+    let anchor = state.site_controls_anchor.unwrap_or([
+        state.sidebar.width - 38.0,
+        theme::HEADER_HEIGHT + theme::FIELD_HEIGHT,
+        22.0,
+        22.0,
+    ]);
+    let x = (anchor[0] + anchor[2] / 2.0 - design::WIDTH / 2.0).max(10.0);
+    let arrow_y = anchor[1] + anchor[3] - 1.0;
+    let y = arrow_y + 8.0;
+
     layer.push(
-        el().key("site-permissions-dismiss-area")
+        el().key("site-controls-dismiss-area")
             .absolute(0.0, 0.0)
             .w_full()
             .h_full()
-            .on_press(|state: &mut AppState| state.site_permissions_open = false),
+            .on_press(|state: &mut AppState| {
+                state.site_permissions_open = false;
+                state.permission_menu = None;
+                state.site_overflow_open = false;
+            }),
     );
-
-    let x = (state.sidebar.width - 76.0).max(12.0);
-    let y = theme::HEADER_HEIGHT + theme::FIELD_HEIGHT + theme::SIDEBAR_GAP;
-    let panel = panel(state, theme, reduced_motion);
-    layer.push(panel.absolute(x, y));
+    layer.push(
+        icon(&icons::SITE_POPOVER_ARROW, design::WIDTH)
+            .key("site-controls-arrow")
+            .size(20.0, 10.0)
+            .absolute(x + design::WIDTH / 2.0 - 10.0, arrow_y)
+            .color(theme.overlay_panel),
+    );
+    layer.push(popover(state, theme, &presentation, reduced_motion).absolute(x, y));
+    permission_menu(state, theme, layer);
+    overflow_menu(state, theme, layer, &presentation);
 }
 
-fn panel(state: &AppState, theme: &Theme, reduced_motion: bool) -> El {
-    let tab = state.browser.active_tab();
-    let url = tab
-        .map(|tab| tab.url.as_str())
-        .filter(|url| !url.is_empty());
-    let origin = url.and_then(PermissionStore::origin);
-    let panel = rune::col()
-        .key("site-permissions-popover")
-        .w(WIDTH)
-        .max_h(510.0)
-        .px(12.0)
-        .py(12.0)
-        .gap(10.0)
-        .radius(RADIUS)
+fn popover(
+    state: &AppState,
+    theme: &Theme,
+    presentation: &SiteControlPresentation,
+    reduced_motion: bool,
+) -> El {
+    let mut content = rune::col()
+        .key("site-controls-popover")
+        .w(design::WIDTH)
+        .px(design::PADDING)
+        .pt(design::PADDING)
+        .pb(design::PADDING)
+        .gap(0.0)
+        .radius(design::OUTER_RADIUS)
         .continuous_corners()
         .fill(theme.overlay_panel)
-        .border(theme::OMNIBOX_BORDER_WIDTH, theme.overlay_border)
-        .shadow(10.0, 24.0, theme.overlay_shadow)
+        .border(1.0, theme.overlay_border)
+        .shadow(9.0, 22.0, theme.overlay_shadow)
         .transition(if reduced_motion {
             Transition::none()
         } else {
-            Transition::offset(0.0, -5.0).combined(Transition::opacity())
+            Transition::offset(0.0, -4.0).combined(Transition::opacity())
         })
         .token_motion(if reduced_motion {
             Spring::NONE
         } else {
             theme::OMNIBOX_MOTION
-        });
-
-    let copy = url.map(|url| {
-        let copy_url = url.to_owned();
-        icon_button("copy-page-url", "Copy page URL", &icons::COPY, 34.0, theme).on_press_tx(
-            move |state: &mut AppState, tx: &mut Tx| {
-                tx.copy(&copy_url);
-                state.site_permissions_open = false;
-            },
-        )
-    });
-    let actions = row()
-        .key("site-popover-actions")
-        .w_full()
-        .gap(7.0)
-        .child(copy.unwrap_or_else(|| {
-            icon_button("copy-page-url", "Copy page URL", &icons::COPY, 34.0, theme)
-                .disabled(true)
-                .opacity(theme.disabled_opacity)
-        }));
-
-    let mut content = panel.child(actions).child(
-        text(if origin.is_some() {
-            "Site permissions"
-        } else {
-            "This page"
         })
-        .key("site-permissions-heading")
-        .font(rune::TextStyle::new(15.0, 600.0))
-        .color(theme.text)
-        .mt(2.0),
-    );
+        .child(action_tiles(presentation, theme))
+        .child(
+            text("This site")
+                .key("site-controls-heading")
+                .font(rune::TextStyle::new(12.0, 600.0))
+                .color(theme.text)
+                .px(6.0)
+                .mt(design::SECTION_GAP)
+                .mb(4.0),
+        );
 
-    if let Some(origin) = origin.as_deref() {
-        for kind in PermissionKind::ALL {
-            content = content.child(permission_row(state, theme, origin, kind));
+    if presentation.origin.is_some() {
+        for (kind, permission) in presentation.permissions {
+            content =
+                content.child(permission_row(state, theme, kind, permission).mt(design::ROW_GAP));
         }
         content = content
-            .child(separator(theme))
-            .child(page_info(theme, url.unwrap_or_default(), origin))
-            .child(
-                text_button("Reset permissions for this site", theme)
-                    .on_press(|state: &mut AppState| state.reset_site_permissions()),
-            );
+            .child(separator(theme).mt(10.0))
+            .child(footer(theme, presentation).mt(8.0));
     } else {
-        let message = if tab.is_none() {
-            "Open a website to manage its permissions."
-        } else {
+        let message = if presentation.url.is_some() {
             "Elaris pages do not use website permissions."
+        } else {
+            "Open a website to manage its permissions."
         };
-        content = content
-            .child(
-                text(message)
-                    .font(type_::BODY)
-                    .color(theme.text_muted)
-                    .py(8.0),
-            )
-            .child(separator(theme))
-            .child(page_info(
-                theme,
-                url.unwrap_or("No page loaded"),
-                "Elaris internal page",
-            ));
+        content = content.child(
+            text(message)
+                .font(type_::BODY)
+                .color(theme.text_muted)
+                .py(6.0)
+                .mt(4.0),
+        );
     }
     content
 }
 
-fn permission_row(state: &AppState, theme: &Theme, origin: &str, kind: PermissionKind) -> El {
+fn action_tiles(presentation: &SiteControlPresentation, theme: &Theme) -> El {
+    let mut actions = row()
+        .key("site-control-actions")
+        .w_full()
+        .gap(design::ACTION_GAP);
+    for action in SiteControlAction::ALL {
+        let glyph = match action {
+            SiteControlAction::CopyUrl => &icons::COPY,
+            SiteControlAction::Reload => &icons::RELOAD,
+            SiteControlAction::DuplicateTab => &icons::DUPLICATE,
+            SiteControlAction::Settings => &icons::SITE_CONTROLS,
+        };
+        let data = presentation.clone();
+        let tile = el()
+            .key(format!("site-action-{}", action as usize))
+            .w((design::WIDTH - design::PADDING * 2.0 - design::ACTION_GAP * 3.0) / 4.0)
+            .h(design::ACTION_HEIGHT)
+            .center()
+            .radius(design::ACTION_RADIUS)
+            .fill(theme.overlay_selected)
+            .hover(theme.hover)
+            .press(theme.press)
+            .press_scale(theme::PRESS_SCALE)
+            .label(action.label())
+            .help(action.label())
+            .role("button")
+            .focusable(true)
+            .child(icon(glyph, design::GLYPH).color(theme.text))
+            .on_press_tx(move |state: &mut AppState, tx: &mut Tx| match action {
+                SiteControlAction::CopyUrl => {
+                    if let Some(url) = data.url.as_deref() {
+                        tx.copy(url);
+                    }
+                }
+                SiteControlAction::Reload => {
+                    if let Some(tab) = data.tab {
+                        state.browser.reload(tab);
+                    }
+                }
+                SiteControlAction::DuplicateTab => {
+                    if let Some(tab) = data.tab {
+                        state.duplicate(tab);
+                    }
+                }
+                SiteControlAction::Settings => app::open_settings(state, tx),
+            });
+        actions = actions.child(tile);
+    }
+    actions
+}
+
+fn permission_row(
+    _state: &AppState,
+    theme: &Theme,
+    kind: PermissionKind,
+    permission: PermissionState,
+) -> El {
     let glyph = match kind {
         PermissionKind::Microphone => &icons::MICROPHONE,
         PermissionKind::Camera => &icons::CAMERA,
         PermissionKind::Location => &icons::LOCATION,
         PermissionKind::Notifications => &icons::NOTIFICATIONS,
     };
-    let current = match state.permission_decision(origin, kind) {
-        crate::permissions::PermissionDecision::Prompt => PermissionState::Ask,
-        crate::permissions::PermissionDecision::Allow => PermissionState::Allow,
-        crate::permissions::PermissionDecision::Block => PermissionState::Block,
+    let active = permission == PermissionState::Allow;
+    let circle = if active {
+        theme.text
+    } else {
+        theme.overlay_selected
     };
+    let glyph_color = if active {
+        theme.overlay_panel
+    } else {
+        theme.text_muted
+    };
+    let label = permission_label(permission);
     let row = row()
-        .key(format!("permission-{}", kind.key()))
+        .key(format!("site-permission-{}", kind.key()))
         .w_full()
-        .h(38.0)
-        .gap(8.0)
+        .h(design::ROW_HEIGHT)
+        .px(6.0)
+        .gap(10.0)
         .center_y()
-        .child(icon(glyph, theme::ICON).color(theme.icon))
+        .radius(design::ROW_RADIUS)
+        .hover(theme.hover)
+        .press(theme.press)
         .child(
-            text(kind.label())
-                .font(type_::BODY)
-                .color(theme.text)
-                .grow(1.0),
-        );
-    let mut choices = rune::row();
-    for (permission, label) in [
+            el().size(design::ICON_CIRCLE, design::ICON_CIRCLE)
+                .center()
+                .radius(design::ICON_CIRCLE / 2.0)
+                .fill(circle)
+                .child(icon(glyph, design::ROW_GLYPH).color(glyph_color)),
+        )
+        .child(
+            rune::col()
+                .grow(1.0)
+                .gap(1.0)
+                .child(
+                    text(kind.label())
+                        .font(rune::TextStyle::new(12.5, 500.0))
+                        .color(theme.text),
+                )
+                .child(
+                    text(label)
+                        .font(rune::TextStyle::new(11.5, 400.0))
+                        .color(theme.text_muted),
+                ),
+        )
+        .role("button")
+        .label(format!("{}, {label}", kind.label()))
+        .help("Choose Ask, Allow or Block")
+        .focusable(true)
+        .on_press(move |state: &mut AppState| state.permission_menu = Some(kind))
+        .on_layout_tx(move |state: &mut AppState, rect, tx| {
+            state.permission_row_anchors[kind.index()] = Some(rect);
+            tx.live_only();
+        });
+    row
+}
+
+fn permission_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
+    let Some(kind) = state.permission_menu else {
+        return;
+    };
+    let Some(rect) = state.permission_row_anchors[kind.index()] else {
+        return;
+    };
+    let origin = state.current_permission_origin();
+    let selected = origin
+        .as_deref()
+        .map(|origin| state.permission_store.state(origin, kind));
+    let point = PointerPress {
+        x: rect[0] + rect[2] - 8.0,
+        y: rect[1] + rect[3] / 2.0,
+    };
+    let menu = context_menu("site-permission-menu", el(), Some(point))
+        .on_close(|state: &mut AppState| state.permission_menu = None);
+    let menu = [
         (PermissionState::Ask, "Ask"),
         (PermissionState::Allow, "Allow"),
         (PermissionState::Block, "Block"),
-    ] {
-        let selected = current == permission;
-        let button = text(label)
-            .font(type_::LABEL)
-            .color(if selected {
-                theme.text
-            } else {
-                theme.text_muted
-            })
-            .center()
-            .w(47.0)
-            .h(27.0)
-            .radius(8.0)
-            .fill(if selected {
-                theme.overlay_selected
-            } else {
-                theme.overlay_panel
-            })
-            .hover(theme.hover)
-            .press(theme.press)
-            .label(format!("{}: {label}", kind.label()))
-            .role("button")
-            .on_press(move |state: &mut AppState| state.set_site_permission(kind, permission));
-        choices = choices.child(button);
-    }
-    row.child(choices)
+    ]
+    .into_iter()
+    .fold(menu, |menu, (permission, label)| {
+        let label = if Some(permission) == selected {
+            format!("{label}  ✓")
+        } else {
+            label.to_owned()
+        };
+        menu.item(
+            MenuItem::new(label).on_select_tx(move |state: &mut AppState, _| {
+                state.set_site_permission(kind, permission);
+                state.permission_menu = None;
+            }),
+        )
+    });
+    menu.build(&theme.kit(theme.overlay_panel), layer);
 }
 
-fn page_info(theme: &Theme, url: &str, origin: &str) -> El {
-    let secure = url.starts_with("https://");
-    let title = if secure {
-        "Secure connection"
+fn footer(theme: &Theme, presentation: &SiteControlPresentation) -> El {
+    let secure_label = if presentation.https_scheme {
+        "HTTPS"
     } else {
-        "Not secure"
+        "HTTP"
     };
-    rune::col()
-        .key("site-page-info")
+    let connection_icon = &icons::INFO;
+    let hostname = presentation
+        .origin
+        .as_deref()
+        .and_then(|origin| origin.rsplit("//").next());
+    row()
+        .key("site-controls-footer")
         .w_full()
-        .gap(3.0)
-        .child(text(title).font(type_::LABEL).color(theme.text))
+        .h(design::FOOTER_HEIGHT)
+        .center_y()
         .child(
-            text(origin)
-                .font(type_::LABEL)
-                .color(theme.text_muted)
+            row()
+                .key("site-security-chip")
+                .h(28.0)
+                .px(10.0)
+                .gap(6.0)
+                .center_y()
+                .radius(10.0)
+                .fill(theme.overlay_selected)
+                .child(icon(connection_icon, 10.0).color(theme.text))
+                .child(
+                    text(secure_label)
+                        .font(rune::TextStyle::new(12.0, 500.0))
+                        .color(theme.text),
+                ),
+        )
+        .child(if let Some(hostname) = hostname {
+            text(hostname)
+                .grow(1.0)
+                .shrink()
                 .single_line()
-                .truncate(),
+                .truncate()
+                .font(rune::TextStyle::new(11.5, 400.0))
+                .color(theme.text_muted)
+        } else {
+            el().grow(1.0)
+        })
+        .child(
+            super::controls::icon_button(
+                "site-controls-overflow",
+                "More site actions",
+                &icons::MORE,
+                28.0,
+                theme,
+            )
+            .on_press(|state: &mut AppState| state.site_overflow_open = true)
+            .on_layout_tx(|state: &mut AppState, rect, tx| {
+                state.site_overflow_anchor = Some(PointerPress {
+                    x: rect[0] + rect[2] / 2.0,
+                    y: rect[1] + rect[3] / 2.0,
+                });
+                tx.live_only();
+            }),
         )
 }
 
+fn overflow_menu(
+    state: &AppState,
+    theme: &Theme,
+    layer: &mut Vec<El>,
+    presentation: &SiteControlPresentation,
+) {
+    let (true, Some(point)) = (state.site_overflow_open, state.site_overflow_anchor) else {
+        return;
+    };
+    let url = presentation.url.clone();
+    let menu = context_menu("site-controls-overflow-menu", el(), Some(point))
+        .on_close(|state: &mut AppState| state.site_overflow_open = false)
+        .item(MenuItem::new("Reset permissions for this site").on_select(
+            |state: &mut AppState| {
+                state.reset_site_permissions();
+                state.site_overflow_open = false;
+            },
+        ));
+    let menu = if let Some(url) = url {
+        menu.item(MenuItem::new("Copy page address").on_select_tx(
+            move |state: &mut AppState, tx: &mut Tx| {
+                tx.copy(&url);
+                state.site_overflow_open = false;
+            },
+        ))
+    } else {
+        menu
+    };
+    menu.build(&theme.kit(theme.overlay_panel), layer);
+}
+
 fn separator(theme: &Theme) -> El {
-    el().key("site-permissions-separator")
+    el().key("site-controls-separator")
         .w_full()
         .h(1.0)
         .fill(theme.overlay_border)
 }
 
-fn text_button(label: &'static str, theme: &Theme) -> El {
-    text(label)
-        .key("reset-site-permissions")
-        .font(type_::LABEL)
-        .color(theme.text_muted)
-        .px(8.0)
-        .py(6.0)
-        .radius(8.0)
-        .hover(theme.hover)
-        .press(theme.press)
-        .role("button")
-        .label(label)
+fn permission_label(permission: PermissionState) -> &'static str {
+    match permission {
+        PermissionState::Ask => "Ask",
+        PermissionState::Allow => "Allowed",
+        PermissionState::Block => "Blocked for this site",
+    }
+}
+
+pub(crate) fn escape(state: &mut AppState, event: &KeyEvent) -> bool {
+    if event.key != Key::Escape {
+        return false;
+    }
+    if state.permission_menu.is_some() {
+        state.permission_menu = None;
+        return true;
+    }
+    if state.site_overflow_open {
+        state.site_overflow_open = false;
+        return true;
+    }
+    if state.site_permissions_open {
+        state.site_permissions_open = false;
+        return true;
+    }
+    false
 }

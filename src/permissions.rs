@@ -30,6 +30,15 @@ impl PermissionKind {
         }
     }
 
+    pub(crate) fn index(self) -> usize {
+        match self {
+            Self::Microphone => 0,
+            Self::Camera => 1,
+            Self::Location => 2,
+            Self::Notifications => 3,
+        }
+    }
+
     pub(crate) fn label(self) -> &'static str {
         match self {
             Self::Microphone => "Microphone",
