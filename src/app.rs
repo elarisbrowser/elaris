@@ -144,6 +144,8 @@ impl RecentlyClosedTab {
 }
 
 pub(crate) struct AppState {
+    /// Maximum page frame rate reported by the window's current display.
+    display_refresh_rate: f64,
     pub(crate) omnibox: omnibox::State,
     /// Whether the floating Find in Page bar is mounted.
     pub(crate) find_open: bool,
@@ -194,6 +196,12 @@ impl Default for AppState {
 }
 
 impl AppState {
+    pub(crate) fn set_display_refresh_rate(&mut self, refresh_rate: f64) {
+        if refresh_rate.is_finite() && refresh_rate > 0.0 {
+            self.display_refresh_rate = refresh_rate;
+        }
+    }
+
     /// Opens the supplied page, or shows the omnibox in an empty window.
     pub(crate) fn new(start: Option<&str>) -> Self {
         #[cfg(test)]
@@ -258,6 +266,7 @@ impl AppState {
             }
         }
         let mut state = Self {
+            display_refresh_rate: 60.0,
             omnibox: omnibox::State::default(),
             find_open: false,
             tab_switcher: None,
@@ -980,7 +989,12 @@ fn start_engine(state: &mut AppState, waker: rune::Waker) {
         );
         return;
     };
-    match Engine::start(waker, profile_dir, state.engine_download_directory()) {
+    match Engine::start(
+        waker,
+        profile_dir,
+        state.engine_download_directory(),
+        state.display_refresh_rate,
+    ) {
         Ok(engine) => state.browser.connect(engine),
         Err(error) => state.browser.fail(error),
     }

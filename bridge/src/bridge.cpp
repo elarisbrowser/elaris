@@ -31,6 +31,7 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <cmath>
 #include <cstring>
 #include <deque>
 #include <map>
@@ -576,6 +577,15 @@ extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t 
         handle->bridge->callback(handle->bridge->context, &event);
     };
     *out_view = handle;
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_set_display_refresh_rate(ElarisLadybirdView* view, double refresh_rate) {
+    if (!view || !(refresh_rate > 0.0) || !std::isfinite(refresh_rate))
+        return fail("a view and positive finite display refresh rate are required");
+    if (!on_owner_thread(view->bridge))
+        return fail("display refresh rate must be set on the initialization thread");
+    view->view->set_display_metadata({}, refresh_rate, false);
     return succeed();
 }
 

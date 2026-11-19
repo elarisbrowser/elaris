@@ -212,14 +212,16 @@ impl Engine {
         notify: Notify,
         profile: std::path::PathBuf,
         download_directory: Option<std::path::PathBuf>,
+        display_refresh_rate: f64,
     ) -> Result<Self, String> {
         #[cfg(feature = "ladybird-bridge")]
-        return thread::start(notify, profile, download_directory);
+        return thread::start(notify, profile, download_directory, display_refresh_rate);
         #[cfg(not(feature = "ladybird-bridge"))]
         {
             let _ = notify;
             let _ = profile;
             let _ = download_directory;
+            let _ = display_refresh_rate;
             Err("This build has no web engine. Rebuild with --features ladybird-bridge.".to_owned())
         }
     }

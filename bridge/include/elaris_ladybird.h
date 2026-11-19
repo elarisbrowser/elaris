@@ -190,6 +190,8 @@ int32_t elaris_ladybird_cancel_download(ElarisLadybird* bridge, uint64_t downloa
 int32_t elaris_ladybird_cancel_active_downloads(ElarisLadybird* bridge);
 /* Creates a view; every event it raises carries view_id, which the host chooses. */
 int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t view_id, ElarisLadybirdView** out_view);
+/* Sets the maximum frame rate reported to pages and used by Ladybird's compositor. */
+int32_t elaris_ladybird_set_display_refresh_rate(ElarisLadybirdView* view, double refresh_rate);
 int32_t elaris_ladybird_load(ElarisLadybirdView* view, const char* url);
 int32_t elaris_ladybird_reload(ElarisLadybirdView* view);
 int32_t elaris_ladybird_stop_loading(ElarisLadybirdView* view);

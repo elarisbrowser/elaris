@@ -44,6 +44,7 @@ features = [
     "NSAnimationContext",
     "NSButton",
     "NSEvent",
+    "NSScreen",
     "NSResponder",
     "NSTrackingArea",
     "NSView",

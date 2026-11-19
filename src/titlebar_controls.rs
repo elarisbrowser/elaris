@@ -93,6 +93,26 @@ pub(crate) fn install(window: &RuneWindowHandle) {
     });
 }
 
+/// Reads the refresh rate of the screen currently displaying Rune's native window.
+pub(crate) fn refresh_rate(window: &RuneWindowHandle) -> Option<f64> {
+    window
+        .with_raw_handle(|handle| {
+            let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
+                return None;
+            };
+            // SAFETY: Rune keeps the native view alive for this callback on AppKit's thread.
+            let content = unsafe {
+                objc2_05::rc::Retained::retain(handle.ns_view.as_ptr().cast::<NSView>())
+            }?;
+            let screen = content.window()?.screen()?;
+            // SAFETY: `maximumFramesPerSecond` is queried on AppKit's main thread.
+            let hz = unsafe { screen.maximumFramesPerSecond() };
+            (hz > 0).then_some(hz as f64)
+        })
+        .ok()
+        .flatten()
+}
+
 fn hover_button_class(base: &'static AnyClass) -> Option<&'static AnyClass> {
     const PREFIX: &str = "ElarisHoverTrafficLight_";
     if base.name().starts_with(PREFIX) {

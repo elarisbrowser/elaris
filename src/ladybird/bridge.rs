@@ -123,6 +123,7 @@ unsafe extern "C" {
         view_id: u64,
         out_view: *mut *mut RawView,
     ) -> i32;
+    fn elaris_ladybird_set_display_refresh_rate(view: *mut RawView, refresh_rate: f64) -> i32;
     fn elaris_ladybird_load(view: *mut RawView, url: *const c_char) -> i32;
     fn elaris_ladybird_reload(view: *mut RawView) -> i32;
     fn elaris_ladybird_stop_loading(view: *mut RawView) -> i32;
@@ -379,12 +380,16 @@ impl Ladybird {
     }
 
     /// A new view, whose events carry `id`.
-    pub fn create_view(&mut self, id: u64) -> Result<WebView, String> {
+    pub fn create_view(&mut self, id: u64, display_refresh_rate: f64) -> Result<WebView, String> {
         let mut raw = std::ptr::null_mut();
         // SAFETY: `self.owner.raw` is a live bridge owned on this thread.
         let status = unsafe { elaris_ladybird_create_view(self.owner.raw.as_ptr(), id, &mut raw) };
         status_result(status)?;
         let raw = NonNull::new(raw).ok_or_else(|| "Ladybird returned a null view".to_owned())?;
+        // SAFETY: the view was just created and is still owned by this thread.
+        status_result(unsafe {
+            elaris_ladybird_set_display_refresh_rate(raw.as_ptr(), display_refresh_rate)
+        })?;
         Ok(WebView {
             raw,
             _owner: Rc::clone(&self.owner),

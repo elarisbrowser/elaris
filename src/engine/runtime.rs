@@ -42,12 +42,14 @@ pub(super) struct Runtime {
     native_ids_by_download: HashMap<DownloadId, u64>,
     downloads: HashMap<DownloadId, Download>,
     timing: Timing,
+    display_refresh_rate: f64,
 }
 
 impl Runtime {
     pub(super) fn start(
         profile: PathBuf,
         download_directory: Option<PathBuf>,
+        display_refresh_rate: f64,
     ) -> Result<(Self, Option<String>), String> {
         let resources = directory("ELARIS_LADYBIRD_RESOURCE_DIR", "vendor/ladybird/Base/res");
         std::fs::create_dir_all(&profile)
@@ -68,6 +70,7 @@ impl Runtime {
                 native_ids_by_download: HashMap::new(),
                 downloads: HashMap::new(),
                 timing: Timing::default(),
+                display_refresh_rate,
             },
             download_directory_error,
         ))
@@ -173,7 +176,9 @@ impl Runtime {
     }
 
     fn open(&mut self, tab: TabId, surface: Surface) -> Result<(), String> {
-        let view = self.ladybird.create_view(tab.raw())?;
+        let view = self
+            .ladybird
+            .create_view(tab.raw(), self.display_refresh_rate)?;
         self.views.insert(
             tab,
             View {

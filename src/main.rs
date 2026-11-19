@@ -75,7 +75,15 @@ fn main() {
         });
     });
     #[cfg(target_os = "macos")]
-    let app = app.on_window(titlebar_controls::install);
+    let app = {
+        let app_handle = app.handle();
+        app.on_window(move |window| {
+            titlebar_controls::install(window);
+            if let Some(refresh_rate) = titlebar_controls::refresh_rate(window) {
+                app_handle.update(move |state, _| state.set_display_refresh_rate(refresh_rate));
+            }
+        })
+    };
     app.modifier_keys()
         .on_frame_drawn(|_| perf::frame_drawn())
         .on_ime(ui::viewport::ime)
