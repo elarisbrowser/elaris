@@ -1015,10 +1015,10 @@ mod tests {
     fn favourite_rows_wrap_at_four_and_fill_the_last_row() {
         let expected = [
             vec![],
-            vec![0..1],
-            vec![0..2],
-            vec![0..3],
-            vec![0..4],
+            std::iter::once(0..1).collect(),
+            std::iter::once(0..2).collect(),
+            std::iter::once(0..3).collect(),
+            std::iter::once(0..4).collect(),
             vec![0..4, 4..5],
             vec![0..4, 4..6],
             vec![0..4, 4..7],

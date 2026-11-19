@@ -100,7 +100,7 @@ mod tests {
         assert_eq!(tall.rgba, vec![127; 320 * 180 * 4]);
 
         let mut wide = vec![0; 32 * 9 * 4];
-        for row in wide.chunks_exact_mut(32 * 4) {
+        for row in wide.as_chunks_mut::<{ 32 * 4 }>().0 {
             row[8 * 4..24 * 4].fill(127);
         }
         let wide = sample(32, 9, &wide).unwrap();
