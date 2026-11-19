@@ -58,6 +58,47 @@ fn crossing_the_threshold_starts_the_drag_without_changing_browser_order() {
 }
 
 #[test]
+fn dragging_either_group_member_moves_both_as_one_slot() {
+    let tabs = tabs(4);
+    let mut state = TabDragState::default();
+    state.set_section_rect(TabSection::Regular, [0.0, 100.0, 220.0, 220.0], &tabs);
+    for (index, tab) in tabs.iter().enumerate() {
+        let row = match index {
+            0 => 0,
+            1 | 2 => 1,
+            _ => 2,
+        };
+        state.record_tab_rect(
+            TabSection::Regular,
+            tab.id(),
+            [0.0, 100.0 + row as f32 * 38.0, 220.0, 34.0],
+        );
+    }
+    state.press_members(
+        tabs[2].id(),
+        vec![tabs[1].id(), tabs[2].id()],
+        &tabs,
+        [20.0, 155.0],
+        [10.0, 17.0],
+        [420.0, 34.0],
+    );
+    assert_eq!(
+        state.move_to(&tabs, [20.0, 240.0]),
+        MoveResult::PreviewChanged
+    );
+    assert_eq!(
+        state.preview_items(&tabs, TabSection::Regular),
+        vec![
+            PreviewItem::Tab(tabs[0].id()),
+            PreviewItem::Tab(tabs[3].id()),
+            PreviewItem::DropSlot(tabs[2].id(), true),
+        ]
+    );
+    let (_, drop) = state.end(&tabs, false);
+    assert_eq!(drop.unwrap().tabs, [tabs[1].id(), tabs[2].id()]);
+}
+
+#[test]
 fn a_single_tab_can_move_to_another_section() {
     let tabs = tabs(1);
     let mut state = TabDragState::default();

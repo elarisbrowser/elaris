@@ -398,7 +398,7 @@ fn split_tab_group(
             group = group.child(child);
         }
     }
-    tab_drag_handler(group, ids[0], ids.to_vec())
+    group
 }
 
 fn section_divider(theme: &Theme) -> El {
@@ -555,9 +555,7 @@ fn tab_row(
             })
         })
         .map_or_else(|| vec![id], |pair| pair.to_vec());
-    if !grouped {
-        row = tab_drag_handler(row, id, drag_members);
-    }
+    row = tab_drag_handler(row, id, drag_members);
     let row = row.on_layout_tx(move |state: &mut AppState, rect, tx| {
         let target_ready = state.tab_drag.record_tab_rect(section, id, rect);
         if target_ready {
@@ -680,13 +678,26 @@ fn tab_drag_handler(row: El, id: TabId, members: Vec<TabId>) -> El {
     row.on_drag(move |state: &mut AppState, drag, tx| match drag.phase {
         rune::Phase::Down => {
             super::hover::dismiss(state);
+            let group_offset =
+                if members.len() > 1 && members.get(1).is_some_and(|member| *member == id) {
+                    drag.w + 2.0
+                } else {
+                    0.0
+                };
+            let grouped = members.len() > 1;
             state.tab_drag.press_members(
                 id,
                 members.clone(),
                 state.browser.tabs(),
                 drag.window_point(),
-                [drag.start_x, drag.start_y],
-                [drag.w, drag.h],
+                [
+                    drag.start_x + group_offset,
+                    drag.start_y + if grouped { 3.0 } else { 0.0 },
+                ],
+                [
+                    if grouped { drag.w * 2.0 + 8.0 } else { drag.w },
+                    if grouped { drag.h + 6.0 } else { drag.h },
+                ],
             );
         }
         rune::Phase::Move => {
