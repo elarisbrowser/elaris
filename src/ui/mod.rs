@@ -10,6 +10,10 @@ mod icons;
 pub(crate) mod internal;
 mod omnibox;
 mod sidebar;
+mod tab_preview;
+pub(crate) use sidebar::hover::{
+    dismiss as dismiss_tab_preview, displayed as displayed_tab_preview, poll as poll_tab_preview,
+};
 pub(crate) mod site_control_style;
 #[cfg(target_os = "linux")]
 pub(crate) mod site_permissions;
@@ -46,6 +50,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         state.settings.accent_color,
     );
     let reduced_motion = cx.system_reduced_motion() || cx.is_reduced_motion();
+    state.sidebar.hover.reduced.set(reduced_motion);
     state.browser.note_scale(cx.env().scale);
     state.browser.note_dark(dark);
     let mut overlays = Vec::new();
@@ -116,6 +121,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
             window = window.child(overlay);
         }
     }
+    overlays.extend(tab_preview::view(state, cx, &theme, reduced_motion));
     viewport::menu::view(state, &theme, &mut overlays);
     sidebar::context_menu(state, &theme, &mut overlays);
     #[cfg(target_os = "linux")]

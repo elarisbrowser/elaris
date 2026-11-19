@@ -16,18 +16,26 @@ use elaris::downloads::{
 use elaris::ladybird::{Event, Frame, Ladybird, Waker, WebView};
 
 use super::frames::{FrameGate, Verdict};
-use super::{Command, DownloadAction, FindResult, Surface, TabUpdate, Update, ViewCommand};
+use super::thumbnails::{self, Sample};
+use super::{
+    Command, DownloadAction, FindResult, Surface, TabUpdate, Thumbnail, Update, ViewCommand,
+};
 use crate::perf::{self, Count, Stage};
 use crate::tab::TabId;
 
 /// How long closing keeps running Ladybird so helper processes see the views close.
 const CLOSE_GRACE: Duration = Duration::from_millis(100);
+const THUMBNAIL_INTERVAL: Duration = Duration::from_secs(1);
 
 /// One tab's view and where its frames go.
 struct View {
     view: WebView,
     surface: Surface,
     gate: FrameGate,
+    visible: bool,
+    preview_revision: u64,
+    preview_committed: bool,
+    last_thumbnail: Option<Instant>,
 }
 
 pub(super) struct Runtime {
@@ -42,6 +50,7 @@ pub(super) struct Runtime {
     native_ids_by_download: HashMap<DownloadId, u64>,
     downloads: HashMap<DownloadId, Download>,
     timing: Timing,
+    thumbnails: thumbnails::Cache,
     display_refresh_rate: f64,
 }
 
@@ -70,6 +79,7 @@ impl Runtime {
                 native_ids_by_download: HashMap::new(),
                 downloads: HashMap::new(),
                 timing: Timing::default(),
+                thumbnails: thumbnails::Cache::default(),
                 display_refresh_rate,
             },
             download_directory_error,
@@ -112,10 +122,14 @@ impl Runtime {
             Command::Open(tab, surface) => (tab, self.open(tab, surface)),
             Command::Close(tab) => {
                 self.views.remove(&tab);
+                self.thumbnails.remove(tab);
                 return None;
             }
             Command::View(tab, command) => {
                 let view = self.views.get_mut(&tab)?;
+                if command.invalidates_preview() {
+                    self.thumbnails.remove(tab);
+                }
                 (tab, apply_to_view(view, command, &mut self.timing))
             }
             Command::ColorScheme(dark) => {
@@ -185,6 +199,10 @@ impl Runtime {
                 view,
                 surface,
                 gate: FrameGate::default(),
+                visible: true,
+                preview_revision: 0,
+                preview_committed: false,
+                last_thumbnail: None,
             },
         );
         Ok(())
@@ -195,7 +213,7 @@ impl Runtime {
     pub(super) fn handle_events(&mut self) -> Vec<Update> {
         let events = std::mem::take(&mut *self.events.borrow_mut());
         let mut updates = Vec::new();
-        let mut painted: Vec<TabId> = Vec::new();
+        let mut painted: Vec<(TabId, bool)> = Vec::new();
         for (id, event) in events {
             if let Event::Download(update) = event {
                 let native_id = update.native_id();
@@ -214,9 +232,9 @@ impl Runtime {
                 continue;
             }
             let tab = TabId::from_raw(id);
-            if !self.views.contains_key(&tab) {
+            let Some(view) = self.views.get_mut(&tab) else {
                 continue;
-            }
+            };
             let update = match event {
                 Event::NewTab {
                     url,
@@ -235,8 +253,25 @@ impl Runtime {
                     continue;
                 }
                 Event::ImeCaret(rect) => TabUpdate::ImeCaret(rect),
-                Event::Navigation(url) => TabUpdate::Navigation(url),
-                Event::NavigationCommitted(url) => TabUpdate::NavigationCommitted(url),
+                Event::Navigation(_) | Event::NavigationCommitted(_) => {
+                    self.thumbnails.remove(tab);
+                    view.last_thumbnail = None;
+                    // A ready-to-paint notification earlier in this batch predates this event.
+                    if let Some((_, sample)) = painted.iter_mut().find(|(id, _)| *id == tab) {
+                        *sample = false;
+                    }
+                    match event {
+                        Event::Navigation(url) => {
+                            view.preview_committed = false;
+                            TabUpdate::Navigation(url)
+                        }
+                        Event::NavigationCommitted(url) => {
+                            view.preview_committed = true;
+                            TabUpdate::NavigationCommitted(url)
+                        }
+                        _ => unreachable!(),
+                    }
+                }
                 Event::Title(title) => TabUpdate::Title(title),
                 Event::Loading(loading) => TabUpdate::Loading(loading),
                 Event::Favicon(favicon) => TabUpdate::Favicon(favicon),
@@ -258,20 +293,35 @@ impl Runtime {
                 Event::History { back, forward } => TabUpdate::History { back, forward },
                 Event::Download(_) => unreachable!("download events are handled above"),
                 Event::ReadyToPaint => {
-                    if !painted.contains(&tab) {
-                        painted.push(tab);
+                    if let Some((_, sample)) = painted.iter_mut().find(|(id, _)| *id == tab) {
+                        *sample = view.preview_committed;
+                    } else {
+                        painted.push((tab, view.preview_committed));
                     }
                     continue;
                 }
             };
             updates.push(Update::Tab(tab, update));
         }
-        for tab in painted {
+        for (tab, sample) in painted {
             let Some(view) = self.views.get_mut(&tab) else {
                 continue;
             };
-            if let Err(error) = show_frame(view, &mut self.timing) {
-                updates.push(Update::Tab(tab, TabUpdate::Error(error)));
+            match show_frame(view, &mut self.timing, sample) {
+                Ok(Some(sample)) => {
+                    if let Some(pixels) = self.thumbnails.store(tab, sample) {
+                        updates.push(Update::Thumbnail(
+                            tab,
+                            Thumbnail {
+                                source: view.surface.preview_source.clone(),
+                                revision: view.preview_revision,
+                                pixels,
+                            },
+                        ));
+                    }
+                }
+                Ok(None) => {}
+                Err(error) => updates.push(Update::Tab(tab, TabUpdate::Error(error))),
             }
         }
         updates
@@ -339,6 +389,13 @@ fn open_download(path: &std::path::Path, reveal: bool) -> Result<(), String> {
 }
 
 fn apply_to_view(view: &mut View, command: ViewCommand, timing: &mut Timing) -> Result<(), String> {
+    if command.invalidates_preview() {
+        // Count the applied requests, rather than reading the UI's counter, which can
+        // already include commands still in flight.
+        view.preview_revision += 1;
+        view.preview_committed = false;
+        view.last_thumbnail = None;
+    }
     let web = &mut view.view;
     match command {
         ViewCommand::LoadPrepared { source, request } => web.load_prepared(source.raw(), request),
@@ -371,34 +428,53 @@ fn apply_to_view(view: &mut View, command: ViewCommand, timing: &mut Timing) -> 
             web.key_event(event)
         }
         ViewCommand::Focus(focused) => web.set_focus(focused),
-        ViewCommand::Visible(visible) => web.set_visible(visible),
+        ViewCommand::Visible(visible) => {
+            view.visible = visible;
+            web.set_visible(visible)
+        }
     }
 }
 
 /// Shows the view's newest frame in its surface if the gate lets it through.
-fn show_frame(view: &mut View, timing: &mut Timing) -> Result<(), String> {
+fn show_frame(
+    view: &mut View,
+    timing: &mut Timing,
+    sample: bool,
+) -> Result<Option<Sample>, String> {
     let Some(frame) = view.view.frame()? else {
-        return Ok(());
+        return Ok(None);
     };
     let skipped = match view.gate.check(frame.serial, frame.scale) {
         Verdict::Show { skipped } => skipped,
         Verdict::Duplicate => {
             perf::count(Count::Duplicate, 1);
-            return Ok(());
+            return Ok(None);
         }
         Verdict::Stale => {
             perf::count(Count::Stale, 1);
-            return Ok(());
+            return Ok(None);
         }
     };
     let rgba = perf::time(Stage::Copy, || view.view.copy_frame(&frame))?;
+    let thumbnail = if sample
+        && view.visible
+        && view.surface.preview_source.revision() == view.preview_revision
+        && view
+            .last_thumbnail
+            .is_none_or(|last| last.elapsed() >= THUMBNAIL_INTERVAL)
+    {
+        view.last_thumbnail = Some(Instant::now());
+        thumbnails::sample(frame.width, frame.height, &rgba)
+    } else {
+        None
+    };
     view.surface.count_frame();
     timing.shown(&frame, skipped);
     view.gate.shown(frame.serial);
     perf::time(Stage::Set, || {
         view.surface.pixels.set(frame.width, frame.height, rgba)
     });
-    Ok(())
+    Ok(thumbnail)
 }
 
 /// Development timing (`ELARIS_PERF`): the last frame shown, the oldest input not yet on screen,
@@ -450,4 +526,106 @@ fn directory(variable: &str, fallback: &str) -> PathBuf {
     std::env::var_os(variable)
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(fallback))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[ignore = "requires a built Ladybird bridge and helper processes"]
+    fn visible_views_sample_their_own_ladybird_frames() {
+        let profile =
+            std::env::temp_dir().join(format!("elaris-thumbnails-{}", std::process::id()));
+        let (mut runtime, _) = Runtime::start(profile.clone(), None, 60.0).unwrap();
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("bridge/tests/smoke.html");
+        let url = format!("file://{}", path.display());
+        let left = TabId::from_raw(1);
+        let right = TabId::from_raw(2);
+        let hidden = TabId::from_raw(3);
+        let left_surface = Surface::default();
+        let right_surface = Surface::default();
+        for (id, width, surface) in [
+            (left, 640, left_surface.clone()),
+            (right, 320, right_surface.clone()),
+            (hidden, 480, Surface::default()),
+        ] {
+            assert!(runtime.apply(Command::Open(id, surface.clone())).is_none());
+            if id == hidden {
+                assert!(
+                    runtime
+                        .apply(Command::View(id, ViewCommand::Visible(false)))
+                        .is_none()
+                );
+            }
+            assert!(
+                runtime
+                    .apply(Command::View(
+                        id,
+                        ViewCommand::Resize {
+                            width,
+                            height: 480,
+                            scale: 1.0,
+                        }
+                    ))
+                    .is_none()
+            );
+            surface.request_preview_invalidation();
+            assert!(
+                runtime
+                    .apply(Command::View(id, ViewCommand::Load(url.clone())))
+                    .is_none()
+            );
+        }
+        let until = Instant::now() + Duration::from_secs(10);
+        let mut samples = HashMap::new();
+        while samples.len() < 2 && Instant::now() < until {
+            runtime
+                .ladybird
+                .wait(Some(Duration::from_millis(100)))
+                .unwrap();
+            for update in runtime.handle_events() {
+                if let Update::Thumbnail(id, thumbnail) = update {
+                    samples.insert(id, thumbnail);
+                }
+            }
+        }
+        let dimensions = |id, surface| samples.get(&id)?.get(surface).map(|pixels| pixels.size());
+        let left_size = dimensions(left, &left_surface);
+        let right_size = dimensions(right, &right_surface);
+        assert!(dimensions(left, &right_surface).is_none());
+        assert!(dimensions(right, &left_surface).is_none());
+
+        left_surface.request_preview_invalidation();
+        assert!(dimensions(left, &left_surface).is_none());
+        assert!(
+            runtime
+                .apply(Command::View(
+                    left,
+                    ViewCommand::Load(format!("{url}?next"))
+                ))
+                .is_none()
+        );
+        let until = Instant::now() + Duration::from_secs(10);
+        let mut next = None;
+        while next.is_none() && Instant::now() < until {
+            runtime
+                .ladybird
+                .wait(Some(Duration::from_millis(100)))
+                .unwrap();
+            for update in runtime.handle_events() {
+                if let Update::Thumbnail(id, thumbnail) = update
+                    && id == left
+                {
+                    next = thumbnail.get(&left_surface).map(|pixels| pixels.size());
+                }
+            }
+        }
+        runtime.close();
+        std::fs::remove_dir_all(profile).unwrap();
+        assert!(!samples.contains_key(&hidden));
+        assert_eq!(left_size, Some((320, 180)));
+        assert_eq!(right_size, Some((320, 180)));
+        assert_eq!(next, left_size);
+    }
 }

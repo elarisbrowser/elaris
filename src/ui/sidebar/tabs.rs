@@ -326,7 +326,6 @@ fn favourite_tile(
         .press(theme.press)
         .press_scale(theme::PRESS_SCALE)
         .label(label)
-        .help(label)
         .child(
             tab_icon(tab, active, theme::FAVOURITE_ICON, theme)
                 .key(format!("favourite-icon-{}", id.raw())),
@@ -364,7 +363,7 @@ fn favourite_tile(
     if hidden {
         tile = tile.opacity(0.0).opacity_motion(rune::Anim::INSTANT);
     }
-    tile
+    super::hover::attach(tile, id)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -396,7 +395,6 @@ fn tab_row(
         close.group_opacity(0.0, 1.0)
     };
     let mut row = row_button(&format!("tab-{}", id.raw()), leading, label, color, theme)
-        .help_when_truncated(label)
         .hover_group()
         .child(close)
         .position_in_set(index + 1, count);
@@ -428,7 +426,7 @@ fn tab_row(
         row = row.opacity(0.0).opacity_motion(rune::Anim::INSTANT);
     }
     row = tab_drag_handler(row, id);
-    row.on_layout_tx(move |state: &mut AppState, rect, tx| {
+    let row = row.on_layout_tx(move |state: &mut AppState, rect, tx| {
         let target_ready = state.tab_drag.record_tab_rect(section, id, rect);
         if target_ready {
             tx.animated();
@@ -437,7 +435,8 @@ fn tab_row(
         } else {
             tx.live_only();
         }
-    })
+    });
+    super::hover::attach(row, id)
 }
 
 fn tab_icon(tab: &Tab, active: bool, size: f32, theme: &Theme) -> El {
@@ -547,13 +546,16 @@ fn dragging_single_page(state: &AppState, id: TabId) -> bool {
 
 fn tab_drag_handler(row: El, id: TabId) -> El {
     row.on_drag(move |state: &mut AppState, drag, tx| match drag.phase {
-        rune::Phase::Down => state.tab_drag.press(
-            id,
-            state.browser.tabs(),
-            drag.window_point(),
-            [drag.start_x, drag.start_y],
-            [drag.w, drag.h],
-        ),
+        rune::Phase::Down => {
+            super::hover::dismiss(state);
+            state.tab_drag.press(
+                id,
+                state.browser.tabs(),
+                drag.window_point(),
+                [drag.start_x, drag.start_y],
+                [drag.w, drag.h],
+            );
+        }
         rune::Phase::Move => {
             let result = state
                 .tab_drag

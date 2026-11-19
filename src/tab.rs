@@ -3,7 +3,7 @@
 //! A tab: its stable identity, what the interface shows about its page, and what the engine was
 //! last told about it. The browser owns every tab and is the only one to change them.
 
-use crate::engine::{FindResult, Surface, TabUpdate};
+use crate::engine::{FindResult, Surface, TabUpdate, Thumbnail};
 use crate::internal::InternalRoute;
 use rune::Pixels;
 use serde::{Deserialize, Serialize};
@@ -58,6 +58,8 @@ pub(crate) struct Tab {
     pub(crate) find: FindState,
     /// Where the engine shows the page's frames, which the viewport scales to its bounds.
     pub(crate) surface: Surface,
+    /// Weak handle to the engine's last cached preview, scoped to this surface.
+    pub(crate) thumbnail: Option<Thumbnail>,
     pub(crate) engine: Applied,
 }
 
@@ -95,6 +97,7 @@ impl Tab {
             can_go_forward: false,
             find: FindState::default(),
             surface: Surface::default(),
+            thumbnail: None,
             engine: Applied {
                 pending_load: Some(url),
                 ..Applied::default()
@@ -123,6 +126,7 @@ impl Tab {
             can_go_forward: false,
             find: FindState::default(),
             surface: Surface::default(),
+            thumbnail: None,
             engine: Default::default(),
         }
     }
@@ -156,10 +160,12 @@ impl Tab {
             }
             TabUpdate::ImeCaret(rect) => self.ime_caret = rect,
             TabUpdate::Navigation(url) => {
+                self.thumbnail = None;
                 self.url = url;
                 self.error = None;
             }
             TabUpdate::NavigationCommitted(url) => {
+                self.thumbnail = None;
                 self.url.clone_from(&url);
                 self.committed_url = url;
                 self.error = None;

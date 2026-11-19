@@ -19,6 +19,7 @@
 
 use std::cell::Cell;
 use std::fmt;
+use std::sync::Arc;
 use std::time::Instant;
 
 mod input_routing;
@@ -76,6 +77,8 @@ pub(crate) struct Polled {
     pub(crate) menu: Option<(TabId, elaris::ladybird::PageMenu)>,
     /// A visible tab showed a frame since the last poll, so it is likely animating.
     pub(crate) animating: bool,
+    /// New preview handles. Pixel updates to existing handles wake Rune directly.
+    pub(crate) thumbnails_ready: Vec<TabId>,
     /// URLs Ladybird confirmed as committed, with the title currently known for each tab.
     pub(crate) committed: Vec<(TabId, String, String)>,
     /// Titles reported for a tab's last committed URL.
@@ -554,6 +557,7 @@ impl Browser {
                 tab.committed_url.clear();
                 surface = Some(tab.surface.clone());
             }
+            tab.thumbnail = None;
             tab.url.clone_from(&url);
             tab.error = None;
             // A tab the engine has not laid out yet loads once it has.
@@ -787,6 +791,15 @@ impl Browser {
         })
     }
 
+    pub(crate) fn window_focused(&self) -> bool {
+        self.window.focused
+    }
+
+    pub(crate) fn thumbnail(&self, id: TabId) -> Option<Arc<rune::Pixels>> {
+        let tab = self.tab(id).filter(|tab| !tab.is_internal())?;
+        tab.thumbnail.as_ref()?.get(&tab.surface)
+    }
+
     pub(crate) fn set_window_focus(&mut self, focused: bool) {
         if !focused {
             self.reset_input();
@@ -881,6 +894,15 @@ impl Browser {
                         polled.changed = true;
                     }
                 }
+                Update::Thumbnail(id, thumbnail) => {
+                    if let Some(tab) = self.tab_mut(id)
+                        && !tab.is_internal()
+                        && thumbnail.get(&tab.surface).is_some()
+                    {
+                        tab.thumbnail = Some(thumbnail);
+                        polled.thumbnails_ready.push(id);
+                    }
+                }
                 Update::NewTab(source, url, request, activate) => {
                     if self.tab(source).is_some_and(|tab| !tab.is_internal())
                         && !InternalRoute::is_internal_address(&url)
@@ -961,8 +983,11 @@ impl Browser {
     /// Sends `command` to the tab's view, if the tab is open and there is an engine.
     pub(crate) fn send(&self, id: TabId, command: ViewCommand) {
         if let Some(engine) = &self.engine
-            && self.tab(id).is_some()
+            && let Some(tab) = self.tab(id)
         {
+            if command.invalidates_preview() {
+                tab.surface.request_preview_invalidation();
+            }
             engine.send(Command::View(id, command));
         }
     }
@@ -1038,6 +1063,7 @@ impl Browser {
                 && (visible || !applied.deferred_load)
                 && let Some(url) = applied.pending_load.take()
             {
+                tab.surface.request_preview_invalidation();
                 send(ViewCommand::Load(url));
             }
             let focused = active && window.focused && window.viewport_focused;
@@ -1487,6 +1513,79 @@ mod tests {
                 view(second, ViewCommand::Focus(true)),
             ]
         );
+    }
+
+    #[test]
+    fn thumbnails_follow_stable_pane_ids_and_reject_late_navigation_frames() {
+        use crate::engine::{TabUpdate, Thumbnail};
+
+        let (mut browser, fake) = ready();
+        let left = browser.open_tab("one.example").unwrap();
+        let right = browser.open_tab("two.example").unwrap();
+        browser.place_split(right, 1);
+        browser.poll();
+        sent(&fake);
+
+        let left_pixels = Arc::new(rune::Pixels::new());
+        let right_pixels = Arc::new(rune::Pixels::new());
+        let thumbnail = |browser: &Browser, id, pixels| {
+            let source = surface(browser, id).preview_source;
+            Thumbnail {
+                revision: source.revision(),
+                source,
+                pixels: Arc::downgrade(pixels),
+            }
+        };
+
+        let left_old = thumbnail(&browser, left, &left_pixels);
+        fake.updates
+            .send(Update::Thumbnail(
+                left,
+                thumbnail(&browser, left, &left_pixels),
+            ))
+            .unwrap();
+        fake.updates
+            .send(Update::Thumbnail(
+                right,
+                thumbnail(&browser, right, &right_pixels),
+            ))
+            .unwrap();
+        browser.poll();
+        assert!(Arc::ptr_eq(&browser.thumbnail(left).unwrap(), &left_pixels));
+        assert!(Arc::ptr_eq(
+            &browser.thumbnail(right).unwrap(),
+            &right_pixels
+        ));
+        assert_eq!(browser.focused_side(), 1);
+        assert!(sent(&fake).is_empty());
+
+        browser.navigate(left, "three.example").unwrap();
+        assert!(browser.thumbnail(left).is_none());
+        fake.updates
+            .send(Update::Thumbnail(left, left_old))
+            .unwrap();
+        browser.poll();
+        assert!(browser.thumbnail(left).is_none());
+        assert!(browser.thumbnail(right).is_some());
+
+        fake.updates
+            .send(Update::Thumbnail(
+                left,
+                thumbnail(&browser, left, &left_pixels),
+            ))
+            .unwrap();
+        browser.poll();
+        assert!(browser.thumbnail(left).is_some());
+        fake.updates
+            .send(Update::Tab(
+                left,
+                TabUpdate::NavigationCommitted("https://four.example".into()),
+            ))
+            .unwrap();
+        browser.poll();
+        assert!(browser.thumbnail(left).is_none());
+        browser.close_tab(right);
+        assert!(browser.thumbnail(right).is_none());
     }
 
     #[test]

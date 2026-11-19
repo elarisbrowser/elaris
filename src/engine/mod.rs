@@ -16,6 +16,8 @@ mod frames;
 mod runtime;
 #[cfg(feature = "ladybird-bridge")]
 mod thread;
+#[cfg(any(test, feature = "ladybird-bridge"))]
+mod thumbnails;
 
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -27,6 +29,8 @@ use elaris::ladybird::{Favicon, KeyEvent, MouseEvent};
 use rune::Pixels;
 
 use crate::tab::TabId;
+
+pub(crate) const THUMBNAIL_ASPECT: (u32, u32) = (16, 9);
 
 /// Wakes the UI so it reads new updates.
 pub(crate) type Notify = Arc<dyn Fn() + Send + Sync>;
@@ -42,9 +46,14 @@ pub(crate) struct Surface {
     pub(crate) pixels: Pixels,
     /// Frames shown so far, which rises while the page animates.
     frames: Arc<AtomicU64>,
+    pub(crate) preview_source: PreviewSource,
 }
 
 impl Surface {
+    pub(crate) fn request_preview_invalidation(&self) {
+        self.preview_source.0.fetch_add(1, Ordering::Relaxed);
+    }
+
     pub(crate) fn frames(&self) -> u64 {
         self.frames.load(Ordering::Relaxed)
     }
@@ -152,12 +161,26 @@ pub(crate) enum ViewCommand {
     Visible(bool),
 }
 
+impl ViewCommand {
+    pub(crate) fn invalidates_preview(&self) -> bool {
+        matches!(
+            self,
+            Self::Load(_)
+                | Self::LoadPrepared { .. }
+                | Self::Reload
+                | Self::Traverse(_)
+                | Self::OpenContext { new_tab: false, .. }
+        )
+    }
+}
+
 /// What the engine tells the browser.
 #[derive(Debug)]
 // Only the engine thread makes updates, which a build without the bridge lacks.
 #[cfg_attr(not(feature = "ladybird-bridge"), allow(dead_code))]
 pub(crate) enum Update {
     Tab(TabId, TabUpdate),
+    Thumbnail(TabId, Thumbnail),
     /// Selected page text for the find bar's guarded initial query.
     FindSelection(TabId, u64, String),
     NewTab(TabId, String, u64, bool),
@@ -169,6 +192,37 @@ pub(crate) enum Update {
     DownloadDirectoryFailed(String),
     /// The engine could not start or stopped; no tab will hear from it again.
     Failed(String),
+}
+
+/// Identifies both an engine surface and the UI navigation requests sent to it.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct PreviewSource(Arc<AtomicU64>);
+
+impl PreviewSource {
+    pub(super) fn revision(&self) -> u64 {
+        self.0.load(Ordering::Relaxed)
+    }
+
+    fn matches(&self, other: &Self, revision: u64) -> bool {
+        Arc::ptr_eq(&self.0, &other.0) && self.revision() == revision
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct Thumbnail {
+    pub(crate) source: PreviewSource,
+    pub(crate) revision: u64,
+    pub(crate) pixels: std::sync::Weak<Pixels>,
+}
+
+impl Thumbnail {
+    pub(crate) fn get(&self, surface: &Surface) -> Option<Arc<Pixels>> {
+        if self.source.matches(&surface.preview_source, self.revision) {
+            self.pixels.upgrade()
+        } else {
+            None
+        }
+    }
 }
 
 /// What one tab's view reported.

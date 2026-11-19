@@ -67,3 +67,16 @@ occasional long intervals, so the log cannot establish continuous 60 Hz motion o
 improvement. One idle process observation showed 0.0% CPU after 27 seconds. The Rune switcher
 replay reported p95 CPU frame times of 6.1 ms in light and 4.9 ms in dark over 37 frames each.
 Those are offscreen observations without a before/after comparison.
+
+## Tab hover preview verification
+
+Headless Rune tests cover the hover and dismissal delays, switching between tab sections,
+native fallback, closing and dragging tabs, Split View focus, sidebar and window resizing,
+and reduced motion. The headless Ladybird runtime smoke test checks that both visible views
+supply independent thumbnails, a hidden view supplies none, and navigation produces a fresh
+sample. With the bridge environment described in [the bridge README](../bridge/README.md), run
+`cargo test --locked --features ladybird-bridge visible_views_sample_their_own_ladybird_frames -- --ignored`.
+
+The locked Rust checks and headless Ladybird smoke tests ran on macOS. Linux x86-64 passed a
+cross-target check. Linux runtime behaviour, live responsiveness, and appearance and motion in
+native windows remain unverified.

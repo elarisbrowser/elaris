@@ -19,7 +19,7 @@ impl PageMenuState {
             self.current = Some((id, point, menu));
         }
     }
-    pub(super) fn open(&self) -> bool {
+    pub(crate) fn open(&self) -> bool {
         self.current.is_some()
     }
 }

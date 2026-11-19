@@ -244,3 +244,21 @@ Allow and Block are persisted under `[permissions."https://example.com"]` in `co
 `AppState::permission_decision` is the request-facing boundary and returns Prompt for Ask. The
 current Ladybird bridge does not expose website permission request callbacks, so these choices are
 stored and queryable but are not yet enforced by camera, microphone, location or notification APIs.
+
+### Sidebar tab hover previews
+
+The sidebar tracks dwell and dismissal deadlines by stable tab ID using Rune's window clock.
+The root overlay reads the actual row or tile bounds, including scroll position, and places an
+inert card inside the window. The overlay follows sidebar and window layout changes. Reduced
+motion keeps the dwell delays and removes the card transitions.
+
+After a committed navigation, the Ladybird engine thread samples an already copied RGBA viewport
+frame at most once per second per visible view. Each Split View pane contributes its own frames.
+Thumbnails crop to 16:9, showing the top of tall pages. The engine retains the 12 most recently
+sampled thumbnails at up to 320 × 180 pixels, for at most 2.64 MiB of cached RGBA data. Tabs and queued updates hold weak references. Rune can
+update an open preview's existing pixel handle without rebuilding the view. Hovering reads the
+cache and never requests rendering, loads or focus changes.
+
+Navigation retires the old sample, and browser-initiated requests advance a per-surface revision
+so queued thumbnails from before the request cannot be reused. Closing a view removes its cache
+entry. Native pages and tabs without a current sample display the favicon or page icon and title.

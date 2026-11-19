@@ -10,6 +10,7 @@
 
 pub(crate) mod drag;
 pub(crate) mod header;
+pub(crate) mod hover;
 pub(crate) mod resize;
 mod tabs;
 
@@ -33,6 +34,7 @@ pub(crate) struct SidebarState {
     pub(crate) settling: bool,
     /// Hidden, leaving the page the window's width.
     pub(crate) collapsed: bool,
+    pub(in crate::ui) hover: hover::Hover,
 }
 
 impl Default for SidebarState {
@@ -41,6 +43,7 @@ impl Default for SidebarState {
             width: theme::SIDEBAR_WIDTH,
             settling: false,
             collapsed: false,
+            hover: hover::Hover::default(),
         }
     }
 }

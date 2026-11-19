@@ -681,6 +681,7 @@ impl AppState {
     }
 
     pub(crate) fn activate(&mut self, tab: TabId) {
+        crate::ui::dismiss_tab_preview(self);
         self.cancel_tab_drag();
         self.browser.activate_tab(tab);
         self.refresh_active_page();
@@ -1323,7 +1324,11 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
             title
         });
     }
+    let preview_changed = crate::ui::poll_tab_preview(state, clock, tx)
+        || crate::ui::displayed_tab_preview(state)
+            .is_some_and(|id| polled.thumbnails_ready.contains(&id));
     polled.changed
+        || preview_changed
         || history_changed
         || history_page_changed
         || settling
@@ -1426,6 +1431,7 @@ pub(crate) fn omnibox_input_key(state: &mut AppState, event: &KeyEvent, tx: &mut
 pub(crate) fn on_window_focus(state: &mut AppState, focused: bool, tx: &mut Tx) {
     state.browser.set_window_focus(focused);
     if !focused {
+        crate::ui::dismiss_tab_preview(state);
         crate::ui::tab_switcher::finish(state, None, tx);
     }
     if !focused && state.cancel_tab_drag() {
