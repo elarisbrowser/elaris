@@ -93,9 +93,13 @@ pub(in crate::ui) fn allowed(state: &AppState) -> bool {
         && !state.downloads_open
 }
 
+pub(in crate::ui) fn eligible(state: &AppState, id: TabId) -> bool {
+    state.browser.active_tab().is_none_or(|tab| tab.id() != id)
+}
+
 pub(in crate::ui) fn attach(tab: El, id: TabId) -> El {
     tab.on_hover_change(move |state: &mut AppState, inside, tx| {
-        if inside && allowed(state) {
+        if inside && allowed(state) && eligible(state, id) {
             state.sidebar.hover.enter(id, tx.clock());
         } else {
             state.sidebar.hover.leave(id, tx.clock());
@@ -114,11 +118,11 @@ pub(crate) fn dismiss(state: &mut AppState) -> bool {
 }
 
 pub(crate) fn poll(state: &mut AppState, now: f64, tx: &mut Tx) -> bool {
-    let exists = |id| state.browser.tab(id).is_some();
+    let valid = |id| eligible(state, id) && state.browser.tab(id).is_some();
     let hover = &state.sidebar.hover;
     if !allowed(state)
-        || hover.shown.is_some_and(|id| !exists(id))
-        || hover.candidate.is_some_and(|id| !exists(id))
+        || hover.shown.is_some_and(|id| !valid(id))
+        || hover.candidate.is_some_and(|id| !valid(id))
     {
         return dismiss(state);
     }

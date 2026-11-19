@@ -249,7 +249,8 @@ stored and queryable but are not yet enforced by camera, microphone, location or
 
 The sidebar tracks dwell and dismissal deadlines by stable tab ID using Rune's window clock.
 The root overlay reads the actual row or tile bounds, including scroll position, and places an
-inert card inside the window. The overlay follows sidebar and window layout changes. Reduced
+inert card inside the window. The focused tab skips the preview, including in Split View. The
+overlay follows sidebar and window layout changes. Reduced
 motion keeps the dwell delays and removes the card transitions.
 
 After a committed navigation, the Ladybird engine thread samples an already copied RGBA viewport

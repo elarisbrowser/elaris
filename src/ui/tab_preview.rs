@@ -11,11 +11,11 @@ use crate::engine::THUMBNAIL_ASPECT;
 use crate::internal::{InternalPage, InternalRoute};
 use crate::tab::{Tab, TabSection};
 
-const WIDTH: f32 = 320.0;
-const MIN_WIDTH: f32 = 300.0;
-const CORNER: f32 = 16.0;
-const LABELS: f32 = 36.0;
-const PADDING: f32 = space::S3;
+const WIDTH: f32 = 266.0;
+const MIN_WIDTH: f32 = 250.0;
+const CORNER: f32 = 14.0;
+const LABELS: f32 = 34.0;
+const PADDING: f32 = space::S2;
 const EDGE: f32 = space::S3;
 const GAP: f32 = space::S2;
 
@@ -101,7 +101,7 @@ pub(super) fn view(
     reduced: bool,
 ) -> Option<El> {
     let (id, fading) = state.sidebar.hover.display()?;
-    if !hover::allowed(state) {
+    if !hover::allowed(state) || !hover::eligible(state, id) {
         return None;
     }
     let tab = state.browser.tab(id)?;
@@ -248,7 +248,7 @@ mod tests {
     #[test]
     fn hover_waits_cancels_and_switches_between_sections() {
         let (mut runtime, [regular, pinned, favourite]) = runtime(false);
-        hover(&mut runtime, regular, "tab", 0.0);
+        hover(&mut runtime, pinned, "tab", 0.0);
         runtime.frame(0.25);
         assert!(preview(&runtime).is_none());
         runtime.pointer_move(700.0, 300.0);
@@ -295,10 +295,11 @@ mod tests {
 
     #[test]
     fn resized_preview_stays_beside_the_tab_and_reduced_motion_is_instant() {
-        let (mut runtime, [regular, ..]) = runtime(true);
-        hover(&mut runtime, regular, "tab", 0.01);
+        let (mut runtime, [_, pinned, _]) = runtime(true);
+        hover(&mut runtime, pinned, "tab", 0.01);
         runtime.frame(0.42);
-        let ([before, ..], opacity) = preview(&runtime).unwrap();
+        let ([before, _, width, _], opacity) = preview(&runtime).unwrap();
+        assert_eq!(width, 266.0);
         assert_eq!(opacity, 1.0);
         runtime.update(|state, _| state.sidebar.width += 50.0);
         runtime.frame(0.01);
@@ -338,6 +339,27 @@ mod tests {
         runtime.frame(0.01);
         assert!(runtime.state.tab_drag.is_dragging());
         runtime.frame(0.50);
+        assert!(preview(&runtime).is_none());
+    }
+
+    #[test]
+    fn focused_tab_has_no_preview_in_single_or_split_view() {
+        let (mut runtime, [regular, pinned, _]) = runtime(true);
+        hover(&mut runtime, regular, "tab", 0.0);
+        runtime.frame(0.45);
+        assert!(preview(&runtime).is_none());
+
+        runtime.update(|state, _| state.browser.place_split(pinned, 1));
+        runtime.frame(0.01);
+        hover(&mut runtime, pinned, "tab", 0.0);
+        runtime.frame(0.45);
+        assert!(preview(&runtime).is_none());
+
+        hover(&mut runtime, regular, "tab", 0.0);
+        runtime.frame(0.45);
+        assert_eq!(hover::displayed(&runtime.state), Some(regular));
+        runtime.update(|state, _| state.browser.activate_tab(regular));
+        runtime.frame(0.01);
         assert!(preview(&runtime).is_none());
     }
 
