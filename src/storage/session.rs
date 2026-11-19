@@ -30,7 +30,7 @@ pub(crate) struct Session {
 pub(crate) struct SessionSplit {
     pub(crate) left: usize,
     pub(crate) right: usize,
-    /// Left pane share in ten-thousandths. The focused pane is stored in active_tab.
+    /// Left pane share in ten-thousandths. The active tab may be outside this group.
     pub(crate) ratio: u16,
 }
 
@@ -95,7 +95,6 @@ impl Session {
                     && split.right < self.tabs.len()
                     && split.left != split.right
                     && split.ratio <= 10_000
-                    && [split.left, split.right].contains(&self.active_tab)
             })
             && self.favourites.iter().all(|index| *index < self.tabs.len())
             && self.pinned.iter().all(|index| *index < self.tabs.len())

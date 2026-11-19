@@ -294,6 +294,7 @@ fn section_rows(
                     items.len(),
                     theme,
                     false,
+                    false,
                 )
             }),
             PreviewItem::SourceSlot(id) => source_placeholder(id, section, index, items.len(), 0.0),
@@ -355,6 +356,7 @@ fn split_tab_group(
     theme: &Theme,
 ) -> El {
     let active = state.browser.active_tab().map(Tab::id);
+    let selected_group = active.is_some_and(|active| ids.contains(&active));
     let mut group = row()
         .key("split-tab-group")
         .w_full()
@@ -364,12 +366,18 @@ fn split_tab_group(
         .center_y()
         .radius(theme::ROW_RADIUS)
         .continuous_corners()
-        .fill(theme.tab_active)
-        .shadow(
+        .fill(if selected_group {
+            theme.tab_active
+        } else {
+            theme.address_field
+        });
+    if selected_group {
+        group = group.shadow(
             theme::ACTIVE_SHADOW_Y,
             theme::ACTIVE_SHADOW_BLUR,
             theme.tab_active_shadow,
         );
+    }
     for (offset, id) in ids.into_iter().enumerate() {
         if let Some(tab) = state.browser.tab(id) {
             let child = tab_row(
@@ -381,6 +389,7 @@ fn split_tab_group(
                 count,
                 theme,
                 true,
+                selected_group,
             )
             .w(0.0)
             .grow(1.0)
@@ -475,6 +484,7 @@ fn tab_row(
     count: usize,
     theme: &Theme,
     grouped: bool,
+    group_active: bool,
 ) -> El {
     let id = tab.id();
     let label = tab.label();
@@ -511,7 +521,11 @@ fn tab_row(
             state.open_context_menu(Some(id), press);
         });
     if grouped {
-        row = row.fill(theme.address_field);
+        row = row.fill(if group_active {
+            theme.address_field
+        } else {
+            theme.tab_drag
+        });
     } else if active {
         row = row.fill(theme.tab_active);
     } else if state.tab_drag.is_hidden(id) {
@@ -659,7 +673,7 @@ fn source_placeholder(
 }
 
 fn dragging_single_page(state: &AppState, id: TabId) -> bool {
-    state.browser.split.is_none() && state.browser.visible_tabs()[0] == Some(id)
+    state.browser.displayed_split().is_none() && state.browser.visible_tabs()[0] == Some(id)
 }
 
 fn tab_drag_handler(row: El, id: TabId, members: Vec<TabId>) -> El {
@@ -683,14 +697,7 @@ fn tab_drag_handler(row: El, id: TabId, members: Vec<TabId>) -> El {
                 .tab_drag
                 .is_dragging()
                 .then(|| crate::ui::viewport::drop_side(state, id, drag.window_point()))
-                .flatten()
-                .map(|side| {
-                    if dragging_single_page(state, id) {
-                        1 - side
-                    } else {
-                        side
-                    }
-                });
+                .flatten();
             if state.split_preview != preview {
                 state.split_preview = preview;
                 tx.motion(theme::TAB_REORDER_MOTION);

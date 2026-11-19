@@ -53,7 +53,7 @@ pub(crate) fn view(
         .pb(theme::VIEWPORT_INSET);
     let panes = state.browser.visible_tabs();
     let preview = state.split_preview;
-    let ratio = state.browser.split.map(|split| split.ratio);
+    let ratio = state.browser.displayed_split().map(|split| split.ratio);
     let width = state.browser.content_width();
     let widths = split::widths(width, ratio.unwrap_or(0.5));
     let layout = rune::row()
@@ -175,12 +175,12 @@ fn pane_key(side: usize) -> &'static str {
 
 pub(crate) fn drop_side(state: &AppState, id: TabId, point: [f32; 2]) -> Option<usize> {
     let [_, _, w, _] = state.split_rect;
-    let boundary = state.browser.split.map_or(w / 2.0, |split| {
+    let boundary = state.browser.displayed_split().map_or(w / 2.0, |split| {
         split::widths(w, split.ratio)[0] + split::DIVIDER / 2.0
     });
     let side = split::target(state.split_rect, point, boundary)?;
     let panes = state.browser.visible_tabs();
-    if state.browser.split.is_some() {
+    if state.browser.displayed_split().is_some() {
         (panes[side] != Some(id)).then_some(side)
     } else {
         panes[0].map(|_| side)
@@ -209,7 +209,7 @@ fn divider(live: bool, theme: &Theme) -> El {
         .label("Resize split panes")
         .on_drag(|state: &mut AppState, drag, tx| {
             if drag.phase == Phase::Down {
-                if let Some(split) = state.browser.split {
+                if let Some(split) = state.browser.displayed_split() {
                     drag.data = split::widths(state.browser.content_width(), split.ratio)[0];
                 }
             } else if !drag.cancelled() {

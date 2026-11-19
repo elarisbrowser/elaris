@@ -205,7 +205,7 @@ impl Browser {
         let scale = window.scale.get();
         let panes = self.visible_tabs();
         let widths = self
-            .split
+            .displayed_split()
             .map(|split| split::widths(window.viewport[0], split.ratio));
         let input_page = self.input_page();
         let peek_id = self.peek.as_ref().map(|peek| peek.page.id());

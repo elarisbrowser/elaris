@@ -431,11 +431,11 @@ impl Browser {
         if self.tab(id).is_none() {
             return;
         }
-        let side = self.focused_side();
         if let Some(split) = &mut self.split
             && !split.panes.contains(&Some(id))
+            && split.panes.contains(&None)
         {
-            let destination = split.panes.iter().position(Option::is_none).unwrap_or(side);
+            let destination = split.panes.iter().position(Option::is_none).unwrap();
             split.panes[destination] = Some(id);
         }
         if self.active != Some(id) {
@@ -699,9 +699,10 @@ impl Browser {
     }
 
     pub(crate) fn viewport_width(&self) -> f32 {
-        self.split.map_or(self.content_width(), |split| {
-            split::widths(self.content_width(), split.ratio)[self.focused_side()]
-        })
+        self.displayed_split()
+            .map_or(self.content_width(), |split| {
+                split::widths(self.content_width(), split.ratio)[self.focused_side()]
+            })
     }
 
     pub(crate) fn window_focused(&self) -> bool {

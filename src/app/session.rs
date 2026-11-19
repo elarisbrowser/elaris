@@ -53,7 +53,6 @@ impl super::AppState {
                     restored.get(split.right).copied().flatten(),
                 )
                 && left != right
-                && (active == left || active == right)
             {
                 self.browser.split = Some(crate::browser::split::Split {
                     panes: [Some(left), Some(right)],

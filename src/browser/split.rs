@@ -32,14 +32,24 @@ pub(crate) fn target(rect: [f32; 4], point: [f32; 2], boundary: f32) -> Option<u
 
 impl Browser {
     pub(crate) fn focused_side(&self) -> usize {
-        usize::from(
-            self.split
-                .is_some_and(|split| self.active.is_some() && split.panes[1] == self.active),
-        )
+        usize::from(self.split.is_some_and(|split| {
+            split.panes.contains(&self.active) && split.panes[1] == self.active
+        }))
     }
 
     pub(crate) fn visible_tabs(&self) -> [Option<TabId>; 2] {
-        self.split.map_or([self.active, None], |split| split.panes)
+        self.split.map_or([self.active, None], |split| {
+            if split.panes.contains(&None) || split.panes.contains(&self.active) {
+                split.panes
+            } else {
+                [self.active, None]
+            }
+        })
+    }
+
+    pub(crate) fn displayed_split(&self) -> Option<Split> {
+        self.split
+            .filter(|split| split.panes.contains(&None) || split.panes.contains(&self.active))
     }
 
     pub(crate) fn begin_split(&mut self, id: TabId, side: usize) {
@@ -134,7 +144,28 @@ mod tests {
     }
 
     #[test]
-    fn swapping_replacing_and_closing_preserve_the_other_pane() {
+    fn activating_another_tab_preserves_the_split_group() {
+        let mut browser = Browser::default();
+        let left = browser.open_tab("left.example").unwrap();
+        let right = browser.open_tab("right.example").unwrap();
+        let other = browser.open_tab("other.example").unwrap();
+        browser.place_split(left, 0);
+        browser.place_split(right, 1);
+
+        browser.activate_tab(other);
+        assert_eq!(browser.visible_tabs(), [Some(other), None]);
+        assert_eq!(
+            browser.split.map(|split| split.panes),
+            Some([Some(left), Some(right)])
+        );
+
+        browser.activate_tab(right);
+        assert_eq!(browser.visible_tabs(), [Some(left), Some(right)]);
+        assert_eq!(browser.active_tab().map(|tab| tab.id()), Some(right));
+    }
+
+    #[test]
+    fn swapping_preserves_the_group_when_another_tab_is_selected() {
         let mut browser = Browser::default();
         let first = browser.open_tab("one.example").unwrap();
         let second = browser.open_tab("two.example").unwrap();
@@ -146,10 +177,13 @@ mod tests {
         browser.swap_split();
         assert_eq!(browser.focused_side(), 0);
         browser.activate_tab(third);
-        assert_eq!(browser.visible_tabs(), [Some(third), Some(second)]);
+        assert_eq!(browser.visible_tabs(), [Some(third), None]);
         assert!(browser.tab(first).is_some());
         browser.close_tab(third);
-        assert!(browser.split.is_none());
-        assert_eq!(browser.visible_tabs(), [Some(second), None]);
+        assert_eq!(
+            browser.split.map(|split| split.panes),
+            Some([Some(first), Some(second)])
+        );
+        assert_eq!(browser.visible_tabs(), [Some(first), Some(second)]);
     }
 }

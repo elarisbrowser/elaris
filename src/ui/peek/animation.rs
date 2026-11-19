@@ -91,7 +91,10 @@ impl PeekAnimation {
                 let bounds = match destination {
                     Destination::Tab => viewport,
                     Destination::Split => {
-                        let ratio = state.browser.split.map_or(0.5, |split| split.ratio);
+                        let ratio = state
+                            .browser
+                            .displayed_split()
+                            .map_or(0.5, |split| split.ratio);
                         split::pane_rects(viewport, ratio)[1]
                     }
                 };

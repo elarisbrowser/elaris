@@ -64,6 +64,30 @@ fn split_session_restores_placement_ratio_and_focused_tab() {
     assert_eq!(restored.browser.focused_side(), 1);
     assert_eq!(restored.session_snapshot(), session);
 }
+
+#[test]
+fn split_session_keeps_its_group_when_a_nonmember_tab_is_active() {
+    let mut state = AppState::new(Some("one.example"));
+    let left = state.browser.active_tab().unwrap().id();
+    let right = state.browser.open_tab("two.example").unwrap();
+    let other = state.browser.open_tab("three.example").unwrap();
+    state.browser.place_split(left, 0);
+    state.browser.place_split(right, 1);
+    state.activate(other);
+
+    let session = state.session_snapshot();
+    let mut restored = AppState::new(None);
+    restored.restore_session(&session);
+
+    assert_eq!(restored.browser.visible_tabs(), [Some(other), None]);
+    assert_eq!(
+        restored.browser.split.map(|split| split.panes),
+        Some([Some(left), Some(right)])
+    );
+    restored.activate(right);
+    assert_eq!(restored.browser.visible_tabs(), [Some(left), Some(right)]);
+}
+
 #[test]
 fn split_picker_can_cancel_and_select_an_existing_tab_by_keyboard() {
     use rune::{Env, Runtime};
