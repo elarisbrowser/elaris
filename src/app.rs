@@ -186,7 +186,6 @@ pub(crate) struct AppState {
     pub(crate) sidebar: SidebarState,
     pub(crate) split_rect: [f32; 4],
     pub(crate) split_preview: Option<usize>,
-    pub(crate) split_search: rune::TextEdit,
     pub(crate) split_selection: usize,
     pub(crate) tab_drag: crate::ui::TabDragState,
     pub(crate) settings_picker_open: bool,
@@ -318,7 +317,6 @@ impl AppState {
             sidebar: SidebarState::default(),
             split_rect: [0.0; 4],
             split_preview: None,
-            split_search: Default::default(),
             split_selection: 0,
             tab_drag: crate::ui::TabDragState::default(),
             settings_picker_open: false,
@@ -698,7 +696,6 @@ impl AppState {
         self.dismiss_find();
         self.browser.begin_split(tab, side);
         self.refresh_active_page();
-        self.split_search = Default::default();
         self.split_selection = 0;
     }
 
@@ -1351,7 +1348,7 @@ pub(crate) fn submit_omnibox(state: &mut AppState, tx: &mut Tx) {
         if state.address_error.is_none() {
             state.omnibox.close();
             let key = if state.has_split_picker() {
-                "split-tab-search"
+                crate::ui::viewport::PICKER
             } else {
                 focus_key(&state.browser)
             };
@@ -2456,7 +2453,7 @@ mod tests {
         );
         let open = |state: &mut AppState, tx: &mut Tx| {
             state.begin_split_picker(first, 1);
-            tx.focus("split-tab-search", false);
+            tx.focus(crate::ui::viewport::PICKER, false);
         };
         let key = |runtime: &mut Runtime<AppState>, key| {
             runtime.key(KeyEvent {
@@ -2475,9 +2472,7 @@ mod tests {
 
         runtime.update(open);
         runtime.frame(3.0 / 60.0);
-        key(&mut runtime, Key::Text("example".into()));
         runtime.frame(4.0 / 60.0);
-        assert_eq!(runtime.state.split_search.text, "example");
         key(&mut runtime, Key::Down);
         runtime.frame(5.0 / 60.0);
         key(&mut runtime, Key::Enter);

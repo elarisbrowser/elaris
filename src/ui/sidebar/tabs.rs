@@ -595,7 +595,7 @@ fn tab_drag_handler(row: El, id: TabId) -> El {
             if let Some(side) = side {
                 if dragging_single_page(state, id) {
                     state.begin_split_picker(id, side);
-                    tx.focus("split-tab-search", false);
+                    tx.focus(crate::ui::viewport::PICKER, false);
                 } else {
                     state.place_split_tab(id, side);
                     tx.focus(crate::ui::viewport::focus_key(&state.browser), false);
@@ -753,7 +753,7 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
                         tx.focus(crate::ui::viewport::focus_key(&state.browser), false);
                     } else {
                         state.begin_split_picker(tab, side);
-                        tx.focus("split-tab-search", false);
+                        tx.focus(crate::ui::viewport::PICKER, false);
                     }
                     tx.animated();
                     tx.motion(theme::TAB_REORDER_MOTION);

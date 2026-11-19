@@ -4,6 +4,7 @@
 
 pub(crate) mod menu;
 mod picker;
+pub(crate) use picker::PICKER;
 
 use crate::browser::{Browser, split};
 use crate::{engine::ViewCommand, tab::TabId};

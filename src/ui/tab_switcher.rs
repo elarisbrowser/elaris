@@ -13,7 +13,7 @@ use crate::ui::{VIEWPORT, icons, theme::Theme};
 
 const PANEL: &str = "quick-tab-switcher";
 const LIST: &str = "quick-tab-list";
-const ROW: f32 = 46.0;
+pub(super) const ROW: f32 = 46.0;
 const WIDTH: f32 = 384.0;
 const VISIBLE_ROWS: usize = 6;
 const MOTION: Spring = Spring::new(0.14, 0.0);
