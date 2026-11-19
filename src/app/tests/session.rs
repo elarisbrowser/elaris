@@ -154,7 +154,7 @@ fn dragging_the_current_tab_opens_a_picker_and_escape_cancels_a_preview() {
     runtime.frame(0.0);
     runtime.pointer_move(target[0], target[1]);
     runtime.frame(1.0 / 60.0);
-    assert_eq!(runtime.state.split_preview, Some(0));
+    assert_eq!(runtime.state.split_preview, Some(1));
     runtime.key(KeyEvent {
         key: Key::Escape,
         mods: Mods::default(),

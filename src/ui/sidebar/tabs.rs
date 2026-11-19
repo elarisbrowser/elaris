@@ -566,14 +566,7 @@ fn tab_drag_handler(row: El, id: TabId) -> El {
                 .tab_drag
                 .is_dragging()
                 .then(|| crate::ui::viewport::drop_side(state, id, drag.window_point()))
-                .flatten()
-                .map(|side| {
-                    if dragging_single_page(state, id) {
-                        1 - side
-                    } else {
-                        side
-                    }
-                });
+                .flatten();
             if state.split_preview != preview {
                 state.split_preview = preview;
                 tx.motion(theme::TAB_REORDER_MOTION);
