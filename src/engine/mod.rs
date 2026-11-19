@@ -185,7 +185,7 @@ pub(crate) enum Update {
     /// Selected page text for the find bar's guarded initial query.
     FindSelection(TabId, u64, String),
     NewTab(TabId, String, u64, bool),
-    Peek(TabId, String, u64),
+    Peek(TabId, String, u64, [i32; 4]),
     ContextMenu(TabId, elaris::ladybird::PageMenu),
     Clipboard(TabId, String),
     Download(DownloadId, DownloadUpdate),

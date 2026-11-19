@@ -1218,6 +1218,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         tx.focus_when_shown(crate::ui::peek::PAGE, false);
         tx.animated();
     }
+    let peek_changed = crate::ui::peek::advance(state, clock, tx);
     if state.site_permissions_open
         && let Some(active_tab) = state.browser.active_tab().map(Tab::id)
         && polled
@@ -1351,6 +1352,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         || crate::ui::displayed_tab_preview(state)
             .is_some_and(|id| polled.thumbnails_ready.contains(&id));
     polled.changed
+        || peek_changed
         || preview_changed
         || history_changed
         || history_page_changed

@@ -42,6 +42,7 @@ pub enum Event {
     Peek {
         url: String,
         request: u64,
+        bounds: [i32; 4],
     },
     /// The active document is an engine error page or its renderer crashed.
     LoadError(String),

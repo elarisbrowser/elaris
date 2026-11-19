@@ -49,6 +49,7 @@ struct RawEvent {
     current_match_index: u64,
     total_match_count: u64,
     has_total_match_count: i32,
+    link_bounds: [i32; 4],
 }
 
 #[repr(C)]
@@ -214,6 +215,7 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
             15 => Event::Peek {
                 url: text,
                 request: raw.request_id,
+                bounds: raw.link_bounds,
             },
             16 => Event::LoadError(text),
             12 => {
@@ -806,6 +808,7 @@ mod tests {
             current_match_index: 0,
             total_match_count: 0,
             has_total_match_count: 0,
+            link_bounds: [0; 4],
         };
         // SAFETY: Both pointers reference stack values that remain alive through the callback.
         unsafe {
