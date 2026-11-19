@@ -188,6 +188,30 @@ def rune_git_shim(directory: Path) -> Path:
     return shim
 
 
+def rune_dx_shim(directory: Path) -> Path:
+    """Enable Dioxus terminal shortcuts in Rune's local hot-reload server."""
+    dx = Path(os.environ.get("RUNE_DX", Path.home() / ".cargo" / "bin" / "dx"))
+    if not dx.is_file():
+        raise SystemExit(f"elaris: Dioxus CLI was not found: {dx}")
+
+    shim = directory / "dx"
+    shim.write_text(
+        "#!/usr/bin/env python3\n"
+        "import os\n"
+        "import sys\n"
+        f"real_dx = {str(dx)!r}\n"
+        "args = sys.argv[1:]\n"
+        "for index in range(len(args) - 1):\n"
+        "    if args[index:index + 2] == ['--interactive', 'false']:\n"
+        "        args[index + 1] = 'true'\n"
+        "        break\n"
+        "os.execv(real_dx, [real_dx, *args])\n",
+        encoding="utf-8",
+    )
+    shim.chmod(0o755)
+    return shim
+
+
 def hot_reload(args: argparse.Namespace) -> None:
     command = [
         rune_dev_python(),
@@ -202,9 +226,11 @@ def hot_reload(args: argparse.Namespace) -> None:
         command.extend(("--patch", pattern))
 
     original_path = os.environ.get("PATH")
+    original_dx = os.environ.get("RUNE_DX")
     with tempfile.TemporaryDirectory(prefix="elaris-rune-hot-") as directory:
         rune_git_shim(Path(directory))
         os.environ["PATH"] = os.pathsep.join(filter(None, (directory, original_path)))
+        os.environ["RUNE_DX"] = str(rune_dx_shim(Path(directory)))
         try:
             run(*command)
         except KeyboardInterrupt:
@@ -214,6 +240,10 @@ def hot_reload(args: argparse.Namespace) -> None:
                 os.environ.pop("PATH", None)
             else:
                 os.environ["PATH"] = original_path
+            if original_dx is None:
+                os.environ.pop("RUNE_DX", None)
+            else:
+                os.environ["RUNE_DX"] = original_dx
 
 
 def check(_args: argparse.Namespace) -> None:
