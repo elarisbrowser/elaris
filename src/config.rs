@@ -13,7 +13,7 @@ use crate::address::SearchEngine;
 use crate::appearance::Appearance;
 use crate::settings::{DownloadDirectory, Settings, SettingsChange, StartupMode};
 
-const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n";
+const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\nglass = true\ntint_opacity = 100\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n";
 static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -60,6 +60,18 @@ pub(crate) fn parse(contents: &str) -> Result<ConfigLoad, String> {
                 defaults.appearance
             }
         };
+    }
+    if let Some(value) = bool_value(&document, "appearance", "glass", &mut issues) {
+        settings.glass_enabled = value;
+    }
+    if let Some(value) = integer_value(&document, "appearance", "tint_opacity", &mut issues) {
+        if (0..=100).contains(&value) {
+            settings.tint_opacity = value as u8;
+        } else {
+            issues.push(format!(
+                "Invalid value for [appearance].tint_opacity: {value}; expected 0 through 100"
+            ));
+        }
     }
     if let Some(value) = string_value(&document, "search", "engine", &mut issues) {
         settings.search_engine = SearchEngine::from_config_key(&value).unwrap_or_else(|| {
@@ -121,6 +133,52 @@ fn string_value(
     }
 }
 
+fn scalar_item<'a>(
+    document: &'a DocumentMut,
+    section: &str,
+    key: &str,
+    issues: &mut Vec<String>,
+) -> Option<&'a Item> {
+    let section_item = document.get(section)?;
+    let Some(table) = section_item.as_table() else {
+        issues.push(format!("[{section}] must be a TOML table"));
+        return None;
+    };
+    table.get(key)
+}
+
+fn bool_value(
+    document: &DocumentMut,
+    section: &str,
+    key: &str,
+    issues: &mut Vec<String>,
+) -> Option<bool> {
+    let item = scalar_item(document, section, key, issues)?;
+    match item.as_bool() {
+        Some(value) => Some(value),
+        None => {
+            issues.push(format!("[{section}].{key} must be a boolean"));
+            None
+        }
+    }
+}
+
+fn integer_value(
+    document: &DocumentMut,
+    section: &str,
+    key: &str,
+    issues: &mut Vec<String>,
+) -> Option<i64> {
+    let item = scalar_item(document, section, key, issues)?;
+    match item.as_integer() {
+        Some(value) => Some(value),
+        None => {
+            issues.push(format!("[{section}].{key} must be an integer"));
+            None
+        }
+    }
+}
+
 /// Updates one known setting while preserving unrelated keys, comments and formatting.
 pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> {
     let mut document = match fs::read_to_string(path) {
@@ -162,6 +220,8 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
                 StartupMode::BlankWindow => "blank".to_owned(),
             },
         ),
+        SettingsChange::GlassEnabled(value) => ("appearance", "glass", value.to_string()),
+        SettingsChange::TintOpacity(value) => ("appearance", "tint_opacity", value.to_string()),
     };
     let item = document
         .as_table_mut()
@@ -170,7 +230,13 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
     let table = item
         .as_table_mut()
         .ok_or_else(|| format!("[{section}] must be a TOML table"))?;
-    let mut new_value = Value::from(value);
+    let mut new_value = if key == "glass" {
+        Value::from(value == "true")
+    } else if key == "tint_opacity" {
+        Value::from(value.parse::<i64>().expect("opacity is an integer"))
+    } else {
+        Value::from(value)
+    };
     if let Some(item) = table.get_mut(key) {
         if let Some(old_value) = item.as_value() {
             *new_value.decor_mut() = old_value.decor().clone();

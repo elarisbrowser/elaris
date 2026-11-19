@@ -74,10 +74,15 @@ impl Theme {
 }
 
 /// The palette for a dark or light interface.
-pub(crate) fn palette(dark: bool) -> Theme {
+pub(crate) fn palette(dark: bool, glass_enabled: bool, tint_opacity: u8) -> Theme {
+    let alpha = if glass_enabled {
+        f32::from(tint_opacity.min(100)) / 100.0
+    } else {
+        1.0
+    };
     if dark {
         Theme {
-            window: oklch(0.185, 0.004, HUE),
+            window: oklch(0.185, 0.004, HUE).alpha(alpha),
             page: oklch(0.232, 0.005, HUE),
             settings_surface: oklch(0.255, 0.006, HUE),
             text: oklch(0.955, 0.003, HUE),
@@ -104,7 +109,7 @@ pub(crate) fn palette(dark: bool) -> Theme {
         }
     } else {
         Theme {
-            window: oklch(0.947, 0.008, HUE),
+            window: oklch(0.947, 0.008, HUE).alpha(alpha),
             page: oklch(1.0, 0.0, 0.0),
             settings_surface: oklch(0.975, 0.004, HUE),
             text: oklch(0.2, 0.008, HUE),
@@ -273,7 +278,7 @@ mod tests {
     #[test]
     fn kit_labels_and_focus_are_readable_on_derived_surfaces() {
         for dark in [false, true] {
-            let theme = palette(dark);
+            let theme = palette(dark, true, 100);
             for base in [theme.settings_surface, theme.overlay_panel] {
                 let kit = theme.kit(base);
                 for surface in [kit.c.bg_base, kit.c.surface_raised, kit.c.bg_button_neutral] {
@@ -292,7 +297,7 @@ mod tests {
     #[test]
     fn chrome_contrast_in_both_appearances() {
         for dark in [false, true] {
-            let t = palette(dark);
+            let t = palette(dark, true, 100);
             for (role, base) in [
                 ("sidebar and inactive tabs", t.window),
                 ("active tabs", t.tab_active),

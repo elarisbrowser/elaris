@@ -5,7 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use rune::tok::type_;
-use rune::{El, ScrollSpec, TextStyle, col, row, text};
+use rune::{Drag, El, Phase, ScrollSpec, TextStyle, col, el, row, text};
 use rune_kit::{Button, ButtonVariant, Kit, SegmentedControl, Select, SelectAppearance};
 
 use crate::address::SearchEngine;
@@ -83,20 +83,114 @@ fn appearance_section(state: &AppState, theme: &Theme, kit: &Kit, compact: bool)
     })
     .build(kit);
 
+    let glass = rune_kit::Switch::new(state.settings.glass_enabled)
+        .label("Liquid glass background")
+        .on_toggle(|state: &mut AppState| state.set_glass_enabled(!state.settings.glass_enabled))
+        .build(kit);
+    let opacity = tint_opacity_control(state.settings.tint_opacity, theme);
     section(
         "Appearance",
         theme,
         settings_group(
-            setting_row(
-                "Theme",
-                "Choose how Elaris and webpages look.",
-                theme,
-                control,
-                compact,
-            ),
+            col()
+                .gap(12.0)
+                .child(setting_row(
+                    "Theme",
+                    "Choose how Elaris and webpages look.",
+                    theme,
+                    control,
+                    compact,
+                ))
+                .child(setting_row(
+                    "Liquid glass",
+                    "Show the tinted glass window background.",
+                    theme,
+                    glass,
+                    compact,
+                ))
+                .child(setting_row(
+                    "Tint opacity",
+                    "100% keeps the current opaque tint.",
+                    theme,
+                    opacity,
+                    compact,
+                )),
             theme,
         ),
     )
+}
+
+fn tint_opacity_control(value: u8, theme: &Theme) -> El {
+    const WIDTH: f32 = 220.0;
+    const KNOB: f32 = 16.0;
+    let value = value.min(100);
+    let fraction = f32::from(value) / 100.0;
+    let travel = WIDTH - KNOB;
+    let position = KNOB / 2.0 + fraction * travel;
+    row()
+        .gap(8.0)
+        .center_y()
+        .child(
+            el().key("tint-opacity-slider")
+                .role("slider")
+                .label("Tint opacity")
+                .range_value(f64::from(value), 0.0, 100.0)
+                .range_step(1.0)
+                .a11y_value(format!("{value}%"))
+                .size(WIDTH, 22.0)
+                .on_step(|state: &mut AppState, steps, _| {
+                    state.set_tint_opacity(
+                        (i16::from(state.settings.tint_opacity) + steps as i16).clamp(0, 100) as u8,
+                    );
+                })
+                .on_drag(
+                    move |state: &mut AppState, drag: &mut Drag, _| match drag.phase {
+                        Phase::Down => {
+                            drag.data = f32::from(state.settings.tint_opacity);
+                            state.set_tint_opacity(
+                                (((drag.x - KNOB / 2.0) / travel).clamp(0.0, 1.0) * 100.0).round()
+                                    as u8,
+                            );
+                        }
+                        Phase::Move => {
+                            state.set_tint_opacity(
+                                (((drag.x - KNOB / 2.0) / travel).clamp(0.0, 1.0) * 100.0).round()
+                                    as u8,
+                            );
+                        }
+                        Phase::Up if drag.cancelled() => {
+                            state.set_tint_opacity(drag.data.clamp(0.0, 100.0) as u8)
+                        }
+                        Phase::Up => {}
+                    },
+                )
+                .child(
+                    el().key("track")
+                        .absolute(0.0, 9.0)
+                        .size(WIDTH, 4.0)
+                        .radius(2.0)
+                        .fill(theme.control_border),
+                )
+                .child(
+                    el().key("fill")
+                        .absolute(0.0, 9.0)
+                        .size(position, 4.0)
+                        .radius(2.0)
+                        .fill(theme.focus),
+                )
+                .child(
+                    el().key("knob")
+                        .absolute(position - KNOB / 2.0, 3.0)
+                        .size(KNOB, KNOB)
+                        .radius(KNOB / 2.0)
+                        .fill(theme.icon),
+                ),
+        )
+        .child(
+            text(format!("{value}%"))
+                .font(type_::LABEL)
+                .color(theme.text),
+        )
 }
 
 fn search_section(

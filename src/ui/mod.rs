@@ -35,7 +35,11 @@ pub(crate) const FIND_INPUT: &str = "find-input";
 pub(crate) use theme::FIND_MOTION;
 pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     let dark = state.settings.appearance.is_dark(cx.system_dark());
-    let theme = theme::palette(dark);
+    let theme = theme::palette(
+        dark,
+        state.settings.glass_enabled,
+        state.settings.tint_opacity,
+    );
     let reduced_motion = cx.system_reduced_motion() || cx.is_reduced_motion();
     state.browser.note_scale(cx.env().scale);
     state.browser.note_dark(dark);

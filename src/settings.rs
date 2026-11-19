@@ -50,6 +50,8 @@ pub(crate) struct Settings {
     pub(crate) search_engine: SearchEngine,
     pub(crate) download_directory: DownloadDirectory,
     pub(crate) startup: StartupMode,
+    pub(crate) glass_enabled: bool,
+    pub(crate) tint_opacity: u8,
 }
 
 impl Default for Settings {
@@ -59,6 +61,8 @@ impl Default for Settings {
             search_engine: SearchEngine::DuckDuckGo,
             download_directory: DownloadDirectory::Default,
             startup: StartupMode::RestoreSession,
+            glass_enabled: true,
+            tint_opacity: 100,
         }
     }
 }
@@ -86,6 +90,14 @@ impl Settings {
     pub(crate) fn set_startup(&mut self, startup: StartupMode) {
         self.startup = startup;
     }
+
+    pub(crate) fn set_glass_enabled(&mut self, enabled: bool) {
+        self.glass_enabled = enabled;
+    }
+
+    pub(crate) fn set_tint_opacity(&mut self, opacity: u8) {
+        self.tint_opacity = opacity.min(100);
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -94,6 +106,8 @@ pub(crate) enum SettingsChange {
     SearchEngine(SearchEngine),
     DownloadDirectory(DownloadDirectory),
     Startup(StartupMode),
+    GlassEnabled(bool),
+    TintOpacity(u8),
 }
 
 #[cfg(test)]

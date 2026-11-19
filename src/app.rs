@@ -505,6 +505,23 @@ impl AppState {
         self.save_setting(SettingsChange::Startup(startup));
     }
 
+    pub(crate) fn set_glass_enabled(&mut self, enabled: bool) {
+        if self.settings.glass_enabled == enabled {
+            return;
+        }
+        self.settings.set_glass_enabled(enabled);
+        self.save_setting(SettingsChange::GlassEnabled(enabled));
+    }
+
+    pub(crate) fn set_tint_opacity(&mut self, opacity: u8) {
+        let opacity = opacity.min(100);
+        if self.settings.tint_opacity == opacity {
+            return;
+        }
+        self.settings.set_tint_opacity(opacity);
+        self.save_setting(SettingsChange::TintOpacity(opacity));
+    }
+
     fn save_setting(&mut self, change: SettingsChange) {
         if let Some(storage) = &self.storage
             && let Err(error) = storage.save_setting(change)
