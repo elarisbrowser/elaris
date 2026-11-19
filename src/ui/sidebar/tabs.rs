@@ -440,7 +440,7 @@ fn tab_row(
     })
 }
 
-pub(in crate::ui) fn tab_icon(tab: &Tab, active: bool, size: f32, theme: &Theme) -> El {
+fn tab_icon(tab: &Tab, active: bool, size: f32, theme: &Theme) -> El {
     let color = if active { theme.text } else { theme.text_muted };
     if let Some(favicon) = &tab.favicon {
         el().size(size, size).center().pixels(favicon)

@@ -206,5 +206,3 @@ fn appearance(current: Appearance, theme: &Theme) -> El {
         .help(format!("{label}. Click to change."))
         .on_press(|state: &mut AppState| state.set_appearance(state.settings.appearance.next()))
 }
-
-pub(super) use tabs::tab_icon;

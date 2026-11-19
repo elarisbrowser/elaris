@@ -193,15 +193,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32, reduced: bool) 
     let list_height = (switcher.candidates.len().min(VISIBLE_ROWS) as f32 * ROW)
         .min((height - 3.0 * space::S6).max(0.0));
 
-    let panel = col()
-        .key(PANEL)
-        .w_full()
-        .max_w(WIDTH)
-        .padding(space::S2)
-        .radius(radius::LG)
-        .continuous_corners()
-        .fill(theme.overlay_panel)
-        .border(1.0, theme.overlay_border)
+    let panel = tab_panel(PANEL, theme)
         .shadow(8.0, 26.0, theme.overlay_shadow)
         .focusable(true)
         .role("listbox")
@@ -252,8 +244,33 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32, reduced: bool) 
     )
 }
 
+pub(super) fn tab_panel(key: &str, theme: &Theme) -> El {
+    col()
+        .key(key)
+        .w_full()
+        .max_w(WIDTH)
+        .padding(space::S2)
+        .radius(radius::LG)
+        .continuous_corners()
+        .fill(theme.overlay_panel)
+        .border(1.0, theme.overlay_border)
+}
+
 fn entry(tab: &Tab, selected: bool, theme: &Theme) -> El {
     let id = tab.id();
+    tab_entry(entry_key(id), tab, selected, theme)
+        .on_pointer_move_local(move |state: &mut AppState, _, tx| {
+            if let Some(switcher) = &mut state.tab_switcher
+                && switcher.selected != id
+            {
+                switcher.selected = id;
+                animate(tx);
+            }
+        })
+        .on_press_tx(move |state: &mut AppState, tx| finish(state, Some(id), tx))
+}
+
+pub(super) fn tab_entry(key: String, tab: &Tab, selected: bool, theme: &Theme) -> El {
     let address = if tab.is_internal() {
         &tab.url
     } else {
@@ -295,7 +312,7 @@ fn entry(tab: &Tab, selected: bool, theme: &Theme) -> El {
         );
     }
     row()
-        .key(entry_key(id))
+        .key(key)
         .w_full()
         .h(ROW)
         .min_h(ROW)
@@ -309,15 +326,6 @@ fn entry(tab: &Tab, selected: bool, theme: &Theme) -> El {
             title.to_owned()
         })
         .preserve_focus_on_press(true)
-        .on_pointer_move_local(move |state: &mut AppState, _, tx| {
-            if let Some(switcher) = &mut state.tab_switcher
-                && switcher.selected != id
-            {
-                switcher.selected = id;
-                animate(tx);
-            }
-        })
-        .on_press_tx(move |state: &mut AppState, tx| finish(state, Some(id), tx))
         .child(symbol)
         .child(labels)
 }

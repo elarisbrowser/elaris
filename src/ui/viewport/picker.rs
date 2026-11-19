@@ -2,7 +2,7 @@
 
 use rune::{
     El, Key, ScrollSpec, col, row, text, text_input,
-    tok::{space, type_},
+    tok::{radius, space, type_},
 };
 
 use super::focus_key;
@@ -10,7 +10,7 @@ use crate::{
     app::AppState,
     tab::{Tab, TabSection},
     ui::{
-        sidebar::tab_icon,
+        tab_switcher::{tab_entry, tab_panel},
         theme::{self, Theme},
     },
 };
@@ -51,63 +51,36 @@ pub(super) fn view(state: &AppState, theme: &Theme, side: usize) -> El {
                 TabSection::Pinned => "Pinned Tabs",
                 TabSection::Regular => "Tabs",
             };
-            list = list.child(text(name).font(type_::LABEL).color(theme.text_muted));
+            list = list.child(
+                text(name)
+                    .font(type_::LABEL)
+                    .color(theme.text_muted)
+                    .px(space::S3)
+                    .pt(space::S2)
+                    .pb(space::S1),
+            );
         }
         let id = tab.id();
         let selected = state.split_selection == index;
-        list = list.child(
-            row()
-                .key(format!("split-choice-{}", id.raw()))
-                .w_full()
-                .px(space::S2)
-                .py(space::S1)
-                .gap(space::S2)
-                .center_y()
-                .radius(theme::FIELD_RADIUS)
-                .fill(if selected {
-                    theme.selection
-                } else {
-                    theme.page
-                })
-                .child(tab_icon(tab, selected, theme::FAVOURITE_ICON, theme))
-                .child(
-                    col()
-                        .min_w(0.0)
-                        .grow(1.0)
-                        .child(
-                            text(if tab.title.is_empty() {
-                                &tab.url
-                            } else {
-                                &tab.title
-                            })
-                            .color(theme.text)
-                            .single_line()
-                            .truncate(),
-                        )
-                        .child(
-                            text(crate::address::compact_address(&tab.url))
-                                .font(type_::LABEL)
-                                .color(theme.text_muted)
-                                .single_line()
-                                .truncate(),
-                        ),
-                )
-                .on_press_tx(move |state: &mut AppState, tx| {
-                    state.place_split_tab(id, side);
-                    tx.focus(focus_key(&state.browser), false);
-                }),
-        );
+        let entry = tab_entry(format!("split-choice-{}", id.raw()), tab, selected, theme)
+            .radius(radius::MD)
+            .on_pointer_move_local(move |state: &mut AppState, _, _| {
+                state.split_selection = index;
+            });
+        let entry = if selected {
+            entry.fill(theme.overlay_selected)
+        } else {
+            entry
+        };
+        list = list.child(entry.on_press_tx(move |state: &mut AppState, tx| {
+            state.place_split_tab(id, side);
+            tx.focus(focus_key(&state.browser), false);
+        }));
     }
-    col()
-        .key("split-tab-picker")
-        .w_full()
+    let panel = tab_panel("split-tab-picker", theme)
         .h_full()
-        .px(space::S3)
-        .py(space::S3)
+        .max_h(7.0 * theme::ROW_HEIGHT + 2.0 * theme::OMNIBOX_INPUT_HEIGHT)
         .gap(space::S2)
-        .fill(theme.page)
-        .clip_rounded(theme::VIEWPORT_RADIUS)
-        .child(text("Choose a tab").font(type_::LABEL).color(theme.text))
         .child(
             text_input(&state.split_search, theme::OMNIBOX_INPUT_TEXT)
                 .key(SEARCH)
@@ -117,7 +90,7 @@ pub(super) fn view(state: &AppState, theme: &Theme, side: usize) -> El {
                 .color(theme.text)
                 .fill(theme.address_field)
                 .radius(theme::FIELD_RADIUS)
-                .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
+                .focus_ring(1.0, 0.0, theme.overlay_border)
                 .caret(theme.text, theme.selection)
                 .placeholder("Search tabs", theme.text_muted)
                 .label("Search tabs")
@@ -162,18 +135,37 @@ pub(super) fn view(state: &AppState, theme: &Theme, side: usize) -> El {
         .child(list)
         .child(
             row()
-                .gap(space::S3)
+                .gap(space::S2)
                 .child(
                     text("New Tab")
+                        .font(type_::LABEL)
                         .color(theme.text)
+                        .px(space::S3)
+                        .py(space::S2)
+                        .radius(radius::MD)
+                        .hover(theme.hover)
                         .on_press_tx(crate::app::new_tab),
                 )
-                .child(text("Cancel").color(theme.text_muted).on_press_tx(
-                    |state: &mut AppState, tx| {
-                        state.browser.exit_split(None);
-                        tx.focus(focus_key(&state.browser), false);
-                        tx.animated();
-                    },
-                )),
-        )
+                .child(
+                    text("Cancel")
+                        .font(type_::LABEL)
+                        .color(theme.text_muted)
+                        .px(space::S3)
+                        .py(space::S2)
+                        .radius(radius::MD)
+                        .hover(theme.hover)
+                        .on_press_tx(|state: &mut AppState, tx| {
+                            state.browser.exit_split(None);
+                            tx.focus(focus_key(&state.browser), false);
+                            tx.animated();
+                        }),
+                ),
+        );
+    col()
+        .w_full()
+        .h_full()
+        .min_w(0.0)
+        .padding(space::S3)
+        .center()
+        .child(panel)
 }

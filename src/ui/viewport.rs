@@ -81,7 +81,22 @@ pub(crate) fn view(
             // The surface stays on the tab's keyed container when the input region changes sides.
             pane = pane.pixels(&tab.surface.pixels);
         }
-        pane.child(child)
+        pane = pane.child(child);
+        if ratio.is_some()
+            && id.is_some()
+            && id == state.browser.active_tab().map(crate::tab::Tab::id)
+        {
+            pane = pane.child(
+                el().key("focused-pane-border")
+                    .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                    .radius(theme::VIEWPORT_RADIUS)
+                    .continuous_corners()
+                    .border(1.0, theme.overlay_border)
+                    .inert()
+                    .a11y_hidden(),
+            );
+        }
+        pane
     };
     let preview_pane = || wrap(None, 1.0, indicator(theme));
     if ratio.is_none() {
@@ -268,8 +283,6 @@ fn page(
     }
     let mut page = page.w_full().h_full();
     page = page
-        .continuous_corners()
-        .clip_rounded(theme::VIEWPORT_RADIUS)
         .focusable(true)
         .no_focus_ring()
         .label("Web page")
@@ -352,10 +365,6 @@ fn page(
                 && !internal
                 && state.browser.key(key, false, false, tx.physical_key())
         });
-
-    if state.browser.split.is_some() && focused {
-        page = page.border(theme::FOCUS_WIDTH, theme.focus);
-    }
 
     #[cfg(not(feature = "ladybird-bridge"))]
     let page = page.child(ui_only_badge(theme));
