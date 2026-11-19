@@ -58,7 +58,17 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         if !state.sidebar.collapsed {
             content = content.child(sidebar::resize::handle(state.sidebar.width));
         }
-        let window = col().key("window").w_full().h_full().fill(theme.window);
+        let mut window = col().key("window").w_full().h_full().fill(theme.window);
+        if state.settings.glass_enabled {
+            window = window.system_material(SystemMaterial::Glass).child(
+                rune::el()
+                    .key("window-tint")
+                    .absolute(0.0, 0.0)
+                    .w_full()
+                    .h_full()
+                    .fill(theme.window),
+            );
+        }
         window
             .child(sidebar::header::view(state, &theme, cx))
             .child(content)
@@ -67,6 +77,16 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     let mut window = {
         // The header and resize handle sit over the sidebar and page on macOS.
         let mut window = row().key("window").w_full().h_full().fill(theme.window);
+        if state.settings.glass_enabled {
+            window = window.system_material(SystemMaterial::Glass).child(
+                rune::el()
+                    .key("window-tint")
+                    .absolute(0.0, 0.0)
+                    .w_full()
+                    .h_full()
+                    .fill(theme.window),
+            );
+        }
         window = window
             .child(sidebar::view(state, &theme, &mut overlays, reduced_motion))
             .child(viewport::view(state, &theme, &mut overlays, reduced_motion))
@@ -76,9 +96,6 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         }
         window
     };
-    if state.settings.glass_enabled {
-        window = window.system_material(SystemMaterial::Glass);
-    }
     if state.tab_switcher.is_none() {
         if let Some(find) = find::view(state, &theme, reduced_motion, viewport::page_origin(state))
         {
