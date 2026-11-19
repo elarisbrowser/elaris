@@ -185,6 +185,7 @@ pub(crate) struct AppState {
     pub(crate) page_menu: crate::ui::PageMenuState,
     pub(crate) sidebar: SidebarState,
     pub(crate) split_rect: [f32; 4],
+    pub(crate) peek_animation: Option<crate::ui::peek::PeekAnimation>,
     pub(crate) split_preview: Option<usize>,
     pub(crate) split_selection: usize,
     pub(crate) tab_drag: crate::ui::TabDragState,
@@ -316,6 +317,7 @@ impl AppState {
             page_menu: Default::default(),
             sidebar: SidebarState::default(),
             split_rect: [0.0; 4],
+            peek_animation: None,
             split_preview: None,
             split_selection: 0,
             tab_drag: crate::ui::TabDragState::default(),
@@ -1213,6 +1215,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         .as_ref()
         .is_some_and(|peek| Some(peek.page.id()) != previous_peek)
     {
+        state.peek_animation = None;
         state.page_menu = Default::default();
         crate::ui::dismiss_tab_preview(state);
         tx.focus_when_shown(crate::ui::peek::PAGE, false);
