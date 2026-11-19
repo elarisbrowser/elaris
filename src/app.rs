@@ -19,6 +19,7 @@ use crate::internal::{InternalPage, InternalRoute};
 use crate::omnibox::{self, Action, Suggestion};
 use crate::permissions::{PermissionDecision, PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{DownloadDirectory, Settings, SettingsChange, StartupMode};
+#[cfg(target_os = "macos")]
 use crate::site_controls::SiteControlPresentation;
 use crate::storage;
 use crate::storage::{Session, SessionTab, Storage};
@@ -149,6 +150,7 @@ impl RecentlyClosedTab {
 
 pub(crate) struct AppState {
     /// Maximum page frame rate reported by the window's current display.
+    #[cfg(any(target_os = "macos", feature = "ladybird-bridge"))]
     display_refresh_rate: f64,
     pub(crate) omnibox: omnibox::State,
     /// Whether the floating Find in Page bar is mounted.
@@ -220,6 +222,7 @@ impl Default for AppState {
 }
 
 impl AppState {
+    #[cfg(target_os = "macos")]
     pub(crate) fn set_display_refresh_rate(&mut self, refresh_rate: f64) {
         if refresh_rate.is_finite() && refresh_rate > 0.0 {
             self.display_refresh_rate = refresh_rate;
@@ -294,6 +297,7 @@ impl AppState {
             }
         }
         let mut state = Self {
+            #[cfg(any(target_os = "macos", feature = "ladybird-bridge"))]
             display_refresh_rate: 60.0,
             omnibox: omnibox::State::default(),
             find_open: false,
@@ -638,6 +642,7 @@ impl AppState {
             .and_then(|tab| PermissionStore::origin(&tab.url))
     }
 
+    #[cfg(target_os = "macos")]
     pub(crate) fn site_control_presentation(&self) -> SiteControlPresentation {
         SiteControlPresentation::from_state(self)
     }

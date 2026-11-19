@@ -125,11 +125,6 @@ pub(crate) static DUPLICATE: Icon = icon(
     r#"<rect x="2.75" y="3.75" width="7" height="7" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6.25 2.75H11.25A1.5 1.5 0 0 1 12.75 4.25V9.25" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M6.5 12.75H11.25A1.5 1.5 0 0 0 12.75 11.25V6.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>"#,
 );
 #[cfg(target_os = "linux")]
-pub(crate) static LOCK: Icon = icon(
-    "lock",
-    r#"<rect x="3.25" y="6.75" width="9.5" height="6.25" rx="1.75" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M5.5 6.75V5A2.5 2.5 0 0 1 10.5 5V6.75" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>"#,
-);
-#[cfg(target_os = "linux")]
 pub(crate) static INFO: Icon = icon(
     "info",
     r#"<circle cx="8" cy="8" r="5.75" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 7.25V10.5M8 5.25H8.01" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>"#,

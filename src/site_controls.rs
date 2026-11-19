@@ -32,6 +32,7 @@ impl SiteControlAction {
         }
     }
 
+    #[cfg(target_os = "macos")]
     pub(crate) fn symbol(self) -> &'static str {
         match self {
             Self::CopyUrl => "doc.on.doc",

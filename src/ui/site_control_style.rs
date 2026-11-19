@@ -2,6 +2,7 @@
 
 //! Shared dimensions and semantic colours for the Site Control Centre hosts.
 
+#[cfg(any(target_os = "macos", test))]
 use rune::Color;
 
 #[cfg(target_os = "macos")]
@@ -22,14 +23,22 @@ pub(crate) const ROW_GAP: f32 = 2.0;
 pub(crate) const SECTION_GAP: f32 = 12.0;
 pub(crate) const FOOTER_HEIGHT: f32 = 28.0;
 
+#[cfg(target_os = "macos")]
 pub(crate) const HEADING_HEIGHT: f32 = 15.0;
+#[cfg(target_os = "macos")]
 pub(crate) const HEADING_TOP: f32 = PADDING + ACTION_HEIGHT + SECTION_GAP;
+#[cfg(target_os = "macos")]
 pub(crate) const ROWS_TOP: f32 = HEADING_TOP + HEADING_HEIGHT + 4.0;
+#[cfg(target_os = "macos")]
 pub(crate) const PERMISSION_COUNT: f32 = 4.0;
+#[cfg(target_os = "macos")]
 pub(crate) const SEPARATOR_TOP: f32 =
     ROWS_TOP + PERMISSION_COUNT * ROW_HEIGHT + (PERMISSION_COUNT - 1.0) * ROW_GAP + 8.0;
+#[cfg(target_os = "macos")]
 pub(crate) const FOOTER_TOP: f32 = SEPARATOR_TOP + 7.0;
+#[cfg(target_os = "macos")]
 pub(crate) const HEIGHT: f32 = FOOTER_TOP + FOOTER_HEIGHT + PADDING;
+#[cfg(target_os = "macos")]
 pub(crate) const INTERNAL_HEIGHT: f32 = HEADING_TOP + HEADING_HEIGHT + 4.0 + 36.0 + PADDING;
 
 #[derive(Clone, Copy)]

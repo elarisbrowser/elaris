@@ -13,7 +13,7 @@ use crate::ui::theme::{self, Theme};
 use super::menus::permission_label;
 
 pub(super) fn popover(
-    state: &AppState,
+    _state: &AppState,
     theme: &Theme,
     presentation: &SiteControlPresentation,
     reduced_motion: bool,
@@ -146,7 +146,7 @@ fn permission_row(theme: &Theme, kind: PermissionKind, permission: PermissionSta
         theme.text_muted
     };
     let label = permission_label(permission);
-    let row = row()
+    row()
         .key(format!("site-permission-{}", kind.key()))
         .w_full()
         .h(design::ROW_HEIGHT)
@@ -186,8 +186,7 @@ fn permission_row(theme: &Theme, kind: PermissionKind, permission: PermissionSta
         .on_layout_tx(move |state: &mut AppState, rect, tx| {
             state.permission_row_anchors[kind.index()] = Some(rect);
             tx.live_only();
-        });
-    row
+        })
 }
 
 fn footer(theme: &Theme, presentation: &SiteControlPresentation) -> El {
