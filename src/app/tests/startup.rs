@@ -1,0 +1,48 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
+use super::*;
+use crate::omnibox;
+use rune::Mods;
+
+#[test]
+fn starts_with_an_empty_window_without_an_about_blank_tab() {
+    let state = AppState::new(None);
+    assert!(state.browser.tabs().is_empty());
+    assert!(!state.omnibox.open);
+    assert_eq!(state.omnibox.input.text, "");
+    assert_eq!(state.address_error, None);
+}
+#[test]
+fn blank_window_startup_does_not_create_a_web_tab() {
+    let mut state = AppState::new(None);
+    state.settings.set_startup(StartupMode::BlankWindow);
+    state.open_start_page(None, None);
+    assert!(state.browser.tabs().is_empty());
+    assert!(!state.omnibox.open);
+}
+#[test]
+fn reduced_motion_centers_the_resized_omnibox_immediately() {
+    let mut state = AppState::new(None);
+    state.open_omnibox(omnibox::Mode::New);
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::ui::view,
+        (960.0, 640.0),
+        rune::Env::new(false, 1.0),
+    );
+    runtime.set_system_reduced_motion(true);
+    runtime.frame(0.0);
+    runtime.key(KeyEvent {
+        key: Key::Text("x".into()),
+        mods: Mods::default(),
+    });
+    runtime.frame(1.0 / 60.0);
+    let panel = runtime
+        .elements()
+        .into_iter()
+        .find(|el| el.key.as_deref() == Some("omnibox-panel"))
+        .unwrap();
+    assert_eq!(panel.rect, panel.target);
+    let [x, y, width, height] = panel.rect;
+    assert_eq!((x + width / 2.0, y + height / 2.0), (480.0, 320.0));
+}
