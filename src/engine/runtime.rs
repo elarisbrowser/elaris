@@ -99,7 +99,12 @@ impl Runtime {
     /// Applies `command`, returning the error to report if it failed. Commands for a tab that
     /// has closed are dropped: the browser may have sent them before it closed the tab.
     pub(super) fn apply(&mut self, command: Command) -> Option<Update> {
-        match command {
+        let report_surfaces = perf::enabled()
+            && matches!(
+                command,
+                Command::Open(..) | Command::Close(_) | Command::View(_, ViewCommand::Visible(_))
+            );
+        let update = match command {
             Command::StartDownload(id, request) => self
                 .start_download(id, request)
                 .err()
@@ -114,7 +119,31 @@ impl Runtime {
                     .map(Update::DownloadDirectoryFailed)
             }
             other => self.apply_tab_command(other),
+        };
+        if report_surfaces {
+            self.report_surfaces();
         }
+        update
+    }
+
+    fn report_surfaces(&self) {
+        let mut visible = 0;
+        let mut visible_rgba_bytes = 0;
+        let mut hidden_rgba_bytes = 0;
+        for view in self.views.values() {
+            let (width, height) = view.surface.pixels.size();
+            let bytes = u64::from(width) * u64::from(height) * 4;
+            if view.visible {
+                visible += 1;
+                visible_rgba_bytes += bytes;
+            } else {
+                hidden_rgba_bytes += bytes;
+            }
+        }
+        let hidden = self.views.len() - visible;
+        eprintln!(
+            "[perf surfaces] visible={visible} hidden={hidden} visible_rgba_bytes={visible_rgba_bytes} hidden_rgba_bytes={hidden_rgba_bytes}"
+        );
     }
 
     fn apply_tab_command(&mut self, command: Command) -> Option<Update> {
@@ -308,10 +337,12 @@ impl Runtime {
             };
             updates.push(Update::Tab(tab, update));
         }
+        let mut surface_size_changed = false;
         for (tab, sample) in painted {
             let Some(view) = self.views.get_mut(&tab) else {
                 continue;
             };
+            let previous_size = perf::enabled().then(|| view.surface.pixels.size());
             match show_frame(view, &mut self.timing, sample) {
                 Ok(Some(sample)) => {
                     if let Some(pixels) = self.thumbnails.store(tab, sample) {
@@ -328,6 +359,11 @@ impl Runtime {
                 Ok(None) => {}
                 Err(error) => updates.push(Update::Tab(tab, TabUpdate::Error(error))),
             }
+            surface_size_changed |=
+                previous_size.is_some_and(|size| size != view.surface.pixels.size());
+        }
+        if surface_size_changed {
+            self.report_surfaces();
         }
         updates
     }

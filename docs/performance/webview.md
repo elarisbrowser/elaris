@@ -143,3 +143,5 @@ processes left, five runs out of five.
 - Elastic overscroll: it needs a real touchpad, so it is enabled but unmeasured.
 - Comparison with Ladybird's own browser.
 - Linux.
+
+See the [memory audit](memory-audit.md) for process RSS and retained frame payload measurements.

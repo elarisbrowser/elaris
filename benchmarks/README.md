@@ -22,3 +22,50 @@ Real sites are worth checking too, by scrolling them with a touchpad. `https://s
 Next.js site) was used for the measurements in the performance notes.
 
 Keep the window in front while measuring: Rune stops drawing a covered window.
+
+## Memory audit
+
+Run with an isolated data directory so restored tabs and browsing data do not affect the baseline.
+
+```sh
+audit_dir=$(mktemp -d)
+ELARIS_DATA_DIR="$audit_dir/profile" ELARIS_PERF=1 \
+  ./elaris run "file://$PWD/benchmarks/idle.html" 2>"$audit_dir/perf.log"
+```
+
+In a second terminal, find the actual Elaris PID with `ps -ax -o pid,ppid,comm`.
+Use the PID of the Elaris binary, excluding the launcher and Cargo. Set `audit_dir`
+to the path created above and `elaris_pid` to that PID. Sample each phase into its own CSV.
+
+```sh
+python3 benchmarks/sample-processes.py "$elaris_pid" idle_1 \
+  >"$audit_dir/idle_1.csv"
+```
+
+Keep the window size, display scale, and refresh rate fixed. Record them alongside the
+Elaris commit, OS, and build profile. Allow ten seconds to settle before sampling each
+steady state. Use the same address for each idle tab, open each in the foreground, and
+wait for its first frame before opening the next. Repeat the sequence in a fresh profile.
+
+| Phase | Procedure |
+|---|---|
+| `idle_1` | Sample one loaded idle page. |
+| `idle_10`, `idle_20` | Sample at ten and twenty loaded idle pages. |
+| `switch` | Start sampling, then cycle through ten loaded tabs, one per second. |
+| `after_close` | Close ten loaded tabs and sample once settled. Compare with the earlier ten-tab sample. |
+| `split_before`, `split_active`, `split_after` | In a fresh run, load the CSS and JS animation pages. Sample both tabs in single-pane mode, then use the tab context menu to split and select the other tab, then sample after exiting Split View. Compare `Drawn`, `Copy`, and `Set` in the timing log. |
+| `peek_before`, `peek_cycles`, `peek_after` | In a fresh run, open `links.html`. Shift-click its link to open Peek and press Escape to dismiss. Sample before opening Peek, during five open/close cycles of two seconds each (use `--samples 20`), and after dismissal and settling. |
+
+CSV rows keep Elaris separate from each descendant. Identify Ladybird helpers by the
+command column. RSS includes shared resident mappings, so summing helper RSS can
+double-count memory. `ps_cpu_percent` is the OS's reported CPU estimate, which may
+reflect usage outside the sampling interval. The sampler observes child processes
+while they remain descendants of Elaris.
+
+The `[perf surfaces]` lines record visible and hidden engine views and the RGBA payload
+of their latest Rune frames. They appear on view lifecycle and visibility commands and
+when frame dimensions change. Counts cover live engine views, including Peek views,
+and exclude lazy tabs that have yet to open a view. Payload bytes exclude thumbnail
+cache, allocator overhead, Rune atlases, GPU textures and Ladybird-owned buffers.
+Compare these counters with the corresponding RSS samples to investigate which
+memory changes track frame retention.
