@@ -262,13 +262,12 @@ fn transition_card(
 fn actions(state: &AppState, theme: &theme::Theme, peek: &peek::PeekState) -> El {
     let [_, _, width, height] = state.split_rect;
     let panel = peek::geometry([width, height]);
-    let stack_height = 3.0 * peek::ACTION_SIZE + 2.0 * ACTION_SPACING;
     let opacity = ((peek.opening_time - ACTION_REVEAL) / ACTION_FADE).clamp(0.0, 1.0);
     col()
         .key("peek-actions")
         .absolute(
             panel.x + panel.width + peek::ACTION_GAP,
-            theme::VIEWPORT_INSET + (height - stack_height) / 2.0,
+            theme::VIEWPORT_INSET + panel.y,
         )
         .w(peek::ACTION_SIZE)
         .gap(ACTION_SPACING)
@@ -707,6 +706,12 @@ mod tests {
             .find(|el| el.key.as_deref() == Some(panel_key.as_str()))
             .unwrap();
         assert!(x >= panel.rect[0] + panel.rect[2] + peek::ACTION_GAP - 0.05);
+        let close = window
+            .elements()
+            .into_iter()
+            .find(|el| el.key.as_deref() == Some("peek-close"))
+            .unwrap();
+        assert!((close.rect[1] - panel.rect[1]).abs() < 0.05);
         let id = window.state.browser.peek.as_ref().unwrap().page.id();
         let [px, py] = [x + w / 2.0, y + h / 2.0];
         window.pointer_down(px, py);
