@@ -6,10 +6,12 @@
 use objc2_05::runtime::{AnyClass, AnyObject, ClassBuilder, Sel};
 use objc2_05::{ClassType, msg_send, sel};
 use objc2_app_kit_02::{
-    NSAnimatablePropertyContainer, NSAnimationContext, NSButton, NSEvent, NSTrackingArea,
-    NSTrackingAreaOptions, NSView, NSWindowButton,
+    NSAnimatablePropertyContainer, NSAnimationContext, NSAutoresizingMaskOptions, NSButton,
+    NSEvent, NSTrackingArea, NSTrackingAreaOptions, NSView, NSVisualEffectBlendingMode,
+    NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView, NSWindowButton,
+    NSWindowOrderingMode,
 };
-use objc2_foundation_02::{NSPoint, NSRect, NSSize};
+use objc2_foundation_02::{MainThreadMarker, NSPoint, NSRect, NSSize};
 use rune::WindowHandle as RuneWindowHandle;
 use rune::raw_window_handle::RawWindowHandle;
 
@@ -32,6 +34,7 @@ pub(crate) fn install(window: &RuneWindowHandle) {
         let Some(native_window) = content.window() else {
             return;
         };
+        install_window_material(&content);
         let buttons: Vec<_> = [
             NSWindowButton::NSWindowCloseButton,
             NSWindowButton::NSWindowMiniaturizeButton,
@@ -91,6 +94,35 @@ pub(crate) fn install(window: &RuneWindowHandle) {
             unsafe { parent.addTrackingArea(&tracking) };
         }
     });
+}
+
+/// Adds AppKit's blurred backdrop beneath Rune's transparent content.
+fn install_window_material(content: &NSView) {
+    let Some(parent) = (unsafe { content.superview() }) else {
+        return;
+    };
+    // SAFETY: AppKit creates and retains the effect view on its main thread.
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    // SAFETY: this callback runs on AppKit's main thread.
+    let effect = unsafe { NSVisualEffectView::new(mtm) };
+    // SAFETY: the view is live and configured on AppKit's main thread.
+    unsafe {
+        effect.setMaterial(NSVisualEffectMaterial::UnderWindowBackground);
+        effect.setBlendingMode(NSVisualEffectBlendingMode::BehindWindow);
+        effect.setState(NSVisualEffectState::Active);
+        effect.setFrame(parent.bounds());
+        effect.setAutoresizingMask(
+            NSAutoresizingMaskOptions::NSViewWidthSizable
+                | NSAutoresizingMaskOptions::NSViewHeightSizable,
+        );
+        parent.addSubview_positioned_relativeTo(
+            &effect,
+            NSWindowOrderingMode::NSWindowBelow,
+            Some(content),
+        );
+    }
 }
 
 /// Reads the refresh rate of the screen currently displaying Rune's native window.
