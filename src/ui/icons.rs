@@ -82,6 +82,30 @@ pub(crate) static CHEVRON_UP: Icon = icon(
     "chevron-up",
     r#"<path d="m4.5 9.5 3.5-3 3.5 3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>"#,
 );
+pub(crate) static SITE_CONTROLS: Icon = icon(
+    "site-controls",
+    r#"<rect x="2.5" y="2.5" width="11" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.35"/><path d="M4.5 6H11M4.5 10H11" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/><circle cx="7" cy="6" r="1.25" fill="currentColor"/><circle cx="9" cy="10" r="1.25" fill="currentColor"/>"#,
+);
+pub(crate) static MICROPHONE: Icon = icon(
+    "microphone",
+    r#"<rect x="6" y="2.25" width="4" height="7.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4 7.5A4 4 0 0 0 12 7.5M8 11.5V14M5.5 14H10.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>"#,
+);
+pub(crate) static CAMERA: Icon = icon(
+    "camera",
+    r#"<path d="M2.75 5.25H5L6.1 3.75H9.9L11 5.25H13.25V12.5H2.75Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="8" cy="8.75" r="2.25" fill="none" stroke="currentColor" stroke-width="1.3"/>"#,
+);
+pub(crate) static LOCATION: Icon = icon(
+    "location",
+    r#"<path d="M12 6.5C12 9.5 8 13.5 8 13.5S4 9.5 4 6.5A4 4 0 1 1 12 6.5Z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="6.5" r="1.25" fill="none" stroke="currentColor" stroke-width="1.2"/>"#,
+);
+pub(crate) static NOTIFICATIONS: Icon = icon(
+    "notifications",
+    r#"<path d="M4 10.75H12L11 9V6.75A3 3 0 0 0 5 6.75V9ZM6.5 12.5A1.5 1.5 0 0 0 9.5 12.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>"#,
+);
+pub(crate) static COPY: Icon = icon(
+    "copy",
+    r#"<rect x="5" y="4" width="7" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3.5 9.5V3.75A1.25 1.25 0 0 1 4.75 2.5H9" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>"#,
+);
 static SEARCH_ENGINE_IMAGES: OnceLock<[Image; 4]> = OnceLock::new();
 
 pub(crate) fn search_engine(engine: SearchEngine, size: f32) -> El {

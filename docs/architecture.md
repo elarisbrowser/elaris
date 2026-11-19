@@ -18,13 +18,14 @@ connection and writes session files, so neither page work nor browser-data write
 | `src/storage.rs` | Native data/config paths, asynchronous history and configuration access, session JSON and atomic replacement. |
 | `src/config.rs` | Typed TOML loading, validation, comment-preserving edits and atomic configuration writes. |
 | `src/settings.rs` | The single typed settings model shared by the app, settings page and TOML file. |
+| `src/permissions.rs` | Per-origin permission overrides, defaults and decisions used by the app and site controls. |
 | `src/internal.rs` | Explicit `elaris://` route parsing for Elaris-owned native pages. |
 | `src/engine/` | The engine thread and everything it owns (see below). |
 | `src/input.rs` | Translates Rune pointer, wheel and key input into Ladybird input. |
 | `src/address.rs` | Classifies omnibox input and builds navigation or search URLs. |
 | `src/appearance.rs` | System, light and dark appearance preference. |
 | `src/perf.rs` | Development timing, printed when `ELARIS_PERF=1`. |
-| `src/ui/` | Rune components for the toolbar, sidebar, omnibox, floating find bar, viewport, native pages and shared theme. |
+| `src/ui/` | Rune components for the toolbar, sidebar, omnibox, floating find and site permissions popovers, viewport, native pages and shared theme. |
 | `src/ladybird/` (library) | Safe Rust wrappers around the bridge's C ABI. Plain event, frame and input types build without the bridge feature. |
 | `bridge/` | The C++ bridge and its headless Ladybird views. |
 
@@ -64,11 +65,11 @@ Elaris stores:
   renamed into place.
 - `profile/`: Ladybird's engine-owned profile data, separate from Elaris history and session
   metadata.
-- `config.toml`: appearance, search provider, download directory and startup mode. The settings
-  page and file use the same typed `Settings` value. The storage worker edits one key at a time,
-  preserves unrelated TOML comments and keys, and replaces the file atomically. A malformed file
-  is reported and never replaced by defaults. Reloading from the settings page reads the file
-  again without restarting the browser.
+- `config.toml`: appearance, search provider, download directory, startup mode and per-origin
+  website permission overrides. The storage worker edits one value at a time, preserves unrelated
+  TOML comments and keys, and replaces the file atomically. Website permission defaults are Ask;
+  internal Elaris pages are excluded. A malformed file is reported and never replaced by defaults.
+  Reloading from the settings page reads the file again without restarting the browser.
 
 The storage worker owns the database connection. It serves recent and frequent snapshots and
 search results to the UI from memory; searches are sent to SQLite off the UI thread. The local
@@ -227,3 +228,14 @@ activation record follow in sidebar order. A restored session starts with
 its saved active tab followed by the saved sidebar order. The switcher
 snapshots that order when opened and keeps its preview separate from
 Browser, so cycling leaves the page, session, and lazy loads untouched.
+
+### Site Permissions
+
+The site controls button beside the sidebar address launcher opens a Rune overlay shared by macOS
+and Linux. It is positioned from sidebar geometry, so it follows sidebar resizing without a
+platform-specific native popover implementation. Clicking outside or pressing Escape closes it.
+`PermissionStore` keys overrides by normalized HTTP(S) origin; Ask removes an override, while
+Allow and Block are persisted under `[permissions."https://example.com"]` in `config.toml`.
+`AppState::permission_decision` is the request-facing boundary and returns Prompt for Ask. The
+current Ladybird bridge does not expose website permission request callbacks, so these choices are
+stored and queryable but are not yet enforced by camera, microphone, location or notification APIs.

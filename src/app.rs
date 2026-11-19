@@ -17,6 +17,7 @@ use crate::config::ConfigLoad;
 use crate::engine::Engine;
 use crate::internal::{InternalPage, InternalRoute};
 use crate::omnibox::{self, Action, Suggestion};
+use crate::permissions::{PermissionDecision, PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{DownloadDirectory, Settings, SettingsChange, StartupMode};
 use crate::storage;
 use crate::storage::{Session, SessionTab, Storage};
@@ -162,6 +163,10 @@ pub(crate) struct AppState {
     pub(crate) browser: Browser,
     /// Whether the downloads popover is open.
     pub(crate) downloads_open: bool,
+    /// Whether the site controls popover is mounted.
+    pub(crate) site_permissions_open: bool,
+    /// Per-origin permission choices loaded from config.toml.
+    pub(crate) permission_store: PermissionStore,
     pub(crate) page_menu: crate::ui::PageMenuState,
     pub(crate) sidebar: SidebarState,
     pub(crate) tab_drag: crate::ui::TabDragState,
@@ -245,13 +250,17 @@ impl AppState {
                     (None, None, None, None, None, Some(message))
                 }
             };
+        let permission_store = config_load
+            .as_ref()
+            .and_then(|load| load.as_ref().ok())
+            .map_or_else(PermissionStore::default, |load| load.permissions.clone());
         #[cfg_attr(test, allow(unused_mut))]
-        let (settings, mut configuration_issue) = match config_load {
+        let (settings, mut configuration_issue) = match config_load.as_ref() {
             Some(Ok(load)) => (
-                load.settings,
+                load.settings.clone(),
                 (!load.issues.is_empty()).then(|| load.issues.join("\n")),
             ),
-            Some(Err(error)) => (Settings::default(), Some(error)),
+            Some(Err(error)) => (Settings::default(), Some(error.clone())),
             None => (Settings::default(), None),
         };
         let default_download_directory = storage::default_download_directory();
@@ -277,6 +286,8 @@ impl AppState {
             address_error: None,
             browser: Browser::default(),
             downloads_open: false,
+            site_permissions_open: false,
+            permission_store,
             page_menu: Default::default(),
             sidebar: SidebarState::default(),
             tab_drag: crate::ui::TabDragState::default(),
@@ -572,6 +583,7 @@ impl AppState {
     fn apply_config_load(&mut self, load: ConfigLoad) {
         let previous_download_directory = self.engine_download_directory();
         self.settings = load.settings;
+        self.permission_store = load.permissions;
         let download_directory = self.engine_download_directory();
         if previous_download_directory != download_directory {
             self.browser.set_download_directory(download_directory);
@@ -579,8 +591,55 @@ impl AppState {
         self.configuration_issue = (!load.issues.is_empty()).then(|| load.issues.join("\n"));
     }
 
+    pub(crate) fn current_permission_origin(&self) -> Option<String> {
+        self.browser
+            .active_tab()
+            .and_then(|tab| PermissionStore::origin(&tab.url))
+    }
+
+    /// Returns the saved decision for a request; `Prompt` means the engine must ask the user.
+    pub(crate) fn permission_decision(
+        &self,
+        origin: &str,
+        kind: PermissionKind,
+    ) -> PermissionDecision {
+        self.permission_store.decision(origin, kind)
+    }
+
+    pub(crate) fn set_site_permission(
+        &mut self,
+        kind: PermissionKind,
+        permission: PermissionState,
+    ) {
+        let Some(origin) = self.current_permission_origin() else {
+            return;
+        };
+        self.permission_store.set(&origin, kind, permission);
+        if let Some(storage) = &self.storage
+            && let Err(error) = storage.save_permission(origin, kind, permission)
+        {
+            self.configuration_issue = Some(error);
+        }
+    }
+
+    pub(crate) fn reset_site_permissions(&mut self) {
+        let Some(origin) = self.current_permission_origin() else {
+            return;
+        };
+        self.permission_store.reset(&origin);
+        for kind in PermissionKind::ALL {
+            if let Some(storage) = &self.storage
+                && let Err(error) =
+                    storage.save_permission(origin.clone(), kind, PermissionState::Ask)
+            {
+                self.configuration_issue = Some(error);
+            }
+        }
+    }
+
     pub(crate) fn activate(&mut self, tab: TabId) {
         self.cancel_tab_drag();
+        self.site_permissions_open = false;
         self.page_menu = Default::default();
         self.browser.activate_tab(tab);
         self.sync_find_tab();

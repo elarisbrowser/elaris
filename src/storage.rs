@@ -23,6 +23,7 @@ use serde::{Deserialize, Serialize};
 use elaris::history::{Cursor, Entry, History, Page};
 
 use crate::config::{self, ConfigLoad};
+use crate::permissions::{PermissionKind, PermissionState};
 use crate::settings::SettingsChange;
 
 const SESSION_VERSION: u8 = 3;
@@ -570,6 +571,17 @@ impl Storage {
             .map_err(|_| "configuration storage worker has stopped".to_owned())
     }
 
+    pub(crate) fn save_permission(
+        &self,
+        origin: String,
+        kind: PermissionKind,
+        state: PermissionState,
+    ) -> Result<(), String> {
+        self.commands
+            .send(Command::SavePermission(origin, kind, state))
+            .map_err(|_| "configuration storage worker has stopped".to_owned())
+    }
+
     pub(crate) fn reload_configuration(&self) -> Result<(), String> {
         self.commands
             .send(Command::ReloadConfig)
@@ -621,6 +633,7 @@ enum Command {
     HistoryMutation(HistoryMutation),
     SaveSession(Session),
     SaveSetting(SettingsChange),
+    SavePermission(String, PermissionKind, PermissionState),
     ReloadConfig,
     Flush(Sender<()>),
     Shutdown,
@@ -751,6 +764,14 @@ fn run_worker(
             }
             Command::SaveSetting(change) => {
                 let result = config::write_change(&config_file, &change);
+                config_events
+                    .lock()
+                    .expect("configuration event lock poisoned")
+                    .push(ConfigEvent::Saved(result));
+                notify(&shared);
+            }
+            Command::SavePermission(origin, kind, state) => {
+                let result = config::write_permission(&config_file, &origin, kind, state);
                 config_events
                     .lock()
                     .expect("configuration event lock poisoned")

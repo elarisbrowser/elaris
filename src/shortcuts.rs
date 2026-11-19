@@ -48,6 +48,10 @@ pub(crate) fn on_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> boo
         state.close_find(tx);
         return true;
     }
+    if event.key == Key::Escape && state.site_permissions_open {
+        state.site_permissions_open = false;
+        return true;
+    }
     let Some(shortcut) = shortcut(event) else {
         return false;
     };

@@ -10,6 +10,7 @@ mod input;
 mod internal;
 mod omnibox;
 mod perf;
+mod permissions;
 mod settings;
 mod shortcuts;
 mod storage;

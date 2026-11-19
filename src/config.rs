@@ -7,10 +7,11 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use toml_edit::{DocumentMut, Item, Value};
+use toml_edit::{DocumentMut, Item, Table, Value};
 
 use crate::address::SearchEngine;
 use crate::appearance::Appearance;
+use crate::permissions::{PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{DownloadDirectory, Settings, SettingsChange, StartupMode};
 
 const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\nglass = true\ntint_opacity = 100\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n";
@@ -19,6 +20,7 @@ static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(1);
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ConfigLoad {
     pub(crate) settings: Settings,
+    pub(crate) permissions: PermissionStore,
     pub(crate) issues: Vec<String>,
 }
 
@@ -109,7 +111,95 @@ pub(crate) fn parse(contents: &str) -> Result<ConfigLoad, String> {
         };
     }
 
-    Ok(ConfigLoad { settings, issues })
+    let permissions = parse_permissions(&document, &mut issues);
+    Ok(ConfigLoad {
+        settings,
+        permissions,
+        issues,
+    })
+}
+
+fn parse_permissions(document: &DocumentMut, issues: &mut Vec<String>) -> PermissionStore {
+    let mut store = PermissionStore::default();
+    let Some(item) = document.get("permissions") else {
+        return store;
+    };
+    let Some(sites) = item.as_table() else {
+        issues.push("[permissions] must be a TOML table".to_owned());
+        return store;
+    };
+    for (origin, item) in sites {
+        let Some(normalized) = PermissionStore::origin(origin) else {
+            issues.push(format!("Ignoring invalid permission origin {origin:?}"));
+            continue;
+        };
+        let Some(values) = item.as_table() else {
+            issues.push(format!("[permissions.{origin:?}] must be a TOML table"));
+            continue;
+        };
+        for (name, value) in values {
+            let Some(kind) = PermissionKind::from_key(name) else {
+                issues.push(format!("Ignoring unknown permission {name:?} for {origin}"));
+                continue;
+            };
+            match value.as_str().and_then(PermissionState::from_key) {
+                Some(PermissionState::Ask) => {}
+                Some(state) => store.set(&normalized, kind, state),
+                None => issues.push(format!(
+                    "[permissions.{origin:?}].{name} must be allow, block or ask"
+                )),
+            }
+        }
+    }
+    store
+}
+
+/// Saves or removes one site's permission override while preserving other config values.
+pub(crate) fn write_permission(
+    path: &Path,
+    origin: &str,
+    kind: PermissionKind,
+    state: PermissionState,
+) -> Result<(), String> {
+    let origin = PermissionStore::origin(origin)
+        .ok_or_else(|| "website permissions require an HTTP or HTTPS origin".to_owned())?;
+    let mut document = match fs::read_to_string(path) {
+        Ok(contents) => contents
+            .parse::<DocumentMut>()
+            .map_err(|error| format!("cannot update malformed TOML: {error}"))?,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => DEFAULT_CONFIG
+            .parse::<DocumentMut>()
+            .map_err(|error| format!("cannot parse built-in configuration: {error}"))?,
+        Err(error) => return Err(format!("cannot read configuration: {error}")),
+    };
+    if document.get("permissions").is_none() {
+        document["permissions"] = Item::Table(Table::new());
+    }
+    let sites = document["permissions"]
+        .as_table_mut()
+        .ok_or_else(|| "[permissions] must be a TOML table".to_owned())?;
+    if state == PermissionState::Ask {
+        if let Some(site) = sites.get_mut(&origin).and_then(Item::as_table_mut) {
+            site.remove(kind.key());
+            if site.is_empty() {
+                sites.remove(&origin);
+            }
+        }
+    } else {
+        if sites.get(&origin).is_none() {
+            sites.insert(&origin, Item::Table(Table::new()));
+        }
+        let site = sites
+            .get_mut(&origin)
+            .and_then(Item::as_table_mut)
+            .ok_or_else(|| format!("[permissions.{origin:?}] must be a TOML table"))?;
+        site.insert(kind.key(), Value::from(state.key()).into());
+    }
+    if sites.is_empty() {
+        document.as_table_mut().remove("permissions");
+    }
+    write_atomic(path, document.to_string().as_bytes())
+        .map_err(|error| format!("cannot save configuration {}: {error}", path.display()))
 }
 
 fn string_value(
@@ -336,6 +426,58 @@ mod tests {
     #[test]
     fn malformed_toml_is_an_error_and_not_a_default_file() {
         assert!(parse("[appearance\ntheme = \"dark\"").is_err());
+    }
+
+    #[test]
+    fn site_permissions_round_trip_and_ask_removes_the_last_site_entry() {
+        let path = std::env::temp_dir().join(format!(
+            "elaris-permissions-{}-{}.toml",
+            std::process::id(),
+            NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed)
+        ));
+        write_permission(
+            &path,
+            "HTTPS://Example.com:443/path",
+            PermissionKind::Camera,
+            PermissionState::Allow,
+        )
+        .expect("save an HTTPS permission override");
+        let loaded = load_or_create(&path).expect("load saved permission override");
+        assert_eq!(
+            loaded
+                .permissions
+                .state("https://example.com", PermissionKind::Camera),
+            PermissionState::Allow
+        );
+        write_permission(
+            &path,
+            "https://example.com",
+            PermissionKind::Camera,
+            PermissionState::Ask,
+        )
+        .expect("remove the permission override");
+        let loaded = load_or_create(&path).expect("load cleared permission overrides");
+        assert_eq!(loaded.permissions, PermissionStore::default());
+        fs::remove_file(path).expect("remove permission test config");
+    }
+
+    #[test]
+    fn internal_pages_cannot_be_persisted_as_site_permissions() {
+        let path = std::env::temp_dir().join(format!(
+            "elaris-internal-permissions-{}-{}.toml",
+            std::process::id(),
+            NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed)
+        ));
+        assert!(
+            write_permission(
+                &path,
+                "elaris://settings",
+                PermissionKind::Camera,
+                PermissionState::Allow,
+            )
+            .is_err()
+        );
+        assert!(!path.exists());
     }
 
     #[test]
