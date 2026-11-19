@@ -14,14 +14,15 @@
 //! and its outcome (the committed address, title, loading state, errors) arrives in the tab's
 //! state through [`Browser::poll`]. Tabs are named by [`TabId`]s, which are never reused: an
 //! operation on a tab that has closed does nothing, and nothing the engine reports about a closed
-//! tab reaches another one. Only the active tab is visible, laid out at the viewport's size and
-//! given focus and input; the others keep their pages but stop painting.
+//! tab reaches another one. Visible tabs each have a viewport. The active tab receives keyboard
+//! input, and hidden tabs keep their pages but stop painting.
 
 use std::cell::Cell;
 use std::fmt;
 use std::time::Instant;
 
 mod input_routing;
+pub(crate) mod split;
 
 use crate::address::url_for_address;
 use crate::engine::{Command, DownloadAction, Engine, Surface, Update, ViewCommand};
@@ -73,7 +74,7 @@ pub(crate) struct Polled {
     pub(crate) changed: bool,
     pub(crate) clipboard: Option<String>,
     pub(crate) menu: Option<(TabId, elaris::ladybird::PageMenu)>,
-    /// The active tab showed a frame since the last poll, so it is likely animating.
+    /// A visible tab showed a frame since the last poll, so it is likely animating.
     pub(crate) animating: bool,
     /// URLs Ladybird confirmed as committed, with the title currently known for each tab.
     pub(crate) committed: Vec<(TabId, String, String)>,
@@ -89,6 +90,7 @@ pub(crate) struct Browser {
     /// In the order the sidebar shows them.
     tabs: Vec<Tab>,
     active: Option<TabId>,
+    pub(crate) split: Option<split::Split>,
     recent: Vec<TabId>,
     next_id: u64,
     input: input_routing::Held,
@@ -103,7 +105,7 @@ pub(crate) struct Browser {
     last_poll: Option<Instant>,
 }
 
-/// What the window tells the browser about the page viewport, which every tab shares.
+/// Display state and the available area for all visible panes.
 struct Window {
     /// The display scale, as the view last saw it.
     scale: Cell<f32>,
@@ -123,6 +125,7 @@ impl Default for Browser {
         Self {
             tabs: Vec::new(),
             active: None,
+            split: None,
             recent: Vec::new(),
             next_id: 1,
             input: Default::default(),
@@ -382,6 +385,7 @@ impl Browser {
     pub(crate) fn clear_active_tab(&mut self) {
         self.reset_input();
         self.active = None;
+        self.split = None;
         self.recent.clear();
     }
 
@@ -510,6 +514,13 @@ impl Browser {
     pub(crate) fn activate_tab(&mut self, id: TabId) {
         if self.tab(id).is_none() {
             return;
+        }
+        let side = self.focused_side();
+        if let Some(split) = &mut self.split
+            && !split.panes.contains(&Some(id))
+        {
+            let destination = split.panes.iter().position(Option::is_none).unwrap_or(side);
+            split.panes[destination] = Some(id);
         }
         if self.active != Some(id) {
             self.reset_input();
@@ -706,6 +717,11 @@ impl Browser {
         if !is_internal && let Some(engine) = &self.engine {
             engine.send(Command::Close(id));
         }
+        if let Some(split) = self.split
+            && split.panes.contains(&Some(id))
+        {
+            self.exit_split(split.panes.into_iter().flatten().find(|pane| *pane != id));
+        }
         if self.active == Some(id) {
             self.active = None;
             if let Some(next) = self
@@ -733,6 +749,7 @@ impl Browser {
         if self.active != Some(id) {
             self.reset_input();
         }
+        self.split = None;
         self.tabs.retain(|tab| tab.id() == id);
         if let Some(engine) = &self.engine {
             for tab in closed {
@@ -760,8 +777,14 @@ impl Browser {
         self.window.viewport = size;
     }
 
-    pub(crate) fn viewport_width(&self) -> f32 {
+    pub(crate) fn content_width(&self) -> f32 {
         self.window.viewport[0]
+    }
+
+    pub(crate) fn viewport_width(&self) -> f32 {
+        self.split.map_or(self.content_width(), |split| {
+            split::widths(self.content_width(), split.ratio)[self.focused_side()]
+        })
     }
 
     pub(crate) fn set_window_focus(&mut self, focused: bool) {
@@ -915,11 +938,11 @@ impl Browser {
                 }
             }
         }
-        if let Some(id) = self.active
-            && let Some(tab) = self.tab_mut(id)
-        {
-            let frames = tab.surface.frames();
-            polled.animating = std::mem::replace(&mut tab.engine.frames, frames) != frames;
+        for id in self.visible_tabs().into_iter().flatten() {
+            if let Some(tab) = self.tab_mut(id) {
+                let frames = tab.surface.frames();
+                polled.animating |= std::mem::replace(&mut tab.engine.frames, frames) != frames;
+            }
         }
         polled
     }
@@ -963,8 +986,17 @@ impl Browser {
         };
         let window = &self.window;
         let scale = window.scale.get();
-        let [width, height] = window.viewport.map(|points| input::device(points, scale));
-        let viewport = (width > 0 && height > 0).then_some((width, height, f64::from(scale)));
+        let panes = self.visible_tabs();
+        let widths = self
+            .split
+            .map(|split| split::widths(window.viewport[0], split.ratio));
+        // Release the old focus before granting it to a different view.
+        for tab in &mut self.tabs {
+            if tab.engine.focused && self.active != Some(tab.id()) {
+                tab.engine.focused = false;
+                engine.send(Command::View(tab.id(), ViewCommand::Focus(false)));
+            }
+        }
         let scheme_known = window.applied_dark.get().is_some();
         for tab in &mut self.tabs {
             if tab.is_internal() {
@@ -973,13 +1005,21 @@ impl Browser {
             let id = tab.id();
             let applied = &mut tab.engine;
             let active = self.active == Some(id);
+            let side = panes.iter().position(|pane| *pane == Some(id));
+            let visible = side.is_some();
+            let width = side
+                .zip(widths)
+                .map_or(window.viewport[0], |(side, widths)| widths[side]);
+            let [width, height] =
+                [width, window.viewport[1]].map(|points| input::device(points, scale));
+            let viewport = (width > 0 && height > 0).then_some((width, height, f64::from(scale)));
             let send = |command| engine.send(Command::View(id, command));
-            if applied.hidden == active {
-                applied.hidden = !active;
-                send(ViewCommand::Visible(active));
+            if applied.hidden == visible {
+                applied.hidden = !visible;
+                send(ViewCommand::Visible(visible));
             }
             // Hidden tabs keep their last layout, unless they have yet to load their first page.
-            if (active || (applied.pending_load.is_some() && !applied.deferred_load))
+            if (visible || (applied.pending_load.is_some() && !applied.deferred_load))
                 && let Some(wanted) = viewport
                 && applied.viewport != Some(wanted)
             {
@@ -995,7 +1035,7 @@ impl Browser {
             // at its real size and never starts in the wrong scheme.
             if applied.viewport.is_some()
                 && scheme_known
-                && (active || !applied.deferred_load)
+                && (visible || !applied.deferred_load)
                 && let Some(url) = applied.pending_load.take()
             {
                 send(ViewCommand::Load(url));
@@ -1440,13 +1480,72 @@ mod tests {
         assert_eq!(
             sent(&fake),
             [
-                view(first, ViewCommand::Visible(false)),
                 view(first, ViewCommand::Focus(false)),
+                view(first, ViewCommand::Visible(false)),
                 view(second, ViewCommand::Visible(true)),
                 view(second, resize(120, 50, 1.0)),
                 view(second, ViewCommand::Focus(true)),
             ]
         );
+    }
+
+    #[test]
+    fn split_views_keep_their_own_sizes_input_and_frames() {
+        let (mut browser, fake) = ready();
+        browser.set_viewport([1008.0, 500.0]);
+        browser.set_viewport_focus(true);
+        let left = browser.open_tab("one.example").unwrap();
+        let right = browser
+            .restore_tab("https://two.example", "Two", true)
+            .unwrap();
+        let background = browser
+            .restore_tab("https://three.example", "Three", true)
+            .unwrap();
+        browser.poll();
+        sent(&fake);
+
+        browser.place_split(right, 1);
+        browser.resize_split(400.0);
+        browser.poll();
+        let commands = sent(&fake);
+        assert!(commands.contains(&view(left, resize(400, 500, 1.0))));
+        assert!(commands.contains(&view(right, resize(600, 500, 1.0))));
+        assert!(commands.contains(&view(right, ViewCommand::Visible(true))));
+        assert!(commands.contains(&view(
+            right,
+            ViewCommand::Load("https://two.example".into())
+        )));
+        assert!(!commands.iter().any(|command| matches!(
+            command,
+            Command::Open(..) | Command::Close(_) | Command::View(_, ViewCommand::Visible(false))
+        )));
+        let unfocus = commands
+            .iter()
+            .position(|command| *command == view(left, ViewCommand::Focus(false)));
+        let focus = commands
+            .iter()
+            .position(|command| *command == view(right, ViewCommand::Focus(true)));
+        assert!(matches!((unfocus, focus), (Some(old), Some(new)) if old < new));
+
+        browser.hover_tab(left, MouseKind::Move, [3.0, 5.0], Mods::default());
+        assert!(browser.key(
+            &KeyEvent {
+                key: RuneKey::Enter,
+                mods: Mods::default()
+            },
+            true,
+            false,
+            None
+        ));
+        assert!(matches!(sent(&fake).as_slice(), [
+            Command::View(mouse, ViewCommand::Mouse(_)),
+            Command::View(key, ViewCommand::Key(_))
+        ] if *mouse == left && *key == right));
+
+        surface(&browser, left).fake_frame();
+        assert!(browser.poll().animating);
+        surface(&browser, background).fake_frame();
+        assert!(!browser.poll().animating);
     }
 
     #[test]

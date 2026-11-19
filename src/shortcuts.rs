@@ -44,6 +44,12 @@ pub(crate) fn on_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> boo
         tx.motion(ui::TAB_REORDER_MOTION);
         return true;
     }
+    if event.key == Key::Escape && state.has_split_picker() {
+        state.browser.exit_split(None);
+        tx.focus(ui::viewport::focus_key(&state.browser), false);
+        tx.animated();
+        return true;
+    }
     if event.key == Key::Escape && state.find_open {
         state.close_find(tx);
         return true;
@@ -60,15 +66,18 @@ pub(crate) fn on_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> boo
         Shortcut::NewTab => app::new_tab(state, tx),
         Shortcut::ReopenClosedTab => {
             if state.reopen_recently_closed(0).is_some() {
-                tx.focus(ui::VIEWPORT, false);
+                tx.focus(ui::viewport::focus_key(&state.browser), false);
             }
         }
         Shortcut::Close => {
             if state.omnibox.open {
                 state.omnibox.close();
-                tx.focus(ui::VIEWPORT, false);
+                tx.focus(ui::viewport::focus_key(&state.browser), false);
             } else if state.browser.active_tab().is_some() {
                 state.close_active();
+                if state.browser.active_tab().is_some() {
+                    tx.focus(ui::viewport::focus_key(&state.browser), false);
+                }
             } else {
                 tx.close_window();
             }

@@ -335,6 +335,9 @@ fn favourite_tile(
         .on_press_tx(move |state: &mut AppState, tx| {
             tx.color_motion(theme::SELECTION_MOTION);
             state.activate(id);
+            if state.browser.split.is_some() {
+                tx.focus(crate::ui::viewport::focus_key(&state.browser), false);
+            }
         })
         .on_middle_press(move |state: &mut AppState, _| state.close(id))
         .on_secondary_press(move |state: &mut AppState, press, _| {
@@ -401,6 +404,9 @@ fn tab_row(
         .on_press_tx(move |state: &mut AppState, tx| {
             tx.color_motion(theme::SELECTION_MOTION);
             state.activate(id);
+            if state.browser.split.is_some() {
+                tx.focus(crate::ui::viewport::focus_key(&state.browser), false);
+            }
         })
         .on_middle_press(move |state: &mut AppState, _| state.close(id))
         .on_secondary_press(move |state: &mut AppState, press, _| {
@@ -434,7 +440,7 @@ fn tab_row(
     })
 }
 
-fn tab_icon(tab: &Tab, active: bool, size: f32, theme: &Theme) -> El {
+pub(in crate::ui) fn tab_icon(tab: &Tab, active: bool, size: f32, theme: &Theme) -> El {
     let color = if active { theme.text } else { theme.text_muted };
     if let Some(favicon) = &tab.favicon {
         el().size(size, size).center().pixels(favicon)
@@ -535,6 +541,10 @@ fn source_placeholder(
     tab_drag_handler(slot, tab)
 }
 
+fn dragging_single_page(state: &AppState, id: TabId) -> bool {
+    state.browser.split.is_none() && state.browser.visible_tabs()[0] == Some(id)
+}
+
 fn tab_drag_handler(row: El, id: TabId) -> El {
     row.on_drag(move |state: &mut AppState, drag, tx| match drag.phase {
         rune::Phase::Down => state.tab_drag.press(
@@ -548,6 +558,22 @@ fn tab_drag_handler(row: El, id: TabId) -> El {
             let result = state
                 .tab_drag
                 .move_to(state.browser.tabs(), drag.window_point());
+            let preview = state
+                .tab_drag
+                .is_dragging()
+                .then(|| crate::ui::viewport::drop_side(state, id, drag.window_point()))
+                .flatten()
+                .map(|side| {
+                    if dragging_single_page(state, id) {
+                        1 - side
+                    } else {
+                        side
+                    }
+                });
+            if state.split_preview != preview {
+                state.split_preview = preview;
+                tx.motion(theme::TAB_REORDER_MOTION);
+            }
             if state.tab_drag.is_dragging() || result == TabDragMoveResult::Cancelled {
                 tx.animated();
             }
@@ -559,7 +585,22 @@ fn tab_drag_handler(row: El, id: TabId) -> El {
             }
         }
         rune::Phase::Up => {
-            let (was_dragging, drop) = state.tab_drag.end(state.browser.tabs(), drag.cancelled());
+            let side = (!drag.cancelled() && state.tab_drag.is_dragging())
+                .then(|| crate::ui::viewport::drop_side(state, id, drag.window_point()))
+                .flatten();
+            state.split_preview = None;
+            let (was_dragging, drop) = state
+                .tab_drag
+                .end(state.browser.tabs(), drag.cancelled() || side.is_some());
+            if let Some(side) = side {
+                if dragging_single_page(state, id) {
+                    state.begin_split_picker(id, side);
+                    tx.focus("split-tab-search", false);
+                } else {
+                    state.place_split_tab(id, side);
+                    tx.focus(crate::ui::viewport::focus_key(&state.browser), false);
+                }
+            }
             if let Some(drop) = drop
                 && let Err(error) =
                     state.commit_tab_move(drop.tab, drop.target.section, drop.target.index)
@@ -698,6 +739,58 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
                     state.move_tab_to_section_animated(tab, section_action.1, tx);
                 },
             ));
+        for (side, label) in ["Split Left", "Split Right"].into_iter().enumerate() {
+            menu = menu.item(
+                MenuItem::new(label).on_select_tx(move |state: &mut AppState, tx| {
+                    state.dismiss_context_menu();
+                    state.dismiss_find();
+                    if state
+                        .browser
+                        .split
+                        .is_some_and(|split| split.panes.iter().all(Option::is_some))
+                    {
+                        state.place_split_tab(tab, side);
+                        tx.focus(crate::ui::viewport::focus_key(&state.browser), false);
+                    } else {
+                        state.begin_split_picker(tab, side);
+                        tx.focus("split-tab-search", false);
+                    }
+                    tx.animated();
+                    tx.motion(theme::TAB_REORDER_MOTION);
+                }),
+            );
+        }
+        if let Some(split) = state.browser.split {
+            menu = menu.item(MenuItem::new("Swap Panes").on_select_tx(
+                |state: &mut AppState, tx| {
+                    state.dismiss_context_menu();
+                    state.browser.swap_split();
+                    tx.focus(crate::ui::viewport::focus_key(&state.browser), false);
+                    tx.animated();
+                },
+            ));
+            if split.panes.contains(&Some(tab))
+                && let Some(other) = split.panes.into_iter().flatten().find(|id| *id != tab)
+            {
+                menu = menu.item(MenuItem::new("Remove Pane").on_select_tx(
+                    move |state: &mut AppState, tx| {
+                        state.dismiss_context_menu();
+                        state.browser.exit_split(Some(other));
+                        state.activate(other);
+                        tx.focus(crate::ui::viewport::focus_key(&state.browser), false);
+                        tx.animated();
+                    },
+                ));
+            }
+            menu = menu.item(MenuItem::new("Exit Split View").on_select_tx(
+                |state: &mut AppState, tx| {
+                    state.dismiss_context_menu();
+                    state.browser.exit_split(None);
+                    tx.focus(crate::ui::viewport::focus_key(&state.browser), false);
+                    tx.animated();
+                },
+            ));
+        }
         match section {
             TabSection::Favourite => {
                 menu = menu.item(MenuItem::new("Move to Pinned Tabs").on_select_tx(

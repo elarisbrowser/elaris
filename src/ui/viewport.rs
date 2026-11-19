@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The active tab's page in a rounded container inset from the window's edges, and the pointer,
-//! wheel and key input it takes.
+//! Rounded webpage panes and their pointer, wheel, and keyboard input.
 
 pub(crate) mod menu;
+mod picker;
+
+use crate::browser::{Browser, split};
 use crate::{engine::ViewCommand, tab::TabId};
 use elaris::ladybird::{Edit, MouseKind};
 use rune::{El, Phase, el};
@@ -31,7 +33,7 @@ pub(crate) fn view(
     } else {
         theme::VIEWPORT_INSET
     };
-    let viewport = el()
+    let viewport = rune::row()
         .key("viewport-container")
         .h_full()
         .grow(1.0)
@@ -48,7 +50,155 @@ pub(crate) fn view(
         })
         .pr(theme::VIEWPORT_INSET)
         .pb(theme::VIEWPORT_INSET);
-    viewport.child(page(state, theme, overlays, reduced_motion))
+    let panes = state.browser.visible_tabs();
+    let preview = state.split_preview;
+    let ratio = state.browser.split.map(|split| split.ratio);
+    let width = state.browser.content_width();
+    let widths = split::widths(width, ratio.unwrap_or(0.5));
+    let layout = rune::row()
+        .key("page-layout")
+        .w_full()
+        .h_full()
+        .min_w(0.0)
+        .on_layout(|state: &mut AppState, rect| {
+            state.split_rect = rect;
+            state.browser.set_viewport([rect[2], rect[3]]);
+        });
+    let wrap = |id: Option<TabId>, weight: f32, child: El| {
+        let mut pane = el()
+            .key(wrapper_key(id))
+            .w(0.0)
+            .grow(weight)
+            .min_w(0.0)
+            .h_full()
+            .fill(theme.page)
+            .continuous_corners()
+            .clip_rounded(theme::VIEWPORT_RADIUS);
+        if let Some(tab) = id
+            .and_then(|id| state.browser.tab(id))
+            .filter(|tab| !tab.is_internal())
+        {
+            // The surface stays on the tab's keyed container when the input region changes sides.
+            pane = pane.pixels(&tab.surface.pixels);
+        }
+        pane.child(child)
+    };
+    let preview_pane = || wrap(None, 1.0, indicator(theme));
+    if ratio.is_none() {
+        let page = wrap(
+            panes[0],
+            1.0,
+            page(state, theme, overlays, reduced_motion, 0),
+        );
+        let layout = match preview {
+            Some(0) => layout
+                .child(preview_pane())
+                .child(divider(false, theme))
+                .child(page),
+            Some(1) => layout
+                .child(page)
+                .child(divider(false, theme))
+                .child(preview_pane()),
+            _ => layout.child(page),
+        };
+        return viewport.child(layout);
+    }
+    let available = widths.iter().sum::<f32>();
+    let mut layout = layout;
+    for (side, id) in panes.into_iter().enumerate() {
+        let mut child = if id.is_some() {
+            page(state, theme, overlays, reduced_motion, side)
+        } else {
+            picker::view(state, theme, side)
+        };
+        if preview == Some(side) {
+            child = child.child(indicator(theme).pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0)));
+        }
+        let weight = if available > 0.0 {
+            widths[side] / available
+        } else {
+            0.5
+        };
+        if side == 1 {
+            layout = layout.child(divider(true, theme));
+        }
+        layout = layout.child(wrap(id, weight, child));
+    }
+    viewport.child(layout)
+}
+
+fn wrapper_key(id: Option<TabId>) -> String {
+    id.map_or_else(
+        || "empty-web-pane".into(),
+        |id| format!("web-pane-{}", id.raw()),
+    )
+}
+
+pub(crate) fn focus_key(browser: &Browser) -> &'static str {
+    pane_key(browser.focused_side())
+}
+
+fn pane_key(side: usize) -> &'static str {
+    if side == 0 {
+        VIEWPORT
+    } else {
+        "right-page-viewport"
+    }
+}
+
+pub(crate) fn drop_side(state: &AppState, id: TabId, point: [f32; 2]) -> Option<usize> {
+    let [_, _, w, _] = state.split_rect;
+    let boundary = state.browser.split.map_or(w / 2.0, |split| {
+        split::widths(w, split.ratio)[0] + split::DIVIDER / 2.0
+    });
+    let side = split::target(state.split_rect, point, boundary)?;
+    let panes = state.browser.visible_tabs();
+    if state.browser.split.is_some() {
+        (panes[side] != Some(id)).then_some(side)
+    } else {
+        panes[0].map(|_| side)
+    }
+}
+
+fn divider(live: bool, theme: &Theme) -> El {
+    let handle = el()
+        .key("split-divider")
+        .w(split::DIVIDER)
+        .h_full()
+        .center()
+        .child(
+            el().w(1.0)
+                .h(24.0)
+                .radius(0.5)
+                .fill(theme.overlay_border)
+                .inert(),
+        );
+
+    if !live {
+        return handle;
+    }
+    handle
+        .cursor(rune::Cursor::ResizeColumn)
+        .label("Resize split panes")
+        .on_drag(|state: &mut AppState, drag, tx| {
+            if drag.phase == Phase::Down {
+                if let Some(split) = state.browser.split {
+                    drag.data = split::widths(state.browser.content_width(), split.ratio)[0];
+                }
+            } else if !drag.cancelled() {
+                state.browser.resize_split(drag.data + drag.dx);
+                tx.instant();
+            }
+        })
+}
+
+fn indicator(theme: &Theme) -> El {
+    el().w_full()
+        .h_full()
+        .inert()
+        .a11y_hidden()
+        .fill(theme.selection)
+        .radius(theme::VIEWPORT_RADIUS)
 }
 
 /// The webpage's top-left origin in the window, used to anchor its native find overlay.
@@ -66,15 +216,30 @@ pub(crate) fn page_origin(state: &AppState) -> [f32; 2] {
     } else {
         theme::VIEWPORT_INSET
     };
-    [left, top]
+    let offset = state
+        .browser
+        .split
+        .filter(|_| state.browser.focused_side() == 1)
+        .map_or(0.0, |split| {
+            split::widths(state.browser.content_width(), split.ratio)[0] + split::DIVIDER
+        });
+    [left + offset, top]
 }
 
 /// The page's latest frame fills the viewport over its appearance-aware background. During a live
 /// resize Rune scales a frame to new bounds.
-fn page(state: &AppState, theme: &Theme, overlays: &mut Vec<El>, reduced_motion: bool) -> El {
-    let mut page = el().key(VIEWPORT);
+fn page(
+    state: &AppState,
+    theme: &Theme,
+    overlays: &mut Vec<El>,
+    reduced_motion: bool,
+    side: usize,
+) -> El {
+    let mut page = el().key(pane_key(side));
+    let id = state.browser.visible_tabs()[side];
+    let focused = state.browser.focused_side() == side;
     let mut internal = false;
-    if let Some(tab) = state.browser.active_tab() {
+    if let Some(tab) = id.and_then(|id| state.browser.tab(id)) {
         if let Some(route) = &tab.internal {
             internal = true;
             page = page.child(super::internal::view(
@@ -84,10 +249,9 @@ fn page(state: &AppState, theme: &Theme, overlays: &mut Vec<El>, reduced_motion:
                 overlays,
                 reduced_motion,
             ));
-        } else {
-            page = page.pixels(&tab.surface.pixels);
         }
-        if !internal
+        if focused
+            && !internal
             && !state.omnibox.open
             && !state.page_menu.open()
             && state.browser.page_focused()
@@ -104,25 +268,21 @@ fn page(state: &AppState, theme: &Theme, overlays: &mut Vec<El>, reduced_motion:
     }
     let mut page = page.w_full().h_full();
     page = page
-        .fill(theme.page)
         .continuous_corners()
         .clip_rounded(theme::VIEWPORT_RADIUS)
         .focusable(true)
         .no_focus_ring()
         .label("Web page")
-        .on_layout(|state: &mut AppState, [_, _, w, h]| state.browser.set_viewport([w, h]))
         .pointer_buttons([PointerButton::Middle])
-        .on_secondary_press_local(|state: &mut AppState, p, tx| {
+        .on_secondary_press_local(move |state: &mut AppState, p, tx| {
+            let Some(id) = id else { return };
+            state.activate(id);
             state.dismiss_find();
-            tx.focus(VIEWPORT, false);
-            if state
-                .browser
-                .active_tab()
-                .is_some_and(|tab| tab.is_internal())
-            {
+            tx.focus(pane_key(side), false);
+            if internal {
                 return;
             }
-            state.page_menu.anchor = state.browser.active_tab().map(|tab| (tab.id(), p.window()));
+            state.page_menu.anchor = Some((id, p.window()));
             for kind in [MouseKind::Down, MouseKind::Up] {
                 state.browser.drag_pointer(
                     kind,
@@ -133,73 +293,69 @@ fn page(state: &AppState, theme: &Theme, overlays: &mut Vec<El>, reduced_motion:
                 );
             }
         })
-        .on_drag(|state: &mut AppState, drag, tx| {
-            if state
-                .browser
-                .active_tab()
-                .is_some_and(|tab| tab.is_internal())
-            {
-                return;
-            }
+        .on_drag(move |state: &mut AppState, drag, tx| {
             let kind = match drag.phase {
                 Phase::Down => {
-                    tx.focus(VIEWPORT, false);
+                    if let Some(id) = id
+                        && state.browser.active_tab().map(crate::tab::Tab::id) != Some(id)
+                    {
+                        state.activate(id);
+                    }
+                    tx.focus(pane_key(side), false);
                     MouseKind::Down
                 }
                 Phase::Move => MouseKind::Move,
                 Phase::Up if drag.cancelled() => MouseKind::Cancel,
                 Phase::Up => MouseKind::Up,
             };
-
-            state
-                .browser
-                .drag_pointer(kind, [drag.x, drag.y], tx.button(), tx.mods(), drag.clicks);
-        })
-        .on_pointer_move_local(|state: &mut AppState, pointer, tx| {
-            if state
-                .browser
-                .active_tab()
-                .is_some_and(|tab| tab.is_internal())
-            {
-                return;
+            if !internal {
+                state.browser.drag_pointer(
+                    kind,
+                    [drag.x, drag.y],
+                    tx.button(),
+                    tx.mods(),
+                    drag.clicks,
+                );
             }
-            state
-                .browser
-                .hover(MouseKind::Move, [pointer.x, pointer.y], tx.mods());
         })
-        .on_hover_change(|state: &mut AppState, inside, tx| {
-            if !inside
-                && !state
+        .on_pointer_move_local(move |state: &mut AppState, pointer, tx| {
+            if let Some(id) = id.filter(|_| !internal) {
+                state
                     .browser
-                    .active_tab()
-                    .is_some_and(|tab| tab.is_internal())
-            {
-                state.browser.hover(MouseKind::Leave, [0.0, 0.0], tx.mods());
+                    .hover_tab(id, MouseKind::Move, [pointer.x, pointer.y], tx.mods());
             }
         })
-        .on_wheel(|state: &mut AppState, wheel, _| {
-            if state
-                .browser
-                .active_tab()
-                .is_some_and(|tab| tab.is_internal())
-            {
-                return false;
+        .on_hover_change(move |state: &mut AppState, inside, tx| {
+            if let Some(id) = id.filter(|_| !inside && !internal) {
+                state
+                    .browser
+                    .hover_tab(id, MouseKind::Leave, [0.0; 2], tx.mods());
             }
-            state.browser.wheel(wheel);
-            true
         })
-        .on_key(page_key)
-        .on_key_up(|state: &mut AppState, key, tx| {
-            if state
-                .browser
-                .active_tab()
-                .is_some_and(|tab| tab.is_internal())
-            {
-                false
+        .on_wheel(move |state: &mut AppState, wheel, _| {
+            if let Some(id) = id.filter(|_| !internal) {
+                state.browser.wheel_tab(id, wheel);
+                true
             } else {
-                state.browser.key(key, false, false, tx.physical_key())
+                false
             }
+        })
+        .on_key(move |state: &mut AppState, key, tx| {
+            if state.browser.focused_side() == side {
+                page_key(state, key, tx)
+            } else {
+                false
+            }
+        })
+        .on_key_up(move |state: &mut AppState, key, tx| {
+            state.browser.focused_side() == side
+                && !internal
+                && state.browser.key(key, false, false, tx.physical_key())
         });
+
+    if state.browser.split.is_some() && focused {
+        page = page.border(theme::FOCUS_WIDTH, theme.focus);
+    }
 
     #[cfg(not(feature = "ladybird-bridge"))]
     let page = page.child(ui_only_badge(theme));
@@ -235,7 +391,7 @@ fn ui_only_badge(theme: &Theme) -> El {
 fn paste(id: TabId, tx: &mut Tx) {
     tx.read_clipboard(move |s: &mut AppState, content, tx| {
         if !s.omnibox.open
-            && tx.focused() == Some(VIEWPORT)
+            && tx.focused() == Some(focus_key(&s.browser))
             && s.browser.active_tab().is_some_and(|tab| tab.id() == id)
             && !content.text().is_empty()
         {
@@ -248,6 +404,9 @@ fn paste(id: TabId, tx: &mut Tx) {
 }
 
 fn page_key(state: &mut AppState, key: &KeyEvent, tx: &mut Tx) -> bool {
+    if key.key == Key::Escape && (state.tab_drag.is_dragging() || state.has_split_picker()) {
+        return crate::shortcuts::on_key(state, key, tx);
+    }
     if crate::ui::tab_switcher::cycle_key(state, key, tx) {
         return true;
     }
@@ -296,7 +455,10 @@ fn page_key(state: &mut AppState, key: &KeyEvent, tx: &mut Tx) -> bool {
 }
 
 pub(crate) fn ime(state: &mut AppState, event: &Ime, tx: &mut Tx) -> bool {
-    if tx.focused() != Some(VIEWPORT) || state.omnibox.open || state.page_menu.open() {
+    if tx.focused() != Some(focus_key(&state.browser))
+        || state.omnibox.open
+        || state.page_menu.open()
+    {
         return false;
     }
     let Some(tab) = state

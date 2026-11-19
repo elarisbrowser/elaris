@@ -26,6 +26,11 @@ impl Browser {
             return;
         }
         if kind == MouseKind::Down {
+            // Pane clicks can be delivered before the next frame's focus poll.
+            if self.split.is_some() {
+                self.set_viewport_focus(true);
+                self.sync_engine();
+            }
             self.input.drag = self.active.map(|id| (id, bit));
         }
         let Some((id, held)) = self.input.drag else {
@@ -72,10 +77,8 @@ impl Browser {
         );
     }
 
-    pub(crate) fn hover(&self, kind: MouseKind, point: [f32; 2], mods: Mods) {
-        if self.input.drag.is_none()
-            && let Some(id) = self.active
-        {
+    pub(crate) fn hover_tab(&self, id: TabId, kind: MouseKind, point: [f32; 2], mods: Mods) {
+        if self.input.drag.is_none() && self.visible_tabs().contains(&Some(id)) {
             self.send(
                 id,
                 ViewCommand::Mouse(input::pointer(
@@ -91,24 +94,25 @@ impl Browser {
         }
     }
 
-    pub(crate) fn wheel(&self, wheel: WheelEvent) {
-        if let Some(id) = self.active {
-            let phase = input::wheel_phase(wheel.precise, wheel.phase, wheel.momentum);
-            let mut event = input::wheel(
-                [wheel.x, wheel.y],
-                [wheel.dx, wheel.dy],
-                wheel.precise,
-                phase,
-                self.window.scale.get(),
-            );
-            event.modifiers = input::modifiers(wheel.mods);
-            event.buttons = self
-                .input
-                .drag
-                .filter(|(owner, _)| *owner == id)
-                .map_or(0, |(_, bits)| bits);
-            self.send(id, ViewCommand::Mouse(event));
+    pub(crate) fn wheel_tab(&self, id: TabId, wheel: WheelEvent) {
+        if !self.visible_tabs().contains(&Some(id)) {
+            return;
         }
+        let phase = input::wheel_phase(wheel.precise, wheel.phase, wheel.momentum);
+        let mut event = input::wheel(
+            [wheel.x, wheel.y],
+            [wheel.dx, wheel.dy],
+            wheel.precise,
+            phase,
+            self.window.scale.get(),
+        );
+        event.modifiers = input::modifiers(wheel.mods);
+        event.buttons = self
+            .input
+            .drag
+            .filter(|(owner, _)| *owner == id)
+            .map_or(0, |(_, bits)| bits);
+        self.send(id, ViewCommand::Mouse(event));
     }
 
     pub(crate) fn key(

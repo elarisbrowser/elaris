@@ -60,9 +60,9 @@ Elaris stores:
   visit count. Internal, invalid and non-web URLs are excluded. Typed omnibox queries are never
   recorded.
 - `session.json`: a versioned list of open tab URLs and titles plus the active tab index and the
-  indices classified as Favourite or Pinned. Unmarked tabs are Regular. Older sessions without
-  section indices restore as Regular tabs. The file is written to a temporary file and atomically
-  renamed into place.
+  indices classified as Favourite or Pinned. A completed split saves both pane indices and the
+  divider ratio. The active tab index also identifies the focused pane. Older sessions restore
+  without a split. The file is written to a temporary file and atomically renamed into place.
 - `profile/`: Ladybird's engine-owned profile data, separate from Elaris history and session
   metadata.
 - `config.toml`: appearance, search provider, download directory, startup mode and per-origin
@@ -97,9 +97,9 @@ without Ladybird.
 
 Ladybird permits one application per process, so Elaris uses one engine thread with one view per
 tab. Commands and updates carry a stable tab ID. Closing a tab drops later updates for that ID.
-Only the active tab receives the viewport size and focus; hidden tabs retain their page. Restored
-background tabs are an exception to the usual eager first layout: their load remains pending until
-they become active.
+Each visible tab receives its pane’s viewport size. Pointer and wheel input use pane-local
+coordinates, and keyboard input goes to the focused tab. Hidden tabs retain their page. A restored
+background tab’s initial load stays pending until its first appearance.
 
 ## Navigation and history
 
@@ -162,7 +162,9 @@ Tabs remain in one stable-ID browser collection, grouped for keyboard navigation
 Pinned, then Regular order. Moving a tab only changes its section and position; it keeps its
 existing Ladybird view and page state. Rune's sidebar owns the transient drag preview and shared
 row-to-tile transition, while the browser commits a move only on release or a context-menu action.
-Only those completed moves queue a session snapshot. With the blank-window startup preference,
+Split View keeps pane membership separate from tab ownership. Rune springs the existing surface
+into place during a sidebar drag and sends pane sizes to Ladybird when the drop commits. Divider
+drags update the committed sizes directly. With the blank-window startup preference,
 restored Favourite and Pinned tabs remain in the sidebar without activating a page; regular tabs
 from the prior session are not restored into that blank window.
 
@@ -171,8 +173,8 @@ and reads the session file. It recreates tabs in saved order and activates the s
 engine starts. `elaris://` URLs restore as Elaris-owned native tabs and never create Ladybird views.
 Only explicitly supported routes are rendered; unknown internal routes show a native not-found
 page. A webpage's navigation to an `elaris:` URL is rejected at the browser/engine boundary.
-The active web view's first load waits for the viewport and colour scheme; restored background web
-views stay lazy. History database opening, configuration saves/reloads and subsequent history
+Each visible web view’s first load waits for its viewport and the colour scheme. Restored
+background web views stay lazy. History database opening, configuration saves/reloads and subsequent history
 queries/writes happen on the storage worker.
 
 ## Find in Page

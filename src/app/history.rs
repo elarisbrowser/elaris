@@ -9,7 +9,6 @@ use super::AppState;
 use crate::internal::{InternalPage, InternalRoute};
 use crate::storage::{HistoryEvent, HistoryMutation};
 use crate::tab::TabId;
-use crate::ui::VIEWPORT;
 
 #[derive(Default)]
 pub(crate) struct HistoryPage {
@@ -150,7 +149,7 @@ impl AppState {
         if let Err(error) = result {
             self.history_page.action_error = Some(error.to_string());
         } else if self.active_history_tab().is_none() {
-            tx.focus(VIEWPORT, false);
+            tx.focus(crate::ui::viewport::focus_key(&self.browser), false);
         }
     }
 

@@ -100,7 +100,7 @@ pub(crate) fn finish(state: &mut AppState, target: Option<TabId>, tx: &mut Tx) {
         state.omnibox.close();
         state.dismiss_find();
         state.activate(target);
-        tx.focus(VIEWPORT, false);
+        tx.focus(crate::ui::viewport::focus_key(&state.browser), false);
     } else {
         tx.focus(
             switcher.previous_focus.as_deref().unwrap_or(VIEWPORT),

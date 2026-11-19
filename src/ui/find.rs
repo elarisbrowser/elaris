@@ -157,7 +157,17 @@ pub(crate) fn view(
             .pin(
                 Some(page_origin[0] + theme::FIND_INSET),
                 Some(page_origin[1] + theme::FIND_INSET),
-                Some(theme::VIEWPORT_INSET + theme::FIND_INSET),
+                Some(
+                    theme::VIEWPORT_INSET
+                        + theme::FIND_INSET
+                        + state
+                            .browser
+                            .split
+                            .filter(|_| state.browser.focused_side() == 0)
+                            .map_or(0.0, |_| {
+                                state.browser.content_width() - state.browser.viewport_width()
+                            }),
+                ),
                 None,
             )
             .h(theme::FIND_HEIGHT)

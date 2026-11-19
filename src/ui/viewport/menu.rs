@@ -4,12 +4,7 @@ use elaris::ladybird::{Edit, PageMenu};
 use rune::{El, PointerPress, Tx, el};
 use rune_kit::{MenuItem, context_menu};
 
-use crate::{
-    app::AppState,
-    engine::ViewCommand,
-    tab::TabId,
-    ui::{VIEWPORT, theme::Theme},
-};
+use crate::{app::AppState, engine::ViewCommand, tab::TabId, ui::theme::Theme};
 
 #[derive(Default)]
 pub(crate) struct PageMenuState {
@@ -32,7 +27,7 @@ impl PageMenuState {
 fn item(id: TabId, label: &str, action: impl Fn(&mut AppState, &mut Tx) + 'static) -> MenuItem {
     MenuItem::new(label).on_select_tx(move |s: &mut AppState, tx| {
         if s.browser.active_tab().is_some_and(|tab| tab.id() == id) && !s.omnibox.open {
-            tx.focus(VIEWPORT, false);
+            tx.focus(crate::ui::viewport::focus_key(&s.browser), false);
             action(s, tx);
         }
         s.page_menu = Default::default();

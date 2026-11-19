@@ -26,7 +26,7 @@ use crate::config::{self, ConfigLoad};
 use crate::permissions::{PermissionKind, PermissionState};
 use crate::settings::SettingsChange;
 
-const SESSION_VERSION: u8 = 3;
+const SESSION_VERSION: u8 = 4;
 const HISTORY_CACHE_LIMIT: usize = 100;
 static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(1);
 static WORKERS: Mutex<Vec<Worker>> = Mutex::new(Vec::new());
@@ -287,6 +287,17 @@ pub(crate) struct Session {
     pub(crate) favourites: Vec<usize>,
     #[serde(default)]
     pub(crate) pinned: Vec<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) split: Option<SessionSplit>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SessionSplit {
+    pub(crate) left: usize,
+    pub(crate) right: usize,
+    /// Left pane share in ten-thousandths. The focused pane is stored in active_tab.
+    pub(crate) ratio: u16,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -328,6 +339,7 @@ impl Session {
             tabs,
             favourites,
             pinned,
+            split: None,
         }
     }
 
@@ -342,8 +354,15 @@ impl Session {
     }
 
     fn is_supported(&self) -> bool {
-        matches!(self.version, 1 | 2 | SESSION_VERSION)
+        matches!(self.version, 1 | 2 | 3 | SESSION_VERSION)
             && (self.tabs.is_empty() || self.active_tab < self.tabs.len())
+            && self.split.as_ref().is_none_or(|split| {
+                split.left < self.tabs.len()
+                    && split.right < self.tabs.len()
+                    && split.left != split.right
+                    && split.ratio <= 10_000
+                    && [split.left, split.right].contains(&self.active_tab)
+            })
             && self.favourites.iter().all(|index| *index < self.tabs.len())
             && self.pinned.iter().all(|index| *index < self.tabs.len())
             && self.tabs.iter().all(|tab| {
