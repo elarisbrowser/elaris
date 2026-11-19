@@ -233,7 +233,42 @@ fn section_rows(
             spring: motion,
             ..GrowthSpec::default()
         });
-    for (index, item) in items.iter().copied().enumerate() {
+    let split_tabs = state.browser.split.map(|split| split.panes);
+    let split_pair = split_tabs
+        .and_then(|[left, right]| Some([left?, right?]))
+        .filter(|pair| {
+            pair.iter().all(|id| {
+                state
+                    .browser
+                    .tab(*id)
+                    .is_some_and(|tab| tab.section() == section)
+            }) && pair.iter().all(|id| items.contains(&PreviewItem::Tab(*id)))
+        });
+    let mut index = 0;
+    let mut split_group_added = false;
+    while index < items.len() {
+        let split_tab = match items[index] {
+            PreviewItem::Tab(id) => split_pair.filter(|pair| pair.contains(&id)),
+            PreviewItem::SourceSlot(_) | PreviewItem::DropSlot(_, _) => None,
+        };
+        if let Some(pair) = split_tab.filter(|_| !split_group_added) {
+            rows = rows.child(split_tab_group(
+                state,
+                section,
+                pair,
+                index,
+                items.len(),
+                theme,
+            ));
+            split_group_added = true;
+            index += 1;
+            continue;
+        }
+        if split_group_added && split_tab.is_some() {
+            index += 1;
+            continue;
+        }
+        let item = items[index];
         let element = match item {
             PreviewItem::Tab(id) => state.browser.tab(id).map_or_else(el, |tab| {
                 tab_row(
@@ -259,6 +294,7 @@ fn section_rows(
             ),
         };
         rows = rows.child(element);
+        index += 1;
     }
     if section == TabSection::Regular {
         rows = rows.child(
@@ -293,6 +329,46 @@ fn section_rows(
             }
         })
         .child(rows)
+}
+
+fn split_tab_group(
+    state: &AppState,
+    section: TabSection,
+    ids: [TabId; 2],
+    index: usize,
+    count: usize,
+    theme: &Theme,
+) -> El {
+    let active = state.browser.active_tab().map(Tab::id);
+    let mut group = row()
+        .key("split-tab-group")
+        .w_full()
+        .h(theme::ROW_HEIGHT)
+        .gap(2.0)
+        .px(3.0)
+        .center_y()
+        .radius(theme::ROW_RADIUS)
+        .continuous_corners()
+        .fill(theme.address_field);
+    for (offset, id) in ids.into_iter().enumerate() {
+        if let Some(tab) = state.browser.tab(id) {
+            let child = tab_row(
+                state,
+                tab,
+                section,
+                Some(id) == active,
+                index + offset,
+                count,
+                theme,
+            )
+            .w(0.0)
+            .grow(1.0)
+            .h(theme::ROW_HEIGHT - 6.0)
+            .radius(theme::ROW_RADIUS - 3.0);
+            group = group.child(child);
+        }
+    }
+    group
 }
 
 fn section_divider(theme: &Theme) -> El {
