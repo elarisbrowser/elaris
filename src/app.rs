@@ -864,16 +864,24 @@ impl AppState {
     fn restore_session(&mut self, session: &Session) {
         let mut restored = Vec::with_capacity(session.tabs.len());
         for (index, tab) in session.tabs.iter().enumerate() {
-            restored.push(
-                self.browser
-                    .restore_tab_in_section(
-                        &tab.url,
-                        &tab.title,
-                        index != session.active_tab,
-                        session.section_at(index),
-                    )
-                    .ok(),
-            );
+            let id = self
+                .browser
+                .restore_tab_in_section(
+                    &tab.url,
+                    &tab.title,
+                    index != session.active_tab,
+                    session.section_at(index),
+                )
+                .ok();
+            if let (Some(id), Some(favicon)) = (id, tab.favicon.as_ref()) {
+                self.browser.restore_favicon(
+                    id,
+                    favicon.width,
+                    favicon.height,
+                    favicon.rgba.clone(),
+                );
+            }
+            restored.push(id);
         }
         let active = restored
             .get(session.active_tab)
@@ -888,10 +896,18 @@ impl AppState {
     fn restore_persistent_tabs(&mut self, session: &Session) {
         for (index, tab) in session.tabs.iter().enumerate() {
             let section = session.section_at(index);
-            if section != TabSection::Regular {
-                let _ = self
+            if section != TabSection::Regular
+                && let Ok(id) = self
                     .browser
-                    .restore_tab_in_section(&tab.url, &tab.title, true, section);
+                    .restore_tab_in_section(&tab.url, &tab.title, true, section)
+                && let Some(favicon) = tab.favicon.as_ref()
+            {
+                self.browser.restore_favicon(
+                    id,
+                    favicon.width,
+                    favicon.height,
+                    favicon.rgba.clone(),
+                );
             }
         }
         self.browser.clear_active_tab();
@@ -926,6 +942,14 @@ impl AppState {
                 SessionTab {
                     url: tab.url.clone(),
                     title: tab.title.clone(),
+                    favicon: tab
+                        .favicon_data
+                        .as_ref()
+                        .map(|favicon| storage::SessionFavicon {
+                            width: favicon.width,
+                            height: favicon.height,
+                            rgba: favicon.rgba.clone(),
+                        }),
                 }
             })
             .collect();
@@ -1746,14 +1770,17 @@ mod tests {
                 SessionTab {
                     url: "https://one.example/".into(),
                     title: "One".into(),
+                    favicon: None,
                 },
                 SessionTab {
                     url: "elaris://settings".into(),
                     title: "Settings".into(),
+                    favicon: None,
                 },
                 SessionTab {
                     url: "https://three.example/".into(),
                     title: "Three".into(),
+                    favicon: None,
                 },
             ],
             1,
@@ -2205,14 +2232,17 @@ mod tests {
                 SessionTab {
                     url: "https://one.example/".into(),
                     title: "One".into(),
+                    favicon: None,
                 },
                 SessionTab {
                     url: "https://two.example/".into(),
                     title: "Two".into(),
+                    favicon: None,
                 },
                 SessionTab {
                     url: "https://three.example/".into(),
                     title: "Three".into(),
+                    favicon: None,
                 },
             ],
             1,

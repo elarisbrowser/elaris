@@ -25,7 +25,7 @@ use elaris::history::{Cursor, Entry, History, Page};
 use crate::config::{self, ConfigLoad};
 use crate::settings::SettingsChange;
 
-const SESSION_VERSION: u8 = 2;
+const SESSION_VERSION: u8 = 3;
 const HISTORY_CACHE_LIMIT: usize = 100;
 static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(1);
 static WORKERS: Mutex<Vec<Worker>> = Mutex::new(Vec::new());
@@ -293,6 +293,16 @@ pub(crate) struct Session {
 pub(crate) struct SessionTab {
     pub(crate) url: String,
     pub(crate) title: String,
+    #[serde(default)]
+    pub(crate) favicon: Option<SessionFavicon>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SessionFavicon {
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) rgba: Vec<u8>,
 }
 
 impl Session {
@@ -331,10 +341,25 @@ impl Session {
     }
 
     fn is_supported(&self) -> bool {
-        matches!(self.version, 1 | SESSION_VERSION)
+        matches!(self.version, 1 | 2 | SESSION_VERSION)
             && (self.tabs.is_empty() || self.active_tab < self.tabs.len())
             && self.favourites.iter().all(|index| *index < self.tabs.len())
             && self.pinned.iter().all(|index| *index < self.tabs.len())
+            && self.tabs.iter().all(|tab| {
+                tab.favicon.as_ref().is_none_or(|favicon| {
+                    favicon.width > 0
+                        && favicon.height > 0
+                        && usize::try_from(favicon.width)
+                            .ok()
+                            .and_then(|width| {
+                                usize::try_from(favicon.height)
+                                    .ok()
+                                    .and_then(|height| width.checked_mul(height))
+                            })
+                            .and_then(|pixels| pixels.checked_mul(4))
+                            == Some(favicon.rgba.len())
+                })
+            })
             && !self
                 .favourites
                 .iter()
@@ -1156,14 +1181,21 @@ mod tests {
                 SessionTab {
                     url: "https://one.example/".into(),
                     title: "One".into(),
+                    favicon: None,
                 },
                 SessionTab {
                     url: "https://two.example/".into(),
                     title: "Two".into(),
+                    favicon: Some(SessionFavicon {
+                        width: 1,
+                        height: 1,
+                        rgba: vec![1, 2, 3, 4],
+                    }),
                 },
                 SessionTab {
                     url: "https://three.example/".into(),
                     title: "Three".into(),
+                    favicon: None,
                 },
             ],
             1,
@@ -1172,6 +1204,7 @@ mod tests {
         let restored: Session = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(restored.tabs[0].url, "https://one.example/");
         assert_eq!(restored.tabs[2].url, "https://three.example/");
+        assert_eq!(restored.tabs[1].favicon, session.tabs[1].favicon);
         assert_eq!(restored.active_tab, 1);
     }
 
@@ -1181,6 +1214,7 @@ mod tests {
             vec![SessionTab {
                 url: "elaris://settings".into(),
                 title: "Settings".into(),
+                favicon: None,
             }],
             0,
         );
@@ -1283,6 +1317,7 @@ mod tests {
             vec![SessionTab {
                 url: "about:blank".into(),
                 title: "Closing tab".into(),
+                favicon: None,
             }],
             0,
         );
@@ -1306,6 +1341,7 @@ mod tests {
             vec![SessionTab {
                 url: "https://example.com/".into(),
                 title: "Example".into(),
+                favicon: None,
             }],
             0,
         );

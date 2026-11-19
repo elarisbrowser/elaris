@@ -186,6 +186,17 @@ impl Browser {
         self.tabs.iter().find(|tab| tab.id() == id)
     }
 
+    pub(crate) fn restore_favicon(&mut self, id: TabId, width: u32, height: u32, rgba: Vec<u8>) {
+        let Some(tab) = self.tab_mut(id) else { return };
+        tab.update(crate::engine::TabUpdate::Favicon(Some(
+            elaris::ladybird::Favicon {
+                width,
+                height,
+                rgba,
+            },
+        )));
+    }
+
     pub(crate) fn active_tab(&self) -> Option<&Tab> {
         self.active.and_then(|id| self.tab(id))
     }

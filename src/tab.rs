@@ -49,6 +49,7 @@ pub(crate) struct Tab {
     pub(crate) loading: bool,
     pub(crate) ime_caret: Option<[i32; 4]>,
     pub(crate) favicon: Option<Pixels>,
+    pub(crate) favicon_data: Option<elaris::ladybird::Favicon>,
     pub(crate) error: Option<String>,
     pub(crate) internal: Option<InternalRoute>,
     pub(crate) can_go_back: bool,
@@ -87,6 +88,7 @@ impl Tab {
             loading: false,
             ime_caret: None,
             favicon: None,
+            favicon_data: None,
             error: None,
             internal: None,
             can_go_back: false,
@@ -114,6 +116,7 @@ impl Tab {
             loading: false,
             ime_caret: None,
             favicon: None,
+            favicon_data: None,
             error: None,
             internal: Some(route),
             can_go_back: false,
@@ -164,6 +167,7 @@ impl Tab {
             TabUpdate::Title(title) => self.title = title,
             TabUpdate::Loading(loading) => self.loading = loading,
             TabUpdate::Favicon(favicon) => {
+                self.favicon_data = favicon.clone();
                 self.favicon = favicon.map(|favicon| {
                     let pixels = Pixels::new();
                     pixels.set(favicon.width, favicon.height, favicon.rgba);
