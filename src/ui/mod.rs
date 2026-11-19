@@ -21,6 +21,7 @@ pub(crate) use sidebar::{
 };
 pub(crate) use theme::{TAB_REORDER_MOTION, TRAFFIC_LIGHTS, WINDOW_MIN_SIZE};
 
+use rune::SystemMaterial;
 #[cfg(target_os = "linux")]
 use rune::col;
 use rune::{Cx, El, row};
@@ -75,6 +76,9 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         }
         window
     };
+    if state.settings.glass_enabled {
+        window = window.system_material(SystemMaterial::Glass);
+    }
     if state.tab_switcher.is_none() {
         if let Some(find) = find::view(state, &theme, reduced_motion, viewport::page_origin(state))
         {

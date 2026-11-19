@@ -44,12 +44,10 @@ features = [
     "NSAnimationContext",
     "NSButton",
     "NSEvent",
-    "NSGraphics",
     "NSScreen",
     "NSResponder",
     "NSTrackingArea",
     "NSView",
-    "NSVisualEffectView",
     "NSWindow",
 ]
 
