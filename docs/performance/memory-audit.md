@@ -88,5 +88,6 @@ The color-fixture recordings showed no blank flash at the sampled viewport locat
 mode. With eviction enabled, both Split View panes painted, exiting the split restored a single
 full-size pane, and opening and dismissing Peek added and removed its own visible frame.
 
-The flag remains opt-in. The visual check used local fixtures on macOS, and repeat trials,
-release-build results, Linux results, and GPU measurements remain outstanding.
+Eviction is now enabled by default. Set `ELARIS_EVICT_HIDDEN_FRAMES=0` to reproduce the
+baseline. The visual check used local fixtures on macOS. Repeat trials, release-build
+results, Linux results, and GPU measurements remain outstanding.

@@ -70,13 +70,13 @@ cache, allocator overhead, Rune atlases, GPU textures and Ladybird-owned buffers
 Compare these counters with the corresponding RSS samples to investigate which
 memory changes track frame retention.
 
-### Hidden-frame eviction experiment
+### Hidden-frame eviction
 
-Set `ELARIS_EVICT_HIDDEN_FRAMES=1` alongside `ELARIS_PERF=1` to keep the two most
-recently hidden full-resolution frames. Older hidden views keep a full-page fallback
-with a maximum side of 160 pixels. The experimental policy is off by default.
+Elaris keeps the two most recently hidden full-resolution frames by default. Older
+hidden views keep a full-page fallback with a maximum side of 160 pixels. Set
+`ELARIS_EVICT_HIDDEN_FRAMES=0` for a baseline run with eviction disabled.
 
-Run the same sequence with and without the flag in fresh profiles. Confirm the
+Run the same sequence in both modes with fresh profiles and `ELARIS_PERF=1`. Confirm the
 number of live views in the log before comparing RSS. Add `fallback_rgba_bytes` to
 the full-resolution payload when accounting for all Rune page images. With eviction
 enabled, `EvictFrame` measures copying and downsampling a hidden frame and

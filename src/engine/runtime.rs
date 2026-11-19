@@ -88,7 +88,7 @@ impl Runtime {
                 thumbnails: thumbnails::Cache::default(),
                 display_refresh_rate,
                 hidden_order: std::env::var_os("ELARIS_EVICT_HIDDEN_FRAMES")
-                    .is_some_and(|value| value == "1")
+                    .is_none_or(|value| value != "0")
                     .then(Vec::new),
                 hidden_frames_dirty: false,
             },
