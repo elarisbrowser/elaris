@@ -244,12 +244,8 @@ impl Runtime {
                     updates.push(Update::NewTab(tab, url, request, activate));
                     continue;
                 }
-                Event::Peek {
-                    url,
-                    request,
-                    bounds,
-                } => {
-                    updates.push(Update::Peek(tab, url, request, bounds));
+                Event::Peek { url, request } => {
+                    updates.push(Update::Peek(tab, url, request));
                     continue;
                 }
                 Event::LoadError(error) => TabUpdate::LoadError(error),

@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use elaris::ladybird::MouseKind;
 use rune::tok::type_;
-use rune::{El, Phase, PointerButton, Spring, SpringPair, Transition, Tx, col, el, row, text};
+use rune::{Anim, El, Phase, PointerButton, Spring, SpringPair, Transition, Tx, col, el, text};
 
 use crate::app::AppState;
 use crate::browser::{
@@ -17,41 +17,43 @@ use crate::browser::{
 use super::{controls, icons, theme, viewport};
 
 pub(crate) const PAGE: &str = "peek-page";
-const ACTION_SIZE: f32 = 32.0;
-const MORPH_DURATION: f64 = 0.28;
-const LINK_RADIUS: f32 = 3.0;
+const INITIAL_SCALE: f32 = 0.035;
+const OPEN_MOTION: Spring = Spring::new(0.40, 0.18);
+const OPEN_SETTLE: f32 = 0.46;
+const ACTION_SPACING: f32 = 4.0;
+const ACTION_REVEAL: f32 = 0.10;
+const ACTION_FADE: f32 = 0.16;
 const CLOSE_MOTION: Spring = Spring::new(0.15, 0.0);
 
-fn view(state: &AppState, theme: &theme::Theme, reduced: bool) -> Option<El> {
-    let peek = state.browser.peek.as_ref()?;
+fn card(state: &AppState, theme: &theme::Theme, reduced: bool, peek: &peek::PeekState) -> El {
     let page = &peek.page;
     let id = page.id();
     let [_, _, width, height] = state.split_rect;
     let panel = peek::geometry([width, height]);
-    let target = [panel.x, 0.0, panel.width, panel.height];
-    let [x, y, w, h] = peek.anchor;
-    let start = [x, y + peek::OUTSET, w, h];
-    let progress = if reduced { 1.0 } else { peek.progress };
-    let expansion = 1.0 - (1.0 - progress).powi(3);
-    let [x, y, w, h] = std::array::from_fn(|i| start[i] + (target[i] - start[i]) * expansion);
-    let preview_opacity = ((progress - 0.12) / 0.55).clamp(0.0, 1.0);
-    let motion = if reduced {
-        Transition::opacity().springs(SpringPair::new(CLOSE_MOTION, CLOSE_MOTION))
+    let y = theme::VIEWPORT_INSET - peek::OUTSET;
+    let [dx, dy] = [
+        peek.origin[0] - (panel.x + panel.width / 2.0),
+        peek.origin[1] - (panel.y + panel.height / 2.0),
+    ];
+    let progress = if reduced || peek.opening_time >= OPEN_SETTLE {
+        1.0
     } else {
-        Transition::asymmetric(
-            Transition::none(),
-            Transition::scale(0.95).combined(Transition::opacity()),
-        )
-        .springs(SpringPair::new(CLOSE_MOTION, CLOSE_MOTION))
+        OPEN_MOTION.sample(0.0, 0.0, 1.0, peek.opening_time).0
     };
+    let max_scale = (height + 2.0 * theme::VIEWPORT_INSET) / panel.height;
+    let scale = (INITIAL_SCALE + (1.0 - INITIAL_SCALE) * progress).min(max_scale);
+    let travel = 1.0 - progress.min(1.0);
+    let motion = if reduced {
+        Transition::opacity()
+    } else {
+        Transition::asymmetric(Transition::none(), Transition::scale(0.95))
+    }
+    .springs(SpringPair::new(CLOSE_MOTION, CLOSE_MOTION));
 
     let mut content = el()
         .key(PAGE)
-        .grow(1.0)
-        .min_w(0.0)
+        .w_full()
         .h_full()
-        .fill(theme.page)
-        .clip_rounded(theme::VIEWPORT_RADIUS)
         .focusable(true)
         .no_focus_ring()
         .label("Preview webpage")
@@ -115,12 +117,45 @@ fn view(state: &AppState, theme: &theme::Theme, reduced: bool) -> Option<El> {
         }
     }
 
-    let actions = col()
+    el().key(format!("peek-panel-{}", id.raw()))
+        .absolute(panel.x, y)
+        .size(panel.width, panel.height)
+        .scale(scale)
+        .scale_motion(Anim::INSTANT)
+        .offset(dx * travel, dy * travel)
+        .offset_motion(Anim::INSTANT)
+        .fill(theme.page)
+        .border(1.0, theme.overlay_border)
+        .shadow(
+            theme::OMNIBOX_SHADOW_Y,
+            theme::OMNIBOX_SHADOW_BLUR,
+            theme.overlay_shadow,
+        )
+        .continuous_corners()
+        .radius(theme::VIEWPORT_RADIUS)
+        .clip_rounded(theme::VIEWPORT_RADIUS)
+        .transition(motion)
+        .role("dialog")
+        .label("Peek")
+        .child(content)
+}
+
+fn actions(state: &AppState, theme: &theme::Theme, peek: &peek::PeekState) -> El {
+    let [_, _, width, height] = state.split_rect;
+    let panel = peek::geometry([width, height]);
+    let stack_height = 3.0 * peek::ACTION_SIZE + 2.0 * ACTION_SPACING;
+    let opacity = ((peek.opening_time - ACTION_REVEAL) / ACTION_FADE).clamp(0.0, 1.0);
+    col()
         .key("peek-actions")
-        .w(peek::ACTION_RAIL)
-        .h_full()
-        .pt(4.0)
-        .items_center()
+        .absolute(
+            panel.x + panel.width + peek::ACTION_GAP,
+            theme::VIEWPORT_INSET + (height - stack_height) / 2.0,
+        )
+        .w(peek::ACTION_SIZE)
+        .gap(ACTION_SPACING)
+        .opacity(opacity)
+        .opacity_motion(Anim::INSTANT)
+        .transition(Transition::opacity().springs(SpringPair::new(CLOSE_MOTION, CLOSE_MOTION)))
         .role("group")
         .label("Peek actions")
         .child(
@@ -128,7 +163,7 @@ fn view(state: &AppState, theme: &theme::Theme, reduced: bool) -> Option<El> {
                 "peek-close",
                 "Close Peek",
                 &icons::CLOSE,
-                ACTION_SIZE,
+                peek::ACTION_SIZE,
                 theme,
             )
             .on_press_tx(|state: &mut AppState, tx| {
@@ -140,7 +175,7 @@ fn view(state: &AppState, theme: &theme::Theme, reduced: bool) -> Option<El> {
                 "peek-open-tab",
                 "Open in New Tab",
                 &icons::OPEN_TAB,
-                ACTION_SIZE,
+                peek::ACTION_SIZE,
                 theme,
             )
             .on_press_tx(|state: &mut AppState, tx| state.promote_peek(Destination::Tab, tx)),
@@ -150,92 +185,51 @@ fn view(state: &AppState, theme: &theme::Theme, reduced: bool) -> Option<El> {
                 "peek-open-split",
                 "Add to Split View",
                 &icons::SPLIT_VIEW,
-                ACTION_SIZE,
+                peek::ACTION_SIZE,
                 theme,
             )
             .on_press_tx(|state: &mut AppState, tx| state.promote_peek(Destination::Split, tx)),
-        );
-
-    let webview = row()
-        .key("peek-live-content")
-        .absolute(0.0, 0.0)
-        .size(panel.width, panel.height)
-        .opacity(preview_opacity)
-        .child(content)
-        .child(actions);
-    let source = peek.source.as_ref().filter(|_| preview_opacity < 1.0).map(
-        |(pixels, [source_x, source_y, source_w, source_h])| {
-            el().key("peek-source-link")
-                .absolute((w - start[2]) / 2.0, (h - start[3]) / 2.0)
-                .size(start[2], start[3])
-                .clip_rounded(LINK_RADIUS)
-                .opacity(1.0 - preview_opacity)
-                .inert()
-                .a11y_hidden()
-                .child(
-                    el().absolute(source_x - start[0], source_y - peek.anchor[1])
-                        .size(*source_w, *source_h)
-                        .pixels(pixels),
-                )
-        },
-    );
-    let radius = LINK_RADIUS + (theme::VIEWPORT_RADIUS - LINK_RADIUS) * expansion;
-    Some(
-        el().key(format!("peek-panel-{}", id.raw()))
-            .absolute(x, y)
-            .size(w, h)
-            .fill(theme.overlay_panel)
-            .border(1.0, theme.overlay_border)
-            .shadow(
-                theme::OMNIBOX_SHADOW_Y,
-                theme::OMNIBOX_SHADOW_BLUR,
-                theme.overlay_shadow,
-            )
-            .continuous_corners()
-            .radius(radius)
-            .clip_rounded(radius)
-            .transition(motion)
-            .role("dialog")
-            .label("Peek")
-            .on_background_press(|_: &mut AppState| {})
-            .child(webview)
-            .children(source),
-    )
+        )
 }
 
-/// Advance the link-to-panel geometry without changing Ladybird's viewport size.
+/// Advance the card's spring on Rune's frame clock, keeping the web viewport at its final size.
 pub(crate) fn advance(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     let Some(peek) = &mut state.browser.peek else {
         return false;
     };
-    if peek.progress >= 1.0 {
+    if peek.opening_time >= OPEN_SETTLE {
         return false;
     }
     let start = *peek.opened_at.get_or_insert(clock);
-    peek.progress = if state.sidebar.hover.reduced.get() {
-        1.0
+    peek.opening_time = if state.sidebar.hover.reduced.get() {
+        OPEN_SETTLE
     } else {
-        ((clock - start) / MORPH_DURATION).clamp(0.0, 1.0) as f32
+        ((clock - start) as f32).clamp(0.0, OPEN_SETTLE)
     };
-    if peek.progress < 1.0 {
+    if peek.opening_time < OPEN_SETTLE {
         tx.wake_after(Duration::ZERO);
-    } else {
-        peek.source = None;
     }
     true
 }
 
-/// Keep the animated panel inside the content region, including its available outer padding.
+/// Keep the card and its detached controls inside the content region.
 pub(super) fn layer(state: &AppState, theme: &theme::Theme, reduced: bool) -> El {
     let [x, y, width, height] = state.split_rect;
-    el().key("peek-layer")
-        .absolute(x, y - peek::OUTSET)
+    let mut layer = el()
+        .key("peek-layer")
+        .absolute(x, y - theme::VIEWPORT_INSET)
         .size(
             width + theme::VIEWPORT_INSET,
-            height + peek::OUTSET + theme::VIEWPORT_INSET,
+            height + 2.0 * theme::VIEWPORT_INSET,
         )
-        .clip_rounded(0.0)
-        .children(view(state, theme, reduced))
+        .clip_rounded(0.0);
+    if let Some(peek) = &state.browser.peek {
+        layer = layer.child(card(state, theme, reduced, peek));
+        if peek.opening_time >= ACTION_REVEAL || reduced {
+            layer = layer.child(actions(state, theme, peek));
+        }
+    }
+    layer
 }
 
 /// A transparent hit target under the panel catches dismissals without altering sidebar layout.
@@ -345,7 +339,7 @@ mod tests {
 
     fn open(window: &mut Runtime<AppState>, fake: &FakeEngine, source: TabId, time: f64) -> String {
         fake.updates
-            .send(Update::Peek(source, TARGET.into(), 1, [-4, -8, 90, 19]))
+            .send(Update::Peek(source, TARGET.into(), 1))
             .unwrap();
         window.update_if(|state, tx| crate::app::poll(state, time, tx));
         window.frame(time);
@@ -362,17 +356,18 @@ mod tests {
             .into_iter()
             .find(|el| el.key.as_deref() == Some(key.as_str()))
             .unwrap();
-        assert!(
-            (opening.rect[2] - 90.0).abs() < 0.05,
-            "opening={:?} anchor={:?} content={:?}",
-            opening.rect,
-            window.state.browser.peek.as_ref().unwrap().anchor,
-            window.state.split_rect
-        );
-        assert!((opening.rect[3] - 19.0).abs() < 0.05);
+        assert!(opening.rect[2] < 0.05 * opening.target[2]);
+        assert!(opening.rect[3] < 0.05 * opening.target[3]);
         window.update_if(|state, tx| crate::app::poll(state, 0.09, tx));
         window.frame(0.016);
         let expanding = window
+            .elements()
+            .into_iter()
+            .find(|el| el.key.as_deref() == Some(key.as_str()))
+            .unwrap();
+        window.update_if(|state, tx| crate::app::poll(state, 0.36, tx));
+        window.frame(0.016);
+        let rebound = window
             .elements()
             .into_iter()
             .find(|el| el.key.as_deref() == Some(key.as_str()))
@@ -388,6 +383,7 @@ mod tests {
         assert!((settled.rect[0] + settled.rect[2] / 2.0 - (x + w / 2.0)).abs() < 0.05);
         assert!(expanding.rect[2] > opening.rect[2] && expanding.rect[2] < settled.rect[2]);
         assert!(expanding.rect[3] > opening.rect[3] && expanding.rect[3] < settled.rect[3]);
+        assert!(rebound.rect[2] > settled.rect[2]);
         assert!(settled.rect[1] < y);
         assert!(settled.rect[2] < w);
         assert!(settled.rect[3] > h);
@@ -439,9 +435,9 @@ mod tests {
     }
 
     #[test]
-    fn action_rail_promotes_to_the_right_split_pane() {
+    fn detached_button_promotes_to_the_right_split_pane() {
         let (mut window, fake, source) = window(false);
-        open(&mut window, &fake, source, 0.01);
+        let panel_key = open(&mut window, &fake, source, 0.01);
         window.update_if(|state, tx| crate::app::poll(state, 1.0, tx));
         window.frame(1.0);
         let [x, y, w, h] = window
@@ -450,6 +446,12 @@ mod tests {
             .find(|el| el.key.as_deref() == Some("peek-open-split"))
             .unwrap()
             .rect;
+        let panel = window
+            .elements()
+            .into_iter()
+            .find(|el| el.key.as_deref() == Some(panel_key.as_str()))
+            .unwrap();
+        assert!(x >= panel.rect[0] + panel.rect[2] + peek::ACTION_GAP - 0.05);
         let id = window.state.browser.peek.as_ref().unwrap().page.id();
         let [px, py] = [x + w / 2.0, y + h / 2.0];
         window.pointer_down(px, py);

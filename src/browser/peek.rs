@@ -5,15 +5,15 @@
 use super::{Browser, Command, Tab, TabId, ViewCommand, split};
 
 pub(crate) const OUTSET: f32 = 4.0;
-pub(crate) const ACTION_RAIL: f32 = 40.0;
+pub(crate) const ACTION_SIZE: f32 = 32.0;
+pub(crate) const ACTION_GAP: f32 = 8.0;
 
 pub(crate) struct PeekState {
     pub(crate) page: Tab,
-    /// The clicked link fragment relative to the content region, in logical points.
-    pub(crate) anchor: [f32; 4],
-    pub(crate) source: Option<(rune::Pixels, [f32; 4])>,
+    /// Click position relative to the entire content region, in logical points.
+    pub(crate) origin: [f32; 2],
     pub(crate) opened_at: Option<f64>,
-    pub(crate) progress: f32,
+    pub(crate) opening_time: f32,
 }
 
 #[derive(Clone, Copy)]
@@ -31,30 +31,18 @@ pub(crate) struct Geometry {
 
 impl Geometry {
     pub(crate) fn page_size(&self) -> [f32; 2] {
-        [(self.width - ACTION_RAIL).max(0.0), self.height]
+        [self.width, self.height]
     }
 }
 
 pub(crate) fn geometry([width, height]: [f32; 2]) -> Geometry {
-    let panel_width = width * 0.86;
+    // Reserve matching margins so the detached controls fit without shifting the card.
+    let panel_width = (width * 0.86).min((width - 2.0 * (ACTION_SIZE + ACTION_GAP)).max(0.0));
     Geometry {
         x: (width - panel_width) / 2.0,
         y: -OUTSET,
         width: panel_width,
         height: height + 2.0 * OUTSET,
-    }
-}
-
-fn link_anchor([x, y]: [f32; 2], bounds: [i32; 4], source: [f32; 4]) -> [f32; 4] {
-    let [dx, dy, width, height] = bounds.map(|value| value as f32);
-    let left = (x + dx).max(source[0]);
-    let top = (y + dy).max(source[1]);
-    let right = (x + dx + width).min(source[0] + source[2]);
-    let bottom = (y + dy + height).min(source[1] + source[3]);
-    if right > left && bottom > top {
-        [left, top, right - left, bottom - top]
-    } else {
-        [x - 12.0, y - 7.0, 24.0, 14.0]
     }
 }
 
@@ -84,13 +72,7 @@ impl Browser {
             .or(self.active)
     }
 
-    pub(super) fn open_peek(
-        &mut self,
-        source: TabId,
-        url: String,
-        request: u64,
-        bounds: [i32; 4],
-    ) -> bool {
+    pub(super) fn open_peek(&mut self, source: TabId, url: String, request: u64) -> bool {
         let is_preview = self
             .peek
             .as_ref()
@@ -106,10 +88,6 @@ impl Browser {
             return false;
         }
         self.reset_input();
-        let source_rect = self.page_rect(source);
-        let source_frame = self
-            .page(source)
-            .map(|page| (page.surface.pixels.clone(), source_rect));
         let previous = self.peek.take();
         let [width, height] = self.window.viewport;
         let origin = self
@@ -117,7 +95,6 @@ impl Browser {
             .take()
             .filter(|(owner, _)| *owner == source)
             .map_or([width / 2.0, height / 2.0], |(_, point)| point);
-        let anchor = link_anchor(origin, bounds, source_rect);
         let id = self.next_page_id();
         let mut page = Tab::new(id, url);
         page.engine.pending_load = None;
@@ -132,10 +109,9 @@ impl Browser {
         }
         self.peek = Some(PeekState {
             page,
-            anchor,
-            source: source_frame,
+            origin,
             opened_at: None,
-            progress: 0.0,
+            opening_time: 0.0,
         });
         self.sync_engine();
         // A replacement originating inside Peek still needs the previous view's descriptor.
@@ -185,26 +161,16 @@ impl Browser {
     }
 
     pub(super) fn note_peek_origin(&mut self, id: TabId, point: [f32; 2]) {
-        let [x, y, _, _] = self.page_rect(id);
-        self.peek_origin = Some((id, [x + point[0], y + point[1]]));
-    }
-
-    fn page_rect(&self, id: TabId) -> [f32; 4] {
-        let [width, height] = self.window.viewport;
-        if self.peek.as_ref().is_some_and(|peek| peek.page.id() == id) {
-            let panel = geometry(self.window.viewport);
-            let [width, height] = panel.page_size();
-            [panel.x, panel.y, width, height]
-        } else if let Some(split) = self.split {
-            let [left, right] = split::widths(width, split.ratio);
-            if split.panes[1] == Some(id) {
-                [left + split::DIVIDER, 0.0, right, height]
-            } else {
-                [0.0, 0.0, left, height]
-            }
+        let [width, _] = self.window.viewport;
+        let [x, y] = if self.peek.as_ref().is_some_and(|peek| peek.page.id() == id) {
+            let layout = geometry(self.window.viewport);
+            [layout.x, layout.y]
+        } else if let Some(split) = self.split.filter(|split| split.panes[1] == Some(id)) {
+            [split::widths(width, split.ratio)[0] + split::DIVIDER, 0.0]
         } else {
-            [0.0, 0.0, width, height]
-        }
+            [0.0; 2]
+        };
+        self.peek_origin = Some((id, [x + point[0], y + point[1]]));
     }
 }
 
@@ -230,12 +196,7 @@ mod tests {
 
     fn open(browser: &mut Browser, fake: &FakeEngine, source: TabId, request: u64) -> TabId {
         fake.updates
-            .send(Update::Peek(
-                source,
-                TARGET.into(),
-                request,
-                [-4, -8, 90, 19],
-            ))
+            .send(Update::Peek(source, TARGET.into(), request))
             .unwrap();
         assert!(browser.poll().changed);
         browser.peek.as_ref().unwrap().page.id()
@@ -249,10 +210,7 @@ mod tests {
         assert_eq!(browser.tabs().len(), 1);
         assert_eq!(browser.active, Some(source));
         assert_eq!(browser.input_page(), Some(preview));
-        assert_eq!(
-            browser.peek.as_ref().unwrap().anchor,
-            [20.0, 30.0, 90.0, 19.0]
-        );
+        assert_eq!(browser.peek.as_ref().unwrap().origin, [24.0, 38.0]);
         let commands: Vec<_> = fake.commands.try_iter().collect();
         assert!(matches!(commands.first(), Some(Command::Open(id, _)) if *id == preview));
         assert!(
@@ -367,7 +325,7 @@ mod tests {
     fn discards_unsupported_requests_and_reports_load_errors_inline() {
         let (mut browser, fake, source) = browser();
         fake.updates
-            .send(Update::Peek(source, "javascript:void(0)".into(), 1, [0; 4]))
+            .send(Update::Peek(source, "javascript:void(0)".into(), 1))
             .unwrap();
         assert!(!browser.poll().changed);
         assert_eq!(

@@ -928,8 +928,8 @@ impl Browser {
                         polled.thumbnails_ready.push(id);
                     }
                 }
-                Update::Peek(source, url, request, bounds) => {
-                    polled.changed |= self.open_peek(source, url, request, bounds);
+                Update::Peek(source, url, request) => {
+                    polled.changed |= self.open_peek(source, url, request);
                 }
                 Update::NewTab(source, url, request, activate) => {
                     if self.tab(source).is_some_and(|tab| !tab.is_internal())

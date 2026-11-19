@@ -1,6 +1,6 @@
 --- a/Libraries/LibWeb/DOM/Element.cpp
 +++ b/Libraries/LibWeb/DOM/Element.cpp
-@@ -880,6 +880,33 @@
+@@ -880,6 +880,25 @@
          return;
      }
 
@@ -17,15 +17,7 @@
 +            auto url = document().encoding_parse_url(target);
 +            if (url.has_value() && (url->scheme() == "http"sv || url->scheme() == "https"sv || url->scheme() == "file"sv)) {
 +                auto navigation = HTML::prepare_navigation_from_document(document(), url.release_value(), hyperlink_referrer_policy());
-+                CSSPixelPoint click { CSSPixels { mouse_event->client_x() }, CSSPixels { mouse_event->client_y() } };
-+                auto rects = get_client_rects();
-+                auto bounds = rects.find_if([&](auto const& rect) { return rect.contains(click); });
-+                ByteString geometry;
-+                if (bounds != rects.end()) {
-+                    geometry = ByteString::formatted("{},{},{},{}", (bounds->x() - click.x()).to_int(),
-+                        (bounds->y() - click.y()).to_int(), bounds->width().to_int(), bounds->height().to_int());
-+                }
-+                document().navigable()->page().client().page_did_click_link(move(navigation), geometry, UIEvents::Mod_Shift);
++                document().navigable()->page().client().page_did_click_link(move(navigation), {}, UIEvents::Mod_Shift);
 +                return;
 +            }
 +        }
@@ -36,35 +28,23 @@
  }
 --- a/Libraries/LibWebView/WebContentPage.cpp
 +++ b/Libraries/LibWebView/WebContentPage.cpp
-@@ -43,10 +43,19 @@
+@@ -43,6 +43,7 @@
  #include <LibWebView/ViewImplementation.h>
  #include <LibWebView/WebContentClient.h>
  #include <LibWebView/WebContentPage.h>
-+#include "peek_link.h"
++#include "peek_disposition.h"
  #include <LibWebView/WebContentTestClient.h>
  #include <LibWebView/WebDriverBiDi.h>
  #include <LibWebView/WebUI.h>
- #include <LibWebView/WorkerAgentManager.h>
-+
-+namespace Elaris {
-+static PeekLinkHandler s_peek_link_handler;
-+void set_peek_link_handler(PeekLinkHandler handler)
-+{
-+    s_peek_link_handler = handler;
-+}
-+}
-
- namespace WebView {
-
-@@ -1092,6 +1101,11 @@
-     auto verified_navigation = navigation_from_page(client(), move(navigation));
-     if (!verified_navigation.has_value())
+@@ -1098,6 +1099,11 @@
+         view().handle_external_url({}, verified_navigation->url, verified_navigation->initiator_origin_snapshot, verified_navigation->source_snapshot_params.has_transient_activation && has_transient_user_activation());
          return;
+     }
 +    if (modifiers == Web::UIEvents::Mod_Shift) {
-+        if (Elaris::s_peek_link_handler && is_url_handled_internally(verified_navigation->url) && view().take_input_to_open_link_in_new_tab({}))
-+            Elaris::s_peek_link_handler(view(), verified_navigation.release_value(), target);
++        if (view().take_input_to_open_link_in_new_tab({}))
++            view().open_navigation_in_new_tab(verified_navigation.release_value(), Elaris::peek_disposition);
 +        return;
 +    }
-     // NB: A link the browser does not handle itself is an external application's. The page asking to open it is not
-     //     the browser's UI, so the request takes the page's path, which honors only input the UI process saw.
-     if (!is_url_handled_internally(verified_navigation->url)) {
+     auto open_in_background = modifiers == Web::UIEvents::Mod_PlatformCtrl;
+     auto open_in_foreground = modifiers == (Web::UIEvents::Mod_PlatformCtrl | Web::UIEvents::Mod_Shift);
+     if (open_in_background || open_in_foreground || target == "_blank"sv) {

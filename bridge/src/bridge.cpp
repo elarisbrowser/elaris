@@ -42,7 +42,7 @@
 #include <thread>
 #include <vector>
 
-#include "peek_link.h"
+#include "peek_disposition.h"
 
 static Core::EventLoop* s_event_loop;
 static std::thread::id s_event_loop_thread;
@@ -358,34 +358,6 @@ void ElarisApplication::open_navigation_in_new_tab(Web::HTML::PreparedNavigation
     }
 }
 
-static void request_peek(WebView::ViewImplementation const& source, Web::HTML::PreparedNavigationDescriptor navigation,
-                         ByteString const& bounds) {
-    auto* host = s_application->host;
-    if (!host || !host->callback)
-        return;
-    for (auto* handle : host->views) {
-        if (handle->view.ptr() != &source)
-            continue;
-        auto url = to_utf8(navigation.url);
-        ElarisLadybirdEvent event{};
-        event.kind = ELARIS_LADYBIRD_PEEK;
-        event.view_id = handle->id;
-        event.text = url.c_str();
-        event.request_id = ++handle->next_request;
-        handle->pending_tabs.emplace(event.request_id, AK::move(navigation));
-        auto parts = bounds.split_view(',');
-        if (parts.size() == 4) {
-            for (size_t index = 0; index < 4; ++index) {
-                auto points = parts[index].to_number<int>().value_or(0);
-                event.link_bounds[index] =
-                    static_cast<int32_t>(std::round(std::clamp(points, -32768, 32768) * source.zoom_level()));
-            }
-        }
-        host->callback(host->context, &event);
-        return;
-    }
-}
-
 extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* profile_dir,
                                           ElarisLadybirdEventCallback callback, void* context,
                                           ElarisLadybird** out_bridge) {
@@ -423,7 +395,6 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
     }
 
     s_application = application.release_value();
-    Elaris::set_peek_link_handler(request_peek);
     // Ladybird's platform initialization during create() resets the root from its own search, so set it again.
     WebView::s_ladybird_resource_root = resource_dir;
     s_event_loop = &Core::EventLoop::current();
@@ -574,7 +545,7 @@ extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t 
         auto request = ++handle->next_request;
         handle->pending_tabs.emplace(request, AK::move(navigation));
         ElarisLadybirdEvent event{};
-        event.kind = ELARIS_LADYBIRD_NEW_TAB;
+        event.kind = activate == Elaris::peek_disposition ? ELARIS_LADYBIRD_PEEK : ELARIS_LADYBIRD_NEW_TAB;
         event.view_id = handle->id;
         event.text = url.c_str();
         event.request_id = request;
@@ -1186,7 +1157,6 @@ extern "C" void elaris_ladybird_destroy(ElarisLadybird* bridge) {
         fail("shutdown must run on the initialization thread");
         return;
     }
-    Elaris::set_peek_link_handler(nullptr);
     (void)elaris_ladybird_cancel_active_downloads(bridge);
     bridge->download_observer.reset();
     for (auto* view : bridge->views) {

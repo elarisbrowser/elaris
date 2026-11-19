@@ -1,7 +1,5 @@
 #include <elaris_ladybird.h>
 
-#include <algorithm>
-#include <array>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -23,7 +21,6 @@ struct Events {
     unsigned committed_navigation{};
     unsigned new_tabs{};
     uint64_t peek_request{};
-    std::array<int32_t, 4> peek_bounds{};
     unsigned load_errors{};
     std::string peek_url;
     bool foreground{};
@@ -60,7 +57,6 @@ static void on_event(void* context, ElarisLadybirdEvent const* event) {
     case ELARIS_LADYBIRD_PEEK:
         events.peek_request = event->request_id;
         events.peek_url = event->text;
-        std::copy(std::begin(event->link_bounds), std::end(event->link_bounds), events.peek_bounds.begin());
         break;
     case ELARIS_LADYBIRD_LOAD_ERROR:
         ++events.load_errors;
@@ -225,7 +221,6 @@ static bool page_input(ElarisLadybird* bridge, ElarisLadybirdView* view, uint64_
     auto commits_before_peek = events.committed_navigation;
     if (!click(ELARIS_LADYBIRD_BUTTON_PRIMARY, ELARIS_LADYBIRD_MOD_SHIFT, 20) ||
         !expect([&] { return events.peek_url.ends_with("smoke.html#target"); }, "Shift-click requests Peek") ||
-        events.peek_bounds != std::array<int32_t, 4>{-22, -12, 150, 32} ||
         events.committed_navigation != commits_before_peek || events.new_tabs != 3)
         return false;
     constexpr uint64_t peek_id = 100;

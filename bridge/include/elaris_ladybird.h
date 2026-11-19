@@ -65,7 +65,6 @@ typedef struct {
     uint64_t current_match_index;
     uint64_t total_match_count;
     int32_t has_total_match_count;
-    int32_t link_bounds[4]; /* Logical points, relative to the click. */
 } ElarisLadybirdEvent;
 
 typedef void (*ElarisLadybirdEventCallback)(void* context, const ElarisLadybirdEvent* event);
