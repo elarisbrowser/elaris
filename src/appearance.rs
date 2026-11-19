@@ -10,6 +10,64 @@ pub(crate) enum Appearance {
     Dark,
 }
 
+/// The interface accent used for focus, selection and emphasized controls.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum AccentColor {
+    #[default]
+    Blue,
+    Purple,
+    Pink,
+    Orange,
+    Green,
+    Gray,
+}
+
+impl AccentColor {
+    /// Every available accent, in the order the settings page shows them.
+    pub(crate) const ALL: [Self; 6] = [
+        Self::Blue,
+        Self::Purple,
+        Self::Pink,
+        Self::Orange,
+        Self::Green,
+        Self::Gray,
+    ];
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Blue => "Blue",
+            Self::Purple => "Purple",
+            Self::Pink => "Pink",
+            Self::Orange => "Orange",
+            Self::Green => "Green",
+            Self::Gray => "Gray",
+        }
+    }
+
+    pub(crate) fn config_key(self) -> &'static str {
+        match self {
+            Self::Blue => "blue",
+            Self::Purple => "purple",
+            Self::Pink => "pink",
+            Self::Orange => "orange",
+            Self::Green => "green",
+            Self::Gray => "gray",
+        }
+    }
+
+    pub(crate) fn from_config_key(value: &str) -> Option<Self> {
+        match value {
+            "blue" => Some(Self::Blue),
+            "purple" => Some(Self::Purple),
+            "pink" => Some(Self::Pink),
+            "orange" => Some(Self::Orange),
+            "green" => Some(Self::Green),
+            "gray" => Some(Self::Gray),
+            _ => None,
+        }
+    }
+}
+
 impl Appearance {
     /// Every choice, in the order the picker shows them.
     /// The appearance after this one, for a control that cycles through them.
@@ -66,5 +124,20 @@ mod tests {
         assert!(!Appearance::System.is_dark(false));
         assert!(!Appearance::Light.is_dark(true));
         assert!(Appearance::Dark.is_dark(false));
+    }
+
+    #[test]
+    fn accent_colors_have_unique_config_keys_and_labels() {
+        let accents = AccentColor::ALL;
+        for (index, accent) in accents.into_iter().enumerate() {
+            assert_eq!(
+                AccentColor::from_config_key(accent.config_key()),
+                Some(accent)
+            );
+            assert!(!accent.label().is_empty());
+            assert!(!accents[index + 1..].contains(&accent));
+        }
+        assert_eq!(AccentColor::default(), AccentColor::Blue);
+        assert_eq!(AccentColor::from_config_key("invalid"), None);
     }
 }

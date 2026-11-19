@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use crate::address::SearchEngine;
-use crate::appearance::Appearance;
+use crate::appearance::{AccentColor, Appearance};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum StartupMode {
@@ -47,6 +47,7 @@ impl DownloadDirectory {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Settings {
     pub(crate) appearance: Appearance,
+    pub(crate) accent_color: AccentColor,
     pub(crate) search_engine: SearchEngine,
     pub(crate) download_directory: DownloadDirectory,
     pub(crate) startup: StartupMode,
@@ -58,6 +59,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             appearance: Appearance::System,
+            accent_color: AccentColor::Blue,
             search_engine: SearchEngine::DuckDuckGo,
             download_directory: DownloadDirectory::Default,
             startup: StartupMode::RestoreSession,
@@ -70,6 +72,10 @@ impl Default for Settings {
 impl Settings {
     pub(crate) fn set_appearance(&mut self, appearance: Appearance) {
         self.appearance = appearance;
+    }
+
+    pub(crate) fn set_accent_color(&mut self, accent_color: AccentColor) {
+        self.accent_color = accent_color;
     }
 
     pub(crate) fn set_search_engine(&mut self, search_engine: SearchEngine) {
@@ -103,6 +109,7 @@ impl Settings {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum SettingsChange {
     Appearance(Appearance),
+    AccentColor(AccentColor),
     SearchEngine(SearchEngine),
     DownloadDirectory(DownloadDirectory),
     Startup(StartupMode),
@@ -118,6 +125,7 @@ mod tests {
     fn defaults_are_sensible_and_download_paths_are_validated() {
         let settings = Settings::default();
         assert_eq!(settings.appearance, Appearance::System);
+        assert_eq!(settings.accent_color, AccentColor::Blue);
         assert_eq!(settings.search_engine, SearchEngine::DuckDuckGo);
         assert_eq!(settings.download_directory, DownloadDirectory::Default);
         assert_eq!(settings.startup, StartupMode::RestoreSession);

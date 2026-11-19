@@ -10,7 +10,7 @@ use rune::{Key, KeyEvent, PointerPress, TextEdit, Tx};
 use std::path::PathBuf;
 
 use crate::address::{self, Destination, SearchEngine};
-use crate::appearance::Appearance;
+use crate::appearance::{AccentColor, Appearance};
 use crate::browser::Browser;
 use crate::config::ConfigLoad;
 #[cfg(feature = "ladybird-bridge")]
@@ -474,6 +474,14 @@ impl AppState {
         }
         self.settings.set_appearance(appearance);
         self.save_setting(SettingsChange::Appearance(appearance));
+    }
+
+    pub(crate) fn set_accent_color(&mut self, accent_color: AccentColor) {
+        if self.settings.accent_color == accent_color {
+            return;
+        }
+        self.settings.set_accent_color(accent_color);
+        self.save_setting(SettingsChange::AccentColor(accent_color));
     }
 
     pub(crate) fn settings_tab(&mut self) -> TabId {

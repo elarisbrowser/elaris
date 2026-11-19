@@ -41,6 +41,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         dark,
         state.settings.glass_enabled,
         state.settings.tint_opacity,
+        state.settings.accent_color,
     );
     let reduced_motion = cx.system_reduced_motion() || cx.is_reduced_motion();
     state.browser.note_scale(cx.env().scale);

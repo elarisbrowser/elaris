@@ -9,6 +9,8 @@ use rune::tok::{motion, radius, space};
 use rune::{Color, oklch, oklcha};
 use rune_kit::{Kit, PaletteFocus, PaletteSeed};
 
+use crate::appearance::AccentColor;
+
 /// The hue every neutral leans toward, a cool grey.
 const HUE: f32 = 265.0;
 
@@ -23,6 +25,8 @@ pub(crate) struct Theme {
     /// Labels that matter less: inactive tabs, the status line, placeholders.
     pub(crate) text_muted: Color,
     pub(crate) icon: Color,
+    /// The selected colour for emphasized controls and indicators.
+    pub(crate) accent: Color,
     /// The window controls at rest, before the pointer fades the native ones in on macOS.
     #[cfg(not(target_os = "linux"))]
     pub(crate) window_control: Color,
@@ -57,7 +61,7 @@ impl Theme {
             PaletteSeed {
                 bg: surface,
                 fg: self.text,
-                accent: self.icon,
+                accent: self.accent,
             },
             PaletteFocus::Custom(self.focus),
         );
@@ -74,7 +78,19 @@ impl Theme {
 }
 
 /// The palette for a dark or light interface.
-pub(crate) fn palette(dark: bool, glass_enabled: bool, tint_opacity: u8) -> Theme {
+pub(crate) fn palette(
+    dark: bool,
+    glass_enabled: bool,
+    tint_opacity: u8,
+    accent_choice: AccentColor,
+) -> Theme {
+    let accent_swatch = accent_color(accent_choice);
+    let accent = accent_focus_color(accent_choice, dark);
+    let selection = if dark {
+        accent_swatch.mix(Color::BLACK, 0.58)
+    } else {
+        accent_swatch.mix(Color::WHITE, 0.55)
+    };
     let alpha = if glass_enabled {
         f32::from(tint_opacity.min(100)) / 100.0
     } else {
@@ -88,18 +104,19 @@ pub(crate) fn palette(dark: bool, glass_enabled: bool, tint_opacity: u8) -> Them
             text: oklch(0.955, 0.003, HUE),
             text_muted: oklch(0.81, 0.008, HUE),
             icon: oklch(0.82, 0.006, HUE),
+            accent,
             #[cfg(not(target_os = "linux"))]
             window_control: oklcha(1.0, 0.0, 0.0, 0.16),
             address_field: oklch(0.24, 0.006, HUE),
             control_border: oklch(0.56, 0.015, HUE),
-            focus: oklch(0.80, 0.09, HUE),
-            selection: oklch(0.43, 0.065, HUE),
+            focus: accent,
+            selection,
             hover: oklcha(0.66, 0.008, HUE, 0.08),
             press: oklcha(0.66, 0.008, HUE, 0.13),
             tab_active: oklch(0.36, 0.009, HUE),
             tab_active_shadow: oklcha(0.0, 0.0, 0.0, 0.3),
             tab_drag: oklch(0.32, 0.009, HUE),
-            tab_drop_indicator: oklch(0.74, 0.04, HUE),
+            tab_drop_indicator: accent,
             overlay_scrim: oklcha(0.0, 0.0, 0.0, 0.16),
             overlay_panel: oklch(0.255, 0.006, HUE),
             overlay_border: oklcha(1.0, 0.0, 0.0, 0.11),
@@ -115,18 +132,19 @@ pub(crate) fn palette(dark: bool, glass_enabled: bool, tint_opacity: u8) -> Them
             text: oklch(0.2, 0.008, HUE),
             text_muted: oklch(0.38, 0.016, HUE),
             icon: oklch(0.32, 0.01, HUE),
+            accent,
             #[cfg(not(target_os = "linux"))]
             window_control: oklcha(0.2, 0.02, HUE, 0.16),
             address_field: oklch(0.985, 0.004, HUE),
             control_border: oklch(0.55, 0.015, HUE),
-            focus: oklch(0.48, 0.11, HUE),
-            selection: oklch(0.84, 0.045, HUE),
+            focus: accent,
+            selection,
             hover: oklcha(0.2, 0.02, HUE, 0.06),
             press: oklcha(0.2, 0.02, HUE, 0.1),
             tab_active: oklch(1.0, 0.0, 0.0),
             tab_active_shadow: oklcha(0.2, 0.02, HUE, 0.18),
             tab_drag: oklch(0.968, 0.009, HUE),
-            tab_drop_indicator: oklch(0.48, 0.055, HUE),
+            tab_drop_indicator: accent,
             overlay_scrim: oklcha(0.2, 0.02, HUE, 0.12),
             overlay_panel: oklch(0.995, 0.002, HUE),
             overlay_border: oklcha(0.2, 0.02, HUE, 0.12),
@@ -134,6 +152,29 @@ pub(crate) fn palette(dark: bool, glass_enabled: bool, tint_opacity: u8) -> Them
             overlay_selected: oklcha(0.2, 0.02, HUE, 0.07),
             disabled_opacity: 0.3,
         }
+    }
+}
+
+/// Accent swatches and semantic accent tokens share one palette.
+pub(crate) fn accent_color(accent: AccentColor) -> Color {
+    let (lightness, chroma, hue) = accent_values(accent);
+    oklch(lightness, chroma, hue)
+}
+
+fn accent_focus_color(accent: AccentColor, dark: bool) -> Color {
+    let lightness = if dark { 0.72 } else { 0.55 };
+    let (_, chroma, hue) = accent_values(accent);
+    oklch(lightness, chroma, hue)
+}
+
+fn accent_values(accent: AccentColor) -> (f32, f32, f32) {
+    match accent {
+        AccentColor::Blue => (0.67, 0.19, 255.0),
+        AccentColor::Purple => (0.67, 0.16, 300.0),
+        AccentColor::Pink => (0.67, 0.18, 350.0),
+        AccentColor::Orange => (0.69, 0.15, 62.0),
+        AccentColor::Green => (0.67, 0.16, 150.0),
+        AccentColor::Gray => (0.65, 0.015, HUE),
     }
 }
 
@@ -278,16 +319,22 @@ mod tests {
     #[test]
     fn kit_labels_and_focus_are_readable_on_derived_surfaces() {
         for dark in [false, true] {
-            let theme = palette(dark, true, 100);
-            for base in [theme.settings_surface, theme.overlay_panel] {
-                let kit = theme.kit(base);
-                for surface in [kit.c.bg_base, kit.c.surface_raised, kit.c.bg_button_neutral] {
-                    for state in [Color::TRANSPARENT, kit.c.hover, kit.c.pressed] {
-                        let background = paint(state, surface);
-                        assert!(contrast(kit.c.text_base, background) >= 4.5);
-                        assert!(contrast(kit.c.text_faint, background) >= 4.5);
-                        assert!(contrast(kit.c.icon_muted, background) >= 3.0);
-                        assert!(contrast(kit.c.border_focus, background) >= 3.0);
+            for accent in AccentColor::ALL {
+                let theme = palette(dark, true, 100, accent);
+                for base in [theme.settings_surface, theme.overlay_panel] {
+                    let kit = theme.kit(base);
+                    for surface in [kit.c.bg_base, kit.c.surface_raised, kit.c.bg_button_neutral] {
+                        for state in [Color::TRANSPARENT, kit.c.hover, kit.c.pressed] {
+                            let background = paint(state, surface);
+                            assert!(contrast(kit.c.text_base, background) >= 4.5);
+                            assert!(contrast(kit.c.text_faint, background) >= 4.5);
+                            assert!(contrast(kit.c.icon_muted, background) >= 3.0);
+                            let ratio = contrast(kit.c.border_focus, background);
+                            assert!(
+                                ratio >= 3.0,
+                                "kit focus for {accent:?} (dark={dark}): {ratio:.2} < 3"
+                            );
+                        }
                     }
                 }
             }
@@ -297,41 +344,43 @@ mod tests {
     #[test]
     fn chrome_contrast_in_both_appearances() {
         for dark in [false, true] {
-            let t = palette(dark, true, 100);
-            for (role, base) in [
-                ("sidebar and inactive tabs", t.window),
-                ("active tabs", t.tab_active),
-                ("dragged tabs", t.tab_drag),
-                ("address launcher", t.address_field),
-                ("native pages", t.page),
-                ("settings groups", t.settings_surface),
-                ("overlay input and status", t.overlay_panel),
-                (
-                    "selected overlay row",
-                    paint(t.overlay_selected, t.overlay_panel),
-                ),
-            ] {
-                assert_eq!(base.a, 1.0, "{role} must have a stable backdrop");
-                for treatment in [Color::TRANSPARENT, t.hover, t.press] {
-                    let background = paint(treatment, base);
-                    for (foreground, minimum) in [
-                        (t.text, 4.5),
-                        (t.text_muted, 4.5),
-                        (t.icon, 3.0),
-                        (t.focus, 3.0),
-                    ] {
-                        let ratio = contrast(foreground, background);
-                        assert!(
-                            ratio >= minimum,
-                            "{role} (dark={dark}): {ratio:.2} < {minimum}"
-                        );
+            for accent in AccentColor::ALL {
+                let t = palette(dark, true, 100, accent);
+                for (role, base) in [
+                    ("sidebar and inactive tabs", t.window),
+                    ("active tabs", t.tab_active),
+                    ("dragged tabs", t.tab_drag),
+                    ("address launcher", t.address_field),
+                    ("native pages", t.page),
+                    ("settings groups", t.settings_surface),
+                    ("overlay input and status", t.overlay_panel),
+                    (
+                        "selected overlay row",
+                        paint(t.overlay_selected, t.overlay_panel),
+                    ),
+                ] {
+                    assert_eq!(base.a, 1.0, "{role} must have a stable backdrop");
+                    for treatment in [Color::TRANSPARENT, t.hover, t.press] {
+                        let background = paint(treatment, base);
+                        for (foreground, minimum) in [
+                            (t.text, 4.5),
+                            (t.text_muted, 4.5),
+                            (t.icon, 3.0),
+                            (t.focus, 3.0),
+                        ] {
+                            let ratio = contrast(foreground, background);
+                            assert!(
+                                ratio >= minimum,
+                                "{role} (accent={accent:?}, dark={dark}): {ratio:.2} < {minimum}"
+                            );
+                        }
                     }
                 }
-            }
-            assert!(contrast(t.text, t.selection) >= 4.5);
-            assert!(contrast(t.tab_drop_indicator, t.window) >= 3.0);
-            for background in [t.address_field, t.window, t.settings_surface] {
-                assert!(contrast(t.control_border, background) >= 3.0);
+                assert!(contrast(t.text, t.selection) >= 4.5);
+                assert!(contrast(t.tab_drop_indicator, t.window) >= 3.0);
+                for background in [t.address_field, t.window, t.settings_surface] {
+                    assert!(contrast(t.control_border, background) >= 3.0);
+                }
             }
         }
     }

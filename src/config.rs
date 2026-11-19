@@ -10,11 +10,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use toml_edit::{DocumentMut, Item, Table, Value};
 
 use crate::address::SearchEngine;
-use crate::appearance::Appearance;
+use crate::appearance::{AccentColor, Appearance};
 use crate::permissions::{PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{DownloadDirectory, Settings, SettingsChange, StartupMode};
 
-const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\nglass = true\ntint_opacity = 100\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n";
+const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\naccent = \"blue\"\nglass = true\ntint_opacity = 100\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n";
 static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -62,6 +62,14 @@ pub(crate) fn parse(contents: &str) -> Result<ConfigLoad, String> {
                 defaults.appearance
             }
         };
+    }
+    if let Some(value) = string_value(&document, "appearance", "accent", &mut issues) {
+        settings.accent_color = AccentColor::from_config_key(&value).unwrap_or_else(|| {
+            issues.push(format!(
+                "Invalid value for [appearance].accent: {value:?}; expected blue, purple, pink, orange, green or gray"
+            ));
+            defaults.accent_color
+        });
     }
     if let Some(value) = bool_value(&document, "appearance", "glass", &mut issues) {
         settings.glass_enabled = value;
@@ -290,6 +298,9 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
                 Appearance::Dark => "dark".to_owned(),
             },
         ),
+        SettingsChange::AccentColor(value) => {
+            ("appearance", "accent", value.config_key().to_owned())
+        }
         SettingsChange::SearchEngine(value) => ("search", "engine", value.config_key().to_owned()),
         SettingsChange::DownloadDirectory(value) => (
             "downloads",
@@ -531,6 +542,7 @@ mod tests {
         fs::write(&path, DEFAULT_CONFIG).expect("write initial config");
         for change in [
             SettingsChange::Appearance(Appearance::Dark),
+            SettingsChange::AccentColor(AccentColor::Pink),
             SettingsChange::SearchEngine(SearchEngine::Brave),
             SettingsChange::DownloadDirectory(DownloadDirectory::Custom(PathBuf::from(
                 "/tmp/elaris-downloads",
@@ -542,6 +554,7 @@ mod tests {
 
         let loaded = load_or_create(&path).expect("reload changed config");
         assert_eq!(loaded.settings.appearance, Appearance::Dark);
+        assert_eq!(loaded.settings.accent_color, AccentColor::Pink);
         assert_eq!(loaded.settings.search_engine, SearchEngine::Brave);
         assert_eq!(
             loaded.settings.download_directory,

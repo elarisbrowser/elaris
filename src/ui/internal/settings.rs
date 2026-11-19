@@ -10,7 +10,7 @@ use rune_kit::{Button, ButtonVariant, Kit, SegmentedControl, Select, SelectAppea
 
 use crate::address::SearchEngine;
 use crate::app::AppState;
-use crate::appearance::Appearance;
+use crate::appearance::{AccentColor, Appearance};
 use crate::settings::{DownloadDirectory, StartupMode};
 use crate::ui::theme::{self, Theme};
 
@@ -20,6 +20,8 @@ const TOP_PADDING: f32 = 48.0;
 const SECTION_GAP: f32 = 25.0;
 const ROW_GAP: f32 = 16.0;
 const CONTROL_WIDTH: f32 = 220.0;
+const ACCENT_SWATCH_SIZE: f32 = 36.0;
+const ACCENT_DOT_SIZE: f32 = 20.0;
 const COMPACT_BREAKPOINT: f32 = 560.0;
 
 pub(super) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
@@ -102,6 +104,13 @@ fn appearance_section(state: &AppState, theme: &Theme, kit: &Kit, compact: bool)
                     compact,
                 ))
                 .child(setting_row(
+                    "Accent colour",
+                    "Choose the colour used for interactive emphasis.",
+                    theme,
+                    accent_color_control(state.settings.accent_color, theme),
+                    compact,
+                ))
+                .child(setting_row(
                     "Liquid glass",
                     "Show the tinted glass window background.",
                     theme,
@@ -118,6 +127,46 @@ fn appearance_section(state: &AppState, theme: &Theme, kit: &Kit, compact: bool)
             theme,
         ),
     )
+}
+
+fn accent_color_control(selected: AccentColor, theme: &Theme) -> El {
+    let mut choices = row()
+        .key("accent-colour-options")
+        .role("radiogroup")
+        .label("Accent colour")
+        .w(ACCENT_SWATCH_SIZE * AccentColor::ALL.len() as f32 + 5.0 * 5.0)
+        .gap(5.0)
+        .center_y();
+
+    for (index, accent) in AccentColor::ALL.into_iter().enumerate() {
+        let is_selected = selected == accent;
+        let mut choice = el()
+            .key(format!("accent-colour-{}", accent.config_key()))
+            .role("radio")
+            .label(accent.label())
+            .checked(is_selected)
+            .position_in_set(index + 1, AccentColor::ALL.len())
+            .size(ACCENT_SWATCH_SIZE, ACCENT_SWATCH_SIZE)
+            .radius(ACCENT_SWATCH_SIZE / 2.0)
+            .center()
+            .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
+            .hover(theme.hover)
+            .press(theme.press)
+            .on_press(move |state: &mut AppState| state.set_accent_color(accent))
+            .child(
+                el().key("swatch")
+                    .size(ACCENT_DOT_SIZE, ACCENT_DOT_SIZE)
+                    .radius(ACCENT_DOT_SIZE / 2.0)
+                    .fill(theme::accent_color(accent))
+                    .a11y_hidden(),
+            );
+        if is_selected {
+            choice = choice.border(3.0, theme.accent);
+        }
+        choices = choices.child(choice);
+    }
+
+    choices
 }
 
 fn tint_opacity_control(value: u8, theme: &Theme) -> El {
