@@ -133,6 +133,7 @@ unsafe extern "C" {
     fn elaris_ladybird_frame(view: *mut RawView, out_frame: *mut RawFrame) -> i32;
     fn elaris_ladybird_copy_frame(view: *mut RawView, rgba: *mut u8, length: usize) -> i32;
     fn elaris_ladybird_mouse_event(view: *mut RawView, event: *const RawMouseEvent) -> i32;
+    fn elaris_ladybird_discard_prepared(view: *mut RawView, request: u64) -> i32;
     fn elaris_ladybird_load_prepared(view: *mut RawView, source: u64, request: u64) -> i32;
     fn elaris_ladybird_open_context_target(view: *mut RawView, request: u64, new_tab: i32) -> i32;
     fn elaris_ladybird_find(view: *mut RawView, query: *const c_char, request_id: u64) -> i32;
@@ -210,6 +211,11 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
             9 => Event::Clipboard(text),
             10 => Event::ImeCaret((raw.value != 0).then_some(raw.caret)),
             11 => Event::NavigationCommitted(text),
+            15 => Event::Peek {
+                url: text,
+                request: raw.request_id,
+            },
+            16 => Event::LoadError(text),
             12 => {
                 let status = match raw.download_status {
                     1 | 2 => DownloadStatus::Downloading,
@@ -649,6 +655,12 @@ impl WebView {
     pub fn load_prepared(&mut self, source: u64, request: u64) -> Result<(), String> {
         // SAFETY: The bridge resolves both identifiers on the owner thread.
         status_result(unsafe { elaris_ladybird_load_prepared(self.raw.as_ptr(), source, request) })
+    }
+
+    /// Releases a prepared navigation Elaris chose not to open.
+    pub fn discard_prepared(&mut self, request: u64) -> Result<(), String> {
+        // SAFETY: The view lives on the calling engine thread.
+        status_result(unsafe { elaris_ladybird_discard_prepared(self.raw.as_ptr(), request) })
     }
 
     pub fn open_context_target(&mut self, request: u64, new_tab: bool) -> Result<(), String> {

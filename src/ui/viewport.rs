@@ -61,7 +61,10 @@ pub(crate) fn view(
         .w_full()
         .h_full()
         .min_w(0.0)
-        .on_layout(|state: &mut AppState, rect| {
+        .on_layout_tx(|state: &mut AppState, rect, tx| {
+            if state.split_rect == rect {
+                tx.live_only();
+            }
             state.split_rect = rect;
             state.browser.set_viewport([rect[2], rect[3]]);
         });
@@ -152,6 +155,14 @@ fn wrapper_key(id: Option<TabId>) -> String {
 
 pub(crate) fn focus_key(browser: &Browser) -> &'static str {
     pane_key(browser.focused_side())
+}
+
+pub(crate) fn page_focus_key(browser: &Browser) -> &'static str {
+    if browser.peek.is_some() {
+        super::peek::PAGE
+    } else {
+        focus_key(browser)
+    }
 }
 
 fn pane_key(side: usize) -> &'static str {
@@ -308,23 +319,17 @@ fn page(
             }
         })
         .on_drag(move |state: &mut AppState, drag, tx| {
-            let kind = match drag.phase {
-                Phase::Down => {
-                    if let Some(id) = id
-                        && state.browser.active_tab().map(crate::tab::Tab::id) != Some(id)
-                    {
-                        state.activate(id);
-                    }
-                    tx.focus(pane_key(side), false);
-                    MouseKind::Down
+            if drag.phase == Phase::Down {
+                if let Some(id) = id
+                    && state.browser.active_tab().map(crate::tab::Tab::id) != Some(id)
+                {
+                    state.activate(id);
                 }
-                Phase::Move => MouseKind::Move,
-                Phase::Up if drag.cancelled() => MouseKind::Cancel,
-                Phase::Up => MouseKind::Up,
-            };
+                tx.focus(pane_key(side), false);
+            }
             if !internal {
                 state.browser.drag_pointer(
-                    kind,
+                    mouse_kind(drag.phase, drag.cancelled()),
                     [drag.x, drag.y],
                     tx.button(),
                     tx.mods(),
@@ -336,19 +341,19 @@ fn page(
             if let Some(id) = id.filter(|_| !internal) {
                 state
                     .browser
-                    .hover_tab(id, MouseKind::Move, [pointer.x, pointer.y], tx.mods());
+                    .hover_page(id, MouseKind::Move, [pointer.x, pointer.y], tx.mods());
             }
         })
         .on_hover_change(move |state: &mut AppState, inside, tx| {
             if let Some(id) = id.filter(|_| !inside && !internal) {
                 state
                     .browser
-                    .hover_tab(id, MouseKind::Leave, [0.0; 2], tx.mods());
+                    .hover_page(id, MouseKind::Leave, [0.0; 2], tx.mods());
             }
         })
         .on_wheel(move |state: &mut AppState, wheel, _| {
             if let Some(id) = id.filter(|_| !internal) {
-                state.browser.wheel_tab(id, wheel);
+                state.browser.wheel_page(id, wheel);
                 true
             } else {
                 false
@@ -398,11 +403,20 @@ fn ui_only_badge(theme: &Theme) -> El {
         )
 }
 
+pub(super) fn mouse_kind(phase: Phase, cancelled: bool) -> MouseKind {
+    match phase {
+        Phase::Down => MouseKind::Down,
+        Phase::Move => MouseKind::Move,
+        Phase::Up if cancelled => MouseKind::Cancel,
+        Phase::Up => MouseKind::Up,
+    }
+}
+
 fn paste(id: TabId, tx: &mut Tx) {
     tx.read_clipboard(move |s: &mut AppState, content, tx| {
         if !s.omnibox.open
-            && tx.focused() == Some(focus_key(&s.browser))
-            && s.browser.active_tab().is_some_and(|tab| tab.id() == id)
+            && tx.focused() == Some(page_focus_key(&s.browser))
+            && s.browser.input_page() == Some(id)
             && !content.text().is_empty()
         {
             s.browser.send(
@@ -413,21 +427,22 @@ fn paste(id: TabId, tx: &mut Tx) {
     });
 }
 
-fn page_key(state: &mut AppState, key: &KeyEvent, tx: &mut Tx) -> bool {
+pub(super) fn page_key(state: &mut AppState, key: &KeyEvent, tx: &mut Tx) -> bool {
+    if key.key == Key::Escape && super::peek::dismiss(state, tx) {
+        return true;
+    }
     if key.key == Key::Escape && (state.tab_drag.is_dragging() || state.has_split_picker()) {
         return crate::shortcuts::on_key(state, key, tx);
     }
     if crate::ui::tab_switcher::cycle_key(state, key, tx) {
         return true;
     }
-    if state
-        .browser
-        .active_tab()
-        .is_some_and(|tab| tab.is_internal())
-    {
-        return false;
-    }
-    let Some(id) = state.browser.active_tab().map(|tab| tab.id()) else {
+    let Some(id) = state.browser.input_page().filter(|id| {
+        state
+            .browser
+            .page(*id)
+            .is_some_and(|page| !page.is_internal())
+    }) else {
         return false;
     };
     if state.omnibox.open || state.page_menu.open() {
@@ -465,7 +480,7 @@ fn page_key(state: &mut AppState, key: &KeyEvent, tx: &mut Tx) -> bool {
 }
 
 pub(crate) fn ime(state: &mut AppState, event: &Ime, tx: &mut Tx) -> bool {
-    if tx.focused() != Some(focus_key(&state.browser))
+    if tx.focused() != Some(page_focus_key(&state.browser))
         || state.omnibox.open
         || state.page_menu.open()
     {
@@ -473,7 +488,8 @@ pub(crate) fn ime(state: &mut AppState, event: &Ime, tx: &mut Tx) -> bool {
     }
     let Some(tab) = state
         .browser
-        .active_tab()
+        .input_page()
+        .and_then(|id| state.browser.page(id))
         .filter(|tab| tab.ime_caret.is_some())
     else {
         return false;

@@ -38,6 +38,13 @@ pub enum Event {
         request: u64,
         activate: bool,
     },
+    /// A Shift-clicked hyperlink whose prepared navigation is still owned by its source view.
+    Peek {
+        url: String,
+        request: u64,
+    },
+    /// The active document is an engine error page or its renderer crashed.
+    LoadError(String),
     ContextMenu(PageMenu),
     Clipboard(String),
     ImeCaret(Option<[i32; 4]>),

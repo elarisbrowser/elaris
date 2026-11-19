@@ -244,6 +244,11 @@ impl Runtime {
                     updates.push(Update::NewTab(tab, url, request, activate));
                     continue;
                 }
+                Event::Peek { url, request } => {
+                    updates.push(Update::Peek(tab, url, request));
+                    continue;
+                }
+                Event::LoadError(error) => TabUpdate::LoadError(error),
                 Event::ContextMenu(menu) => {
                     updates.push(Update::ContextMenu(tab, menu));
                     continue;
@@ -399,6 +404,7 @@ fn apply_to_view(view: &mut View, command: ViewCommand, timing: &mut Timing) -> 
     let web = &mut view.view;
     match command {
         ViewCommand::LoadPrepared { source, request } => web.load_prepared(source.raw(), request),
+        ViewCommand::DiscardPrepared(request) => web.discard_prepared(request),
         ViewCommand::OpenContext { request, new_tab } => web.open_context_target(request, new_tab),
         ViewCommand::Find { query, request_id } => web.find(&query, request_id),
         ViewCommand::FindNext { request_id } => web.find_next(request_id),

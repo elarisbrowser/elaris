@@ -36,6 +36,14 @@ pub(crate) static CLOSE: Icon = icon(
     "close",
     r#"<path d="M5 5L11 11M11 5L5 11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>"#,
 );
+pub(crate) static OPEN_TAB: Icon = icon(
+    "open-tab",
+    r#"<path d="M8 3.5H12.5V8M12.5 3.5L6.75 9.25M11.5 9.5V12.5H3.5V4.5H6.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>"#,
+);
+pub(crate) static SPLIT_VIEW: Icon = icon(
+    "split-view",
+    r#"<rect x="2.5" y="3.5" width="11" height="9" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 3.75V12.25" stroke="currentColor" stroke-width="1.4"/>"#,
+);
 #[cfg(target_os = "linux")]
 pub(crate) static MINIMIZE: Icon = icon(
     "minimize",

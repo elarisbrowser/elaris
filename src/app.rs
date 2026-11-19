@@ -700,6 +700,18 @@ impl AppState {
         self.split_selection = 0;
     }
 
+    pub(crate) fn promote_peek(
+        &mut self,
+        destination: crate::browser::peek::Destination,
+        tx: &mut Tx,
+    ) {
+        if self.browser.promote_peek(destination).is_some() {
+            self.refresh_active_page();
+            tx.focus(focus_key(&self.browser), false);
+            tx.animated();
+        }
+    }
+
     fn refresh_active_page(&mut self) {
         #[cfg(target_os = "macos")]
         crate::site_popover_macos::close();
@@ -1190,11 +1202,22 @@ pub(crate) fn setup_headless(state: &mut AppState, waker: rune::Waker) {
 
 /// Rune's per-frame hook: forwards UI changes to the browser and shows what it reported.
 pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
-    let focus_changed = state
-        .browser
-        .set_viewport_focus(tx.focused() == Some(focus_key(&state.browser)));
+    let focused = tx.focused() == Some(crate::ui::viewport::page_focus_key(&state.browser));
+    let focus_changed = state.browser.set_viewport_focus(focused);
     let settling = crate::ui::settle_sidebar(state, tx);
+    let previous_peek = state.browser.peek.as_ref().map(|peek| peek.page.id());
     let polled = state.browser.poll();
+    if state
+        .browser
+        .peek
+        .as_ref()
+        .is_some_and(|peek| Some(peek.page.id()) != previous_peek)
+    {
+        state.page_menu = Default::default();
+        crate::ui::dismiss_tab_preview(state);
+        tx.focus_when_shown(crate::ui::peek::PAGE, false);
+        tx.animated();
+    }
     if state.site_permissions_open
         && let Some(active_tab) = state.browser.active_tab().map(Tab::id)
         && polled

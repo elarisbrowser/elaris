@@ -133,6 +133,7 @@ pub(crate) enum ViewCommand {
         source: TabId,
         request: u64,
     },
+    DiscardPrepared(u64),
     OpenContext {
         request: u64,
         new_tab: bool,
@@ -184,6 +185,7 @@ pub(crate) enum Update {
     /// Selected page text for the find bar's guarded initial query.
     FindSelection(TabId, u64, String),
     NewTab(TabId, String, u64, bool),
+    Peek(TabId, String, u64),
     ContextMenu(TabId, elaris::ladybird::PageMenu),
     Clipboard(TabId, String),
     Download(DownloadId, DownloadUpdate),
@@ -237,6 +239,7 @@ pub(crate) enum TabUpdate {
     Loading(bool),
     Favicon(Option<Favicon>),
     History { back: bool, forward: bool },
+    LoadError(String),
     Error(String),
 }
 

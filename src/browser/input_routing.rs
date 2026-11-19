@@ -21,6 +21,20 @@ impl Browser {
         mods: Mods,
         clicks: u32,
     ) {
+        if let Some(id) = self.active {
+            self.drag_page(id, kind, point, button, mods, clicks);
+        }
+    }
+
+    pub(crate) fn drag_page(
+        &mut self,
+        id: TabId,
+        kind: MouseKind,
+        point: [f32; 2],
+        button: PointerButton,
+        mods: Mods,
+        clicks: u32,
+    ) {
         let bit = input::button_bit(button);
         if bit == 0 {
             return;
@@ -31,17 +45,24 @@ impl Browser {
                 self.set_viewport_focus(true);
                 self.sync_engine();
             }
-            self.input.drag = self.active.map(|id| (id, bit));
+            self.input.drag = Some((id, bit));
         }
-        let Some((id, held)) = self.input.drag else {
+        let Some((owner, held)) = self.input.drag else {
             return;
         };
         if kind == MouseKind::Up || kind == MouseKind::Cancel {
             self.input.drag = None;
         }
-        if self.active != Some(id) {
-            self.cancel_pointer(id);
+        let through_peek = self.peek.is_some() && self.visible_tabs().contains(&Some(id));
+        if owner != id || (self.input_page() != Some(id) && !through_peek) {
+            self.cancel_pointer(owner);
             return;
+        }
+        if kind == MouseKind::Up
+            && button == PointerButton::Primary
+            && super::peek::shift_only(mods)
+        {
+            self.note_peek_origin(id, point);
         }
         let changed = if matches!(kind, MouseKind::Down | MouseKind::Up) {
             bit
@@ -77,8 +98,8 @@ impl Browser {
         );
     }
 
-    pub(crate) fn hover_tab(&self, id: TabId, kind: MouseKind, point: [f32; 2], mods: Mods) {
-        if self.input.drag.is_none() && self.visible_tabs().contains(&Some(id)) {
+    pub(crate) fn hover_page(&self, id: TabId, kind: MouseKind, point: [f32; 2], mods: Mods) {
+        if self.input.drag.is_none() && self.accepts_pointer(id) {
             self.send(
                 id,
                 ViewCommand::Mouse(input::pointer(
@@ -94,8 +115,8 @@ impl Browser {
         }
     }
 
-    pub(crate) fn wheel_tab(&self, id: TabId, wheel: WheelEvent) {
-        if !self.visible_tabs().contains(&Some(id)) {
+    pub(crate) fn wheel_page(&self, id: TabId, wheel: WheelEvent) {
+        if !self.accepts_pointer(id) {
             return;
         }
         let phase = input::wheel_phase(wheel.precise, wheel.phase, wheel.momentum);
@@ -122,7 +143,7 @@ impl Browser {
         repeat: bool,
         physical: Option<rune::PhysicalKeyCode>,
     ) -> bool {
-        let Some(id) = self.active.filter(|_| self.engine.is_some()) else {
+        let Some(id) = self.input_page().filter(|_| self.engine.is_some()) else {
             return false;
         };
         let pressed = if let rune::Key::Modifier { pressed, .. } = event.key {
@@ -154,6 +175,13 @@ impl Browser {
         }
         self.send(id, ViewCommand::Key(key));
         true
+    }
+
+    fn accepts_pointer(&self, id: TabId) -> bool {
+        self.peek.as_ref().map_or_else(
+            || self.visible_tabs().contains(&Some(id)),
+            |peek| peek.page.id() == id,
+        )
     }
 
     pub(super) fn reset_input(&mut self) {

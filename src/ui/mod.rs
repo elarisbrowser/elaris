@@ -9,6 +9,7 @@ mod find;
 mod icons;
 pub(crate) mod internal;
 mod omnibox;
+pub(crate) mod peek;
 mod sidebar;
 mod tab_preview;
 pub(crate) use sidebar::hover::{
@@ -105,7 +106,11 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         }
         window
     };
-    if state.tab_switcher.is_none() {
+    if state.browser.peek.is_some() {
+        window = window.child(peek::backdrop());
+    }
+    window = window.child(peek::layer(state, &theme, reduced_motion));
+    if state.browser.peek.is_none() && state.tab_switcher.is_none() {
         if let Some(find) = find::view(state, &theme, reduced_motion, viewport::page_origin(state))
         {
             overlays.push(find);

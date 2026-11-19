@@ -184,6 +184,7 @@ impl Tab {
                 self.can_go_back = back;
                 self.can_go_forward = forward;
             }
+            TabUpdate::LoadError(_) => {}
             TabUpdate::Error(error) => self.error = Some(error),
         }
     }

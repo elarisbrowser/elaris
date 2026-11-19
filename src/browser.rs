@@ -23,6 +23,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 mod input_routing;
+pub(crate) mod peek;
 pub(crate) mod split;
 
 use crate::address::url_for_address;
@@ -93,6 +94,9 @@ pub(crate) struct Browser {
     /// In the order the sidebar shows them.
     tabs: Vec<Tab>,
     active: Option<TabId>,
+    pub(crate) peek: Option<peek::PeekState>,
+    peek_origin: Option<(TabId, [f32; 2])>,
+    promoted_visit: Option<(TabId, String, String)>,
     pub(crate) split: Option<split::Split>,
     recent: Vec<TabId>,
     next_id: u64,
@@ -128,6 +132,9 @@ impl Default for Browser {
         Self {
             tabs: Vec::new(),
             active: None,
+            peek: None,
+            peek_origin: None,
+            promoted_visit: None,
             split: None,
             recent: Vec::new(),
             next_id: 1,
@@ -180,6 +187,9 @@ impl Browser {
     pub(crate) fn fail(&mut self, error: String) {
         for tab in &mut self.tabs {
             tab.error = Some(error.clone());
+        }
+        if let Some(peek) = &mut self.peek {
+            peek.page.error = Some(error.clone());
         }
         self.engine_error = Some(error);
     }
@@ -446,8 +456,7 @@ impl Browser {
         route: InternalRoute,
         section: TabSection,
     ) -> TabId {
-        let id = TabId::from_raw(self.next_id);
-        self.next_id += 1;
+        let id = self.next_page_id();
         let mut tab = Tab::new_internal(id, route);
         tab.section = section;
         let index = self
@@ -469,8 +478,7 @@ impl Browser {
         deferred_load: bool,
         section: TabSection,
     ) -> TabId {
-        let id = TabId::from_raw(self.next_id);
-        self.next_id += 1;
+        let id = self.next_page_id();
         let mut tab = Tab::new(id, url);
         tab.section = section;
         tab.title = title;
@@ -832,6 +840,7 @@ impl Browser {
             }
         }
         let mut polled = Polled::default();
+        polled.committed.extend(self.promoted_visit.take());
         self.sync_engine();
         // Collected first: taking them in needs the browser, which the engine is part of.
         // Empty, as most polls are, it allocates nothing.
@@ -840,6 +849,22 @@ impl Browser {
             match update {
                 // A tab closed since the engine reported this has nothing to show it.
                 Update::Tab(id, update) => {
+                    if let Some(peek) = self.peek.as_mut().filter(|peek| peek.page.id() == id) {
+                        if !matches!(&update,
+                            crate::engine::TabUpdate::Navigation(url)
+                            | crate::engine::TabUpdate::NavigationCommitted(url)
+                            if InternalRoute::is_internal_address(url))
+                        {
+                            if let crate::engine::TabUpdate::LoadError(error) = update {
+                                peek.page.error = Some(error);
+                                peek.page.loading = false;
+                            } else {
+                                peek.page.update(update);
+                            }
+                            polled.changed = true;
+                        }
+                        continue;
+                    }
                     if self.tab(id).is_some_and(Tab::is_internal) {
                         continue;
                     }
@@ -903,6 +928,9 @@ impl Browser {
                         polled.thumbnails_ready.push(id);
                     }
                 }
+                Update::Peek(source, url, request) => {
+                    polled.changed |= self.open_peek(source, url, request);
+                }
                 Update::NewTab(source, url, request, activate) => {
                     if self.tab(source).is_some_and(|tab| !tab.is_internal())
                         && !InternalRoute::is_internal_address(&url)
@@ -916,6 +944,8 @@ impl Browser {
                             self.activate_tab(tab);
                         }
                         polled.changed = true;
+                    } else {
+                        self.send(source, ViewCommand::DiscardPrepared(request));
                     }
                 }
                 Update::FindSelection(id, request_id, text)
@@ -929,7 +959,7 @@ impl Browser {
                     polled.menu = Some((id, menu));
                     polled.changed = true;
                 }
-                Update::Clipboard(id, text) if self.active == Some(id) => {
+                Update::Clipboard(id, text) if self.input_page() == Some(id) => {
                     polled.clipboard = Some(text)
                 }
                 Update::ContextMenu(..) | Update::Clipboard(..) => {}
@@ -966,6 +996,10 @@ impl Browser {
                 polled.animating |= std::mem::replace(&mut tab.engine.frames, frames) != frames;
             }
         }
+        if let Some(peek) = &mut self.peek {
+            let frames = peek.page.surface.frames();
+            polled.animating |= std::mem::replace(&mut peek.page.engine.frames, frames) != frames;
+        }
         polled
     }
 
@@ -983,7 +1017,7 @@ impl Browser {
     /// Sends `command` to the tab's view, if the tab is open and there is an engine.
     pub(crate) fn send(&self, id: TabId, command: ViewCommand) {
         if let Some(engine) = &self.engine
-            && let Some(tab) = self.tab(id)
+            && let Some(tab) = self.page(id)
         {
             if command.invalidates_preview() {
                 tab.surface.request_preview_invalidation();
@@ -1015,28 +1049,43 @@ impl Browser {
         let widths = self
             .split
             .map(|split| split::widths(window.viewport[0], split.ratio));
+        let input_page = self.input_page();
+        let peek_id = self.peek.as_ref().map(|peek| peek.page.id());
         // Release the old focus before granting it to a different view.
-        for tab in &mut self.tabs {
-            if tab.engine.focused && self.active != Some(tab.id()) {
+        for tab in self
+            .tabs
+            .iter_mut()
+            .chain(self.peek.iter_mut().map(|peek| &mut peek.page))
+        {
+            if tab.engine.focused && input_page != Some(tab.id()) {
                 tab.engine.focused = false;
                 engine.send(Command::View(tab.id(), ViewCommand::Focus(false)));
             }
         }
         let scheme_known = window.applied_dark.get().is_some();
-        for tab in &mut self.tabs {
+        for tab in self
+            .tabs
+            .iter_mut()
+            .chain(self.peek.iter_mut().map(|peek| &mut peek.page))
+        {
             if tab.is_internal() {
                 continue;
             }
             let id = tab.id();
             let applied = &mut tab.engine;
-            let active = self.active == Some(id);
+            let active = input_page == Some(id);
             let side = panes.iter().position(|pane| *pane == Some(id));
-            let visible = side.is_some();
+            let is_peek = peek_id == Some(id);
+            let visible = is_peek || side.is_some();
             let width = side
                 .zip(widths)
                 .map_or(window.viewport[0], |(side, widths)| widths[side]);
-            let [width, height] =
-                [width, window.viewport[1]].map(|points| input::device(points, scale));
+            let size = if is_peek {
+                peek::geometry(window.viewport).page_size()
+            } else {
+                [width, window.viewport[1]]
+            };
+            let [width, height] = size.map(|points| input::device(points, scale));
             let viewport = (width > 0 && height > 0).then_some((width, height, f64::from(scale)));
             let send = |command| engine.send(Command::View(id, command));
             if applied.hidden == visible {
@@ -1626,7 +1675,7 @@ mod tests {
             .position(|command| *command == view(right, ViewCommand::Focus(true)));
         assert!(matches!((unfocus, focus), (Some(old), Some(new)) if old < new));
 
-        browser.hover_tab(left, MouseKind::Move, [3.0, 5.0], Mods::default());
+        browser.hover_page(left, MouseKind::Move, [3.0, 5.0], Mods::default());
         assert!(browser.key(
             &KeyEvent {
                 key: RuneKey::Enter,
