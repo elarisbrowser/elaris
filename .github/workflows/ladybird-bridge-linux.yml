@@ -31,7 +31,7 @@ jobs:
           llvm_release="$(lsb_release -sc)"
           echo "deb [signed-by=/usr/share/keyrings/llvm-snapshot.gpg] https://apt.llvm.org/${llvm_release}/ llvm-toolchain-${llvm_release}-22 main" > /etc/apt/sources.list.d/llvm.list
           apt-get update -o APT::Update::Error-Mode=any
-          apt-get install -y --no-install-recommends clang-tidy-22 libxkbcommon-dev passwd util-linux
+          apt-get install -y --no-install-recommends clang-tidy-22 libxkbcommon-dev passwd patch util-linux
           clang-tidy-22 --version
 
       - name: Verify headless display and compiler-cache tools

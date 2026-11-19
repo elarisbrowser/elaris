@@ -1,6 +1,6 @@
 # Ladybird bridge
 
-For the normal local workflow, run `./elaris setup` once and then `./elaris build`; the wrapper installs prerequisites, prepares the pinned checkout, builds Ladybird's dependencies, and compiles the bridge and helper processes described below. The bridge is an opt-in C ABI over `vendor/ladybird`. It does not add files to or patch that submodule. Ladybird must remain the top-level CMake project because its Rust rules use `CMAKE_SOURCE_DIR`; Elaris injects its target after Ladybird declares its libraries. Direct `cargo run` remains a UI-only build and does not link Ladybird.
+For the normal local workflow, run `./elaris setup` once and then `./elaris build`; the wrapper installs prerequisites, prepares the pinned checkout, builds Ladybird's dependencies, and compiles the bridge and helper processes described below. The bridge is an opt-in C ABI over `vendor/ladybird`. The vendored checkout stays pristine. For Peek, CMake applies [a small patch](patches/peek.patch) to copies of two source files in the build directory using `patch`. The patch adds Shift-only pointer activation for HTTP, HTTPS and file links through Ladybird’s existing verified link callback. Normal links, downloads and other modifier combinations keep their upstream activation paths. Ladybird must remain the top-level CMake project because its Rust rules use `CMAKE_SOURCE_DIR`; Elaris injects its target after Ladybird declares its libraries. Direct `cargo run` remains a UI-only build and does not link Ladybird.
 
 ## Configure, build and test
 

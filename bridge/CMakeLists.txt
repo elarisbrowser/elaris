@@ -3,7 +3,10 @@
 # project for its Rust rules and helper-process paths.
 set(ELARIS_BRIDGE_DIR "${CMAKE_CURRENT_LIST_DIR}")
 
+include("${ELARIS_BRIDGE_DIR}/Peek.cmake")
+
 function(elaris_add_ladybird_bridge)
+    elaris_patch_peek()
     if(TARGET harfbuzz AND ELARIS_VCPKG_PREFIX)
         # The installed vcpkg config incorrectly publishes `//include/harfbuzz`.
         set_property(TARGET harfbuzz PROPERTY INTERFACE_INCLUDE_DIRECTORIES

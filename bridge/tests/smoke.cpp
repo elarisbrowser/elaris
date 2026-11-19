@@ -20,6 +20,9 @@ struct Events {
     unsigned navigation{};
     unsigned committed_navigation{};
     unsigned new_tabs{};
+    uint64_t peek_request{};
+    unsigned load_errors{};
+    std::string peek_url;
     bool foreground{};
     std::string link_menu;
     std::string clipboard;
@@ -50,6 +53,13 @@ static void on_event(void* context, ElarisLadybirdEvent const* event) {
     case ELARIS_LADYBIRD_NEW_TAB:
         ++events.new_tabs;
         events.foreground = event->value;
+        break;
+    case ELARIS_LADYBIRD_PEEK:
+        events.peek_request = event->request_id;
+        events.peek_url = event->text;
+        break;
+    case ELARIS_LADYBIRD_LOAD_ERROR:
+        ++events.load_errors;
         break;
     case ELARIS_LADYBIRD_CONTEXT_MENU:
         events.link_menu = event->text;
@@ -166,7 +176,8 @@ template <typename Done> static bool pump_until(ElarisLadybird* bridge, Done don
 }
 
 // Drive the fixed-position link and input in smoke.html at scale one.
-static bool page_input(ElarisLadybird* bridge, ElarisLadybirdView* view, Events& events) {
+static bool page_input(ElarisLadybird* bridge, ElarisLadybirdView* view, uint64_t view_id, EventsByView& all_events) {
+    auto& events = all_events.at(view_id);
     auto click = [&](int button, int mods, int y) {
         ElarisLadybirdMouseEvent event{};
         event.x = 30;
@@ -203,7 +214,36 @@ static bool page_input(ElarisLadybird* bridge, ElarisLadybirdView* view, Events&
         !expect([&] { return events.new_tabs == 1 && !events.foreground; }, "modified link") ||
         !click(ELARIS_LADYBIRD_BUTTON_MIDDLE, 0, 20) ||
         !expect([&] { return events.new_tabs == 2 && !events.foreground; }, "middle link") ||
-        !click(ELARIS_LADYBIRD_BUTTON_PRIMARY, 0, 52) || !expect([&] { return events.editing; }, "editable caret"))
+        !click(ELARIS_LADYBIRD_BUTTON_PRIMARY, new_tab_mod | ELARIS_LADYBIRD_MOD_SHIFT, 20) ||
+        !expect([&] { return events.new_tabs == 3 && events.foreground; }, "foreground modified link"))
+        return false;
+
+    auto commits_before_peek = events.committed_navigation;
+    if (!click(ELARIS_LADYBIRD_BUTTON_PRIMARY, ELARIS_LADYBIRD_MOD_SHIFT, 20) ||
+        !expect([&] { return events.peek_url.ends_with("smoke.html#target"); }, "Shift-click requests Peek") ||
+        events.committed_navigation != commits_before_peek || events.new_tabs != 3)
+        return false;
+    constexpr uint64_t peek_id = 100;
+    ElarisLadybirdView* preview = nullptr;
+    auto& preview_events = all_events[peek_id];
+    auto preview_loaded =
+        check(elaris_ladybird_create_view(bridge, peek_id, &preview), "create Peek view") &&
+        check(elaris_ladybird_resize(preview, 320, 300, 1), "resize Peek view") &&
+        check(elaris_ladybird_load_prepared(preview, view_id, events.peek_request), "load Peek link") &&
+        expect(
+            [&] {
+                return preview_events.committed_navigation && preview_events.frames && preview_events.loading_finished;
+            },
+            "Peek commits and paints independently");
+    auto missing_page = events.peek_url.substr(0, events.peek_url.find_last_of('/')) + "/missing-peek-smoke.html";
+    auto error_reported = preview_loaded &&
+                          check(elaris_ladybird_load(preview, missing_page.c_str()), "load missing Peek page") &&
+                          expect([&] { return preview_events.load_errors == 1; }, "Peek reports load failure");
+    if (preview)
+        elaris_ladybird_destroy_view(preview);
+    all_events.erase(peek_id);
+    if (!error_reported || !click(ELARIS_LADYBIRD_BUTTON_PRIMARY, ELARIS_LADYBIRD_MOD_SHIFT, 52) ||
+        !expect([&] { return events.editing; }, "editable caret") || events.new_tabs != 3)
         return false;
     ElarisLadybirdKeyEvent key{ELARIS_LADYBIRD_KEY_PRESS, ELARIS_LADYBIRD_KEY_CHARACTER, 0, 'a', 0};
     if (!check(elaris_ladybird_key_event(view, &key), "key down"))
@@ -380,7 +420,7 @@ int main(int argc, char** argv) {
         if (passed && cycle == 0)
             passed = page_find(bridge, view, events);
         if (passed && cycle == 0)
-            passed = page_input(bridge, view, events);
+            passed = page_input(bridge, view, view_id, events_by_view);
         elaris_ladybird_destroy_view(view);
         auto close_deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
         while (std::chrono::steady_clock::now() < close_deadline) {

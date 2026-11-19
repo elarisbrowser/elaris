@@ -1,0 +1,50 @@
+--- a/Libraries/LibWeb/DOM/Element.cpp
++++ b/Libraries/LibWeb/DOM/Element.cpp
+@@ -880,6 +880,25 @@
+         return;
+     }
+
++    if (event.is_trusted() && mouse_event && mouse_event->detail() > 0 && mouse_event->button() == 0 && mouse_event->shift_key()
++        && !mouse_event->ctrl_key() && !mouse_event->meta_key() && !mouse_event->alt_key()
++        && !cannot_navigate() && !is_editable_or_editing_host()) {
++        auto href = get_attribute_ns({}, HTML::AttributeNames::href);
++        if (!href.has_value() && is_svg_a_element())
++            href = get_attribute_ns(Namespace::XLink, HTML::AttributeNames::href);
++        if (href.has_value() && !href->is_empty()) {
++            auto target = hyperlink_suffix.has_value()
++                ? Utf16String::formatted("{}{}", *href, *hyperlink_suffix)
++                : *href;
++            auto url = document().encoding_parse_url(target);
++            if (url.has_value() && (url->scheme() == "http"sv || url->scheme() == "https"sv || url->scheme() == "file"sv)) {
++                auto navigation = HTML::prepare_navigation_from_document(document(), url.release_value(), hyperlink_referrer_policy());
++                document().navigable()->page().client().page_did_click_link(move(navigation), {}, UIEvents::Mod_Shift);
++                return;
++            }
++        }
++    }
++
+     // 7. Otherwise, follow the hyperlink created by element with hyperlinkSuffix set to hyperlinkSuffix and userInvolvement set to userInvolvement.
+     follow_the_hyperlink(hyperlink_suffix, user_involvement);
+ }
+--- a/Libraries/LibWebView/WebContentPage.cpp
++++ b/Libraries/LibWebView/WebContentPage.cpp
+@@ -43,6 +43,7 @@
+ #include <LibWebView/ViewImplementation.h>
+ #include <LibWebView/WebContentClient.h>
+ #include <LibWebView/WebContentPage.h>
++#include "peek_disposition.h"
+ #include <LibWebView/WebContentTestClient.h>
+ #include <LibWebView/WebDriverBiDi.h>
+ #include <LibWebView/WebUI.h>
+@@ -1098,6 +1099,11 @@
+         view().handle_external_url({}, verified_navigation->url, verified_navigation->initiator_origin_snapshot, verified_navigation->source_snapshot_params.has_transient_activation && has_transient_user_activation());
+         return;
+     }
++    if (modifiers == Web::UIEvents::Mod_Shift) {
++        if (view().take_input_to_open_link_in_new_tab({}))
++            view().open_navigation_in_new_tab(verified_navigation.release_value(), Elaris::peek_disposition);
++        return;
++    }
+     auto open_in_background = modifiers == Web::UIEvents::Mod_PlatformCtrl;
+     auto open_in_foreground = modifiers == (Web::UIEvents::Mod_PlatformCtrl | Web::UIEvents::Mod_Shift);
+     if (open_in_background || open_in_foreground || target == "_blank"sv) {

@@ -27,6 +27,8 @@ typedef enum {
     ELARIS_LADYBIRD_DOWNLOAD = 12,
     ELARIS_LADYBIRD_FIND_RESULT = 13,
     ELARIS_LADYBIRD_SELECTED_TEXT = 14,
+    ELARIS_LADYBIRD_PEEK = 15,
+    ELARIS_LADYBIRD_LOAD_ERROR = 16,
 } ElarisLadybirdEventKind;
 
 typedef enum {
@@ -217,6 +219,7 @@ typedef enum {
     ELARIS_EDIT_COMMIT,
 } ElarisEdit;
 int32_t elaris_ladybird_edit(ElarisLadybirdView*, ElarisEdit, const uint8_t* text, size_t length);
+int32_t elaris_ladybird_discard_prepared(ElarisLadybirdView*, uint64_t request);
 int32_t elaris_ladybird_load_prepared(ElarisLadybirdView*, uint64_t source, uint64_t request);
 int32_t elaris_ladybird_open_context_target(ElarisLadybirdView*, uint64_t request, int32_t new_tab);
 /* Searches case-insensitively, highlights all matches, and reports the request ID with the result. */

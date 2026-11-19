@@ -22,6 +22,8 @@
 #include <LibWebCommon/UIEvents/KeyCode.h>
 #include <LibWebCommon/WebView/Utilities.h>
 #include <LibWebView/Application.h>
+#include <LibWebView/CanonicalDocument.h>
+#include <LibWebView/CanonicalTraversable.h>
 #include <LibWebView/ContextMenuRequest.h>
 #include <LibWebView/FileDownloader.h>
 #include <LibWebView/HeadlessWebView.h>
@@ -39,6 +41,8 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+#include "peek_disposition.h"
 
 static Core::EventLoop* s_event_loop;
 static std::thread::id s_event_loop_thread;
@@ -510,6 +514,11 @@ extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t 
     };
     handle->view->on_top_level_navigation_commit = [handle] {
         emit(handle, ELARIS_LADYBIRD_NAVIGATION_COMMITTED, to_utf8(handle->view->url()));
+        if (handle->view->traversable().active_document().creation_url() == URL::about_error())
+            emit(handle, ELARIS_LADYBIRD_LOAD_ERROR, "This page could not be loaded.");
+    };
+    handle->view->on_web_content_crashed = [handle](auto) {
+        emit(handle, ELARIS_LADYBIRD_LOAD_ERROR, "This page stopped responding.");
     };
     handle->view->on_browser_history_traversal_complete = [handle] {
         emit(handle, ELARIS_LADYBIRD_NAVIGATION_COMMITTED, to_utf8(handle->view->url()));
@@ -536,7 +545,7 @@ extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t 
         auto request = ++handle->next_request;
         handle->pending_tabs.emplace(request, AK::move(navigation));
         ElarisLadybirdEvent event{};
-        event.kind = ELARIS_LADYBIRD_NEW_TAB;
+        event.kind = activate == Elaris::peek_disposition ? ELARIS_LADYBIRD_PEEK : ELARIS_LADYBIRD_NEW_TAB;
         event.view_id = handle->id;
         event.text = url.c_str();
         event.request_id = request;
@@ -601,6 +610,13 @@ extern "C" int32_t elaris_ladybird_load(ElarisLadybirdView* handle, char const* 
     return succeed();
 }
 
+extern "C" int32_t elaris_ladybird_discard_prepared(ElarisLadybirdView* handle, uint64_t request) {
+    if (!handle || !on_owner_thread(handle->bridge))
+        return fail("invalid input view");
+    handle->pending_tabs.erase(request);
+    return succeed();
+}
+
 extern "C" int32_t elaris_ladybird_load_prepared(ElarisLadybirdView* target, uint64_t source, uint64_t request) {
     if (!target || !on_owner_thread(target->bridge))
         return fail("invalid input view");
@@ -608,11 +624,13 @@ extern "C" int32_t elaris_ladybird_load_prepared(ElarisLadybirdView* target, uin
         if (handle->id != source)
             continue;
         auto item = handle->pending_tabs.extract(request);
-        if (!item.empty())
+        if (!item.empty()) {
             target->view->load(AK::move(item.mapped()));
+            return succeed();
+        }
         break;
     }
-    return succeed();
+    return fail("the prepared link is no longer available");
 }
 
 extern "C" int32_t elaris_ladybird_open_context_target(ElarisLadybirdView* handle, uint64_t request, int32_t new_tab) {
