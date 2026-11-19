@@ -26,6 +26,7 @@ impl Browser {
         }
     }
 
+    /// Sends the pointer event and returns whether the release can open Peek.
     pub(crate) fn drag_page(
         &mut self,
         id: TabId,
@@ -34,10 +35,10 @@ impl Browser {
         button: PointerButton,
         mods: Mods,
         clicks: u32,
-    ) {
+    ) -> bool {
         let bit = input::button_bit(button);
         if bit == 0 {
-            return;
+            return false;
         }
         if kind == MouseKind::Down {
             // Pane clicks can be delivered before the next frame's focus poll.
@@ -48,7 +49,7 @@ impl Browser {
             self.input.drag = Some((id, bit));
         }
         let Some((owner, held)) = self.input.drag else {
-            return;
+            return false;
         };
         if kind == MouseKind::Up || kind == MouseKind::Cancel {
             self.input.drag = None;
@@ -56,12 +57,12 @@ impl Browser {
         let through_peek = self.peek.is_some() && self.visible_tabs().contains(&Some(id));
         if owner != id || (self.input_page() != Some(id) && !through_peek) {
             self.cancel_pointer(owner);
-            return;
+            return false;
         }
-        if kind == MouseKind::Up
+        let peek_click = kind == MouseKind::Up
             && button == PointerButton::Primary
-            && super::peek::shift_only(mods)
-        {
+            && super::peek::shift_only(mods);
+        if peek_click {
             self.note_peek_origin(id, point);
         }
         let changed = if matches!(kind, MouseKind::Down | MouseKind::Up) {
@@ -80,6 +81,7 @@ impl Browser {
             clicks,
         );
         self.send(id, ViewCommand::Mouse(event));
+        peek_click
     }
 
     fn cancel_pointer(&mut self, id: TabId) {

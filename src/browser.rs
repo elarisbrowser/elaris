@@ -471,6 +471,12 @@ impl Browser {
         id
     }
 
+    fn next_page_id(&mut self) -> TabId {
+        let id = TabId::from_raw(self.next_id);
+        self.next_id += 1;
+        id
+    }
+
     fn insert_tab_with_state(
         &mut self,
         url: String,

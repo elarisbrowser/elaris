@@ -18,6 +18,12 @@ pub(crate) fn widths(width: f32, ratio: f32) -> [f32; 2] {
     [left, available - left]
 }
 
+/// Page bounds on each side of the divider, in the same coordinates as the content rect.
+pub(crate) fn pane_rects([x, y, width, height]: [f32; 4], ratio: f32) -> [[f32; 4]; 2] {
+    let [left, right] = widths(width, ratio);
+    [[x, y, left, height], [x + left + DIVIDER, y, right, height]]
+}
+
 pub(crate) fn target(rect: [f32; 4], point: [f32; 2], boundary: f32) -> Option<usize> {
     let [x, y, w, h] = rect;
     let [px, py] = point;

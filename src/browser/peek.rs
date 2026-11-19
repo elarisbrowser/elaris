@@ -12,8 +12,6 @@ pub(crate) struct PeekState {
     pub(crate) page: Tab,
     /// Click position relative to the entire content region, in logical points.
     pub(crate) origin: [f32; 2],
-    pub(crate) opened_at: Option<f64>,
-    pub(crate) opening_time: f32,
 }
 
 #[derive(Clone, Copy)]
@@ -51,12 +49,6 @@ pub(crate) fn shift_only(mods: rune::Mods) -> bool {
 }
 
 impl Browser {
-    pub(super) fn next_page_id(&mut self) -> TabId {
-        let id = TabId::from_raw(self.next_id);
-        self.next_id += 1;
-        id
-    }
-
     pub(crate) fn page(&self, id: TabId) -> Option<&Tab> {
         self.peek
             .as_ref()
@@ -107,12 +99,7 @@ impl Browser {
             }
             engine.send(Command::Open(id, page.surface.clone()));
         }
-        self.peek = Some(PeekState {
-            page,
-            origin,
-            opened_at: None,
-            opening_time: 0.0,
-        });
+        self.peek = Some(PeekState { page, origin });
         self.sync_engine();
         // A replacement originating inside Peek still needs the previous view's descriptor.
         self.send(id, ViewCommand::LoadPrepared { source, request });
@@ -170,7 +157,11 @@ impl Browser {
         } else {
             [0.0; 2]
         };
-        self.peek_origin = Some((id, [x + point[0], y + point[1]]));
+        self.record_peek_origin(id, [x + point[0], y + point[1]]);
+    }
+
+    pub(crate) fn record_peek_origin(&mut self, id: TabId, content_point: [f32; 2]) {
+        self.peek_origin = Some((id, content_point));
     }
 }
 
@@ -319,6 +310,16 @@ mod tests {
         assert_eq!(browser.active, Some(second));
         assert!(browser.tab(first).is_some());
         assert!(browser.peek.is_none());
+    }
+
+    #[test]
+    fn promotes_to_the_right_when_the_left_pane_is_a_picker() {
+        let (mut browser, fake, source) = browser();
+        browser.begin_split(source, 1);
+        assert_eq!(browser.visible_tabs(), [None, Some(source)]);
+        let preview = open(&mut browser, &fake, source, 1);
+        assert_eq!(browser.promote_peek(Destination::Split), Some(preview));
+        assert_eq!(browser.visible_tabs(), [Some(source), Some(preview)]);
     }
 
     #[test]
