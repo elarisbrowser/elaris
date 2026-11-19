@@ -321,6 +321,18 @@ mod tests {
     }
 
     #[test]
+    fn floating_icon_buttons_remain_legible_over_web_content() {
+        for dark in [false, true] {
+            let theme = palette(dark, true, 100, AccentColor::ALL[0]);
+            assert_eq!(theme.overlay_panel.a, 1.0);
+            assert!(contrast(theme.control_border, theme.overlay_panel) >= 3.0);
+            for state in [Color::TRANSPARENT, theme.hover, theme.press] {
+                assert!(contrast(theme.icon, paint(state, theme.overlay_panel)) >= 4.5);
+            }
+        }
+    }
+
+    #[test]
     fn kit_labels_and_focus_are_readable_on_derived_surfaces() {
         for dark in [false, true] {
             for accent in AccentColor::ALL {

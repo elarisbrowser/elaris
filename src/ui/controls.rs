@@ -29,6 +29,19 @@ pub(crate) fn icon_button(
         .child(icon(glyph, theme::ICON).color(theme.icon))
 }
 
+/// A standalone icon button that stays legible over webpage content.
+pub(crate) fn floating_icon_button(
+    key: &str,
+    label: &str,
+    glyph: &'static Icon,
+    size: f32,
+    theme: &Theme,
+) -> El {
+    icon_button(key, label, glyph, size, theme)
+        .fill(theme.overlay_panel)
+        .border(1.0, theme.control_border)
+}
+
 /// A full-width row with an icon and a label, for a tab or a button shaped like one. Callers
 /// add what follows the label.
 pub(crate) fn row_button(

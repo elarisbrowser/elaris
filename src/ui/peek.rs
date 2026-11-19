@@ -277,7 +277,7 @@ fn actions(state: &AppState, theme: &theme::Theme, peek: &peek::PeekState) -> El
         .role("group")
         .label("Peek actions")
         .child(
-            controls::icon_button(
+            controls::floating_icon_button(
                 "peek-close",
                 "Close Peek",
                 &icons::CLOSE,
@@ -289,7 +289,7 @@ fn actions(state: &AppState, theme: &theme::Theme, peek: &peek::PeekState) -> El
             }),
         )
         .child(
-            controls::icon_button(
+            controls::floating_icon_button(
                 "peek-open-tab",
                 "Open in New Tab",
                 &icons::OPEN_TAB,
@@ -299,7 +299,7 @@ fn actions(state: &AppState, theme: &theme::Theme, peek: &peek::PeekState) -> El
             .on_press_tx(expand),
         )
         .child(
-            controls::icon_button(
+            controls::floating_icon_button(
                 "peek-open-split",
                 "Add to Split View",
                 &icons::SPLIT_VIEW,
