@@ -228,14 +228,18 @@ static bool two_views(ElarisLadybird* bridge, EventsByView& events, std::string 
     bool passed = check(elaris_ladybird_create_view(bridge, 10, &first), "create first view") &&
                   check(elaris_ladybird_create_view(bridge, 11, &second), "create second view") &&
                   check(elaris_ladybird_resize(first, 400, 300, 1), "resize first view") &&
-                  check(elaris_ladybird_resize(second, 400, 300, 1), "resize second view") &&
+                  check(elaris_ladybird_resize(second, 360, 280, 1), "resize second view") &&
                   check(elaris_ladybird_load(first, url.c_str()), "load first view") &&
                   check(elaris_ladybird_load(second, other), "load second view");
     passed = passed && pump_until(bridge, [&] {
-                 return events[10].last_title == "Elaris Bridge Smoke" && events[11].last_title == "Second";
+                 ElarisLadybirdFrame left{}, right{};
+                 return events[10].last_title == "Elaris Bridge Smoke" && events[11].last_title == "Second" &&
+                        events[10].frames > 0 && events[11].frames > 0 && elaris_ladybird_frame(first, &left) == 0 &&
+                        elaris_ladybird_frame(second, &right) == 0 && left.width == 400 && left.height == 300 &&
+                        right.width == 360 && right.height == 280;
              });
     if (!passed)
-        std::cerr << "each view should see only its own title\n";
+        std::cerr << "both visible views should produce frames at their own sizes and report their own titles\n";
 
     // The hidden first view keeps its page while the second navigates and goes back.
     passed = passed && check(elaris_ladybird_set_visible(first, 0), "hide first view") &&
