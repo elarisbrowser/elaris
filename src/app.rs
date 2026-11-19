@@ -141,14 +141,6 @@ impl RecentlyClosedTab {
             section: tab.section(),
         }
     }
-
-    pub(crate) fn label(&self) -> &str {
-        match (self.title.trim(), self.url.as_str()) {
-            ("", "" | "about:blank") => "New Tab",
-            ("", url) => url,
-            (title, _) => title,
-        }
-    }
 }
 
 pub(crate) struct AppState {
@@ -583,10 +575,6 @@ impl AppState {
         }
     }
 
-    pub(crate) fn recently_closed(&self) -> &[RecentlyClosedTab] {
-        &self.recently_closed
-    }
-
     /// Reopens a recently closed tab and returns its new identity.
     pub(crate) fn reopen_recently_closed(&mut self, index: usize) -> Option<TabId> {
         let closed = self.recently_closed.get(index)?.clone();
@@ -622,6 +610,11 @@ impl AppState {
             self.remember_closed(closed_tab);
         }
         self.browser.close_other_tabs(tab);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn recently_closed(&self) -> &[RecentlyClosedTab] {
+        &self.recently_closed
     }
 
     fn remember_closed(&mut self, tab: RecentlyClosedTab) {
