@@ -14,7 +14,7 @@ pub(crate) mod resize;
 mod tabs;
 
 use rune::tok::type_;
-use rune::{El, Tx, col, icon, row, text};
+use rune::{El, Tx, col, icon, text};
 pub(crate) use tabs::context_menu;
 
 use super::controls::row_button;
@@ -126,6 +126,7 @@ fn search_launcher(state: &AppState, theme: &Theme) -> El {
     let label = address
         .map(crate::address::compact_address)
         .unwrap_or("Search or type a URL");
+    let has_tab = state.browser.active_tab().is_some();
     let launcher = row_button(
         "omnibox-launcher",
         address.is_none().then(|| {
@@ -152,36 +153,22 @@ fn search_launcher(state: &AppState, theme: &Theme) -> El {
     .shortcut_hint("cmd+l")
     .focusable(true)
     .on_press_tx(app::open_from_launcher);
-    let has_tab = state.browser.active_tab().is_some();
-    let controls_width = if has_tab {
-        theme::FIELD_HEIGHT + theme::SIDEBAR_GAP / 2.0
-    } else {
-        0.0
-    };
-    let launcher = launcher
-        .w((state.sidebar.width - 2.0 * theme::SIDEBAR_PADDING - controls_width).max(0.0))
-        .min_w(0.0);
-    let mut controls = row()
-        .key("site-controls-bar")
-        .w_full()
-        .gap(theme::SIDEBAR_GAP / 2.0)
-        .center_y()
-        .child(launcher);
     if has_tab {
-        controls = controls.child(
+        launcher.child(
             super::controls::icon_button(
                 "site-controls",
                 "Site permissions and page information",
                 &icons::SITE_CONTROLS,
-                theme::FIELD_HEIGHT,
+                theme::CLOSE_BUTTON,
                 theme,
             )
             .on_press(|state: &mut AppState| {
                 state.site_permissions_open = !state.site_permissions_open;
             }),
-        );
+        )
+    } else {
+        launcher
     }
-    controls
 }
 
 /// A quiet button at the foot of the sidebar that steps through System, Light and Dark.
