@@ -56,3 +56,37 @@ The split held 9.66 MiB across its two visible frames. After exit, the visible p
 to 9.75 MiB and the hidden pane retained its last 4.83 MiB frame until its view closed.
 `Set` measures the CPU-side handoff to Rune. GPU upload time and GPU residency were outside
 the scope of this pass. Linux and release builds remain unmeasured.
+
+## Hidden-frame eviction experiment
+
+A second macOS debug-build comparison used identical 20-tab saved sessions in fresh profiles.
+The benchmark visited tabs sequentially and sampled after 10 and 20 idle pages had painted.
+Elaris created views for all 20 restored tabs, which explains the higher helper RSS than in the
+original run that opened tabs one at a time. Each idle page used a 6.65 MiB full frame.
+The table gives medians of five RSS samples per state. Hidden payload includes fallback images.
+
+| Loaded tabs | Eviction | Hidden payload (MiB) | Elaris RSS (MiB) | Descendant RSS sum (MiB) |
+|---|---|---:|---:|---:|
+| 10 | Off | 59.9 | 325.4 | 1716.1 |
+| 10 | On | 13.9 | 278.3 | 1714.4 |
+| 20 | Off | 126.4 | 461.7 | 1789.7 |
+| 20 | On | 14.8 | 348.9 | 1788.2 |
+
+Eviction removed 111.6 MiB of hidden image payload at 20 loaded tabs, including the cost
+of 17 fallback images. Elaris RSS was 112.8 MiB lower in this run. Helper RSS is a sum of
+per-process measurements and can double-count shared pages. This comparison is one trial
+per mode, with no GPU residency measurement.
+
+During rapid switching among 20 tabs, median Elaris RSS was 549.4 MiB with eviction off
+and 436.2 MiB with it on. The p95 interval between Rune draws was 17.7–20.5 ms across the
+two baseline reports and 18.0–18.6 ms across the two eviction reports. In a separate
+five-page color-fixture test, the engine timed 15 restores during the switching sequence.
+Restore p95 was 1.9–3.0 ms across the two reports, measured from the engine's activation
+command to updating the Rune surface. End-to-end keypress-to-display latency remains unmeasured.
+
+The color-fixture recordings showed no blank flash at the sampled viewport location in either
+mode. With eviction enabled, both Split View panes painted, exiting the split restored a single
+full-size pane, and opening and dismissing Peek added and removed its own visible frame.
+
+The flag remains opt-in. The visual check used local fixtures on macOS, and repeat trials,
+release-build results, Linux results, and GPU measurements remain outstanding.

@@ -49,6 +49,10 @@ impl FrameGate {
         }
     }
 
+    pub(super) fn forget_frame(&mut self) {
+        self.serial = None;
+    }
+
     /// Records the frame as on show.
     pub(super) fn shown(&mut self, serial: u64) {
         self.serial = Some(serial);

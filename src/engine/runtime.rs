@@ -25,6 +25,8 @@ use crate::tab::TabId;
 
 /// How long closing keeps running Ladybird so helper processes see the views close.
 const CLOSE_GRACE: Duration = Duration::from_millis(100);
+const RETAINED_HIDDEN_FRAMES: usize = 2;
+const FALLBACK_MAX_SIDE: u32 = 160;
 const THUMBNAIL_INTERVAL: Duration = Duration::from_secs(1);
 
 /// One tab's view and where its frames go.
@@ -33,6 +35,7 @@ struct View {
     surface: Surface,
     gate: FrameGate,
     visible: bool,
+    showing_fallback: bool,
     preview_revision: u64,
     preview_committed: bool,
     last_thumbnail: Option<Instant>,
@@ -52,6 +55,9 @@ pub(super) struct Runtime {
     timing: Timing,
     thumbnails: thumbnails::Cache,
     display_refresh_rate: f64,
+    // Oldest hidden view first. Absent when the experiment is disabled.
+    hidden_order: Option<Vec<TabId>>,
+    hidden_frames_dirty: bool,
 }
 
 impl Runtime {
@@ -81,6 +87,10 @@ impl Runtime {
                 timing: Timing::default(),
                 thumbnails: thumbnails::Cache::default(),
                 display_refresh_rate,
+                hidden_order: std::env::var_os("ELARIS_EVICT_HIDDEN_FRAMES")
+                    .is_some_and(|value| value == "1")
+                    .then(Vec::new),
+                hidden_frames_dirty: false,
             },
             download_directory_error,
         ))
@@ -130,11 +140,16 @@ impl Runtime {
         let mut visible = 0;
         let mut visible_rgba_bytes = 0;
         let mut hidden_rgba_bytes = 0;
+        let mut fallback_rgba_bytes = 0;
         for view in self.views.values() {
             let (width, height) = view.surface.pixels.size();
             let bytes = u64::from(width) * u64::from(height) * 4;
             if view.visible {
                 visible += 1;
+            }
+            if view.showing_fallback {
+                fallback_rgba_bytes += bytes;
+            } else if view.visible {
                 visible_rgba_bytes += bytes;
             } else {
                 hidden_rgba_bytes += bytes;
@@ -142,7 +157,7 @@ impl Runtime {
         }
         let hidden = self.views.len() - visible;
         eprintln!(
-            "[perf surfaces] visible={visible} hidden={hidden} visible_rgba_bytes={visible_rgba_bytes} hidden_rgba_bytes={hidden_rgba_bytes}"
+            "[perf surfaces] visible={visible} hidden={hidden} visible_rgba_bytes={visible_rgba_bytes} hidden_rgba_bytes={hidden_rgba_bytes} fallback_rgba_bytes={fallback_rgba_bytes}"
         );
     }
 
@@ -151,6 +166,9 @@ impl Runtime {
             Command::Open(tab, surface) => (tab, self.open(tab, surface)),
             Command::Close(tab) => {
                 self.views.remove(&tab);
+                if let Some(order) = &mut self.hidden_order {
+                    order.retain(|id| *id != tab);
+                }
                 self.thumbnails.remove(tab);
                 return None;
             }
@@ -159,7 +177,30 @@ impl Runtime {
                 if command.invalidates_preview() {
                     self.thumbnails.remove(tab);
                 }
-                (tab, apply_to_view(view, command, &mut self.timing))
+                let visibility = match command {
+                    ViewCommand::Visible(visible) if view.visible != visible => Some(visible),
+                    _ => None,
+                };
+                let result = apply_to_view(view, command, &mut self.timing);
+                if result.is_ok()
+                    && let Some(visible) = visibility
+                    && let Some(order) = &mut self.hidden_order
+                {
+                    if visible {
+                        order.retain(|id| *id != tab);
+                        if view.showing_fallback {
+                            // Even an idle page has a displayed Ladybird frame. Restore it
+                            // without waiting for a new paint notification.
+                            let _ = perf::time(Stage::RestoreFrame, || {
+                                show_frame(view, &mut self.timing, false)
+                            });
+                        }
+                    } else {
+                        order.push(tab);
+                        self.hidden_frames_dirty = true;
+                    }
+                }
+                (tab, result)
             }
             Command::ColorScheme(dark) => {
                 return self
@@ -229,12 +270,42 @@ impl Runtime {
                 surface,
                 gate: FrameGate::default(),
                 visible: true,
+                showing_fallback: false,
                 preview_revision: 0,
                 preview_committed: false,
                 last_thumbnail: None,
             },
         );
         Ok(())
+    }
+
+    /// Keeps full frames for the newest hidden views that have painted.
+    pub(super) fn trim_hidden_frames(&mut self) {
+        if !std::mem::take(&mut self.hidden_frames_dirty) {
+            return;
+        }
+        let Some(order) = &self.hidden_order else {
+            return;
+        };
+        let mut retained = 0;
+        let mut changed = false;
+        for id in order.iter().rev() {
+            let Some(view) = self.views.get_mut(id) else {
+                continue;
+            };
+            if view.showing_fallback || view.surface.pixels.size() == (0, 0) {
+                continue;
+            }
+            retained += 1;
+            if retained > RETAINED_HIDDEN_FRAMES
+                && perf::time(Stage::EvictFrame, || evict_frame(view))
+            {
+                changed = true;
+            }
+        }
+        if changed && perf::enabled() {
+            self.report_surfaces();
+        }
     }
 
     /// Turns the events Ladybird raised into updates, showing each tab's new frame if it has
@@ -342,6 +413,10 @@ impl Runtime {
             let Some(view) = self.views.get_mut(&tab) else {
                 continue;
             };
+            let new_hidden_frame = self.hidden_order.is_some()
+                && !view.visible
+                && !view.showing_fallback
+                && view.surface.pixels.size() == (0, 0);
             let previous_size = perf::enabled().then(|| view.surface.pixels.size());
             match show_frame(view, &mut self.timing, sample) {
                 Ok(Some(sample)) => {
@@ -359,6 +434,7 @@ impl Runtime {
                 Ok(None) => {}
                 Err(error) => updates.push(Update::Tab(tab, TabUpdate::Error(error))),
             }
+            self.hidden_frames_dirty |= new_hidden_frame && view.surface.pixels.size() != (0, 0);
             surface_size_changed |=
                 previous_size.is_some_and(|size| size != view.surface.pixels.size());
         }
@@ -471,10 +547,42 @@ fn apply_to_view(view: &mut View, command: ViewCommand, timing: &mut Timing) -> 
         }
         ViewCommand::Focus(focused) => web.set_focus(focused),
         ViewCommand::Visible(visible) => {
+            web.set_visible(visible)?;
             view.visible = visible;
-            web.set_visible(visible)
+            Ok(())
         }
     }
+}
+
+fn evict_frame(view: &mut View) -> bool {
+    let Ok(Some(frame)) = view.view.frame() else {
+        return false;
+    };
+    let Ok(rgba) = view.view.copy_frame(&frame) else {
+        return false;
+    };
+    let (width, height, fallback) = frame_fallback(frame.width, frame.height, &rgba);
+    view.surface.pixels.set(width, height, fallback);
+    view.showing_fallback = true;
+    view.gate.forget_frame();
+    true
+}
+
+fn frame_fallback(width: u32, height: u32, rgba: &[u8]) -> (u32, u32, Vec<u8>) {
+    let longest = u64::from(width.max(height));
+    let side = u64::from(FALLBACK_MAX_SIDE).min(longest);
+    let scaled = |size| (u64::from(size) * side / longest).max(1) as usize;
+    let (w, h) = (scaled(width), scaled(height));
+    let (width, height) = (width as usize, height as usize);
+    let mut fallback = Vec::with_capacity(w * h * 4);
+    for y in 0..h {
+        let row = ((2 * y + 1) * height / (2 * h)) * width;
+        for x in 0..w {
+            let offset = (row + (2 * x + 1) * width / (2 * w)) * 4;
+            fallback.extend_from_slice(&rgba[offset..offset + 4]);
+        }
+    }
+    (w as u32, h as u32, fallback)
 }
 
 /// Shows the view's newest frame in its surface if the gate lets it through.
@@ -483,6 +591,9 @@ fn show_frame(
     timing: &mut Timing,
     sample: bool,
 ) -> Result<Option<Sample>, String> {
+    if view.showing_fallback && !view.visible {
+        return Ok(None);
+    }
     let Some(frame) = view.view.frame()? else {
         return Ok(None);
     };
@@ -513,6 +624,7 @@ fn show_frame(
     view.surface.count_frame();
     timing.shown(&frame, skipped);
     view.gate.shown(frame.serial);
+    view.showing_fallback = false;
     perf::time(Stage::Set, || {
         view.surface.pixels.set(frame.width, frame.height, rgba)
     });
@@ -573,6 +685,75 @@ fn directory(variable: &str, fallback: &str) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires a built Ladybird bridge and helper processes"]
+    fn hidden_frames_keep_two_recent_views_and_restore_idle_tabs() {
+        let profile =
+            std::env::temp_dir().join(format!("elaris-frame-eviction-{}", std::process::id()));
+        let (mut runtime, _) = Runtime::start(profile.clone(), None, 60.0).unwrap();
+        runtime.hidden_order = Some(Vec::new());
+        let url = format!("file://{}/benchmarks/idle.html", env!("CARGO_MANIFEST_DIR"));
+        let tabs: Vec<_> = (1..=5)
+            .map(|id| (TabId::from_raw(id), Surface::default()))
+            .collect();
+        let size = (400, 300);
+        let mut previews = HashMap::new();
+
+        for (id, surface) in &tabs {
+            surface.request_preview_invalidation();
+            for command in [
+                Command::Open(*id, surface.clone()),
+                Command::View(
+                    *id,
+                    ViewCommand::Resize {
+                        width: size.0 as i32,
+                        height: size.1 as i32,
+                        scale: 1.0,
+                    },
+                ),
+                Command::View(*id, ViewCommand::Load(url.clone())),
+            ] {
+                assert!(runtime.apply(command).is_none());
+            }
+        }
+        let until = Instant::now() + Duration::from_secs(10);
+        while previews.len() < tabs.len() && Instant::now() < until {
+            runtime
+                .ladybird
+                .wait(Some(Duration::from_millis(100)))
+                .unwrap();
+            for update in runtime.handle_events() {
+                if let Update::Thumbnail(id, thumbnail) = update {
+                    previews.insert(id, thumbnail);
+                }
+            }
+        }
+        assert_eq!(previews.len(), tabs.len());
+        for (id, _) in &tabs[..3] {
+            assert!(
+                runtime
+                    .apply(Command::View(*id, ViewCommand::Visible(false)))
+                    .is_none()
+            );
+        }
+        runtime.trim_hidden_frames();
+
+        let (evicted, surface) = &tabs[0];
+        assert_eq!(surface.pixels.size(), (160, 120));
+        assert!(previews[evicted].get(surface).is_some());
+        for (_, surface) in &tabs[1..] {
+            assert_eq!(surface.pixels.size(), size);
+        }
+        assert!(
+            runtime
+                .apply(Command::View(*evicted, ViewCommand::Visible(true)))
+                .is_none()
+        );
+        assert_eq!(surface.pixels.size(), size);
+        runtime.close();
+        std::fs::remove_dir_all(profile).unwrap();
+    }
 
     #[test]
     #[ignore = "requires a built Ladybird bridge and helper processes"]

@@ -28,6 +28,10 @@ pub(crate) enum Stage {
     Copy,
     /// One `Pixels::set`.
     Set,
+    /// Restoring an evicted tab from Ladybird when it becomes visible.
+    RestoreFrame,
+    /// Replacing a hidden tab's full-size frame with its fallback.
+    EvictFrame,
     /// From an input event to the first new frame after it.
     InputToFrame,
     /// From a new viewport size to the first frame at that size.

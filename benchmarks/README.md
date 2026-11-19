@@ -69,3 +69,18 @@ and exclude lazy tabs that have yet to open a view. Payload bytes exclude thumbn
 cache, allocator overhead, Rune atlases, GPU textures and Ladybird-owned buffers.
 Compare these counters with the corresponding RSS samples to investigate which
 memory changes track frame retention.
+
+### Hidden-frame eviction experiment
+
+Set `ELARIS_EVICT_HIDDEN_FRAMES=1` alongside `ELARIS_PERF=1` to keep the two most
+recently hidden full-resolution frames. Older hidden views keep a full-page fallback
+with a maximum side of 160 pixels. The experimental policy is off by default.
+
+Run the same sequence with and without the flag in fresh profiles. Confirm the
+number of live views in the log before comparing RSS. Add `fallback_rgba_bytes` to
+the full-resolution payload when accounting for all Rune page images. With eviction
+enabled, `EvictFrame` measures copying and downsampling a hidden frame and
+`RestoreFrame` measures the engine's attempt to restore it on activation. Neither
+timing includes UI input dispatch or presentation. Use contrasting pages during rapid
+switching to check for blank frames and confirm both Split View panes and Peek still
+paint and dismiss.

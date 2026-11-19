@@ -148,6 +148,7 @@ fn serve(
         if !open {
             return Ok(());
         }
+        runtime.trim_hidden_frames();
         runtime.wait()?;
         for update in perf::time(Stage::Pump, || runtime.handle_events()) {
             report(update);
