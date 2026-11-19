@@ -108,9 +108,23 @@ pub(super) fn view(
     if let Some(visual) = state.tab_drag.visual()
         && let Some(tab) = state.browser.tab(visual.tab)
     {
+        let peer = state.browser.split.and_then(|split| {
+            if split.panes.contains(&Some(visual.tab)) {
+                split
+                    .panes
+                    .into_iter()
+                    .flatten()
+                    .find(|id| *id != visual.tab)
+                    .and_then(|id| state.browser.tab(id))
+                    .filter(|peer| peer.section() == visual.section)
+            } else {
+                None
+            }
+        });
         overlays.push(tab_drag_visual(
             tab,
-            Some(tab.id()) == active,
+            peer,
+            active,
             visual,
             theme,
             reduced_motion,
@@ -279,6 +293,7 @@ fn section_rows(
                     index,
                     items.len(),
                     theme,
+                    false,
                 )
             }),
             PreviewItem::SourceSlot(id) => source_placeholder(id, section, index, items.len(), 0.0),
@@ -349,7 +364,12 @@ fn split_tab_group(
         .center_y()
         .radius(theme::ROW_RADIUS)
         .continuous_corners()
-        .fill(theme.address_field);
+        .fill(theme.tab_active)
+        .shadow(
+            theme::ACTIVE_SHADOW_Y,
+            theme::ACTIVE_SHADOW_BLUR,
+            theme.tab_active_shadow,
+        );
     for (offset, id) in ids.into_iter().enumerate() {
         if let Some(tab) = state.browser.tab(id) {
             let child = tab_row(
@@ -360,6 +380,7 @@ fn split_tab_group(
                 index + offset,
                 count,
                 theme,
+                true,
             )
             .w(0.0)
             .grow(1.0)
@@ -368,7 +389,7 @@ fn split_tab_group(
             group = group.child(child);
         }
     }
-    group
+    tab_drag_handler(group, ids[0], ids.to_vec())
 }
 
 fn section_divider(theme: &Theme) -> El {
@@ -453,6 +474,7 @@ fn tab_row(
     index: usize,
     count: usize,
     theme: &Theme,
+    grouped: bool,
 ) -> El {
     let id = tab.id();
     let label = tab.label();
@@ -488,12 +510,14 @@ fn tab_row(
         .on_secondary_press(move |state: &mut AppState, press, _| {
             state.open_context_menu(Some(id), press);
         });
-    if active {
+    if grouped {
+        row = row.fill(theme.address_field);
+    } else if active {
         row = row.fill(theme.tab_active);
     } else if state.tab_drag.is_hidden(id) {
         row = row.fill(theme.tab_drag);
     }
-    if active {
+    if active && !grouped {
         row = row.shadow(
             theme::ACTIVE_SHADOW_Y,
             theme::ACTIVE_SHADOW_BLUR,
@@ -517,7 +541,9 @@ fn tab_row(
             })
         })
         .map_or_else(|| vec![id], |pair| pair.to_vec());
-    row = tab_drag_handler(row, id, drag_members);
+    if !grouped {
+        row = tab_drag_handler(row, id, drag_members);
+    }
     let row = row.on_layout_tx(move |state: &mut AppState, rect, tx| {
         let target_ready = state.tab_drag.record_tab_rect(section, id, rect);
         if target_ready {
@@ -714,7 +740,8 @@ fn tab_drag_handler(row: El, id: TabId, members: Vec<TabId>) -> El {
 
 fn tab_drag_visual(
     tab: &Tab,
-    active: bool,
+    peer: Option<&Tab>,
+    active_tab: Option<TabId>,
     visual: super::drag::DragVisual,
     theme: &Theme,
     reduced_motion: bool,
@@ -732,6 +759,61 @@ fn tab_drag_visual(
         theme::ICON
     };
     let title_width = if favourite { 0.0 } else { 1.0 };
+    if let Some(peer) = peer.filter(|_| !favourite && active_tab.is_some()) {
+        let mut group = row()
+            .key("tab-drag-visual")
+            .size(visual.to_size[0], visual.to_size[1])
+            .gap(2.0)
+            .px(3.0)
+            .center_y()
+            .radius(theme::ROW_RADIUS)
+            .continuous_corners()
+            .clip_soft(0.0)
+            .fill(theme.tab_active)
+            .shadow(
+                theme::TAB_DRAG_SHADOW_Y,
+                theme::TAB_DRAG_SHADOW_BLUR,
+                theme.tab_active_shadow,
+            );
+        for member in [tab, peer] {
+            let member_active = active_tab == Some(member.id());
+            group = group.child(
+                row()
+                    .w(0.0)
+                    .h(theme::ROW_HEIGHT - 6.0)
+                    .grow(1.0)
+                    .px(theme::ROW_PADDING / 2.0)
+                    .gap(theme::ROW_GAP)
+                    .center_y()
+                    .radius(theme::ROW_RADIUS - 3.0)
+                    .fill(theme.address_field)
+                    .child(tab_icon(member, member_active, icon_size, theme))
+                    .child(
+                        text(member.label())
+                            .font(type_::BODY)
+                            .color(if member_active {
+                                theme.text
+                            } else {
+                                theme.text_muted
+                            })
+                            .single_line()
+                            .truncate()
+                            .shrink()
+                            .min_w(0.0)
+                            .grow(1.0),
+                    ),
+            );
+        }
+        return el()
+            .key("tab-drag-layer")
+            .absolute(0.0, 0.0)
+            .w_full()
+            .h_full()
+            .inert()
+            .a11y_hidden()
+            .child(group.absolute(visual.to[0], visual.to[1]));
+    }
+    let active = active_tab == Some(tab.id());
     let mut row = row()
         .key("tab-drag-visual")
         .size(visual.to_size[0], visual.to_size[1])
