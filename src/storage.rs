@@ -479,6 +479,22 @@ impl Storage {
 impl Drop for Storage {
     fn drop(&mut self) {
         let _ = self.metrics.enqueue(&self.commands, Command::Shutdown);
+        #[cfg(test)]
+        {
+            // Tests can remove their temporary profile as soon as Storage is dropped.
+            let worker = {
+                let mut workers = WORKERS
+                    .lock()
+                    .expect("storage worker registry lock poisoned");
+                workers
+                    .iter()
+                    .position(|worker| Arc::ptr_eq(&worker.metrics, &self.metrics))
+                    .map(|index| workers.swap_remove(index))
+            };
+            if let Some(worker) = worker {
+                worker.thread.join().expect("storage worker completes");
+            }
+        }
     }
 }
 
