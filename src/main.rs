@@ -24,6 +24,8 @@ mod tab;
 #[cfg(target_os = "macos")]
 mod titlebar_controls;
 mod ui;
+#[cfg(target_os = "macos")]
+mod window_macos;
 
 use std::sync::Arc;
 
@@ -58,6 +60,8 @@ fn main() {
             traffic_lights: Some(ui::TRAFFIC_LIGHTS),
             ..Chrome::DEFAULT
         });
+    #[cfg(target_os = "macos")]
+    let app = app.keep_running().release_gpu_when_closed();
     #[cfg(target_os = "linux")]
     let app = {
         let app_handle = app.handle();
@@ -87,6 +91,7 @@ fn main() {
     let app = {
         let app_handle = app.handle();
         app.on_window(move |window| {
+            window_macos::install(window);
             titlebar_controls::install(window);
             site_popover_macos::install(window, app_handle.clone());
             if let Some(refresh_rate) = titlebar_controls::refresh_rate(window) {
@@ -98,7 +103,7 @@ fn main() {
         .on_frame_drawn(|_| perf::frame_drawn())
         .on_ime(ui::viewport::ime)
         .on_focus(app::on_window_focus)
-        .on_close(app::shut_down)
+        .on_close(app::window_closed)
         .on_quit(app::shut_down)
         .run();
 }

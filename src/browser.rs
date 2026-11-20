@@ -721,6 +721,28 @@ impl Browser {
         self.window.focused = focused;
     }
 
+    /// Suspends every live page while the Rune window is closed but the app remains running.
+    pub(crate) fn suspend_window(&mut self) {
+        self.set_window_focus(false);
+        self.dismiss_peek();
+        let Some(engine) = &self.engine else {
+            return;
+        };
+        for tab in &mut self.tabs {
+            if tab.is_internal() {
+                continue;
+            }
+            if tab.engine.focused {
+                tab.engine.focused = false;
+                engine.send(Command::View(tab.id(), ViewCommand::Focus(false)));
+            }
+            if !tab.engine.hidden {
+                tab.engine.hidden = true;
+                engine.send(Command::View(tab.id(), ViewCommand::Visible(false)));
+            }
+        }
+    }
+
     pub(crate) fn set_viewport_focus(&mut self, focused: bool) -> bool {
         let changed = self.window.viewport_focused != focused;
         if self.window.viewport_focused && !focused {

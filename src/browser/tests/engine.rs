@@ -34,6 +34,19 @@ fn shutting_down_asks_the_engine_to_stop() {
 }
 
 #[test]
+fn closing_a_window_suspends_pages_without_stopping_the_engine() {
+    let (mut browser, fake) = ready();
+    let tab = browser.open_tab("example.com").unwrap();
+    browser.poll();
+    sent(&fake);
+    browser.set_window_focus(true);
+    browser.suspend_window();
+
+    assert_eq!(sent(&fake), [view(tab, ViewCommand::Visible(false)),]);
+    assert!(!browser.window_focused());
+}
+
+#[test]
 fn without_an_engine_tabs_keep_their_page_and_take_no_keys() {
     let mut browser = Browser::default();
     let tab = browser.open_tab("example.com").unwrap();

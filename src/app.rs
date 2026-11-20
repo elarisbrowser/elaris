@@ -381,5 +381,5 @@ mod tests;
 
 pub(crate) use lifecycle::{
     new_tab, omnibox_input_key, on_window_focus, open_from_launcher, open_history, open_settings,
-    poll, setup_headless, shut_down, start_workers, submit_omnibox,
+    poll, setup_headless, shut_down, start_workers, submit_omnibox, window_closed,
 };

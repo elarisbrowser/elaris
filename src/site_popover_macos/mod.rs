@@ -177,6 +177,16 @@ pub(crate) fn close() {
     });
 }
 
+/// Releases the native host before Rune destroys its window on the final-window close path.
+pub(crate) fn detach_window() {
+    HOST.with(|host| {
+        if let Some(mut host) = host.borrow_mut().take() {
+            close_host(&mut host);
+        }
+    });
+    APP_HANDLE.with(|app| *app.borrow_mut() = None);
+}
+
 pub(super) fn close_host(host: &mut Host) {
     // SAFETY: the popover is retained by Host and this call is on AppKit's main thread.
     unsafe { host.popover.performClose(None) };

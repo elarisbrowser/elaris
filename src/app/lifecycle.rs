@@ -158,10 +158,26 @@ pub(crate) fn on_window_focus(state: &mut AppState, focused: bool, tx: &mut Tx) 
 
 pub(crate) fn shut_down(state: &mut AppState, _: &mut Tx) {
     state.persist_session();
+    state.browser.shut_down();
     if let Some(storage) = &state.storage
         && let Err(error) = storage.flush_on_close()
     {
         eprintln!("Elaris: {error}");
     }
-    state.browser.shut_down();
+}
+
+/// Saves the browser before Rune hides the last window but keeps the app available to reopen.
+pub(crate) fn window_closed(state: &mut AppState, _: &mut Tx) {
+    if rune::quitting() {
+        return;
+    }
+    #[cfg(target_os = "macos")]
+    crate::site_popover_macos::detach_window();
+    state.browser.suspend_window();
+    state.persist_session();
+    if let Some(storage) = &state.storage
+        && let Err(error) = storage.flush_on_close()
+    {
+        eprintln!("Elaris: {error}");
+    }
 }
