@@ -479,6 +479,144 @@ fn closing_waits_for_the_latest_session_snapshot() {
 }
 
 #[test]
+fn acknowledged_session_commit_is_a_snapshot_coalescing_barrier() {
+    let temp = TempDir::new();
+    let paths = Paths::resolve_with(
+        Platform::Linux,
+        Some(&temp.0),
+        None,
+        None,
+        None,
+        None,
+        false,
+    )
+    .expect("resolve isolated storage paths");
+    let session_file = paths.session_file.clone();
+    let storage = Storage::open(paths).expect("open isolated storage");
+    let queued = Session::new(
+        vec![SessionTab {
+            url: "https://queued.example/".into(),
+            title: "Queued snapshot".into(),
+            favicon: None,
+        }],
+        0,
+    );
+    let committed = Session::new(
+        vec![SessionTab {
+            url: "https://committed.example/".into(),
+            title: "Acknowledged snapshot".into(),
+            favicon: None,
+        }],
+        0,
+    );
+    let after_commit = Session::new(
+        vec![SessionTab {
+            url: "https://after.example/".into(),
+            title: "Later snapshot".into(),
+            favicon: None,
+        }],
+        0,
+    );
+
+    storage
+        .save_session(queued)
+        .expect("queue ordinary snapshot");
+    storage
+        .commit_merged_session(vec![committed.clone()])
+        .expect("wait for acknowledged snapshot");
+    assert_eq!(
+        load_sessions(&session_file).expect("read acknowledged snapshot"),
+        Some(vec![committed])
+    );
+
+    storage
+        .save_session(after_commit.clone())
+        .expect("queue later snapshot");
+    storage.flush_on_close().expect("drain later snapshot");
+    assert_eq!(
+        load_session(&session_file).expect("read final snapshot"),
+        Some(after_commit)
+    );
+}
+
+#[test]
+fn mixed_storage_burst_preserves_latest_state_and_reports_queue_cost() {
+    const BURST_SIZE: usize = 128;
+
+    let temp = TempDir::new();
+    let paths = Paths::resolve_with(
+        Platform::Linux,
+        Some(&temp.0),
+        None,
+        None,
+        None,
+        None,
+        false,
+    )
+    .expect("resolve isolated storage paths");
+    let session_file = paths.session_file.clone();
+    let history_file = paths.history_file.clone();
+    let storage = Storage::open(paths).expect("open isolated storage");
+
+    storage
+        .history()
+        .request_search("burst.example")
+        .expect("queue history search");
+    let history_started = std::time::Instant::now();
+    for index in 0..BURST_SIZE {
+        storage
+            .history()
+            .record_visit(
+                &format!("https://{index}.burst.example/"),
+                &format!("Burst page {index}"),
+            )
+            .expect("queue history visit");
+    }
+    storage.flush_on_close().expect("drain history queue");
+    let history_elapsed = history_started.elapsed();
+
+    let sessions_started = std::time::Instant::now();
+    for index in 0..BURST_SIZE {
+        storage
+            .save_session(Session::new(
+                vec![SessionTab {
+                    url: format!("https://{index}.burst.example/"),
+                    title: format!("Snapshot {index}"),
+                    favicon: None,
+                }],
+                0,
+            ))
+            .expect("queue session snapshot");
+    }
+    storage.flush_on_close().expect("drain session queue");
+    let sessions_elapsed = sessions_started.elapsed();
+
+    assert_eq!(
+        load_session(&session_file).expect("read final session"),
+        Some(Session::new(
+            vec![SessionTab {
+                url: format!("https://{}.burst.example/", BURST_SIZE - 1),
+                title: format!("Snapshot {}", BURST_SIZE - 1),
+                favicon: None,
+            }],
+            0,
+        ))
+    );
+    assert_eq!(
+        History::open(&history_file)
+            .expect("open final history database")
+            .recent(BURST_SIZE)
+            .expect("read recorded history")
+            .len(),
+        BURST_SIZE
+    );
+    println!(
+        "headless storage burst: {BURST_SIZE} visits {:?}, {BURST_SIZE} session snapshots {:?}",
+        history_elapsed, sessions_elapsed
+    );
+}
+
+#[test]
 fn session_write_replaces_atomically_and_leaves_no_temporary_file() {
     let temp = TempDir::new();
     let path = temp.0.join("session.json");

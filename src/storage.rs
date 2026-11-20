@@ -466,7 +466,8 @@ fn run_worker(
     if let Some(history) = &history {
         refresh_history(history, &shared);
     }
-    while let Ok(command) = receiver.recv() {
+    let mut pending_command = None;
+    while let Some(command) = pending_command.take().or_else(|| receiver.recv().ok()) {
         match command {
             Command::RecordVisit(url, title) => {
                 if let Some(history) = &history {
@@ -547,14 +548,33 @@ fn run_worker(
                     );
                 }
             }
-            Command::SaveSessions(sessions, restore_on_launch, finished) => {
-                let result = write_sessions_atomic(&session_file, &sessions, restore_on_launch)
-                    .map_err(|error| format!("cannot save session: {error}"));
-                if let Some(finished) = finished {
-                    let _ = finished.send(result);
-                } else if let Err(error) = result {
+            Command::SaveSessions(sessions, restore_on_launch, None) => {
+                // Ordinary snapshots supersede adjacent snapshots. Keep the latest complete
+                // multi-window state, but stop at every other storage command and at explicit
+                // acknowledgements so ordering and transfer commit semantics remain intact.
+                let mut latest = (sessions, restore_on_launch);
+                loop {
+                    match receiver.try_recv() {
+                        Ok(Command::SaveSessions(sessions, restore_on_launch, None)) => {
+                            latest = (sessions, restore_on_launch);
+                        }
+                        Ok(command) => {
+                            pending_command = Some(command);
+                            break;
+                        }
+                        Err(mpsc::TryRecvError::Empty | mpsc::TryRecvError::Disconnected) => break,
+                    }
+                }
+                if let Err(error) = write_sessions_atomic(&session_file, &latest.0, latest.1)
+                    .map_err(|error| format!("cannot save session: {error}"))
+                {
                     eprintln!("Elaris: {error}");
                 }
+            }
+            Command::SaveSessions(sessions, restore_on_launch, Some(finished)) => {
+                let result = write_sessions_atomic(&session_file, &sessions, restore_on_launch)
+                    .map_err(|error| format!("cannot save session: {error}"));
+                let _ = finished.send(result);
             }
             Command::SaveSetting(change) => {
                 let result = config::write_change(&config_file, &change);
