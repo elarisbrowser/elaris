@@ -495,15 +495,22 @@ impl TabDragState {
     }
 
     pub(crate) fn incoming_target(&self, tabs: &[Tab], point: [f32; 2]) -> Option<TabDropTarget> {
-        let section = self.section_at(point)?;
-        if section != TabSection::Favourite
-            && !self.viewport.is_some_and(|rect| contains(rect, point))
-        {
-            return None;
-        }
-        if section == TabSection::Pinned && !tabs.iter().any(|tab| tab.section() == section) {
-            return None;
-        }
+        let in_list = self.viewport.is_some_and(|rect| contains(rect, point));
+        let section = match self.section_at(point) {
+            Some(TabSection::Favourite) => TabSection::Favourite,
+            Some(TabSection::Pinned)
+                if in_list && tabs.iter().any(|tab| tab.section() == TabSection::Pinned) =>
+            {
+                TabSection::Pinned
+            }
+            _ if in_list
+                && self.section_rects[section_index(TabSection::Regular)]
+                    .is_some_and(|rect| point[1] >= rect[1]) =>
+            {
+                TabSection::Regular
+            }
+            _ => return None,
+        };
         let index = self.insertion_index(
             tabs,
             &[],

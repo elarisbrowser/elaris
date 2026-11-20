@@ -517,3 +517,18 @@ fn incoming_drop_settles_from_pointer_into_laid_out_favourite_tile() {
     assert_eq!(visual.to, [12.0, 88.0]);
     assert_eq!(visual.to_size, [218.0, 56.0]);
 }
+
+#[test]
+fn blank_space_below_new_tab_accepts_a_tab_in_an_empty_window() {
+    let mut state = TabDragState::default();
+    state.set_viewport([10.0, 100.0, 220.0, 340.0]);
+    state.set_section_rect(TabSection::Regular, [10.0, 100.0, 220.0, 34.0], &[]);
+    assert_eq!(
+        state.incoming_target(&[], [70.0, 210.0]),
+        Some(TabDropTarget {
+            section: TabSection::Regular,
+            index: 0
+        })
+    );
+    assert!(state.incoming_target(&[], [245.0, 210.0]).is_none());
+}

@@ -34,7 +34,9 @@ pointer. The destination converts the pointer to its sidebar coordinates and
 uses the existing section and insertion geometry. Its preview takes a slot in
 the normal animated list or adaptive Favourites grid. Release resolves the
 target again before B1 validates and commits it. Escape, pointer cancellation,
-and window closure clear the preview.
+and window closure clear the preview. The blank tab list below New Tab accepts
+a drop into an empty window. A stalled handoff or lost macOS mouse-up clears
+the preview and unwinds the drag.
 
 On macOS, AppKit supplies the window under the pointer and converts from screen
 points to the target content view. On X11, Rune's desktop pixel coordinates

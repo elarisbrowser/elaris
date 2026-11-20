@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use std::cell::{Cell, RefCell};
+use std::time::{Duration, Instant};
 
 use rune::{Drag, Tx, WindowHandle};
 
@@ -26,6 +27,7 @@ struct IncomingDrag {
     point: [f32; 2],
     visual: DragVisual,
     phase: Phase,
+    deadline: Option<Instant>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -52,6 +54,7 @@ pub(crate) fn track(state: &AppState, tab: TabId, drag: &Drag, release: bool) ->
             tab,
             point,
             visual,
+            deadline: release.then(|| Instant::now() + Duration::from_secs(2)),
             phase: if release {
                 Phase::Released
             } else {
@@ -129,6 +132,9 @@ pub(super) fn finish(state: &mut AppState, tab: TabId, success: bool, tx: &mut T
 
 pub(super) fn poll(state: &mut AppState, tx: &mut Tx) -> bool {
     let mut preview = None;
+    if expire(state, tx) {
+        return true;
+    }
     if let Some(drag) = DRAG.get() {
         if drag.destination == state.window_id {
             let target = match drag.phase {
@@ -172,6 +178,53 @@ pub(super) fn poll(state: &mut AppState, tx: &mut Tx) -> bool {
         tx.motion(crate::ui::TAB_REORDER_MOTION);
     }
     layout_changed || visual_changed
+}
+
+fn expire(state: &mut AppState, tx: &mut Tx) -> bool {
+    let Some(drag) = DRAG
+        .get()
+        .filter(|drag| drag.destination == state.window_id || drag.source == state.window_id)
+    else {
+        return false;
+    };
+    #[cfg(target_os = "macos")]
+    let mut drag = drag;
+    #[cfg(target_os = "macos")]
+    if drag.phase == Phase::Hovering && drag.source == state.window_id {
+        use objc2_app_kit_02::NSEvent;
+        // SAFETY: Rune polls the source window on AppKit's main thread.
+        if unsafe { NSEvent::pressedMouseButtons() } & 1 == 0 {
+            if drag.deadline.is_none() {
+                drag.deadline = Some(Instant::now() + Duration::from_millis(150));
+                DRAG.set(Some(drag));
+            }
+        } else {
+            drag.deadline = None;
+            DRAG.set(Some(drag));
+            tx.wake_after(Duration::from_millis(40));
+        }
+    }
+    let Some(deadline) = drag.deadline else {
+        return false;
+    };
+    if drag.phase == Phase::Hovering && drag.source != state.window_id {
+        return false;
+    }
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    if !remaining.is_zero() {
+        tx.wake_after(remaining);
+        return false;
+    }
+    if matches!(drag.phase, Phase::Submitted(_)) {
+        state.cancel_tab_transfer();
+    }
+    state.cancel_tab_drag();
+    state.tab_drag.set_outside(false);
+    state.tab_drag.set_incoming(None);
+    state.tab_drag.set_incoming_visual(None);
+    tx.animated();
+    tx.motion(crate::ui::TAB_REORDER_MOTION);
+    true
 }
 
 fn locate(source: u64, drag: &Drag) -> Option<(u64, [f32; 2])> {
@@ -306,5 +359,40 @@ mod tests {
             content_point((-400, 100), (-1200, 0), (800, 600), 2.0),
             None
         );
+    }
+    #[test]
+    fn expired_release_clears_preview_without_removing_the_source_tab() {
+        let source = AppState::new(Some("one.example"));
+        let mut destination = AppState::new(None);
+        let tab = source.browser.active_tab().unwrap().id();
+        let target = TabDropTarget {
+            section: crate::tab::TabSection::Regular,
+            index: 0,
+        };
+        destination.tab_drag.set_incoming(Some((tab, target)));
+        DRAG.set(Some(IncomingDrag {
+            source: source.window_id,
+            destination: destination.window_id,
+            tab,
+            point: [30.0, 130.0],
+            visual: DragVisual {
+                tab,
+                section: target.section,
+                to: [30.0, 130.0],
+                to_size: [220.0, 34.0],
+                settling: false,
+            },
+            phase: Phase::Ready(target),
+            deadline: Some(Instant::now()),
+        }));
+        assert!(poll(&mut destination, &mut Tx::default()));
+        assert!(DRAG.get().is_none());
+        assert!(
+            destination
+                .tab_drag
+                .preview_items(destination.browser.tabs(), target.section)
+                .is_empty()
+        );
+        assert!(source.browser.tab(tab).is_some());
     }
 }
