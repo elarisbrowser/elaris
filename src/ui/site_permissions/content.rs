@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use rune::tok::type_;
-use rune::{El, PointerPress, Spring, Tx, el, icon, row, text};
+use rune::{El, PointerPress, Spring, Transition, Tx, el, icon, row, text};
 
 use crate::app::{self, AppState};
 use crate::permissions::{PermissionKind, PermissionState};
-use crate::site_controls::{SiteControlAction, SiteControlPresentation};
+use crate::site_controls::{SiteControlAction, SiteControlPresentation, SiteControlsPage};
 use crate::ui::icons;
 use crate::ui::site_control_style as design;
 use crate::ui::theme::{self, Theme};
@@ -13,12 +13,12 @@ use crate::ui::theme::{self, Theme};
 use super::menus::permission_label;
 
 pub(super) fn popover(
-    _state: &AppState,
+    state: &AppState,
     theme: &Theme,
     presentation: &SiteControlPresentation,
     reduced_motion: bool,
 ) -> El {
-    let mut content = rune::col()
+    let shell = rune::col()
         .key("site-controls-popover")
         .w(design::WIDTH)
         .px(design::PADDING)
@@ -35,6 +35,27 @@ pub(super) fn popover(
             Spring::NONE
         } else {
             theme::OMNIBOX_MOTION
+        });
+
+    if state.site_controls_page == SiteControlsPage::Security {
+        let details = security_page(theme, presentation)
+            .key("site-controls-security-page")
+            .transition(if reduced_motion {
+                Transition::none()
+            } else {
+                Transition::opacity()
+            });
+        return shell.child(details);
+    }
+
+    let mut main = rune::col()
+        .key("site-controls-main-page")
+        .w_full()
+        .gap(0.0)
+        .transition(if reduced_motion {
+            Transition::none()
+        } else {
+            Transition::opacity()
         })
         .child(action_tiles(presentation, theme))
         .child(
@@ -49,9 +70,9 @@ pub(super) fn popover(
 
     if presentation.origin.is_some() {
         for (kind, permission) in presentation.permissions {
-            content = content.child(permission_row(theme, kind, permission).mt(design::ROW_GAP));
+            main = main.child(permission_row(theme, kind, permission).mt(design::ROW_GAP));
         }
-        content = content
+        main = main
             .child(separator(theme).mt(10.0))
             .child(footer(theme, presentation).mt(8.0));
     } else {
@@ -60,7 +81,7 @@ pub(super) fn popover(
         } else {
             "Open a website to manage its permissions."
         };
-        content = content.child(
+        main = main.child(
             text(message)
                 .font(type_::BODY)
                 .color(theme.text_muted)
@@ -68,7 +89,107 @@ pub(super) fn popover(
                 .mt(4.0),
         );
     }
-    content
+    shell.child(main)
+}
+
+fn security_page(theme: &Theme, presentation: &SiteControlPresentation) -> El {
+    let hostname = presentation
+        .origin
+        .as_deref()
+        .and_then(|origin| origin.rsplit("//").next())
+        .unwrap_or("This site");
+    let (status, description, glyph) = if presentation.https_scheme {
+        (
+            "Connection is secure",
+            "Your information, such as passwords and payment details, is encrypted when sent to this site.",
+            &icons::LOCK,
+        )
+    } else {
+        (
+            "Connection is not secure",
+            "Avoid sending passwords or payment information to this site.",
+            &icons::INFO,
+        )
+    };
+    let header = row()
+        .key("site-security-header")
+        .w_full()
+        .h(40.0)
+        .gap(8.0)
+        .center_y()
+        .child(
+            crate::ui::controls::icon_button(
+                "site-security-back",
+                "Back to site settings",
+                &icons::BACK,
+                32.0,
+                theme,
+            )
+            .on_press(|state: &mut AppState| {
+                state.site_controls_page = SiteControlsPage::Main;
+            }),
+        )
+        .child(
+            rune::col()
+                .grow(1.0)
+                .gap(1.0)
+                .child(
+                    text("Security")
+                        .font(rune::TextStyle::new(14.0, 600.0))
+                        .color(theme.text),
+                )
+                .child(
+                    text(hostname)
+                        .font(rune::TextStyle::new(11.5, 400.0))
+                        .color(theme.text_muted)
+                        .single_line()
+                        .truncate(),
+                ),
+        )
+        .child(
+            crate::ui::controls::icon_button(
+                "site-security-close",
+                "Close site controls",
+                &icons::CLOSE,
+                28.0,
+                theme,
+            )
+            .on_press(|state: &mut AppState| {
+                state.site_permissions_open = false;
+                state.site_controls_page = SiteControlsPage::Main;
+            }),
+        );
+
+    rune::col()
+        .w_full()
+        .gap(10.0)
+        .child(header)
+        .child(separator(theme).mt(4.0))
+        .child(
+            row()
+                .key("site-security-status")
+                .w_full()
+                .gap(12.0)
+                .px(8.0)
+                .py(12.0)
+                .center_y()
+                .child(icon(glyph, 20.0).color(theme.text))
+                .child(
+                    rune::col()
+                        .grow(1.0)
+                        .gap(4.0)
+                        .child(
+                            text(status)
+                                .font(rune::TextStyle::new(13.0, 600.0))
+                                .color(theme.text),
+                        )
+                        .child(
+                            text(description)
+                                .font(rune::TextStyle::new(11.5, 400.0))
+                                .color(theme.text_muted),
+                        ),
+                ),
+        )
 }
 
 fn action_tiles(presentation: &SiteControlPresentation, theme: &Theme) -> El {
@@ -186,48 +307,49 @@ fn permission_row(theme: &Theme, kind: PermissionKind, permission: PermissionSta
 }
 
 fn footer(theme: &Theme, presentation: &SiteControlPresentation) -> El {
-    let secure_label = if presentation.https_scheme {
-        "HTTPS"
+    let (label, glyph) = if presentation.https_scheme {
+        ("Connection is secure", &icons::LOCK)
     } else {
-        "HTTP"
+        ("Connection is not secure", &icons::INFO)
     };
-    let connection_icon = &icons::INFO;
-    let hostname = presentation
-        .origin
-        .as_deref()
-        .and_then(|origin| origin.rsplit("//").next());
     row()
         .key("site-controls-footer")
         .w_full()
         .h(design::FOOTER_HEIGHT)
+        .gap(4.0)
         .center_y()
         .child(
             row()
                 .key("site-security-chip")
-                .h(28.0)
-                .px(10.0)
-                .gap(6.0)
+                .h(32.0)
+                .grow(1.0)
+                .px(9.0)
+                .gap(8.0)
                 .center_y()
                 .radius(10.0)
                 .fill(theme.overlay_selected)
-                .child(icon(connection_icon, 10.0).color(theme.text))
+                .hover(theme.hover)
+                .press(theme.press)
+                .press_scale(theme::PRESS_SCALE)
+                .label(label)
+                .help("Show connection security details")
+                .role("button")
+                .focusable(true)
+                .child(icon(glyph, 16.0).color(theme.text))
                 .child(
-                    text(secure_label)
-                        .font(rune::TextStyle::new(12.0, 500.0))
-                        .color(theme.text),
-                ),
+                    text(label)
+                        .font(rune::TextStyle::new(11.5, 500.0))
+                        .color(theme.text)
+                        .single_line()
+                        .truncate()
+                        .grow(1.0),
+                )
+                .child(icon(&icons::CHEVRON_RIGHT, 12.0).color(theme.text_muted))
+                .on_press(|state: &mut AppState| {
+                    state.site_controls_page = SiteControlsPage::Security;
+                    state.site_overflow_open = false;
+                }),
         )
-        .child(if let Some(hostname) = hostname {
-            text(hostname)
-                .grow(1.0)
-                .shrink()
-                .single_line()
-                .truncate()
-                .font(rune::TextStyle::new(11.5, 400.0))
-                .color(theme.text_muted)
-        } else {
-            el().grow(1.0)
-        })
         .child(
             crate::ui::controls::icon_button(
                 "site-controls-overflow",

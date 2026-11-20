@@ -196,6 +196,7 @@ pub(super) fn site_controls(theme: &Theme) -> El {
         }
         let open = !state.site_permissions_open;
         state.site_permissions_open = open;
+        state.site_controls_page = crate::site_controls::SiteControlsPage::Main;
         state.permission_menu = None;
         state.site_overflow_open = false;
     })

@@ -175,6 +175,8 @@ pub(crate) struct AppState {
     pub(crate) site_permissions_open: bool,
     /// Rune-space bounds of the URL-bar control, used as AppKit's popover anchor.
     pub(crate) site_controls_anchor: Option<[f32; 4]>,
+    /// The page currently shown inside the site controls popover.
+    pub(crate) site_controls_page: crate::site_controls::SiteControlsPage,
     /// Layout bounds for each Rune permission row, in `PermissionKind::index()` order.
     pub(crate) permission_row_anchors: [Option<[f32; 4]>; 4],
     /// The open permission choice menu, if any.
@@ -344,6 +346,7 @@ impl AppState {
             downloads_open: false,
             site_permissions_open: false,
             site_controls_anchor: None,
+            site_controls_page: crate::site_controls::SiteControlsPage::Main,
             permission_row_anchors: [None; 4],
             permission_menu: None,
             site_overflow_open: false,

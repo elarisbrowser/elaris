@@ -6,6 +6,13 @@ use crate::app::AppState;
 use crate::permissions::{PermissionDecision, PermissionKind, PermissionState, PermissionStore};
 use crate::tab::TabId;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum SiteControlsPage {
+    #[default]
+    Main,
+    Security,
+}
+
 /// A useful action available from the site controls action strip.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum SiteControlAction {

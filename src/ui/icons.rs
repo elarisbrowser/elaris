@@ -122,6 +122,14 @@ pub(crate) static INFO: Icon = icon(
     "info",
     r#"<circle cx="8" cy="8" r="5.75" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 7.25V10.5M8 5.25H8.01" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>"#,
 );
+pub(crate) static LOCK: Icon = icon(
+    "lock",
+    r#"<rect x="3.25" y="7" width="9.5" height="7" rx="1.25" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.25 7V5.5A2.75 2.75 0 0 1 10.75 5.5V7M8 9.5V11.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>"#,
+);
+pub(crate) static CHEVRON_RIGHT: Icon = icon(
+    "chevron-right",
+    r#"<path d="m6 4.5 3.5 3.5L6 11.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>"#,
+);
 pub(crate) static MORE: Icon = icon(
     "more",
     r#"<circle cx="3.25" cy="8" r="1" fill="currentColor"/><circle cx="8" cy="8" r="1" fill="currentColor"/><circle cx="12.75" cy="8" r="1" fill="currentColor"/>"#,

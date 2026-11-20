@@ -7,6 +7,7 @@ use crate::app::AppState;
 #[cfg(target_os = "macos")]
 use crate::permissions::PermissionState;
 use crate::site_controls::SiteControlPresentation;
+use crate::site_controls::SiteControlsPage;
 use crate::ui::theme::Theme;
 
 pub(super) fn permission_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
@@ -97,6 +98,10 @@ pub(super) fn escape(state: &mut AppState, event: &KeyEvent) -> bool {
     }
     if state.site_overflow_open {
         state.site_overflow_open = false;
+        return true;
+    }
+    if state.site_controls_page == SiteControlsPage::Security {
+        state.site_controls_page = SiteControlsPage::Main;
         return true;
     }
     if state.site_permissions_open {
