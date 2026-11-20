@@ -55,7 +55,9 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         state.settings.tint_opacity,
         state.settings.accent_color,
     );
-    cx.reduced_motion(state.settings.reduce_motion);
+    if state.settings.reduce_motion {
+        cx.reduced_motion(true);
+    }
     let reduced_motion = cx.is_reduced_motion();
     state.sidebar.hover.reduced.set(reduced_motion);
     state.browser.note_scale(cx.env().scale);
