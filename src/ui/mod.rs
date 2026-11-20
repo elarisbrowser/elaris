@@ -62,6 +62,12 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     let mut overlays = Vec::new();
 
     let horizontal = state.horizontal_tabs();
+    #[cfg(target_os = "macos")]
+    cx.set_titlebar(theme::native_titlebar(if horizontal {
+        theme::HORIZONTAL_STRIP_HEIGHT
+    } else {
+        theme::HEADER_HEIGHT
+    }));
     let mut window = if horizontal || cfg!(target_os = "linux") {
         col()
     } else {

@@ -235,6 +235,14 @@ pub(crate) const TRAFFIC_LIGHTS: (f32, f32) = (
     (HEADER_HEIGHT - rune::Chrome::TRAFFIC_LIGHT) / 2.0,
 );
 
+#[cfg(target_os = "macos")]
+pub(crate) const fn native_titlebar(height: f32) -> rune::Titlebar {
+    rune::Titlebar::new(height).traffic_lights(
+        TRAFFIC_LIGHTS.0,
+        (height - rune::Chrome::TRAFFIC_LIGHT) / 2.0,
+    )
+}
+
 /// Square icon buttons: back, forward, reload, and each tab's close button.
 pub(crate) const ICON_BUTTON: f32 = 28.0;
 pub(crate) const ICON_BUTTON_RADIUS: f32 = radius::MD;

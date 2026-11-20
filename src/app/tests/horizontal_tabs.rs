@@ -478,3 +478,25 @@ fn split_markers_follow_the_displayed_pair() {
     assert!(window.presented(&marker(first)).is_none());
     assert!(window.presented(&marker(second)).is_none());
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+fn traffic_light_placeholders_follow_the_native_titlebar_position() {
+    let mut window = runtime(AppState::new(Some("one.example")), 960.0);
+    window.set_titlebar_inset(
+        theme::TRAFFIC_LIGHTS.0 + 2.0 * rune::Chrome::TRAFFIC_PITCH + rune::Chrome::TRAFFIC_LIGHT,
+    );
+    settle(&mut window);
+    for (layout, height) in [
+        (TabLayout::Vertical, theme::HEADER_HEIGHT),
+        (TabLayout::Horizontal, theme::HORIZONTAL_STRIP_HEIGHT),
+        (TabLayout::Vertical, theme::HEADER_HEIGHT),
+    ] {
+        window.update(|state, _| state.set_tab_layout(layout));
+        settle(&mut window);
+        let (_, native_y) = theme::native_titlebar(height)
+            .traffic_lights_origin()
+            .unwrap();
+        assert_eq!(rect(&window, "window-controls")[1], native_y);
+    }
+}

@@ -79,6 +79,8 @@ fn configure_app(app: App<app::AppState>) -> App<app::AppState> {
             drag_regions: true,
             ..Chrome::DEFAULT
         });
+    #[cfg(target_os = "macos")]
+    let app = app.titlebar(ui::theme::native_titlebar(ui::theme::HEADER_HEIGHT));
     #[cfg(target_os = "linux")]
     let app = {
         let app_handle = app.handle();

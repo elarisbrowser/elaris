@@ -63,6 +63,14 @@ pub(crate) fn install(window: &RuneWindowHandle) {
                 ),
             );
         }
+        // Rune moves the buttons within this parent when the tab layout changes. The
+        // tracking area covers both positions, whichever layout the window opened in.
+        let travel = f64::from(
+            (crate::ui::theme::HEADER_HEIGHT - crate::ui::theme::HORIZONTAL_STRIP_HEIGHT).abs()
+                / 2.0,
+        );
+        group.origin.y -= travel;
+        group.size.height += 2.0 * travel;
         for button in buttons {
             let Some(button_class) = hover_button_class(button.class()) else {
                 continue;
