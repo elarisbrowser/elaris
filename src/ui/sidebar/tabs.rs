@@ -9,6 +9,7 @@ use super::drag::{PreviewItem, favourite_columns, favourite_row_ranges, favourit
 use crate::app::{self, AppState};
 
 mod context_menu;
+mod split;
 use crate::internal::{InternalPage, InternalRoute};
 use crate::tab::{Tab, TabId, TabSection};
 use crate::ui::TabDragMoveResult;
@@ -16,6 +17,7 @@ use crate::ui::controls::{icon_button, row_button};
 use crate::ui::icons;
 use crate::ui::theme::{self, Theme};
 pub(crate) use context_menu::context_menu;
+use split::{TabRowStyle, members as split_group_members, view as split_tab_group};
 
 pub(super) fn view(
     state: &AppState,
@@ -247,21 +249,11 @@ fn section_rows(
             spring: motion,
             ..GrowthSpec::default()
         });
-    let split_tabs = state.browser.split.map(|split| split.panes);
-    let split_pair = split_tabs
-        .and_then(|[left, right]| Some([left?, right?]))
-        .filter(|pair| {
-            pair.iter().all(|id| {
-                state
-                    .browser
-                    .tab(*id)
-                    .is_some_and(|tab| tab.section() == section)
-            }) && pair.iter().all(|id| items.contains(&PreviewItem::Tab(*id)))
-        });
-    let mut index = 0;
+    let split_pair = split_group_members(state, section)
+        .filter(|pair| pair.iter().all(|id| items.contains(&PreviewItem::Tab(*id))));
     let mut split_group_added = false;
-    while index < items.len() {
-        let split_tab = match items[index] {
+    for (index, item) in items.iter().copied().enumerate() {
+        let split_tab = match item {
             PreviewItem::Tab(id) => split_pair.filter(|pair| pair.contains(&id)),
             PreviewItem::SourceSlot(_) | PreviewItem::DropSlot(_, _) => None,
         };
@@ -275,14 +267,11 @@ fn section_rows(
                 theme,
             ));
             split_group_added = true;
-            index += 1;
             continue;
         }
         if split_group_added && split_tab.is_some() {
-            index += 1;
             continue;
         }
-        let item = items[index];
         let element = match item {
             PreviewItem::Tab(id) => state.browser.tab(id).map_or_else(el, |tab| {
                 tab_row(
@@ -293,8 +282,7 @@ fn section_rows(
                     index,
                     items.len(),
                     theme,
-                    false,
-                    false,
+                    TabRowStyle::Standalone,
                 )
             }),
             PreviewItem::SourceSlot(id) => source_placeholder(id, section, index, items.len(), 0.0),
@@ -310,7 +298,6 @@ fn section_rows(
             ),
         };
         rows = rows.child(element);
-        index += 1;
     }
     if section == TabSection::Regular {
         rows = rows.child(
@@ -345,60 +332,6 @@ fn section_rows(
             }
         })
         .child(rows)
-}
-
-fn split_tab_group(
-    state: &AppState,
-    section: TabSection,
-    ids: [TabId; 2],
-    index: usize,
-    count: usize,
-    theme: &Theme,
-) -> El {
-    let active = state.browser.active_tab().map(Tab::id);
-    let selected_group = active.is_some_and(|active| ids.contains(&active));
-    let mut group = row()
-        .key("split-tab-group")
-        .w_full()
-        .h(theme::ROW_HEIGHT)
-        .gap(2.0)
-        .px(3.0)
-        .center_y()
-        .radius(theme::ROW_RADIUS)
-        .continuous_corners()
-        .fill(if selected_group {
-            theme.tab_active
-        } else {
-            theme.address_field
-        });
-    if selected_group {
-        group = group.shadow(
-            theme::ACTIVE_SHADOW_Y,
-            theme::ACTIVE_SHADOW_BLUR,
-            theme.tab_active_shadow,
-        );
-    }
-    for (offset, id) in ids.into_iter().enumerate() {
-        if let Some(tab) = state.browser.tab(id) {
-            let child = tab_row(
-                state,
-                tab,
-                section,
-                Some(id) == active,
-                index + offset,
-                count,
-                theme,
-                true,
-                selected_group,
-            )
-            .w(0.0)
-            .grow(1.0)
-            .h(theme::ROW_HEIGHT - 6.0)
-            .radius(theme::ROW_RADIUS - 3.0);
-            group = group.child(child);
-        }
-    }
-    group
 }
 
 fn section_divider(theme: &Theme) -> El {
@@ -483,8 +416,7 @@ fn tab_row(
     index: usize,
     count: usize,
     theme: &Theme,
-    grouped: bool,
-    group_active: bool,
+    style: TabRowStyle,
 ) -> El {
     let id = tab.id();
     let label = tab.label();
@@ -520,18 +452,21 @@ fn tab_row(
         .on_secondary_press(move |state: &mut AppState, press, _| {
             state.open_context_menu(Some(id), press);
         });
-    if grouped {
-        row = row.fill(if group_active {
-            theme.address_field
-        } else {
-            theme.tab_drag
-        });
-    } else if active {
-        row = row.fill(theme.tab_active);
-    } else if state.tab_drag.is_hidden(id) {
-        row = row.fill(theme.tab_drag);
+    match style {
+        TabRowStyle::Standalone if active => row = row.fill(theme.tab_active),
+        TabRowStyle::Standalone if state.tab_drag.is_hidden(id) => {
+            row = row.fill(theme.tab_drag);
+        }
+        TabRowStyle::Grouped { selected } => {
+            row = row.fill(if selected {
+                theme.address_field
+            } else {
+                theme.tab_drag
+            });
+        }
+        TabRowStyle::Standalone => {}
     }
-    if active && !grouped {
+    if active && matches!(style, TabRowStyle::Standalone) {
         row = row.shadow(
             theme::ACTIVE_SHADOW_Y,
             theme::ACTIVE_SHADOW_BLUR,
@@ -541,19 +476,8 @@ fn tab_row(
     if hidden {
         row = row.opacity(0.0).opacity_motion(rune::Anim::INSTANT);
     }
-    let drag_members = state
-        .browser
-        .split
-        .filter(|split| split.panes.contains(&Some(id)))
-        .and_then(|split| Some([split.panes[0]?, split.panes[1]?]))
-        .filter(|pair| {
-            pair.iter().all(|member| {
-                state
-                    .browser
-                    .tab(*member)
-                    .is_some_and(|member| member.section() == section)
-            })
-        })
+    let drag_members = split_group_members(state, section)
+        .filter(|pair| pair.contains(&id))
         .map_or_else(|| vec![id], |pair| pair.to_vec());
     row = tab_drag_handler(row, id, drag_members);
     let row = row.on_layout_tx(move |state: &mut AppState, rect, tx| {
