@@ -109,6 +109,7 @@ struct Settling {
     start_pending: bool,
     target_pending: bool,
     target_wait_started: Option<f64>,
+    incoming: bool,
     deadline: Option<f64>,
 }
 
@@ -416,6 +417,7 @@ impl TabDragState {
                 start_pending: cross_section,
                 target_pending: cross_section,
                 target_wait_started: None,
+                incoming: false,
                 deadline: None,
             });
             return (
@@ -439,6 +441,7 @@ impl TabDragState {
             start_pending: false,
             target_pending: false,
             target_wait_started: None,
+            incoming: false,
             deadline: None,
         });
         (true, None)
@@ -469,6 +472,7 @@ impl TabDragState {
                     start_pending: false,
                     target_pending: false,
                     target_wait_started: None,
+                    incoming: false,
                     deadline: None,
                 });
                 true
@@ -630,6 +634,12 @@ impl TabDragState {
         }
     }
 
+    pub(crate) fn is_incoming_settle(&self, tab: TabId) -> bool {
+        self.settling
+            .as_ref()
+            .is_some_and(|settling| settling.tab == tab && settling.incoming)
+    }
+
     pub(crate) fn settle_incoming(&mut self, visual: DragVisual, target: TabDropTarget) {
         let from = [
             visual.to[0],
@@ -649,6 +659,9 @@ impl TabDragState {
             from,
             to,
         );
+        if let Some(settling) = self.settling.as_mut() {
+            settling.incoming = true;
+        }
     }
 
     /// Starts the same shared-element settle used by a pointer drop, for a menu action.
@@ -676,6 +689,7 @@ impl TabDragState {
             start_pending: true,
             target_pending: true,
             target_wait_started: None,
+            incoming: false,
             deadline: None,
         });
     }

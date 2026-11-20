@@ -508,6 +508,7 @@ fn incoming_drop_settles_from_pointer_into_laid_out_favourite_tile() {
         target,
     );
 
+    assert!(state.is_incoming_settle(id));
     assert_eq!(state.visual().unwrap().to, [80.0, 125.0]);
     assert!(state.is_hidden(id));
     assert!(state.record_tab_rect(target.section, id, [12.0, 88.0, 218.0, 56.0]));

@@ -141,14 +141,33 @@ pub(super) fn view(
                 None
             }
         });
-        overlays.push(tab_drag_visual(
-            tab,
-            peer,
-            active,
-            visual,
-            theme,
-            reduced_motion,
-        ));
+        if state.tab_drag.is_incoming_settle(visual.tab) {
+            let icon_size = if visual.section == TabSection::Favourite {
+                theme::FAVOURITE_ICON
+            } else {
+                theme::ICON
+            };
+            // Start with the floating card's colors, then settle to the active row's appearance.
+            let active = visual.settling;
+            overlays.push(single_drag_visual(
+                tab.label(),
+                tab_icon(tab, active, icon_size, theme),
+                active,
+                visual,
+                theme,
+                reduced_motion,
+                true,
+            ));
+        } else {
+            overlays.push(tab_drag_visual(
+                tab,
+                peer,
+                active,
+                visual,
+                theme,
+                reduced_motion,
+            ));
+        }
     }
     sidebar_tabs
 }
@@ -807,6 +826,7 @@ fn tab_drag_visual(
         visual,
         theme,
         reduced_motion,
+        false,
     )
 }
 
@@ -832,6 +852,7 @@ pub(crate) fn floating_drag_preview(
         visual,
         theme,
         reduced_motion,
+        false,
     )
 }
 
@@ -842,6 +863,7 @@ fn single_drag_visual(
     visual: super::drag::DragVisual,
     theme: &Theme,
     reduced_motion: bool,
+    incoming: bool,
 ) -> El {
     let favourite = visual.section == TabSection::Favourite;
     let title_visible = !favourite;
@@ -893,11 +915,13 @@ fn single_drag_visual(
     } else if !visual.settling {
         row = row.fill(theme.tab_drag);
     }
-    row = row.shadow(
-        theme::TAB_DRAG_SHADOW_Y,
-        theme::TAB_DRAG_SHADOW_BLUR,
-        theme.tab_active_shadow,
-    );
+    if !incoming || !visual.settling {
+        row = row.shadow(
+            theme::TAB_DRAG_SHADOW_Y,
+            theme::TAB_DRAG_SHADOW_BLUR,
+            theme.tab_active_shadow,
+        );
+    }
     if visual.settling {
         row = row.motion(motion);
     } else {
