@@ -44,10 +44,11 @@ published branches, and do not merge upstream changes without review.
 Choose the tested commit on `elaris`, then update the one shared revision in Elaris's
 `Cargo.toml` for `rune`, `rune-kit`, and the `parley_engine`/`winit` patches. Keep all these
 dependencies on the same fork commit and retain their existing features and platform
-configuration. Update the lockfile and verify its Rune git sources resolve to that commit.
+configuration. Update the lockfile with the targeted command below and verify its Rune git
+sources resolve to that commit.
 
 ```sh
-cargo update
+cargo update -p rune --precise <tested-commit>
 cargo metadata --locked --no-deps --format-version 1
 cargo fmt --check
 cargo check --locked
