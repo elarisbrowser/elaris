@@ -43,7 +43,13 @@ pub(super) fn view(
             spring: reorder_motion,
             ..GrowthSpec::default()
         })
-        .child(regular_rows(state, active, theme, reduced_motion));
+        .child(regular_rows(
+            state,
+            active,
+            theme,
+            reduced_motion,
+            has_favourites,
+        ));
 
     let scroll_live = state.tab_drag.scroll_live();
     let scroll = col()
@@ -259,6 +265,7 @@ fn regular_rows(
     active: Option<TabId>,
     theme: &Theme,
     reduced_motion: bool,
+    has_favourites: bool,
 ) -> El {
     let section = TabSection::Regular;
     let items = state.tab_drag.preview_items(state.browser.tabs(), section);
@@ -325,6 +332,16 @@ fn regular_rows(
             ),
         };
         rows = rows.child(element);
+    }
+    if !has_favourites && !items.is_empty() {
+        rows = rows.child(
+            col()
+                .key("regular-tabs-divider")
+                .w_full()
+                .px(theme::SIDEBAR_PADDING)
+                .pt(2.0 * theme::SIDEBAR_GAP)
+                .child(el().w_full().h(1.0).fill(theme.overlay_border)),
+        );
     }
     rows = rows.child(
         row_button(
