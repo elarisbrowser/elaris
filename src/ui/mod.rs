@@ -155,7 +155,6 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     overlays.extend(tab_preview::view(state, cx, &theme, reduced_motion));
     viewport::menu::view(state, &theme, &mut overlays);
     sidebar::context_menu(state, &theme, &mut overlays);
-    site_permissions::view(state, cx, &theme, &mut overlays, reduced_motion);
     #[cfg(target_os = "linux")]
     if !horizontal {
         overlays.push(sidebar::header::hover_zone());
@@ -171,6 +170,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         reduced_motion,
     ));
     overlays.extend(tab_switcher::view(state, &theme, height, reduced_motion));
+    site_permissions::view(state, cx, &theme, &mut overlays, reduced_motion);
     let (hover_enter, hover_exit) = if reduced_motion {
         (rune::Anim::INSTANT, rune::Anim::INSTANT)
     } else {
