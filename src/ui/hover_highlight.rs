@@ -163,6 +163,8 @@ pub(crate) fn poll_context_menu(state: &mut AppState, tx: &mut Tx) -> bool {
         "sidebar-context-menu-item"
     } else if state.page_menu.open() {
         "page-context-menu-item"
+    } else if state.omnibox.search_engine_menu_open {
+        "search-engine-menu-item"
     } else {
         ""
     };
@@ -183,20 +185,36 @@ pub(in crate::ui) fn build_context_menu(
     theme: &Theme,
     layer: &mut Vec<El>,
 ) {
+    let _ = build_highlight_menu(state, menu, None, theme, layer);
+}
+
+pub(in crate::ui) fn build_highlight_menu(
+    state: &AppState,
+    menu: rune_kit::Menu,
+    surface_key: Option<&str>,
+    theme: &Theme,
+    layer: &mut Vec<El>,
+) -> El {
     let mut kit = theme.kit(theme.overlay_panel);
     if state.context_menu_highlight.is_some() {
         kit.c.hover = rune::Color::TRANSPARENT;
     }
     let before = layer.len();
-    menu.build(&kit, layer);
+    let trigger = menu.build(&kit, layer);
     if layer.len() > before
         && let Some(surface) = layer.pop()
     {
-        layer.push(surface.on_pointer_move_local(|_: &mut AppState, _, tx| {
+        let surface = surface.on_pointer_move_local(|_: &mut AppState, _, tx| {
             tx.wake_after(std::time::Duration::ZERO);
             tx.live_only();
-        }));
+        });
+        layer.push(if let Some(key) = surface_key {
+            surface.key(key)
+        } else {
+            surface
+        });
     }
+    trigger
 }
 
 pub(super) fn context_menu_view(
@@ -210,6 +228,8 @@ pub(super) fn context_menu_view(
         "sidebar-context-menu-menu"
     } else if state.page_menu.open() {
         "page-context-menu-menu"
+    } else if state.omnibox.search_engine_menu_open {
+        "search-engine-menu-menu"
     } else {
         return None;
     };

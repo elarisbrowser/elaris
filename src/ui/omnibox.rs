@@ -369,7 +369,6 @@ fn search_engine_selector(state: &AppState, theme: &Theme, overlays: &mut Vec<El
             theme::OMNIBOX_SEARCH_ICON,
         ))
         .child(icon(&super::icons::CHEVRON_DOWN, theme::OMNIBOX_SEARCH_CHEVRON).color(theme.icon));
-    let kit = theme.kit(theme.overlay_panel);
     let mut menu = Menu::new("search-engine-menu")
         .trigger(trigger)
         .group_label("Search with");
@@ -385,9 +384,16 @@ fn search_engine_selector(state: &AppState, theme: &Theme, overlays: &mut Vec<El
                 }),
         );
     }
-    menu.open(state.omnibox.search_engine_menu_open)
-        .on_close(|state: &mut AppState| state.omnibox.search_engine_menu_open = false)
-        .build(&kit, overlays)
+    let menu = menu
+        .open(state.omnibox.search_engine_menu_open)
+        .on_close(|state: &mut AppState| state.omnibox.search_engine_menu_open = false);
+    super::hover_highlight::build_highlight_menu(
+        state,
+        menu,
+        Some("search-engine-menu-menu"),
+        theme,
+        overlays,
+    )
 }
 
 fn result_row(
