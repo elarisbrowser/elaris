@@ -203,16 +203,6 @@ pub(crate) fn view(
             };
             grid_row = grid_row.child(wrap(id, side, 1.0, child));
         }
-        for column in row_panes.len()..columns {
-            grid_row = grid_row.child(
-                el().key(format!("split-grid-empty-{row_index}-{column}"))
-                    .w(0.0)
-                    .h_full()
-                    .min_h(0.0)
-                    .grow(1.0)
-                    .inert(),
-            );
-        }
         grid = grid.child(grid_row);
     }
     let mut layout = layout.child(grid);
@@ -356,11 +346,7 @@ pub(crate) fn drop_side(state: &AppState, id: TabId, point: [f32; 2]) -> Option<
             && point[0] < x + width
             && point[1] >= y
             && point[1] < y + height
-            && (point[1] >= y + height - edge
-                || (panes.len() > 2
-                    && split::target(state.split_rect, point, panes.len() + 1)
-                        == Some(panes.len())
-                    && split::target(state.split_rect, point, panes.len()).is_none()))
+            && point[1] >= y + height - edge
         {
             return Some(panes.len());
         }

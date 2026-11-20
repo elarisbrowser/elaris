@@ -687,6 +687,15 @@ fn dropping_tabs_at_the_bottom_edge_adds_panes_until_the_limit() {
         assert_eq!(window.state.browser.visible_tabs().len(), index + 3);
         assert_eq!(window.state.browser.visible_tabs()[0], Some(first));
         assert_eq!(window.state.browser.visible_tabs()[index + 2], Some(tab));
+        let pane_width = rect(&window, &format!("web-pane-{}", tab.raw()))[2];
+        let layout_width = rect(&window, "page-layout")[2];
+        let expected = if index == 0 {
+            layout_width
+        } else {
+            (layout_width - crate::browser::split::DIVIDER) / 2.0
+        };
+        assert!((pane_width - expected).abs() <= 1.0);
+        assert!((window.state.browser.viewport_width() - expected).abs() <= 1.0);
     }
 
     let [x, y, width, height] = rect(&window, "page-layout");

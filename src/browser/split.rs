@@ -24,8 +24,9 @@ pub(crate) fn grid_cell_rect(rect: [f32; 4], count: usize, index: usize) -> [f32
     let columns = (count as f32).sqrt().ceil().max(1.0) as usize;
     let rows = count.div_ceil(columns).max(1);
     let [x, y, width, height] = rect;
-    let cell_width = (width - DIVIDER * (columns.saturating_sub(1) as f32)) / columns as f32;
     let row = index / columns;
+    let row_columns = (count - row * columns).min(columns);
+    let cell_width = (width - DIVIDER * (row_columns - 1) as f32).max(0.0) / row_columns as f32;
     let column = index % columns;
     let cell_height = (height - DIVIDER * (rows.saturating_sub(1) as f32)) / rows as f32;
     [

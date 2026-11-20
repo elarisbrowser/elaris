@@ -825,9 +825,11 @@ impl Browser {
                 if count == 2 {
                     return split::widths(self.content_width(), split.ratio)[self.focused_side()];
                 }
-                let columns = (count as f32).sqrt().ceil() as usize;
-                (self.content_width() - split::DIVIDER * (columns.saturating_sub(1) as f32))
-                    / columns as f32
+                split::grid_cell_rect(
+                    [0.0, 0.0, self.content_width(), self.window.viewport[1]],
+                    count,
+                    self.focused_side(),
+                )[2]
             })
     }
 

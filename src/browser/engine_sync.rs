@@ -211,16 +211,6 @@ impl Browser {
         let scale = window.scale.get();
         let panes = self.visible_tabs();
         let split_ratio = self.displayed_split().map(|split| split.ratio);
-        let grid_size = split_ratio.filter(|_| panes.len() > 2).map(|_| {
-            let columns = (panes.len() as f32).sqrt().ceil() as usize;
-            let rows = panes.len().div_ceil(columns);
-            [
-                (window.viewport[0] - split::DIVIDER * (columns.saturating_sub(1) as f32))
-                    / columns as f32,
-                (window.viewport[1] - split::DIVIDER * (rows.saturating_sub(1) as f32))
-                    / rows as f32,
-            ]
-        });
         let input_page = self.input_page();
         let peek_id = self.peek.as_ref().map(|peek| peek.page.id());
         // Release the old focus before granting it to a different view.
@@ -259,8 +249,12 @@ impl Browser {
                     window.viewport[1],
                 ]
             } else {
-                side.zip(grid_size)
-                    .map_or(window.viewport, |(_, size)| size)
+                side.zip(split_ratio).map_or(window.viewport, |(side, _)| {
+                    let [width, height] = window.viewport;
+                    let [_, _, width, height] =
+                        split::grid_cell_rect([0.0, 0.0, width, height], panes.len(), side);
+                    [width, height]
+                })
             };
             let [width, height] = size.map(|points| input::device(points, scale));
             let viewport = (width > 0 && height > 0).then_some((width, height, f64::from(scale)));
