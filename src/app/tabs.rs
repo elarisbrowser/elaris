@@ -8,6 +8,7 @@ use crate::tab::{Tab, TabId, TabSection};
 use crate::ui::{TabDropTarget, viewport::focus_key};
 
 impl super::AppState {
+    #[cfg(target_os = "macos")]
     pub(crate) fn can_reopen_closed_tab(&self) -> bool {
         !self.recently_closed.is_empty()
     }

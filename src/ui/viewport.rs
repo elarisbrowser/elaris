@@ -427,6 +427,7 @@ fn paste(id: TabId, tx: &mut Tx) {
     });
 }
 
+#[cfg(target_os = "macos")]
 pub(crate) enum PageEdit {
     Cut,
     Copy,
@@ -435,6 +436,7 @@ pub(crate) enum PageEdit {
 }
 
 /// Applies a native edit menu action to the focused Ladybird page, if it owns focus.
+#[cfg(target_os = "macos")]
 pub(crate) fn menu_edit(state: &mut AppState, edit: PageEdit, tx: &mut Tx) -> bool {
     let Some(id) = state.browser.input_page().filter(|id| {
         tx.focused() == Some(page_focus_key(&state.browser))

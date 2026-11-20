@@ -10,6 +10,7 @@ mod input;
 mod internal;
 #[cfg(target_os = "macos")]
 mod menu_macos;
+#[cfg(target_os = "macos")]
 mod menu_state;
 mod omnibox;
 mod perf;
