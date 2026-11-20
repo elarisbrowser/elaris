@@ -125,7 +125,9 @@ impl super::AppState {
     }
 
     pub(crate) fn cancel_tab_drag(&mut self) -> bool {
-        self.split_preview.take().is_some() | self.tab_drag.cancel()
+        super::cross_window_drag::clear(self.window_id)
+            | self.split_preview.take().is_some()
+            | self.tab_drag.cancel()
     }
 
     #[cfg(test)]

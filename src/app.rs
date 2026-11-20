@@ -623,6 +623,7 @@ pub(crate) fn save_closed_final_session(storage: &Storage) {
     save_registered_sessions(storage, false);
 }
 
+pub(crate) mod cross_window_drag;
 mod find;
 mod lifecycle;
 mod omnibox_actions;

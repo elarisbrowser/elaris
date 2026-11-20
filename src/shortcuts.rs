@@ -45,7 +45,9 @@ pub(crate) fn on_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> boo
     if crate::ui::tab_switcher::cycle_key(state, event, tx) {
         return true;
     }
-    if event.key == Key::Escape && state.tab_drag.is_dragging() {
+    if event.key == Key::Escape
+        && (state.tab_drag.is_dragging() || crate::app::cross_window_drag::clear(state.window_id))
+    {
         state.cancel_tab_drag();
         tx.animated();
         tx.motion(ui::TAB_REORDER_MOTION);

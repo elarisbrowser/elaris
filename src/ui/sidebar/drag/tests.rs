@@ -419,3 +419,48 @@ fn empty_favourite_preview_remains_valid_when_the_grid_becomes_visible() {
         })
     );
 }
+
+#[test]
+fn incoming_preview_uses_destination_order_and_clears_without_changing_tabs() {
+    let tabs = tabs(3);
+    let mut state = TabDragState::default();
+    begin(&mut state, &tabs, 0);
+    state.cancel();
+    let incoming = TabId::from_raw(50);
+    let target = state.incoming_target(&tabs, [35.0, 141.0]).unwrap();
+    assert_eq!(
+        target,
+        TabDropTarget {
+            section: TabSection::Regular,
+            index: 1
+        }
+    );
+    assert!(state.set_incoming(Some((incoming, target))));
+    assert_eq!(
+        state.preview_items(&tabs, TabSection::Regular),
+        [
+            PreviewItem::Tab(tabs[0].id()),
+            PreviewItem::DropSlot(incoming, false),
+            PreviewItem::Tab(tabs[1].id()),
+            PreviewItem::Tab(tabs[2].id()),
+        ]
+    );
+    assert!(state.set_incoming(None));
+    assert_eq!(state.preview_items(&tabs, TabSection::Regular).len(), 3);
+    assert!(state.incoming_target(&tabs, [35.0, 410.0]).is_none());
+}
+
+#[test]
+fn incoming_tab_can_preview_an_empty_favourites_region() {
+    let tabs = tabs(1);
+    let mut state = TabDragState::default();
+    state.set_empty_favourites_anchor([0.0, 180.0, 220.0, 300.0]);
+    let target = state.incoming_target(&tabs, [35.0, 170.0]).unwrap();
+    assert_eq!(
+        target,
+        TabDropTarget {
+            section: TabSection::Favourite,
+            index: 0
+        }
+    );
+}

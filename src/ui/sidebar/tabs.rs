@@ -628,9 +628,14 @@ fn tab_drag_handler(row: El, id: TabId, members: Vec<TabId>) -> El {
             let result = state
                 .tab_drag
                 .move_to(state.browser.tabs(), drag.window_point());
-            let preview = state
-                .tab_drag
-                .is_dragging()
+            let active = state.tab_drag.is_dragging();
+            let external = active
+                && members.len() == 1
+                && crate::app::cross_window_drag::track(state, id, drag, false);
+            if !active {
+                crate::app::cross_window_drag::clear(state.window_id);
+            }
+            let preview = (active && !external)
                 .then(|| crate::ui::viewport::drop_side(state, id, drag.window_point()))
                 .flatten();
             if state.split_preview != preview {
@@ -648,13 +653,21 @@ fn tab_drag_handler(row: El, id: TabId, members: Vec<TabId>) -> El {
             }
         }
         rune::Phase::Up => {
-            let side = (!drag.cancelled() && state.tab_drag.is_dragging())
+            let active = !drag.cancelled() && state.tab_drag.is_dragging();
+            let external = active
+                && members.len() == 1
+                && crate::app::cross_window_drag::track(state, id, drag, true);
+            if !external {
+                crate::app::cross_window_drag::clear(state.window_id);
+            }
+            let side = (active && !external)
                 .then(|| crate::ui::viewport::drop_side(state, id, drag.window_point()))
                 .flatten();
             state.split_preview = None;
-            let (was_dragging, drop) = state
-                .tab_drag
-                .end(state.browser.tabs(), drag.cancelled() || side.is_some());
+            let (was_dragging, drop) = state.tab_drag.end(
+                state.browser.tabs(),
+                drag.cancelled() || external || side.is_some(),
+            );
             if let Some(side) = side {
                 if dragging_single_page(state, id) {
                     state.begin_split_picker(id, side);

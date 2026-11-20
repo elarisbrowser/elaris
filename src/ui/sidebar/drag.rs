@@ -39,6 +39,7 @@ pub(crate) enum PreviewItem {
 
 pub(crate) struct TabDragState {
     gesture: Option<Gesture>,
+    incoming: Option<(TabId, TabDropTarget)>,
     settling: Option<Settling>,
     tab_rects: HashMap<TabId, [f32; 4]>,
     section_rects: [Option<[f32; 4]>; 3],
@@ -55,6 +56,7 @@ impl Default for TabDragState {
     fn default() -> Self {
         Self {
             gesture: None,
+            incoming: None,
             settling: None,
             tab_rects: HashMap::new(),
             section_rects: [None; 3],
@@ -141,7 +143,11 @@ impl TabDragState {
     ) -> bool {
         if rect.into_iter().all(f32::is_finite) && rect[2] > 0.0 && rect[3] >= 0.0 {
             self.section_rects[section_index(section)] = Some(rect);
-            if section == TabSection::Favourite && rect[3] > 0.0 && !self.is_dragging() {
+            if section == TabSection::Favourite
+                && rect[3] > 0.0
+                && !self.is_dragging()
+                && self.incoming.is_none()
+            {
                 self.empty_favourite_area = None;
             }
             if let Some(settling) = self.settling.as_mut()
@@ -477,6 +483,32 @@ impl TabDragState {
                 .is_some_and(|settling| settling.tab == tab)
     }
 
+    pub(crate) fn incoming_target(&self, tabs: &[Tab], point: [f32; 2]) -> Option<TabDropTarget> {
+        let section = self.section_at(point)?;
+        if section != TabSection::Favourite
+            && !self.viewport.is_some_and(|rect| contains(rect, point))
+        {
+            return None;
+        }
+        if section == TabSection::Pinned && !tabs.iter().any(|tab| tab.section() == section) {
+            return None;
+        }
+        let index = self.insertion_index(
+            tabs,
+            &[],
+            section,
+            point,
+            self.incoming.map(|(_, target)| target),
+        );
+        Some(TabDropTarget { section, index })
+    }
+
+    pub(crate) fn set_incoming(&mut self, incoming: Option<(TabId, TabDropTarget)>) -> bool {
+        let changed = self.incoming != incoming;
+        self.incoming = incoming;
+        changed
+    }
+
     /// The displayed order for a sidebar section, with distinct source and destination slots.
     pub(crate) fn preview_items(&self, tabs: &[Tab], section: TabSection) -> Vec<PreviewItem> {
         let mut items: Vec<_> = tabs
@@ -485,6 +517,15 @@ impl TabDragState {
             .map(|tab| PreviewItem::Tab(tab.id()))
             .collect();
         let Some(Gesture::Dragging(dragging)) = &self.gesture else {
+            if let Some((id, target)) = self
+                .incoming
+                .filter(|(_, target)| target.section == section)
+            {
+                items.insert(
+                    target.index.min(items.len()),
+                    PreviewItem::DropSlot(id, false),
+                );
+            }
             return items;
         };
         if dragging.pressed.source.section == section {

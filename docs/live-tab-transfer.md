@@ -24,6 +24,25 @@ snapshot to the existing atomic session writer. The source acknowledges that
 snapshot in its next poll before routine saving resumes. A crash before the
 snapshot is written can restore the previous layout.
 
-The coordinator currently processes one handoff at a time. Drag hit testing,
-insertion previews, cross-window animations, detachment, and closing an emptied
-source are separate stages.
+The coordinator currently processes one handoff at a time. Detachment and
+closing an emptied source are separate stages.
+
+## Dragging between existing windows
+
+After the normal tab drag threshold, the source tracks the window under the
+pointer. The destination converts the pointer to its sidebar coordinates and
+uses the existing section and insertion geometry. Its preview takes a slot in
+the normal animated list or adaptive Favourites grid. Release resolves the
+target again before B1 validates and commits it. Escape, pointer cancellation,
+and window closure clear the preview.
+
+On macOS, AppKit supplies the window under the pointer and converts from screen
+points to the target content view. On X11, Rune's desktop pixel coordinates
+are converted using the destination's content origin and scale. The X11 path
+rejects ambiguous hits in overlapping Elaris windows and currently cannot
+detect occlusion by other applications. Wayland provides no desktop coordinates
+through Rune and retains in-window dragging.
+
+Cross-window gestures here move a single tab. Split groups retain their
+local drag behavior. A pointer-following visual outside the source window and
+the final cross-window settle are still pending.

@@ -53,10 +53,6 @@ impl Transfer {
 
 impl AppState {
     /// Requests a transfer while the source still owns the tab. Only one handoff is in flight.
-    #[allow(
-        dead_code,
-        reason = "The cross-window drag handler will submit this request"
-    )]
     pub(crate) fn request_tab_transfer(
         &self,
         tab: TabId,
@@ -192,6 +188,15 @@ impl AppState {
                         transfer.index,
                     ) {
                         Ok(()) => {
+                            if let Some(window) = WINDOW_REGISTRY.get().and_then(|registry| {
+                                registry
+                                    .lock()
+                                    .expect("window registry poisoned")
+                                    .get(&id)
+                                    .cloned()
+                            }) {
+                                window.focus();
+                            }
                             tx.focus_when_shown(
                                 crate::ui::viewport::focus_key(&self.browser),
                                 false,
