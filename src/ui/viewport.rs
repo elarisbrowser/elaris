@@ -84,6 +84,7 @@ pub(crate) fn view(
             .grow(weight)
             .min_w(0.0)
             .h_full()
+            .min_h(0.0)
             .fill(theme.page)
             .continuous_corners()
             .clip_rounded(radius);
@@ -160,12 +161,14 @@ pub(crate) fn view(
         .key("split-grid")
         .w_full()
         .h_full()
+        .min_h(0.0)
         .gap(split::DIVIDER);
     for (row_index, row_panes) in panes.chunks(columns.max(1)).enumerate() {
         let mut grid_row = rune::row()
             .key(format!("split-grid-row-{row_index}"))
             .w_full()
             .h(0.0)
+            .min_h(0.0)
             .grow(1.0)
             .gap(split::DIVIDER);
         for (column, id) in row_panes.iter().copied().enumerate() {
@@ -185,20 +188,21 @@ pub(crate) fn view(
             } else {
                 child
             };
-            grid_row = grid_row.child(wrap(id, side, 1.0, child).h(0.0).grow(1.0));
+            grid_row = grid_row.child(wrap(id, side, 1.0, child));
         }
         for column in row_panes.len()..columns {
             grid_row = grid_row.child(
                 el().key(format!("split-grid-empty-{row_index}-{column}"))
                     .w(0.0)
-                    .h(0.0)
+                    .h_full()
+                    .min_h(0.0)
                     .grow(1.0)
                     .inert(),
             );
         }
         grid = grid.child(grid_row);
     }
-    viewport.child(grid)
+    viewport.child(layout.child(grid))
 }
 
 fn wrapper_key(id: Option<TabId>, side: usize) -> String {

@@ -14,6 +14,39 @@ fn runtime(state: AppState, width: f32) -> Runtime<AppState> {
     runtime
 }
 
+#[test]
+fn settings_remains_scrollable_inside_a_multi_pane_grid() {
+    let mut state = AppState::new(Some("elaris://settings"));
+    let settings = state.browser.active_tab().unwrap().id();
+    let tabs = [
+        state.browser.open_tab("one.example").unwrap(),
+        state.browser.open_tab("two.example").unwrap(),
+        state.browser.open_tab("three.example").unwrap(),
+    ];
+    state.browser.split_view_limit = 4;
+    state.browser.place_split(settings, 0);
+    for (index, tab) in tabs.into_iter().enumerate() {
+        state.browser.place_split(tab, index + 1);
+    }
+    state.browser.activate_tab(settings);
+
+    let runtime = runtime(state, 1000.0);
+    let settings_scroll = rect(&runtime, "settings-scroll");
+    assert!(rect(&runtime, "split-grid-row-1")[3] > 0.0);
+    for tab in [settings, tabs[0], tabs[1], tabs[2]] {
+        assert!(rect(&runtime, &format!("web-pane-{}", tab.raw()))[3] > 0.0);
+    }
+    assert!(
+        settings_scroll[3] > 0.0,
+        "settings scroll region has no height: {settings_scroll:?}; viewport={:?}, grid={:?}, row={:?}, pane={:?}, page={:?}",
+        rect(&runtime, "viewport-container"),
+        rect(&runtime, "split-grid"),
+        rect(&runtime, "split-grid-row-0"),
+        rect(&runtime, &format!("web-pane-{}", settings.raw())),
+        rect(&runtime, "page-layout"),
+    );
+}
+
 fn rect(runtime: &Runtime<AppState>, key: &str) -> [f32; 4] {
     runtime
         .elements()
