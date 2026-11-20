@@ -100,6 +100,9 @@ pub(crate) fn palette(
     } else {
         1.0
     };
+    // Keep the field and selected tab distinguishable even with the window tint turned off.
+    const MIN_CHROME_ALPHA: f32 = 0.25;
+    let chrome_alpha = MIN_CHROME_ALPHA + (1.0 - MIN_CHROME_ALPHA) * alpha;
     if dark {
         Theme {
             #[cfg(target_os = "macos")]
@@ -113,15 +116,15 @@ pub(crate) fn palette(
             accent,
             #[cfg(not(target_os = "linux"))]
             window_control: oklcha(1.0, 0.0, 0.0, 0.16),
-            address_field: oklch(0.24, 0.006, HUE),
+            address_field: oklch(0.24, 0.006, HUE).alpha(chrome_alpha),
             control_border: oklch(0.56, 0.015, HUE),
             focus: accent,
             selection,
             hover: oklcha(0.66, 0.008, HUE, 0.08),
             press: oklcha(0.66, 0.008, HUE, 0.13),
-            tab_active: oklch(0.36, 0.009, HUE),
+            tab_active: oklch(0.36, 0.009, HUE).alpha(chrome_alpha),
             tab_active_shadow: oklcha(0.0, 0.0, 0.0, 0.3),
-            tab_drag: oklch(0.32, 0.009, HUE),
+            tab_drag: oklch(0.32, 0.009, HUE).alpha(chrome_alpha),
             tab_drop_indicator: accent,
             overlay_scrim: oklcha(0.0, 0.0, 0.0, 0.16),
             overlay_panel: oklch(0.255, 0.006, HUE),
@@ -143,15 +146,15 @@ pub(crate) fn palette(
             accent,
             #[cfg(not(target_os = "linux"))]
             window_control: oklcha(0.2, 0.02, HUE, 0.16),
-            address_field: oklch(0.985, 0.004, HUE),
+            address_field: oklch(0.985, 0.004, HUE).alpha(chrome_alpha),
             control_border: oklch(0.55, 0.015, HUE),
             focus: accent,
             selection,
             hover: oklcha(0.2, 0.02, HUE, 0.06),
             press: oklcha(0.2, 0.02, HUE, 0.1),
-            tab_active: oklch(1.0, 0.0, 0.0),
+            tab_active: oklch(1.0, 0.0, 0.0).alpha(chrome_alpha),
             tab_active_shadow: oklcha(0.2, 0.02, HUE, 0.18),
-            tab_drag: oklch(0.968, 0.009, HUE),
+            tab_drag: oklch(0.968, 0.009, HUE).alpha(chrome_alpha),
             tab_drop_indicator: accent,
             overlay_scrim: oklcha(0.2, 0.02, HUE, 0.12),
             overlay_panel: oklch(0.995, 0.002, HUE),
@@ -322,6 +325,29 @@ mod tests {
     // Rune colours are linear sRGB. Model source-over against an opaque surface.
     fn paint(foreground: Color, background: Color) -> Color {
         background.mix(foreground.alpha(1.0), foreground.a)
+    }
+
+    #[test]
+    fn sidebar_fills_follow_window_tint() {
+        for dark in [false, true] {
+            let accent = AccentColor::Blue;
+            let clear = palette(dark, true, 0, accent);
+            let tinted = palette(dark, true, 50, accent);
+            let solid = palette(dark, false, 50, accent);
+            for (clear, tinted, solid) in [
+                (
+                    clear.address_field,
+                    tinted.address_field,
+                    solid.address_field,
+                ),
+                (clear.tab_active, tinted.tab_active, solid.tab_active),
+                (clear.tab_drag, tinted.tab_drag, solid.tab_drag),
+            ] {
+                assert!(0.0 < clear.a && clear.a < tinted.a && tinted.a < solid.a);
+                assert_eq!(solid.a, 1.0);
+            }
+            assert_eq!(tinted.text.a, 1.0);
+        }
     }
 
     #[test]
