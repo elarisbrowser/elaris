@@ -8,6 +8,9 @@ mod config;
 mod engine;
 mod input;
 mod internal;
+#[cfg(target_os = "macos")]
+mod menu_macos;
+mod menu_state;
 mod omnibox;
 mod perf;
 mod permissions;
@@ -71,6 +74,8 @@ fn main() {
     };
     let app_handle = app.handle();
     let app = app.on_ready(move |_| {
+        #[cfg(target_os = "macos")]
+        menu_macos::install(app_handle.clone());
         let wake_handle = app_handle.clone();
         let waker: rune::Waker = Arc::new(move || wake_handle.wake());
         let app_handle = app_handle.clone();

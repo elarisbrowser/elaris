@@ -427,6 +427,34 @@ fn paste(id: TabId, tx: &mut Tx) {
     });
 }
 
+pub(crate) enum PageEdit {
+    Cut,
+    Copy,
+    Paste,
+    SelectAll,
+}
+
+/// Applies a native edit menu action to the focused Ladybird page, if it owns focus.
+pub(crate) fn menu_edit(state: &mut AppState, edit: PageEdit, tx: &mut Tx) -> bool {
+    let Some(id) = state.browser.input_page().filter(|id| {
+        tx.focused() == Some(page_focus_key(&state.browser))
+            && !state.omnibox.open
+            && state
+                .browser
+                .page(*id)
+                .is_some_and(|page| !page.is_internal())
+    }) else {
+        return false;
+    };
+    match edit {
+        PageEdit::Cut => state.browser.send(id, ViewCommand::Edit(Edit::Cut)),
+        PageEdit::Copy => state.browser.send(id, ViewCommand::Edit(Edit::Copy)),
+        PageEdit::Paste => paste(id, tx),
+        PageEdit::SelectAll => state.browser.send(id, ViewCommand::Edit(Edit::SelectAll)),
+    }
+    true
+}
+
 pub(super) fn page_key(state: &mut AppState, key: &KeyEvent, tx: &mut Tx) -> bool {
     if key.key == Key::Escape && super::peek::dismiss(state, tx) {
         return true;

@@ -43,6 +43,8 @@ pub(crate) const HISTORY_SCROLL: &str = "history-scroll";
 pub(crate) const FIND_INPUT: &str = "find-input";
 pub(crate) use theme::FIND_MOTION;
 pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
+    #[cfg(target_os = "macos")]
+    crate::menu_macos::refresh(state);
     let dark = state.settings.appearance.is_dark(cx.system_dark());
     let theme = theme::palette(
         dark,

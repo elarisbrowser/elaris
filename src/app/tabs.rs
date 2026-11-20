@@ -8,6 +8,10 @@ use crate::tab::{Tab, TabId, TabSection};
 use crate::ui::{TabDropTarget, viewport::focus_key};
 
 impl super::AppState {
+    pub(crate) fn can_reopen_closed_tab(&self) -> bool {
+        !self.recently_closed.is_empty()
+    }
+
     pub(crate) fn activate(&mut self, tab: TabId) {
         crate::ui::dismiss_tab_preview(self);
         self.cancel_tab_drag();

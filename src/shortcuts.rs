@@ -64,8 +64,14 @@ pub(crate) fn on_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> boo
     let Some(shortcut) = shortcut(event) else {
         return false;
     };
+    dispatch(state, shortcut, tx);
+    true
+}
+
+/// Runs a browser shortcut from either Rune's key hook or a native menu action.
+pub(crate) fn dispatch(state: &mut AppState, shortcut: Shortcut, tx: &mut Tx) {
     if ui::peek::dismiss(state, tx) && shortcut == Shortcut::Close {
-        return true;
+        return;
     }
     crate::ui::tab_switcher::finish(state, None, tx);
     match shortcut {
@@ -116,7 +122,6 @@ pub(crate) fn on_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> boo
             }
         }
     }
-    true
 }
 
 /// The tab a tab-selecting shortcut picks.
@@ -216,5 +221,19 @@ mod tests {
             mods: Mods::default(),
         };
         assert_eq!(shortcut(&typed), None);
+    }
+
+    #[test]
+    fn dispatched_menu_shortcuts_reuse_browser_actions() {
+        let mut state = AppState::new(Some("example.com"));
+        let original = state.browser.active_tab().unwrap().id();
+        dispatch(&mut state, Shortcut::NewTab, &mut Tx::default());
+        assert_eq!(state.browser.tabs().len(), 1);
+        assert!(state.omnibox.open);
+
+        dispatch(&mut state, Shortcut::Close, &mut Tx::default());
+        assert_eq!(state.browser.tabs().len(), 1);
+        assert_eq!(state.browser.active_tab().unwrap().id(), original);
+        assert!(!state.omnibox.open);
     }
 }
