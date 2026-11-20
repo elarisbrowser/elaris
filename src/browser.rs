@@ -432,10 +432,21 @@ impl Browser {
             return;
         }
         if let Some(split) = &mut self.split
-            && !split.panes[..self.split_view_limit.min(split::MAX_PANES)].contains(&Some(id))
-            && split.panes[..self.split_view_limit.min(split::MAX_PANES)].contains(&None)
+            && !split.panes[..split
+                .pane_count
+                .min(self.split_view_limit)
+                .min(split::MAX_PANES)]
+                .contains(&Some(id))
+            && split.panes[..split
+                .pane_count
+                .min(self.split_view_limit)
+                .min(split::MAX_PANES)]
+                .contains(&None)
         {
-            let destination = split.panes[..self.split_view_limit.min(split::MAX_PANES)]
+            let destination = split.panes[..split
+                .pane_count
+                .min(self.split_view_limit)
+                .min(split::MAX_PANES)]
                 .iter()
                 .position(Option::is_none)
                 .expect("an empty configured pane exists");
@@ -720,10 +731,17 @@ impl Browser {
         let tab = self.tabs.remove(index);
         self.recent.retain(|&tab| tab != id);
         if let Some(split) = self.split
-            && split.panes[..self.split_view_limit.min(split::MAX_PANES)].contains(&Some(id))
+            && split.panes[..split
+                .pane_count
+                .min(self.split_view_limit)
+                .min(split::MAX_PANES)]
+                .contains(&Some(id))
         {
             self.exit_split(
-                split.panes[..self.split_view_limit.min(split::MAX_PANES)]
+                split.panes[..split
+                    .pane_count
+                    .min(self.split_view_limit)
+                    .min(split::MAX_PANES)]
                     .iter()
                     .flatten()
                     .copied()

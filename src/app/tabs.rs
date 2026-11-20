@@ -122,6 +122,7 @@ impl super::AppState {
             split.panes[..self
                 .browser
                 .split_view_limit
+                .min(split.pane_count)
                 .min(crate::browser::split::MAX_PANES)]
                 .contains(&None)
         })

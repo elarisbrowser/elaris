@@ -508,6 +508,7 @@ fn tab_view(state: &AppState, tab: &Tab, theme: &Theme) -> El {
         split.panes[..state
             .browser
             .split_view_limit
+            .min(split.pane_count)
             .min(crate::browser::split::MAX_PANES)]
             .iter()
             .all(Option::is_some)

@@ -51,6 +51,7 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
                         split.panes[..state
                             .browser
                             .split_view_limit
+                            .min(split.pane_count)
                             .min(crate::browser::split::MAX_PANES)]
                             .iter()
                             .all(Option::is_some)
@@ -79,6 +80,7 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
                 && let Some(other) = split.panes[..state
                     .browser
                     .split_view_limit
+                    .min(split.pane_count)
                     .min(crate::browser::split::MAX_PANES)]
                     .iter()
                     .flatten()

@@ -25,12 +25,26 @@ fn settings_remains_scrollable_inside_a_multi_pane_grid() {
     ];
     state.browser.split_view_limit = 4;
     state.browser.place_split(settings, 0);
-    for (index, tab) in tabs.into_iter().enumerate() {
-        state.browser.place_split(tab, index + 1);
-    }
+    state.browser.place_split(tabs[0], 1);
+    assert_eq!(state.browser.visible_tabs().len(), 2);
     state.browser.activate_tab(settings);
 
-    let runtime = runtime(state, 1000.0);
+    let mut runtime = runtime(state, 1000.0);
+    assert!(runtime.presented("add-split-pane").is_some());
+    let [x, y, width, height] = rect(&runtime, "add-split-pane");
+    runtime.pointer_down(x + width / 2.0, y + height / 2.0);
+    runtime.pointer_up(x + width / 2.0, y + height / 2.0);
+    runtime.frame(0.01);
+    assert_eq!(runtime.state.browser.visible_tabs().len(), 3);
+    runtime.update(|state, _| state.browser.place_split(tabs[1], 2));
+    runtime.frame(0.01);
+    let [x, y, width, height] = rect(&runtime, "add-split-pane");
+    runtime.pointer_down(x + width / 2.0, y + height / 2.0);
+    runtime.pointer_up(x + width / 2.0, y + height / 2.0);
+    runtime.frame(0.01);
+    assert_eq!(runtime.state.browser.visible_tabs().len(), 4);
+    runtime.update(|state, _| state.browser.place_split(tabs[2], 3));
+    runtime.frame(0.01);
     let settings_scroll = rect(&runtime, "settings-scroll");
     assert!(rect(&runtime, "split-grid-row-1")[3] > 0.0);
     for tab in [settings, tabs[0], tabs[1], tabs[2]] {

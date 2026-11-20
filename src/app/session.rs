@@ -65,6 +65,7 @@ impl super::AppState {
                 }
                 self.browser.split = Some(crate::browser::split::Split {
                     panes,
+                    pane_count: (split.additional.len() + 2).min(crate::browser::split::MAX_PANES),
                     ratio: f32::from(split.ratio) / 10_000.0,
                 });
             }
@@ -151,6 +152,7 @@ impl super::AppState {
             && let panes = &split.panes[..self
                 .browser
                 .split_view_limit
+                .min(split.pane_count)
                 .min(crate::browser::split::MAX_PANES)]
             && panes.len() >= 2
             && let (Some(left), Some(right)) = (panes[0], panes[1])

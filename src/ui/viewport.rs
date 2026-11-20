@@ -154,6 +154,9 @@ pub(crate) fn view(
             }
             layout = layout.child(wrap(id, side, weight, child));
         }
+        if let Some(button) = add_split_pane_button(state, theme) {
+            layout = layout.child(button);
+        }
         return viewport.child(layout);
     }
     let columns = (panes.len() as f32).sqrt().ceil() as usize;
@@ -202,7 +205,39 @@ pub(crate) fn view(
         }
         grid = grid.child(grid_row);
     }
-    viewport.child(layout.child(grid))
+    let mut layout = layout.child(grid);
+    if let Some(button) = add_split_pane_button(state, theme) {
+        layout = layout.child(button);
+    }
+    viewport.child(layout)
+}
+
+fn add_split_pane_button(state: &AppState, theme: &Theme) -> Option<El> {
+    let split = state.browser.displayed_split()?;
+    let current = split
+        .pane_count
+        .min(state.browser.split_view_limit)
+        .min(split::MAX_PANES);
+    (current < state.browser.split_view_limit).then(|| {
+        el().key("add-split-pane")
+            .role("button")
+            .label("Add pane to Split View")
+            .size(34.0, 34.0)
+            .pin(None, Some(8.0), Some(8.0), None)
+            .center()
+            .radius(theme::FIELD_RADIUS)
+            .fill(theme.settings_surface)
+            .border(1.0, theme.control_border)
+            .hover(theme.hover)
+            .press(theme.press)
+            .focusable(true)
+            .on_press_tx(|state: &mut AppState, tx| {
+                if state.browser.add_split_pane() {
+                    tx.animated();
+                }
+            })
+            .child(rune::text("+").color(theme.text))
+    })
 }
 
 fn wrapper_key(id: Option<TabId>, side: usize) -> String {

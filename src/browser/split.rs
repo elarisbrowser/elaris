@@ -9,6 +9,7 @@ pub(crate) const MAX_PANES: usize = 64;
 #[derive(Clone, Copy)]
 pub(crate) struct Split {
     pub(crate) panes: [Option<TabId>; MAX_PANES],
+    pub(crate) pane_count: usize,
     pub(crate) ratio: f32,
 }
 
@@ -46,7 +47,7 @@ impl Browser {
     pub(crate) fn focused_side(&self) -> usize {
         self.split
             .and_then(|split| {
-                split.panes[..self.split_view_limit.min(MAX_PANES)]
+                split.panes[..split.pane_count.min(self.split_view_limit).min(MAX_PANES)]
                     .iter()
                     .position(|pane| *pane == self.active)
             })
@@ -57,7 +58,8 @@ impl Browser {
         self.split.map_or_else(
             || vec![self.active, None],
             |split| {
-                let visible = &split.panes[..self.split_view_limit.min(MAX_PANES)];
+                let visible =
+                    &split.panes[..split.pane_count.min(self.split_view_limit).min(MAX_PANES)];
                 if visible.contains(&None) || visible.contains(&self.active) {
                     visible.to_vec()
                 } else {
@@ -69,7 +71,7 @@ impl Browser {
 
     pub(crate) fn displayed_split(&self) -> Option<Split> {
         self.split.filter(|split| {
-            let panes = &split.panes[..self.split_view_limit.min(MAX_PANES)];
+            let panes = &split.panes[..split.pane_count.min(self.split_view_limit).min(MAX_PANES)];
             panes.contains(&None) || panes.contains(&self.active)
         })
     }
@@ -78,10 +80,14 @@ impl Browser {
         if self.tab(id).is_none() {
             return;
         }
-        let count = self.split_view_limit.max(2);
         let mut panes = [None; MAX_PANES];
-        panes[side.min(count - 1)] = Some(id);
-        self.split = Some(Split { panes, ratio: 0.5 });
+        let pane_count = 2;
+        panes[side.min(pane_count - 1)] = Some(id);
+        self.split = Some(Split {
+            panes,
+            pane_count,
+            ratio: 0.5,
+        });
         self.activate_tab(id);
     }
 
@@ -98,7 +104,10 @@ impl Browser {
             }
         }
         if let Some(split) = &mut self.split {
-            let side = side.min(self.split_view_limit.min(MAX_PANES).saturating_sub(1));
+            if side >= split.pane_count && side < self.split_view_limit.min(MAX_PANES) {
+                split.pane_count = side + 1;
+            }
+            let side = side.min(split.pane_count.saturating_sub(1));
             if let Some(existing) = split.panes.iter().position(|pane| *pane == Some(id)) {
                 split.panes.swap(existing, side);
             } else {
@@ -106,6 +115,17 @@ impl Browser {
             }
         }
         self.activate_tab(id);
+    }
+
+    pub(crate) fn add_split_pane(&mut self) -> bool {
+        let Some(split) = &mut self.split else {
+            return false;
+        };
+        if split.pane_count >= self.split_view_limit.min(MAX_PANES) {
+            return false;
+        }
+        split.pane_count += 1;
+        true
     }
 
     pub(crate) fn swap_split(&mut self) {
@@ -224,9 +244,15 @@ mod tests {
         .into_iter()
         .map(|url| browser.open_tab(url).unwrap())
         .collect();
-        for (side, tab) in tabs.iter().copied().enumerate() {
-            browser.place_split(tab, side);
-        }
+        browser.place_split(tabs[0], 0);
+        browser.place_split(tabs[1], 1);
+        assert_eq!(browser.visible_tabs().len(), 2);
+        assert!(browser.add_split_pane());
+        browser.place_split(tabs[2], 2);
+        assert_eq!(browser.visible_tabs().len(), 3);
+        assert!(browser.add_split_pane());
+        browser.place_split(tabs[3], 3);
+        assert!(!browser.add_split_pane());
         assert_eq!(
             browser.visible_tabs(),
             tabs.into_iter().map(Some).collect::<Vec<_>>()
