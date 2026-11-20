@@ -126,6 +126,7 @@ fn configure_app(app: App<app::AppState>) -> App<app::AppState> {
 fn start_window_workers(handle: rune::AppHandle<app::AppState>) {
     let wake_handle = handle.clone();
     let waker: rune::Waker = Arc::new(move || wake_handle.wake());
+    #[cfg(target_os = "macos")]
     let menu_handle = handle.clone();
     handle.update(move |state, _| {
         app::start_workers(state, waker);
