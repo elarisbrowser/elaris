@@ -336,6 +336,7 @@ pub(crate) const FAVOURITE_ICON: f32 = 20.0;
 /// The web page's container: how far it sits in from the window's edges, and its corners.
 pub(crate) const VIEWPORT_INSET: f32 = space::S1 + space::S1 / 2.0;
 pub(crate) const VIEWPORT_RADIUS: f32 = radius::LG;
+pub(crate) const HORIZONTAL_VIEWPORT_RADIUS: f32 = radius::MD;
 /// The status badge's inset from the web page container's lower-right corner.
 #[cfg(not(feature = "ladybird-bridge"))]
 pub(crate) const VIEWPORT_BADGE_INSET: f32 = space::S3;

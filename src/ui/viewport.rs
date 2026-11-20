@@ -35,10 +35,11 @@ pub(crate) fn view(
         theme::VIEWPORT_INSET
     };
     let horizontal = state.horizontal_tabs();
-    let inset = if horizontal {
-        0.0
+    let inset = theme::VIEWPORT_INSET;
+    let radius = if horizontal {
+        theme::HORIZONTAL_VIEWPORT_RADIUS
     } else {
-        theme::VIEWPORT_INSET
+        theme::VIEWPORT_RADIUS
     };
     let viewport = rune::row()
         .key("viewport-container")
@@ -48,8 +49,12 @@ pub(crate) fn view(
         .min_w(0.0)
         .min_h(0.0)
         // With the sidebar hidden, the page sits below the header and in from the left edge too.
-        .pt(if horizontal { 0.0 } else { top_padding })
-        .pl(if state.sidebar.collapsed { inset } else { 0.0 })
+        .pt(if horizontal { inset } else { top_padding })
+        .pl(if horizontal || state.sidebar.collapsed {
+            inset
+        } else {
+            0.0
+        })
         .pr(inset)
         .pb(inset);
     let viewport = if horizontal {
@@ -83,11 +88,7 @@ pub(crate) fn view(
             .h_full()
             .fill(theme.page)
             .continuous_corners()
-            .clip_rounded(if horizontal {
-                0.0
-            } else {
-                theme::VIEWPORT_RADIUS
-            });
+            .clip_rounded(radius);
         if let Some(tab) = id
             .and_then(|id| state.browser.tab(id))
             .filter(|tab| !tab.is_internal())
@@ -103,7 +104,7 @@ pub(crate) fn view(
             pane = pane.child(
                 el().key("focused-pane-border")
                     .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-                    .radius(theme::VIEWPORT_RADIUS)
+                    .radius(radius)
                     .continuous_corners()
                     .border(1.0, theme.overlay_border)
                     .inert()
@@ -112,7 +113,7 @@ pub(crate) fn view(
         }
         pane
     };
-    let preview_pane = || wrap(None, 1.0, indicator(theme));
+    let preview_pane = || wrap(None, 1.0, indicator(theme, radius));
     if ratio.is_none() {
         let page = wrap(
             panes[0],
@@ -141,7 +142,12 @@ pub(crate) fn view(
             picker::view(state, theme, side)
         };
         if preview == Some(side) {
-            child = child.child(indicator(theme).pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0)));
+            child = child.child(indicator(theme, radius).pin(
+                Some(0.0),
+                Some(0.0),
+                Some(0.0),
+                Some(0.0),
+            ));
         }
         let weight = if available > 0.0 {
             widths[side] / available
@@ -229,13 +235,13 @@ fn divider(live: bool, theme: &Theme) -> El {
         })
 }
 
-fn indicator(theme: &Theme) -> El {
+fn indicator(theme: &Theme, radius: f32) -> El {
     el().w_full()
         .h_full()
         .inert()
         .a11y_hidden()
         .fill(theme.selection)
-        .radius(theme::VIEWPORT_RADIUS)
+        .radius(radius)
 }
 
 /// The webpage's top-left origin in the window, used to anchor its native find overlay.
@@ -261,7 +267,10 @@ pub(crate) fn page_origin(state: &AppState) -> [f32; 2] {
             split::widths(state.browser.content_width(), split.ratio)[0] + split::DIVIDER
         });
     if state.horizontal_tabs() {
-        [offset, theme::HORIZONTAL_CHROME_HEIGHT]
+        [
+            theme::VIEWPORT_INSET + offset,
+            theme::HORIZONTAL_CHROME_HEIGHT + theme::VIEWPORT_INSET,
+        ]
     } else {
         [left + offset, top]
     }

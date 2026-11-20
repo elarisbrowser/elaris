@@ -65,14 +65,21 @@ fn layout_switch_preserves_split_tabs_and_window_state() {
     assert_eq!(window.state.browser.visible_tabs(), split);
     assert!(window.state.browser.tab(first).is_some());
     let page = rect(&window, "page-layout");
+    let inset = theme::VIEWPORT_INSET;
     assert_eq!(
         page,
         [
-            0.0,
-            theme::HORIZONTAL_CHROME_HEIGHT,
-            960.0,
-            640.0 - theme::HORIZONTAL_CHROME_HEIGHT
+            inset,
+            theme::HORIZONTAL_CHROME_HEIGHT + inset,
+            960.0 - 2.0 * inset,
+            640.0 - theme::HORIZONTAL_CHROME_HEIGHT - 2.0 * inset
         ]
+    );
+    window.frame(0.0);
+    let right_pane = rect(&window, &format!("web-pane-{}", second.raw()));
+    assert_eq!(
+        crate::ui::viewport::page_origin(&window.state),
+        [right_pane[0], right_pane[1]]
     );
     let anchor = rect(&window, "site-controls");
     let nav = rect(&window, "horizontal-navigation");
@@ -87,7 +94,7 @@ fn layout_switch_preserves_split_tabs_and_window_state() {
         );
     });
     other.frame(1.0);
-    assert_eq!(rect(&other, "page-layout")[2], 800.0);
+    assert_eq!(rect(&other, "page-layout")[2], 800.0 - 2.0 * inset);
     assert!(active_url(&other.state).contains("other.example"));
 
     window.update(|state, _| state.set_tab_layout(TabLayout::Vertical));
