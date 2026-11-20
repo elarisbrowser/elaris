@@ -8,6 +8,7 @@ use crate::tab::{Tab, TabId};
 
 /// Rune's per-frame hook: forwards UI changes to the browser and shows what it reported.
 pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
+    let transferred = state.advance_tab_transfer(tx);
     let focused = tx.focused() == Some(crate::ui::viewport::page_focus_key(&state.browser));
     let focus_changed = state.browser.set_viewport_focus(focused);
     let settling = crate::ui::settle_sidebar(state, tx);
@@ -31,7 +32,8 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     let preview_changed = crate::ui::poll_tab_preview(state, clock, tx)
         || crate::ui::displayed_tab_preview(state)
             .is_some_and(|id| polled.thumbnails_ready.contains(&id));
-    polled.changed
+    transferred
+        || polled.changed
         || peek_changed
         || preview_changed
         || history_changed

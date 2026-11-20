@@ -8,4 +8,22 @@ The browser transfer validates both owners and the destination section index bef
 
 Rune revision `9553c9a` exposes drag positions in the originating window and provides window placement in physical pixels on macOS and X11. Its placement API explicitly returns no coordinates on Wayland. Placement alone also cannot identify the topmost eligible window when windows overlap. A complete gesture needs platform-aware hit testing and a preview that can follow the pointer outside the source surface. Wayland needs compositor-mediated drag handling or a reduced feature set.
 
-Each Rune window holds its own AppState. AppHandle updates run through separate UI-thread queues, including while windows are hidden. A window-level transfer needs a commit protocol that handles destination closure and native window creation failure and saves both final session records together. The Browser primitive currently takes both owners directly. There is no sidebar gesture bound to it yet.
+## Existing-window coordination
+
+A source window can request a handoff through `AppState::request_tab_transfer`.
+The destination validates the index and engine and reserves space during its own
+Rune poll. The source then moves the live tab into the coordinator, and the
+destination revalidates before claiming it. Escape or window closure cancels a
+pending handoff. If extraction already happened, the source restores the tab
+before its next normal session save or window teardown.
+
+Once extracted, both participants suspend their routine session saves. The
+registry retains the previous complete layout until the destination claims the
+tab. At commit, the coordinator replaces both window records and sends a single
+snapshot to the existing atomic session writer. The source acknowledges that
+snapshot in its next poll before routine saving resumes. A crash before the
+snapshot is written can restore the previous layout.
+
+The coordinator currently processes one handoff at a time. Drag hit testing,
+insertion previews, cross-window animations, detachment, and closing an emptied
+source are separate stages.

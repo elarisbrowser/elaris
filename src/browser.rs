@@ -635,7 +635,6 @@ impl Browser {
 
     /// Moves the existing tab and its pixel stream between browsers on the UI thread.
     /// Both browsers must be connected to the same runtime if the tab has a live view.
-    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn transfer_tab(
         &mut self,
         destination: &mut Self,
@@ -648,28 +647,17 @@ impl Browser {
             .iter()
             .position(|tab| tab.id() == id)
             .ok_or(Error::NoSuchTab(id))?;
-        if index > destination.section_tabs(section).count() {
-            return Err(Error::InvalidSectionIndex(index));
-        }
-        if destination.tab(id).is_some() {
-            return Err(Error::Address("The destination already owns this tab"));
-        }
-        if !self.tabs[source_index].is_internal()
-            && !match (&self.engine, &destination.engine) {
-                (Some(source), Some(target)) => source.same_runtime(target),
-                (None, None) => true,
-                _ => false,
-            }
-        {
-            return Err(Error::Address(
-                "The destination uses a different web engine",
-            ));
-        }
+        destination.prepare_transfer(
+            id,
+            section,
+            index,
+            self,
+            self.tabs[source_index].is_internal(),
+        )?;
         let insertion = destination
             .tabs
             .partition_point(|tab| section_rank(tab.section()) < section_rank(section))
             + index;
-        destination.tabs.reserve(1);
 
         let mut tab = self.remove_tab_at(source_index);
         if tab.engine.focused {
@@ -681,6 +669,41 @@ impl Browser {
         tab.section = section;
         destination.tabs.insert(insertion, tab);
         destination.activate_tab(id);
+        Ok(())
+    }
+
+    pub(crate) fn transfer_buffer(&self) -> Self {
+        Self {
+            engine: self.engine.clone(),
+            ..Self::default()
+        }
+    }
+
+    pub(crate) fn prepare_transfer(
+        &mut self,
+        id: TabId,
+        section: TabSection,
+        index: usize,
+        source: &Self,
+        internal: bool,
+    ) -> Result<(), Error> {
+        if index > self.section_tabs(section).count() {
+            return Err(Error::InvalidSectionIndex(index));
+        }
+        if self.tab(id).is_some() {
+            return Err(Error::Address("The destination already owns this tab"));
+        }
+        let compatible = match (&source.engine, &self.engine) {
+            (Some(source), Some(target)) => source.same_runtime(target),
+            (None, None) => true,
+            _ => false,
+        };
+        if !internal && !compatible {
+            return Err(Error::Address(
+                "The destination uses a different web engine",
+            ));
+        }
+        self.tabs.reserve(1);
         Ok(())
     }
 
@@ -855,7 +878,7 @@ impl Browser {
         }
     }
 
-    pub(super) fn tab_mut(&mut self, id: TabId) -> Option<&mut Tab> {
+    pub(crate) fn tab_mut(&mut self, id: TabId) -> Option<&mut Tab> {
         self.tabs.iter_mut().find(|tab| tab.id() == id)
     }
 

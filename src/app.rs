@@ -629,6 +629,7 @@ mod omnibox_actions;
 mod session;
 mod settings_actions;
 mod tabs;
+mod transfer;
 
 #[cfg(test)]
 mod tests;

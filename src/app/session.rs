@@ -84,6 +84,9 @@ impl super::AppState {
     }
 
     pub(crate) fn persist_session_if_changed(&mut self) {
+        if self.tab_transfer_blocks_session() {
+            return;
+        }
         let session = self.session_snapshot();
         if self.last_saved_session.as_ref() != Some(&session) {
             self.queue_session(session);
@@ -91,6 +94,9 @@ impl super::AppState {
     }
 
     pub(super) fn persist_session(&mut self) {
+        if self.tab_transfer_blocks_session() {
+            return;
+        }
         let session = self.session_snapshot();
         self.queue_session(session);
     }

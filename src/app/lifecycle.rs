@@ -165,6 +165,7 @@ pub(crate) fn on_window_focus(state: &mut AppState, focused: bool, tx: &mut Tx) 
 }
 
 pub(crate) fn shut_down(state: &mut AppState, _: &mut Tx) {
+    state.cancel_tab_transfer();
     super::unregister_window(state.window_id);
     crate::engine::unregister_window_waker(state.window_id);
     if let Some(storage) = &state.storage {
@@ -198,6 +199,7 @@ pub(crate) fn window_closed(state: &mut AppState, _: &mut Tx) {
         return;
     }
     let others_remain = super::open_window_count() > 1;
+    state.cancel_tab_transfer();
     super::unregister_window(state.window_id);
     #[cfg(target_os = "macos")]
     crate::site_popover_macos::detach_window(state.window_id);
