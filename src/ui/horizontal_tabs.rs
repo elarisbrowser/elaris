@@ -22,7 +22,7 @@ pub(crate) fn key(id: TabId) -> String {
 pub(crate) fn reveal_active(state: &mut AppState, tx: &mut Tx) {
     if !state.horizontal_tabs() {
         state.sidebar.revealed_tab = None;
-        state.sidebar.horizontal_tab_width = None;
+        state.sidebar.horizontal_strip_width = None;
     } else if !state.tab_drag.has_preview() {
         let active = state.browser.active_tab().and_then(|tab| {
             state
@@ -58,10 +58,18 @@ pub(super) fn view(
         .key("horizontal-tab-strip")
         .w_full()
         .h(theme::HORIZONTAL_STRIP_HEIGHT)
-        .pr(theme::ICON_BUTTON)
+        .pr(theme::SIDEBAR_PADDING)
         .gap(theme::NAV_GAP)
         .center_y()
-        .window_drag();
+        .window_drag()
+        .on_layout_tx(|state: &mut AppState, rect, tx| {
+            if state.sidebar.horizontal_strip_width == Some(rect[2]) {
+                tx.live_only();
+            } else {
+                state.sidebar.horizontal_strip_width = Some(rect[2]);
+                state.sidebar.revealed_tab = None;
+            }
+        });
     #[cfg(target_os = "macos")]
     let inset = cx.titlebar_inset();
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
@@ -82,13 +90,20 @@ pub(super) fn view(
     #[cfg(target_os = "linux")]
     let inset = (theme::ICON_BUTTON + theme::NAV_GAP) * window_controls.len() as f32;
 
-    let viewport_width = state.sidebar.horizontal_tab_width.unwrap_or_else(|| {
+    let strip_width = state.sidebar.horizontal_strip_width.unwrap_or_else(|| {
         cx.layout_size("window")
             .map_or(theme::WINDOW_MIN_SIZE.0, |size| size[0])
-            - inset
-            - theme::SIDEBAR_PADDING
-            - 2.0 * (theme::NAV_GAP + theme::ICON_BUTTON)
     });
+    #[cfg(not(target_os = "linux"))]
+    let leading = inset.max(theme::SIDEBAR_PADDING);
+    #[cfg(target_os = "linux")]
+    let leading = inset + theme::SIDEBAR_PADDING;
+    let viewport_width = strip_width
+        - leading
+        - theme::SIDEBAR_PADDING
+        - theme::ICON_BUTTON
+        - theme::ROW_PADDING
+        - 3.0 * theme::NAV_GAP;
     let sections = TabSection::ORDER
         .map(|section| state.tab_drag.preview_items(state.browser.tabs(), section));
     let regular = state
@@ -99,6 +114,9 @@ pub(super) fn view(
         .count();
     let favourites = state.browser.tabs().len() - regular;
     let regular_width = regular_width(viewport_width, [favourites, regular]);
+    let [favourite_items, regular_items] = sections.each_ref().map(Vec::len);
+    let content_width = section_width(favourite_items, theme::HORIZONTAL_COMPACT_TAB)
+        + section_width(regular_items, regular_width);
     let mut content = row()
         .key("horizontal-tab-sections")
         .role("tablist")
@@ -120,9 +138,9 @@ pub(super) fn view(
         .child(
             row()
                 .key(SCROLL)
-                .w(0.0)
+                .w(content_width)
                 .min_w(0.0)
-                .grow(1.0)
+                .shrink()
                 .h_full()
                 .center_y()
                 .no_window_drag()
@@ -130,13 +148,8 @@ pub(super) fn view(
                 .scroll_edge_fade(theme::SIDEBAR_PADDING)
                 .on_layout_tx(|state: &mut AppState, rect, tx| {
                     state.tab_drag.set_horizontal_viewport(rect);
-                    if state.sidebar.horizontal_tab_width == Some(rect[2]) {
-                        tx.live_only();
-                    } else {
-                        state.sidebar.horizontal_tab_width = Some(rect[2]);
-                        state.sidebar.revealed_tab = None;
-                        reveal_active(state, tx);
-                    }
+                    reveal_active(state, tx);
+                    tx.live_only();
                 })
                 .on_scroll_offset(move |position| {
                     live.set([position.offset[0], position.max[0]]);
@@ -156,6 +169,13 @@ pub(super) fn view(
             )
             .shortcut_hint("cmd+t")
             .on_press_tx(app::new_tab),
+        )
+        .child(
+            el().key("horizontal-window-drag")
+                .grow(1.0)
+                .min_w(theme::ROW_PADDING)
+                .h_full()
+                .window_drag(),
         );
     #[cfg(target_os = "linux")]
     {
@@ -189,12 +209,12 @@ pub(super) fn view(
         .child(navigation)
 }
 
+fn section_width(count: usize, tab_width: f32) -> f32 {
+    (count as f32 * (tab_width + theme::TAB_GAP)).max(theme::HORIZONTAL_EMPTY_SECTION)
+}
+
 fn regular_width(available: f32, [favourites, regular]: [usize; 2]) -> f32 {
-    let compact_width = if favourites == 0 {
-        theme::HORIZONTAL_EMPTY_SECTION
-    } else {
-        favourites as f32 * (theme::HORIZONTAL_COMPACT_TAB + theme::TAB_GAP)
-    };
+    let compact_width = section_width(favourites, theme::HORIZONTAL_COMPACT_TAB);
     ((available - compact_width) / regular.max(1) as f32 - theme::TAB_GAP)
         .clamp(theme::HORIZONTAL_TAB_MIN, theme::HORIZONTAL_TAB_MAX)
 }

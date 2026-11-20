@@ -342,8 +342,11 @@ fn horizontal_chrome_only_drags_the_window_outside_the_tab_strip() {
     window.pointer_up(empty_inside[0], empty_inside[1]);
     window.frame(0.0);
 
-    let chrome = rect(&window, "horizontal-tab-strip");
-    let gutter = [chrome[0] + chrome[2] - 8.0, center(chrome)[1]];
-    window.pointer_down(gutter[0], gutter[1]);
+    let new_tab = rect(&window, "new-tab");
+    assert!((new_tab[0] - (strip[0] + strip[2]) - theme::NAV_GAP).abs() < 0.5);
+    let drag_area = rect(&window, "horizontal-window-drag");
+    assert!(drag_area[2] > strip[2]);
+    let [x, y] = center(drag_area);
+    window.pointer_down(x, y);
     assert!(window.take_titlebar_action().is_some());
 }
