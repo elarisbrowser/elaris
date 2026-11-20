@@ -821,10 +821,11 @@ impl Browser {
     pub(crate) fn viewport_width(&self) -> f32 {
         self.displayed_split()
             .map_or(self.content_width(), |split| {
-                if self.split_view_limit <= 2 {
+                let count = split.pane_count.min(self.split_view_limit);
+                if count == 2 {
                     return split::widths(self.content_width(), split.ratio)[self.focused_side()];
                 }
-                let columns = (self.split_view_limit as f32).sqrt().ceil() as usize;
+                let columns = (count as f32).sqrt().ceil() as usize;
                 (self.content_width() - split::DIVIDER * (columns.saturating_sub(1) as f32))
                     / columns as f32
             })

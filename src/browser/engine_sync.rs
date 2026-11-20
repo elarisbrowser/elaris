@@ -212,8 +212,8 @@ impl Browser {
         let panes = self.visible_tabs();
         let split_ratio = self.displayed_split().map(|split| split.ratio);
         let grid_size = split_ratio.filter(|_| panes.len() > 2).map(|_| {
-            let columns = (self.split_view_limit as f32).sqrt().ceil() as usize;
-            let rows = self.split_view_limit.div_ceil(columns);
+            let columns = (panes.len() as f32).sqrt().ceil() as usize;
+            let rows = panes.len().div_ceil(columns);
             [
                 (window.viewport[0] - split::DIVIDER * (columns.saturating_sub(1) as f32))
                     / columns as f32,

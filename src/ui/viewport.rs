@@ -134,6 +134,16 @@ pub(crate) fn view(
         };
         return viewport.child(layout);
     }
+    let append_preview = (preview == Some(panes.len())).then(|| {
+        let [_, _, width, height] = state.split_rect;
+        let [x, y, w, h] =
+            split::grid_cell_rect([0.0, 0.0, width, height], panes.len() + 1, panes.len());
+        indicator(theme, radius)
+            .key("split-add-preview")
+            .absolute(x, y)
+            .size(w, h)
+            .border(2.0, theme.focus)
+    });
     if panes.len() == 2 {
         let pane_widths = split::widths(state.browser.content_width(), ratio.unwrap_or(0.5));
         let available = pane_widths.iter().sum::<f32>();
@@ -157,7 +167,7 @@ pub(crate) fn view(
         if let Some(button) = add_split_pane_button(state, theme) {
             layout = layout.child(button);
         }
-        return viewport.child(layout);
+        return viewport.child(layout.children(append_preview));
     }
     let columns = (panes.len() as f32).sqrt().ceil() as usize;
     let mut grid = rune::col()
@@ -209,7 +219,7 @@ pub(crate) fn view(
     if let Some(button) = add_split_pane_button(state, theme) {
         layout = layout.child(button);
     }
-    viewport.child(layout)
+    viewport.child(layout.children(append_preview))
 }
 
 fn add_split_pane_button(state: &AppState, theme: &Theme) -> Option<El> {
@@ -335,6 +345,26 @@ const PANE_KEYS: [&str; 64] = [
 
 pub(crate) fn drop_side(state: &AppState, id: TabId, point: [f32; 2]) -> Option<usize> {
     let panes = state.browser.visible_tabs();
+    if state.browser.displayed_split().is_some()
+        && panes.len() < state.browser.split_view_limit.min(split::MAX_PANES)
+        && !panes.contains(&Some(id))
+        && !panes.contains(&None)
+    {
+        let [x, y, width, height] = state.split_rect;
+        let edge = (height * 0.2).min(96.0);
+        if point[0] >= x
+            && point[0] < x + width
+            && point[1] >= y
+            && point[1] < y + height
+            && (point[1] >= y + height - edge
+                || (panes.len() > 2
+                    && split::target(state.split_rect, point, panes.len() + 1)
+                        == Some(panes.len())
+                    && split::target(state.split_rect, point, panes.len()).is_none()))
+        {
+            return Some(panes.len());
+        }
+    }
     if panes.len() == 2 {
         let ratio = state
             .browser

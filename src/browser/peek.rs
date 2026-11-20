@@ -161,7 +161,8 @@ impl Browser {
                 .iter()
                 .position(|pane| *pane == Some(id))
         {
-            if self.split_view_limit <= 2 {
+            let count = split.pane_count.min(self.split_view_limit);
+            if count == 2 {
                 [
                     if index == 1 {
                         split::widths(self.window.viewport[0], split.ratio)[0] + split::DIVIDER
@@ -173,7 +174,7 @@ impl Browser {
             } else {
                 let rect = split::grid_cell_rect(
                     [0.0, 0.0, self.window.viewport[0], self.window.viewport[1]],
-                    self.split_view_limit.min(split::MAX_PANES),
+                    count,
                     index,
                 );
                 [rect[0], rect[1]]

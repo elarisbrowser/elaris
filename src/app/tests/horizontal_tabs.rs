@@ -657,3 +657,43 @@ fn context_menu_highlight_slides_between_items() {
     settle(&mut window);
     assert_eq!(rect(&window, indicator)[1], first[1]);
 }
+
+#[test]
+fn dropping_tabs_at_the_bottom_edge_adds_panes_until_the_limit() {
+    let mut state = AppState::new(Some("one.example"));
+    state.set_tab_layout(TabLayout::Horizontal);
+    state.set_split_view_limit(4);
+    let first = state.browser.active_tab().unwrap().id();
+    let tabs = [
+        "two.example",
+        "three.example",
+        "four.example",
+        "five.example",
+    ]
+    .map(|url| state.browser.open_tab(url).unwrap());
+    state.browser.activate_tab(first);
+    state.place_split_tab(tabs[0], 1);
+    let mut window = runtime(state, 1000.0);
+
+    for (index, tab) in tabs[1..3].iter().copied().enumerate() {
+        start_drag(&mut window, tab);
+        let [x, y, width, height] = rect(&window, "page-layout");
+        let end = [x + width * 0.4, y + height - 20.0];
+        window.pointer_move(end[0], end[1]);
+        window.frame(1.0 / 60.0);
+        assert_eq!(window.state.split_preview, Some(index + 2));
+        assert!(window.presented("split-add-preview").is_some());
+        release(&mut window, end);
+        assert_eq!(window.state.browser.visible_tabs().len(), index + 3);
+        assert_eq!(window.state.browser.visible_tabs()[0], Some(first));
+        assert_eq!(window.state.browser.visible_tabs()[index + 2], Some(tab));
+    }
+
+    let [x, y, width, height] = rect(&window, "page-layout");
+    let target = crate::ui::viewport::drop_side(
+        &window.state,
+        tabs[3],
+        [x + width * 0.4, y + height - 20.0],
+    );
+    assert!(target.is_some_and(|side| side < 4));
+}
