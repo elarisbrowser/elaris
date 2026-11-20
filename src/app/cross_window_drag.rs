@@ -79,6 +79,11 @@ pub(crate) fn track(state: &AppState, tab: TabId, drag: &Drag, release: bool) ->
     }
 }
 
+pub(crate) fn release_pending(window: u64) -> bool {
+    DRAG.get()
+        .is_some_and(|drag| drag.source == window && drag.phase != Phase::Hovering)
+}
+
 pub(crate) fn clear(window: u64) -> bool {
     if DRAG
         .get()
@@ -191,6 +196,17 @@ fn expire(state: &mut AppState, tx: &mut Tx) -> bool {
     let mut drag = drag;
     #[cfg(target_os = "macos")]
     if drag.phase == Phase::Hovering && drag.source == state.window_id {
+        if let Some((destination, point)) =
+            DesktopPointer::current().and_then(|pointer| locate_pointer(drag.source, &pointer))
+        {
+            drag.visual.to = [
+                drag.visual.to[0] + point[0] - drag.point[0],
+                drag.visual.to[1] + point[1] - drag.point[1],
+            ];
+            drag.destination = destination;
+            drag.point = point;
+            publish(Some(drag));
+        }
         use objc2_app_kit_02::NSEvent;
         // SAFETY: Rune polls the source window on AppKit's main thread.
         if unsafe { NSEvent::pressedMouseButtons() } & 1 == 0 {
@@ -215,6 +231,20 @@ fn expire(state: &mut AppState, tx: &mut Tx) -> bool {
         tx.wake_after(remaining);
         return false;
     }
+    #[cfg(target_os = "macos")]
+    if drag.phase == Phase::Hovering
+        && state.tab_drag.is_dragging()
+        && DesktopPointer::current()
+            .and_then(|pointer| locate_pointer(drag.source, &pointer))
+            .is_some_and(|(window, _)| window == drag.destination)
+    {
+        state.tab_drag.end(state.browser.tabs(), true);
+        drag.phase = Phase::Released;
+        drag.deadline = Some(Instant::now() + Duration::from_secs(2));
+        publish(Some(drag));
+        tx.wake_after(Duration::ZERO);
+        return true;
+    }
     if matches!(drag.phase, Phase::Submitted(_)) {
         state.cancel_tab_transfer();
     }
@@ -228,11 +258,14 @@ fn expire(state: &mut AppState, tx: &mut Tx) -> bool {
 }
 
 fn locate(source: u64, drag: &Drag) -> Option<(u64, [f32; 2])> {
+    locate_pointer(source, &DesktopPointer::from_drag(drag)?)
+}
+
+fn locate_pointer(source: u64, pointer: &DesktopPointer) -> Option<(u64, [f32; 2])> {
     let windows = WINDOW_REGISTRY
         .get()?
         .lock()
         .expect("window registry poisoned");
-    let pointer = DesktopPointer::from_drag(drag)?;
     let mut hits = windows
         .iter()
         .filter_map(|(&id, window)| pointer.in_window(window).map(|point| (id, point)));
@@ -250,6 +283,10 @@ struct DesktopPointer {
 #[cfg(target_os = "macos")]
 impl DesktopPointer {
     fn from_drag(_drag: &Drag) -> Option<Self> {
+        Self::current()
+    }
+
+    fn current() -> Option<Self> {
         use objc2_app_kit_02::{NSEvent, NSWindow};
         use objc2_foundation_02::MainThreadMarker;
 

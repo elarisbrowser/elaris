@@ -679,6 +679,12 @@ fn tab_drag_handler(row: El, id: TabId, members: Vec<TabId>) -> El {
             }
         }
         rune::Phase::Up => {
+            if !state.tab_drag.is_dragging()
+                && crate::app::cross_window_drag::release_pending(state.window_id)
+            {
+                return;
+            }
+
             let active = !drag.cancelled() && state.tab_drag.is_dragging();
             if active && members.len() == 1 {
                 state
