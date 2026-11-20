@@ -39,6 +39,9 @@ pub(crate) fn on_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> boo
     if event.key == Key::Escape
         && (crate::app::detach::cancel(state) || state.cancel_tab_transfer())
     {
+        state.cancel_tab_drag();
+        tx.animated();
+        tx.motion(ui::TAB_REORDER_MOTION);
         return true;
     }
     if event.key == Key::Escape && ui::peek::dismiss(state, tx) {

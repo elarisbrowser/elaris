@@ -120,13 +120,8 @@ impl AppState {
                 *pending = Some(transfer);
                 return false;
             }
-            if let Phase::Committed(session) = transfer.phase {
-                if self.window_id == transfer.source {
-                    self.last_saved_session = Some(session);
-                } else {
-                    transfer.phase = Phase::Committed(session);
-                    *pending = Some(transfer);
-                }
+            if matches!(transfer.phase, Phase::Committed(_)) {
+                *pending = Some(transfer);
                 return false;
             }
             if let Phase::InTransit(mut moved) | Phase::Cancelled(mut moved) = transfer.phase {
@@ -144,6 +139,18 @@ impl AppState {
             crate::engine::wake_all_windows();
         }
         changed
+    }
+
+    pub(super) fn closing_tab_transfer(&mut self) {
+        self.cancel_tab_transfer();
+        TRANSFER.with_borrow_mut(|pending| {
+            if pending.as_ref().is_some_and(|transfer| {
+                transfer.source == self.window_id && matches!(transfer.phase, Phase::Committed(_))
+            }) {
+                pending.take();
+                self.merged_away = self.browser.tabs().is_empty();
+            }
+        });
     }
 
     pub(super) fn advance_tab_transfer(&mut self, tx: &mut Tx) -> bool {
@@ -434,7 +441,12 @@ mod tests {
         assert_eq!(std::fs::read(data.join("session.json")).unwrap(), prior);
 
         assert!(destination.advance_tab_transfer(tx));
-        assert!(source.advance_tab_transfer(tx));
+        assert!(!source.cancel_tab_transfer());
+        assert!(in_progress());
+        source.closing_tab_transfer();
+        assert!(source.merged_away);
+        assert!(!in_progress());
+        source.persist_session();
         assert_eq!(destination.browser.active_tab().unwrap().id(), tab);
         assert_eq!(destination.browser.tab(tab).unwrap().surface, surface);
         assert!(fake.commands.try_iter().all(|command| !matches!(
@@ -504,7 +516,7 @@ mod tests {
         let tx = &mut Tx::default();
         assert!(destination.advance_tab_transfer(tx));
         assert!(source.advance_tab_transfer(tx));
-        assert!(destination.cancel_tab_transfer());
+        destination.closing_tab_transfer();
         assert!(source.tab_transfer_blocks_session());
         assert!(source.advance_tab_transfer(tx));
         assert_eq!(source.browser.active_tab().unwrap().id(), tab);
@@ -530,5 +542,39 @@ mod tests {
         assert!(source.advance_tab_transfer(tx));
         assert_eq!(source.session_snapshot(), previous);
         assert!(destination.browser.tab(tab).is_none());
+    }
+    #[test]
+    fn escape_and_app_deactivation_rollback_a_pending_final_tab_transfer() {
+        for escape in [true, false] {
+            let mut source = AppState::new(Some("source.example"));
+            let mut destination = AppState::new(Some("destination.example"));
+            destination.workers_started = true;
+            let tab = source.browser.active_tab().unwrap().id();
+            let surface = source.browser.tab(tab).unwrap().surface.clone();
+            let before = source.session_snapshot();
+            let tx = &mut Tx::default();
+            request(&source, &destination, tab, 1);
+            assert!(destination.advance_tab_transfer(tx));
+            assert!(source.advance_tab_transfer(tx));
+            if escape {
+                assert!(crate::shortcuts::on_key(
+                    &mut source,
+                    &rune::KeyEvent {
+                        key: rune::Key::Escape,
+                        mods: rune::Mods::default(),
+                    },
+                    tx
+                ));
+            } else {
+                super::super::lifecycle::cancel_deactivated_drag(&mut source, tx);
+            }
+            assert!(!in_progress());
+            assert!(!source.merged_away);
+            assert_eq!(source.session_snapshot(), before);
+            assert_eq!(source.browser.tab(tab).unwrap().surface, surface);
+            assert!(destination.browser.tab(tab).is_none());
+            assert!(source.tab_drag.visual().is_none());
+            assert!(!destination.advance_tab_transfer(tx));
+        }
     }
 }

@@ -8,6 +8,12 @@ use crate::tab::{Tab, TabId};
 
 /// Rune's per-frame hook: forwards UI changes to the browser and shows what it reported.
 pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
+    #[cfg(target_os = "macos")]
+    let deactivated_drag = super::super::transfer::in_progress()
+        && !crate::window_macos::application_active()
+        && super::cancel_deactivated_drag(state, tx);
+    #[cfg(not(target_os = "macos"))]
+    let deactivated_drag = false;
     let incoming_drag = super::super::cross_window_drag::poll(state, tx);
     let transferred = state.advance_tab_transfer(tx);
     #[cfg(target_os = "macos")]
@@ -38,7 +44,8 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     let preview_changed = crate::ui::poll_tab_preview(state, clock, tx)
         || crate::ui::displayed_tab_preview(state)
             .is_some_and(|id| polled.thumbnails_ready.contains(&id));
-    native_preview_changed
+    deactivated_drag
+        || native_preview_changed
         || incoming_drag
         || transferred
         || polled.changed

@@ -158,10 +158,26 @@ pub(crate) fn on_window_focus(state: &mut AppState, focused: bool, tx: &mut Tx) 
         crate::ui::dismiss_tab_preview(state);
         crate::ui::tab_switcher::finish(state, None, tx);
     }
-    if !focused && state.cancel_tab_drag() {
+    #[cfg(target_os = "macos")]
+    let deactivated = !focused && !crate::window_macos::application_active();
+    #[cfg(not(target_os = "macos"))]
+    let deactivated = false;
+    if deactivated {
+        cancel_deactivated_drag(state, tx);
+    } else if !focused && state.cancel_tab_drag() {
         tx.animated();
         tx.motion(crate::ui::TAB_REORDER_MOTION);
     }
+}
+
+pub(super) fn cancel_deactivated_drag(state: &mut AppState, tx: &mut Tx) -> bool {
+    let changed =
+        super::detach::cancel(state) | state.cancel_tab_transfer() | state.cancel_tab_drag();
+    if changed {
+        tx.animated();
+        tx.motion(crate::ui::TAB_REORDER_MOTION);
+    }
+    changed
 }
 
 pub(crate) fn shut_down(state: &mut AppState, _: &mut Tx) {
@@ -169,7 +185,7 @@ pub(crate) fn shut_down(state: &mut AppState, _: &mut Tx) {
     crate::drag_overlay_macos::hide(state.window_id);
     super::detach::closing(state);
     super::cross_window_drag::clear(state.window_id);
-    state.cancel_tab_transfer();
+    state.closing_tab_transfer();
     super::unregister_window(state.window_id);
     crate::engine::unregister_window_waker(state.window_id);
     if let Some(storage) = &state.storage {
@@ -207,7 +223,7 @@ pub(crate) fn window_closed(state: &mut AppState, _: &mut Tx) {
     super::detach::closing(state);
     let others_remain = super::open_window_count() > 1;
     super::cross_window_drag::clear(state.window_id);
-    state.cancel_tab_transfer();
+    state.closing_tab_transfer();
     super::unregister_window(state.window_id);
     #[cfg(target_os = "macos")]
     crate::site_popover_macos::detach_window(state.window_id);

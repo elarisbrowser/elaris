@@ -50,3 +50,12 @@ pub(crate) fn install(window: &RuneWindowHandle) {
         }
     });
 }
+
+pub(crate) fn application_active() -> bool {
+    use objc2_app_kit_02::NSApplication;
+    use objc2_foundation_02::MainThreadMarker;
+
+    // SAFETY: the marker keeps this AppKit query on the main thread.
+    MainThreadMarker::new()
+        .is_none_or(|main| unsafe { NSApplication::sharedApplication(main).isActive() })
+}
