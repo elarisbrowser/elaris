@@ -21,6 +21,7 @@ use crate::tab::{Tab, TabSection};
 
 thread_local! {
     static MENU_ITEMS: RefCell<Vec<Retained<NSMenuItem>>> = const { RefCell::new(Vec::new()) };
+    static MENU_TARGET: RefCell<Option<Retained<ProtocolObject<dyn NSMenuDelegate>>>> = const { RefCell::new(None) };
     static FULL_SCREEN_ITEM: RefCell<Option<Retained<NSMenuItem>>> = const { RefCell::new(None) };
     static MENU_STATE: RefCell<Option<MenuState>> = const { RefCell::new(None) };
     static APP_HANDLES: RefCell<HashMap<u64, rune::AppHandle<AppState>>> = RefCell::new(HashMap::new());
@@ -376,6 +377,7 @@ pub(crate) fn install(app: rune::AppHandle<AppState>) {
     }
     application.setMainMenu(Some(&root_menu));
     MENU_ITEMS.with(|slot| *slot.borrow_mut() = items);
+    MENU_TARGET.with(|slot| *slot.borrow_mut() = Some(target));
 }
 
 pub(crate) fn register_window(id: u64, app: rune::AppHandle<AppState>) {
