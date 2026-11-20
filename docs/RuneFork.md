@@ -41,9 +41,9 @@ published branches, and do not merge upstream changes without review.
 
 ## Update Elaris's pin
 
-Choose the tested commit on `elaris`, then update the one shared revision in Elaris's
-`Cargo.toml` for `rune`, `rune-kit`, and the `parley_engine`/`winit` patches. Keep all these
-dependencies on the same fork commit and retain their existing features and platform
+Choose the tested commit on `elaris`, then update the shared revision in Elaris's
+`Cargo.toml` for `rune`, `rune-kit`, and every Rune-owned `[patch.crates-io]` entry. Keep
+all these dependencies on the same fork commit and retain their features and platform
 configuration. Update the lockfile with the targeted command below and verify its Rune git
 sources resolve to that commit.
 

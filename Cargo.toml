@@ -89,11 +89,27 @@ all = "warn"
 [profile.dev.package."*"]
 opt-level = 1
 
-# Rune needs its matching patched platform and text crates when used outside its workspace.
+# Rune needs its matching graphics, platform, accessibility, and text patches outside its workspace.
+[patch.crates-io.wgpu-hal]
+git = "https://github.com/elarisbrowser/rune"
+rev = "9553c9a7d7d1e5e038d14e0b313513e95b4fb8bb"
+
 [patch.crates-io.parley_engine]
 git = "https://github.com/elarisbrowser/rune"
 rev = "9553c9a7d7d1e5e038d14e0b313513e95b4fb8bb"
 package = "parley_engine"
+
+[patch.crates-io.sctk-adwaita]
+git = "https://github.com/elarisbrowser/rune"
+rev = "9553c9a7d7d1e5e038d14e0b313513e95b4fb8bb"
+
+[patch.crates-io.accesskit_windows]
+git = "https://github.com/elarisbrowser/rune"
+rev = "9553c9a7d7d1e5e038d14e0b313513e95b4fb8bb"
+
+[patch.crates-io.accesskit_macos]
+git = "https://github.com/elarisbrowser/rune"
+rev = "9553c9a7d7d1e5e038d14e0b313513e95b4fb8bb"
 
 [patch.crates-io.winit]
 git = "https://github.com/elarisbrowser/rune"
