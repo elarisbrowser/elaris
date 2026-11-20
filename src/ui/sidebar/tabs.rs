@@ -79,6 +79,14 @@ pub(super) fn view(
                 theme,
                 reduced_motion,
             ))
+            .child(
+                col()
+                    .key("favourites-divider")
+                    .w_full()
+                    .px(theme::SIDEBAR_PADDING)
+                    .pt(2.0 * theme::SIDEBAR_GAP)
+                    .child(el().w_full().h(1.0).fill(theme.overlay_border)),
+            )
             .gap(theme::SIDEBAR_GAP);
     }
     sidebar_tabs = sidebar_tabs.child(scroll);
