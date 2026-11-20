@@ -539,7 +539,7 @@ pub(crate) fn publish_permissions(permissions: &PermissionStore) {
     crate::engine::wake_all_windows();
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(crate) fn native_window(id: u64) -> Option<rune::WindowHandle> {
     WINDOW_REGISTRY.get()?.lock().ok()?.get(&id).cloned()
 }

@@ -76,7 +76,20 @@ failure, or a readiness timeout cancels the handoff and discards the tentative
 window. A successful transfer saves the destination and updates or removes the source
 record in one snapshot.
 
-Desktop detachment is currently macOS-only. The X11 drag path can locate other
-Elaris windows but cannot distinguish an empty desktop drop from an occluding
-application. Wayland still lacks desktop coordinates in the pinned Rune
-backend. Native ordering and mixed-scale display behavior still need graphical verification.
+X11 desktop detachment accepts exposed root space and desktop windows that
+advertise their EWMH desktop type on the hit window. Placement uses the RandR
+monitor under the pointer and intersects it with the current desktop's EWMH
+work area when available. Window managers that wrap the desktop in an untyped
+frame can cause the gesture to be rejected. X11 runtime remains unverified.
+
+The pinned Rune backend supplies no global Wayland window positions, and Rune's
+drag-out source path is disabled there. Supporting window-to-window transfer
+requires a compositor-mediated drag with a seat serial, an application-owned
+tab identity payload, and destination-local drop coordinates. A rejected desktop
+drop provides no global position for placing a new toplevel. Wayland retains
+local tab dragging while those framework capabilities are unavailable.
+
+The floating-to-inline handoff keeps the preview's appearance until the landing
+animation starts, then transitions to the active tab style and drops the
+floating shadow. Native window ordering and mixed-scale behavior still need
+graphical verification.

@@ -142,6 +142,8 @@ pub(crate) struct Placement {
     pointer: objc2_foundation_02::NSPoint,
     #[cfg(target_os = "macos")]
     usable: objc2_foundation_02::NSRect,
+    #[cfg(target_os = "linux")]
+    x11: x11::Placement,
 }
 
 #[cfg(target_os = "macos")]
@@ -193,7 +195,18 @@ fn contains(
         && point.y < rect.origin.y + rect.size.height + margin
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
+mod x11;
+
+#[cfg(target_os = "linux")]
+fn placement(source: u64) -> Option<Placement> {
+    let window = super::native_window(source)?;
+    Some(Placement {
+        x11: x11::placement(&window)?,
+    })
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 fn placement(_: u64) -> Option<Placement> {
     None
 }
@@ -204,7 +217,9 @@ impl Placement {
         crate::window_macos::with_window(window, |native| {
             native.setFrame_display(self.frame_near_pointer(native.frame().size), true);
         });
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "linux")]
+        self.x11.apply(window);
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         let _ = window;
     }
 

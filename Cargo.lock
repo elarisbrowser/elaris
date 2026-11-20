@@ -907,6 +907,7 @@ dependencies = [
  "serde_json",
  "toml_edit",
  "x11-dl",
+ "x11rb",
 ]
 
 [[package]]
