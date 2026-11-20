@@ -21,12 +21,12 @@ source-over on stable backgrounds and include the surfaces Rune Kit derives.
 Set `ELARIS_DATA_DIR` to a new absolute temporary directory before launching a bridge-enabled
 build. Put the download destination inside it and keep any explicit Ladybird profile override
 inside it as well. Use the local `bridge/tests/smoke.html` fixture for Find and favicon checks.
-Open Settings and an unknown `elaris://` page. Add a pinned tab and two Favourites, then reopen
+Open Settings and an unknown `elaris://` page. Add two Favourites, then reopen
 the browser to verify their order. Capture each surface in both forced appearances.
 
 | Surface | What to inspect | November 2026 review |
 |---|---|---|
-| Sidebar, tabs, Favourites and pinned tabs | Current and inactive labels, favicon, fallback icon, close, drag across sections, resize and collapse | Both themes on macOS Retina. Light cross-section drag and resize observed. |
+| Sidebar, tabs and Favourites | Current and inactive labels, favicon, fallback icon, close, drag across sections, resize and collapse | Both themes on macOS Retina. Light cross-section drag and resize observed. |
 | Omnibox | Empty and populated, text selection, current result, footer and focus return | Populated and selected text inspected in both themes. Creation and submission verified. |
 | Find | Placeholder, disabled arrows, no matches, matches and selection | No-match and three-match light states, three-match dark state on the local page. |
 | Quick Tab Switcher | Selected row, URL, wrapping, long list and modifier release | Both themes in Rune screenshots at 800×560. Native Control+Tab commit observed. |

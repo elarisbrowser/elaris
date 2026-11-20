@@ -211,12 +211,8 @@ mod tests {
     fn runtime(reduced: bool) -> (Runtime<AppState>, [TabId; 3]) {
         let mut state = AppState::new(Some("one.example"));
         let regular = state.browser.active_tab().unwrap().id();
-        let pinned = state.browser.open_tab("two.example").unwrap();
+        let second = state.browser.open_tab("two.example").unwrap();
         let favourite = state.browser.open_tab("elaris://settings").unwrap();
-        state
-            .browser
-            .move_tab_to(pinned, TabSection::Pinned, 0)
-            .unwrap();
         state
             .browser
             .move_tab_to(favourite, TabSection::Favourite, 0)
@@ -225,7 +221,7 @@ mod tests {
         runtime.poll = Some(crate::app::poll);
         runtime.set_system_reduced_motion(reduced);
         runtime.frame(0.0);
-        (runtime, [regular, pinned, favourite])
+        (runtime, [regular, second, favourite])
     }
 
     fn point(runtime: &Runtime<AppState>, id: TabId, prefix: &str) -> [f32; 2] {
@@ -247,8 +243,8 @@ mod tests {
 
     #[test]
     fn hover_waits_cancels_and_switches_between_sections() {
-        let (mut runtime, [regular, pinned, favourite]) = runtime(false);
-        hover(&mut runtime, pinned, "tab", 0.0);
+        let (mut runtime, [regular, second, favourite]) = runtime(false);
+        hover(&mut runtime, second, "tab", 0.0);
         runtime.frame(0.25);
         assert!(preview(&runtime).is_none());
         runtime.pointer_move(700.0, 300.0);
@@ -256,11 +252,11 @@ mod tests {
         runtime.frame(0.30);
         assert!(preview(&runtime).is_none());
 
-        hover(&mut runtime, pinned, "tab", 0.0);
+        hover(&mut runtime, second, "tab", 0.0);
         runtime.frame(0.39);
         assert!(preview(&runtime).is_none());
         runtime.frame(0.02);
-        assert_eq!(hover::displayed(&runtime.state), Some(pinned));
+        assert_eq!(hover::displayed(&runtime.state), Some(second));
         let (rect, opacity) = preview(&runtime).unwrap();
         assert!(opacity < 1.0, "the delayed opening fades in");
         let ([sidebar_x, _, sidebar_w, _], _) = runtime.presented("sidebar").unwrap();
@@ -295,8 +291,8 @@ mod tests {
 
     #[test]
     fn resized_preview_stays_beside_the_tab_and_reduced_motion_is_instant() {
-        let (mut runtime, [_, pinned, _]) = runtime(true);
-        hover(&mut runtime, pinned, "tab", 0.01);
+        let (mut runtime, [_, second, _]) = runtime(true);
+        hover(&mut runtime, second, "tab", 0.01);
         runtime.frame(0.42);
         let ([before, _, width, _], opacity) = preview(&runtime).unwrap();
         assert_eq!(width, 266.0);
@@ -319,8 +315,8 @@ mod tests {
 
     #[test]
     fn pressing_and_dragging_clear_the_preview_without_changing_split_focus() {
-        let (mut runtime, [regular, pinned, _]) = runtime(true);
-        runtime.update(|state, _| state.browser.place_split(pinned, 1));
+        let (mut runtime, [regular, second, _]) = runtime(true);
+        runtime.update(|state, _| state.browser.place_split(second, 1));
         runtime.frame(0.01);
         let active = runtime.state.browser.active_tab().unwrap().id();
         hover(&mut runtime, regular, "tab", 0.0);
@@ -329,7 +325,7 @@ mod tests {
         assert_eq!(runtime.state.browser.active_tab().unwrap().id(), active);
         assert_eq!(
             runtime.state.browser.visible_tabs(),
-            [Some(regular), Some(pinned)]
+            [Some(regular), Some(second)]
         );
         let [x, y] = point(&runtime, regular, "tab");
         runtime.pointer_down(x, y);
@@ -344,14 +340,14 @@ mod tests {
 
     #[test]
     fn focused_tab_has_no_preview_in_single_or_split_view() {
-        let (mut runtime, [regular, pinned, _]) = runtime(true);
+        let (mut runtime, [regular, second, _]) = runtime(true);
         hover(&mut runtime, regular, "tab", 0.0);
         runtime.frame(0.45);
         assert!(preview(&runtime).is_none());
 
-        runtime.update(|state, _| state.browser.place_split(pinned, 1));
+        runtime.update(|state, _| state.browser.place_split(second, 1));
         runtime.frame(0.01);
-        hover(&mut runtime, pinned, "tab", 0.0);
+        hover(&mut runtime, second, "tab", 0.0);
         runtime.frame(0.45);
         assert!(preview(&runtime).is_none());
 
@@ -365,11 +361,11 @@ mod tests {
 
     #[test]
     fn closing_the_hovered_tab_cancels_its_preview() {
-        let (mut runtime, [_, pinned, _]) = runtime(true);
-        hover(&mut runtime, pinned, "tab", 0.01);
+        let (mut runtime, [_, second, _]) = runtime(true);
+        hover(&mut runtime, second, "tab", 0.01);
         runtime.frame(0.42);
         assert!(preview(&runtime).is_some());
-        runtime.update(|state, _| state.close(pinned));
+        runtime.update(|state, _| state.close(second));
         runtime.frame(0.01);
         assert!(preview(&runtime).is_none());
     }

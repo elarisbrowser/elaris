@@ -50,7 +50,6 @@ pub(super) fn view(state: &AppState, theme: &Theme, side: usize) -> El {
             groups += 1;
             let name = match section {
                 TabSection::Favourite => "Favourites",
-                TabSection::Pinned => "Pinned Tabs",
                 TabSection::Regular => "Tabs",
             };
             list = list.child(

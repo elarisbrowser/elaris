@@ -66,9 +66,10 @@ Elaris stores:
   visit count. Internal, invalid and non-web URLs are excluded. Typed omnibox queries are never
   recorded.
 - `session.json`: a versioned list of open tab URLs and titles plus the active tab index and the
-  indices classified as Favourite or Pinned. A completed split saves both pane indices and the
-  divider ratio. The active tab index also identifies the focused pane. Older sessions restore
-  without a split. The file is written to a temporary file and atomically renamed into place.
+  indices classified as Favourite. Legacy pinned tabs restore as regular tabs. A completed split
+  saves both pane indices and the divider ratio. The active tab index also identifies the focused
+  pane. Older sessions restore without a split. The file is written to a temporary file and
+  atomically renamed into place.
 - `profile/`: Ladybird's engine-owned profile data, separate from Elaris history and session
   metadata.
 - `config.toml`: appearance, search provider, download directory, startup mode and per-origin
@@ -151,7 +152,7 @@ Persisting favicons would require extending the history store.
 Removing a result deletes its URL row and the visit count for that address. Clear History requires
 confirmation and deletes all rows in a single SQLite transaction. The worker refreshes the
 omnibox snapshots before acknowledging a successful mutation. The History page keeps the search
-term and refreshes the results. Open tabs, Favourites, Pinned Tabs, session metadata and
+term and refreshes the results. Open tabs, Favourites, session metadata and
 Ladybird's profile data are outside these operations.
 
 ## From Rune to Ladybird
@@ -168,14 +169,14 @@ Ladybird's profile data are outside these operations.
 
 ## Startup and shutdown
 
-Tabs remain in one stable-ID browser collection, grouped for keyboard navigation in Favourite,
-Pinned, then Regular order. Moving a tab only changes its section and position; it keeps its
+Tabs remain in one stable-ID browser collection, grouped for keyboard navigation with Favourites first,
+followed by regular tabs. Moving a tab only changes its section and position; it keeps its
 existing Ladybird view and page state. Rune's sidebar owns the transient drag preview and shared
 row-to-tile transition, while the browser commits a move only on release or a context-menu action.
 Split View keeps pane membership separate from tab ownership. Rune springs the existing surface
 into place during a sidebar drag and sends pane sizes to Ladybird when the drop commits. Divider
 drags update the committed sizes directly. With the blank-window startup preference,
-restored Favourite and Pinned tabs remain in the sidebar without activating a page; regular tabs
+restored Favourites remain in the sidebar without activating a page; regular tabs
 from the prior session are not restored into that blank window.
 
 At app construction, Elaris resolves its data/config directories, loads the small settings file,

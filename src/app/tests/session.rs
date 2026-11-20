@@ -214,10 +214,6 @@ fn split_picker_can_cancel_and_select_an_existing_tab_by_keyboard() {
     let third = state.browser.open_tab("three.example").unwrap();
     state
         .browser
-        .move_tab_to(second, TabSection::Pinned, 0)
-        .unwrap();
-    state
-        .browser
         .move_tab_to(third, TabSection::Favourite, 0)
         .unwrap();
     let mut runtime = Runtime::new(

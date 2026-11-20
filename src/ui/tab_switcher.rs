@@ -347,7 +347,7 @@ mod tests {
                 .unwrap(),
             state
                 .browser
-                .restore_tab_in_section("pinned.example", "Pinned", true, TabSection::Pinned)
+                .restore_tab_in_section("third.example", "Third", true, TabSection::Regular)
                 .unwrap(),
         ];
         state.activate(ids[1]);
@@ -429,7 +429,7 @@ mod tests {
                 .iter()
                 .map(Tab::id)
                 .collect::<Vec<_>>(),
-            [ids[1], ids[2], ids[0]]
+            [ids[1], ids[0], ids[2]]
         );
         release(&mut runtime);
         assert!(runtime.state.tab_switcher.is_none());

@@ -44,11 +44,6 @@ fn favourite_tiles_fill_each_responsive_row() {
                     .iter()
                     .any(|element| element.key.as_deref() == Some("favourites-grid"))
             );
-            assert!(
-                !elements
-                    .iter()
-                    .any(|element| element.key.as_deref() == Some("pinned-section"))
-            );
             continue;
         }
         let grid = elements

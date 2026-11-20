@@ -103,7 +103,6 @@ impl super::AppState {
 
     pub(super) fn session_snapshot(&self) -> Session {
         let mut favourites = Vec::new();
-        let mut pinned = Vec::new();
         let tabs = self
             .browser
             .tabs()
@@ -112,7 +111,6 @@ impl super::AppState {
             .map(|(index, tab)| {
                 match tab.section() {
                     TabSection::Favourite => favourites.push(index),
-                    TabSection::Pinned => pinned.push(index),
                     TabSection::Regular => {}
                 }
                 SessionTab {
@@ -139,7 +137,7 @@ impl super::AppState {
                     .position(|tab| tab.id() == active.id())
             })
             .unwrap_or_default();
-        let mut session = Session::new_with_sections(tabs, active_tab, favourites, pinned);
+        let mut session = Session::new_with_sections(tabs, active_tab, favourites);
         if let Some(split) = self.browser.split
             && let [Some(left), Some(right)] = split.panes
         {

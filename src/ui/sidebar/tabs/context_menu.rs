@@ -20,7 +20,6 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
             .map_or(TabSection::Regular, Tab::section);
         let section_action = match section {
             TabSection::Favourite => ("Remove from Favourites", TabSection::Regular),
-            TabSection::Pinned => ("Unpin Tab", TabSection::Regular),
             TabSection::Regular => ("Add to Favourites", TabSection::Favourite),
         };
         menu = menu
@@ -94,32 +93,6 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
                     tx.animated();
                 },
             ));
-        }
-        match section {
-            TabSection::Favourite => {
-                menu = menu.item(MenuItem::new("Move to Pinned Tabs").on_select_tx(
-                    move |state: &mut AppState, tx: &mut Tx| {
-                        state.dismiss_context_menu();
-                        state.move_tab_to_section_animated(tab, TabSection::Pinned, tx);
-                    },
-                ));
-            }
-            TabSection::Regular => {
-                menu = menu.item(MenuItem::new("Pin Tab").on_select_tx(
-                    move |state: &mut AppState, tx: &mut Tx| {
-                        state.dismiss_context_menu();
-                        state.move_tab_to_section_animated(tab, TabSection::Pinned, tx);
-                    },
-                ));
-            }
-            TabSection::Pinned => {
-                menu = menu.item(MenuItem::new("Add to Favourites").on_select_tx(
-                    move |state: &mut AppState, tx: &mut Tx| {
-                        state.dismiss_context_menu();
-                        state.move_tab_to_section_animated(tab, TabSection::Favourite, tx);
-                    },
-                ));
-            }
         }
         menu = menu
             .separator()

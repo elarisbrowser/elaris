@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Persistent favourites, pinned tabs, and the scrollable regular tab list.
+//! Persistent favourites and the scrollable regular tab list.
 
 use rune::tok::type_;
 use rune::{El, GrowthSpec, ScrollSpec, Spring, col, el, icon, row, text};
@@ -29,45 +29,21 @@ pub(super) fn view(
     let favourite_items = state
         .tab_drag
         .preview_items(state.browser.tabs(), TabSection::Favourite);
-    let pinned_items = state
-        .tab_drag
-        .preview_items(state.browser.tabs(), TabSection::Pinned);
-    let regular_items = state
-        .tab_drag
-        .preview_items(state.browser.tabs(), TabSection::Regular);
     let has_favourites = !favourite_items.is_empty();
     let reorder_motion = if reduced_motion {
         Spring::NONE
     } else {
         theme::TAB_REORDER_MOTION
     };
-    let mut scroll_content = col()
+    let scroll_content = col()
         .key("tabs-scroll-content")
         .w_full()
         .gap(theme::TAB_GAP)
         .growth(GrowthSpec {
             spring: reorder_motion,
             ..GrowthSpec::default()
-        });
-    if !pinned_items.is_empty() {
-        scroll_content = scroll_content.child(section_rows(
-            state,
-            TabSection::Pinned,
-            active,
-            theme,
-            reduced_motion,
-        ));
-    }
-    if !pinned_items.is_empty() && !regular_items.is_empty() {
-        scroll_content = scroll_content.child(section_divider(theme));
-    }
-    scroll_content = scroll_content.child(section_rows(
-        state,
-        TabSection::Regular,
-        active,
-        theme,
-        reduced_motion,
-    ));
+        })
+        .child(regular_rows(state, active, theme, reduced_motion));
 
     let scroll_live = state.tab_drag.scroll_live();
     let scroll = col()
@@ -260,13 +236,13 @@ fn favourites(
         .child(grid)
 }
 
-fn section_rows(
+fn regular_rows(
     state: &AppState,
-    section: TabSection,
     active: Option<TabId>,
     theme: &Theme,
     reduced_motion: bool,
 ) -> El {
+    let section = TabSection::Regular;
     let items = state.tab_drag.preview_items(state.browser.tabs(), section);
     let motion = if reduced_motion {
         Spring::NONE
@@ -274,11 +250,7 @@ fn section_rows(
         theme::TAB_REORDER_MOTION
     };
     let mut rows = col()
-        .key(match section {
-            TabSection::Pinned => "pinned-rows",
-            TabSection::Regular => "regular-rows",
-            TabSection::Favourite => unreachable!("favourites use their grid"),
-        })
+        .key("regular-rows")
         .w_full()
         .gap(theme::TAB_GAP)
         .motion(motion)
@@ -336,25 +308,19 @@ fn section_rows(
         };
         rows = rows.child(element);
     }
-    if section == TabSection::Regular {
-        rows = rows.child(
-            row_button(
-                "new-tab",
-                icon(&icons::PLUS, theme::ICON).color(theme.text_muted),
-                "New Tab",
-                theme.text_muted,
-                theme,
-            )
-            .on_press_tx(app::new_tab),
-        );
-    }
+    rows = rows.child(
+        row_button(
+            "new-tab",
+            icon(&icons::PLUS, theme::ICON).color(theme.text_muted),
+            "New Tab",
+            theme.text_muted,
+            theme,
+        )
+        .on_press_tx(app::new_tab),
+    );
 
     col()
-        .key(match section {
-            TabSection::Pinned => "pinned-section",
-            TabSection::Regular => "regular-section",
-            TabSection::Favourite => unreachable!("favourites use their grid"),
-        })
+        .key("regular-section")
         .w_full()
         .on_layout_tx(move |state: &mut AppState, rect, tx| {
             let target_ready = state
@@ -369,13 +335,6 @@ fn section_rows(
             }
         })
         .child(rows)
-}
-
-fn section_divider(theme: &Theme) -> El {
-    el().key("pinned-regular-divider")
-        .w_full()
-        .h(1.0)
-        .fill(theme.overlay_border)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -581,11 +540,10 @@ fn drop_placeholder(
         slot
     } else {
         let mut slot = el()
-            .key(match (section, same_section) {
-                (TabSection::Pinned | TabSection::Regular, true) => format!("tab-{}", tab.raw()),
-                (TabSection::Pinned, false) => "pinned-drop-placeholder".to_owned(),
-                (TabSection::Regular, false) => "regular-drop-placeholder".to_owned(),
-                (TabSection::Favourite, _) => unreachable!(),
+            .key(if same_section {
+                format!("tab-{}", tab.raw())
+            } else {
+                "regular-drop-placeholder".to_owned()
             })
             .w_full()
             .h(theme::ROW_HEIGHT)

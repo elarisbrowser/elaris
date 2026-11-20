@@ -134,7 +134,7 @@ fn history_mutation_preserves_tabs_and_query_on_success_or_failure() {
     state.storage = Some(std::sync::Arc::new(Storage::open(paths.clone()).unwrap()));
     for (url, section) in [
         ("https://favourite.example/", TabSection::Favourite),
-        ("https://pinned.example/", TabSection::Pinned),
+        ("https://regular.example/", TabSection::Regular),
     ] {
         state
             .browser

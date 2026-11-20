@@ -16,13 +16,12 @@ use std::sync::{Mutex, OnceLock};
 #[serde(rename_all = "snake_case")]
 pub(crate) enum TabSection {
     Favourite,
-    Pinned,
     #[default]
     Regular,
 }
 
 impl TabSection {
-    pub(crate) const ORDER: [Self; 3] = [Self::Favourite, Self::Pinned, Self::Regular];
+    pub(crate) const ORDER: [Self; 2] = [Self::Favourite, Self::Regular];
 }
 
 /// A tab's identity, stable for as long as the tab is open and never reused afterwards, so a

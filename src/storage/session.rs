@@ -19,8 +19,14 @@ pub(crate) struct Session {
     /// Positions in `tabs`, kept in sidebar order. Missing fields in version 1 mean regular tabs.
     #[serde(default)]
     pub(crate) favourites: Vec<usize>,
-    #[serde(default)]
-    pub(crate) pinned: Vec<usize>,
+    // Older sessions store pinning separately from the tabs themselves.
+    #[serde(
+        default,
+        rename = "pinned",
+        skip_serializing,
+        deserialize_with = "ignore_legacy_pins"
+    )]
+    _legacy_pins: (),
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) split: Option<SessionSplit>,
 }
@@ -54,14 +60,13 @@ pub(crate) struct SessionFavicon {
 impl Session {
     #[cfg(test)]
     pub(crate) fn new(tabs: Vec<SessionTab>, active_tab: usize) -> Self {
-        Self::new_with_sections(tabs, active_tab, Vec::new(), Vec::new())
+        Self::new_with_sections(tabs, active_tab, Vec::new())
     }
 
     pub(crate) fn new_with_sections(
         tabs: Vec<SessionTab>,
         active_tab: usize,
         favourites: Vec<usize>,
-        pinned: Vec<usize>,
     ) -> Self {
         Self {
             version: SESSION_VERSION,
@@ -72,7 +77,7 @@ impl Session {
             },
             tabs,
             favourites,
-            pinned,
+            _legacy_pins: (),
             split: None,
         }
     }
@@ -80,8 +85,6 @@ impl Session {
     pub(crate) fn section_at(&self, index: usize) -> crate::tab::TabSection {
         if self.favourites.contains(&index) {
             crate::tab::TabSection::Favourite
-        } else if self.pinned.contains(&index) {
-            crate::tab::TabSection::Pinned
         } else {
             crate::tab::TabSection::Regular
         }
@@ -97,7 +100,6 @@ impl Session {
                     && split.ratio <= 10_000
             })
             && self.favourites.iter().all(|index| *index < self.tabs.len())
-            && self.pinned.iter().all(|index| *index < self.tabs.len())
             && self.tabs.iter().all(|tab| {
                 tab.favicon.as_ref().is_none_or(|favicon| {
                     favicon.width > 0
@@ -113,10 +115,6 @@ impl Session {
                             == Some(favicon.rgba.len())
                 })
             })
-            && !self
-                .favourites
-                .iter()
-                .any(|index| self.pinned.contains(index))
     }
 }
 
@@ -127,6 +125,10 @@ struct SessionCollection {
     #[serde(default = "restore_sessions_by_default")]
     restore_on_launch: bool,
     windows: Vec<Session>,
+}
+
+fn ignore_legacy_pins<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<(), D::Error> {
+    serde::de::IgnoredAny::deserialize(deserializer).map(|_| ())
 }
 
 fn restore_sessions_by_default() -> bool {

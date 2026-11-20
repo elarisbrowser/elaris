@@ -31,8 +31,7 @@ pub(crate) fn favourite_tile_width(content_width: f32, items_in_row: usize) -> f
 pub(super) fn section_index(section: TabSection) -> usize {
     match section {
         TabSection::Favourite => 0,
-        TabSection::Pinned => 1,
-        TabSection::Regular => 2,
+        TabSection::Regular => 1,
     }
 }
 

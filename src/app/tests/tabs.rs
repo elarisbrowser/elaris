@@ -37,12 +37,12 @@ fn cmd_shift_t_reopens_the_last_closed_tab_in_its_original_section() {
     assert!(state.recently_closed().is_empty());
 }
 #[test]
-fn close_others_keeps_recently_closed_pinned_tabs_reopenable() {
-    let mut state = AppState::new(Some("pinned.example"));
-    let pinned = state.browser.active_tab().unwrap().id();
+fn close_others_keeps_recently_closed_favourite_tabs_reopenable() {
+    let mut state = AppState::new(Some("favourite.example"));
+    let favourite = state.browser.active_tab().unwrap().id();
     state
         .browser
-        .move_tab_to(pinned, TabSection::Pinned, 0)
+        .move_tab_to(favourite, TabSection::Favourite, 0)
         .unwrap();
     let kept = state.browser.open_tab("kept.example").unwrap();
     state.activate(kept);
@@ -53,8 +53,8 @@ fn close_others_keeps_recently_closed_pinned_tabs_reopenable() {
 
     let reopened = state.reopen_recently_closed(0).unwrap();
     let tab = state.browser.tab(reopened).unwrap();
-    assert_eq!(tab.url, "https://pinned.example");
-    assert_eq!(tab.section(), TabSection::Pinned);
+    assert_eq!(tab.url, "https://favourite.example");
+    assert_eq!(tab.section(), TabSection::Favourite);
     assert_eq!(state.browser.active_tab().map(Tab::id), Some(reopened));
 }
 #[test]

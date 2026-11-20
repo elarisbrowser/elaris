@@ -250,7 +250,7 @@ impl Browser {
     }
 
     /// Moves a live tab into `section` at its zero-based position without changing its page or
-    /// active state. The single tab vector stays grouped in keyboard order: favourites, pinned,
+    /// active state. The single tab vector stays grouped in keyboard order: favourites,
     /// then regular tabs.
     pub(crate) fn move_tab_to(
         &mut self,
@@ -898,8 +898,7 @@ impl Browser {
 fn section_rank(section: TabSection) -> usize {
     match section {
         TabSection::Favourite => 0,
-        TabSection::Pinned => 1,
-        TabSection::Regular => 2,
+        TabSection::Regular => 1,
     }
 }
 

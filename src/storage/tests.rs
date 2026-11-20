@@ -723,3 +723,28 @@ fn empty_session_has_no_active_tab() {
     assert_eq!(session.active_tab, 0);
     assert!(session.is_supported());
 }
+
+#[test]
+fn legacy_pins_restore_as_regular_tabs_and_are_omitted_on_save() {
+    use crate::tab::TabSection;
+
+    let temp = TempDir::new();
+    let path = temp.0.join("session.json");
+    fs::write(
+        &path,
+        r#"{"version":4,"tabs":[{"url":"https://example.com","title":"Former pin"},
+        {"url":"https://example.org","title":"Favourite"}],"active_tab":0,
+        "favourites":[1],"pinned":[0]}"#,
+    )
+    .unwrap();
+
+    let session = load_session(&path).unwrap().unwrap();
+    assert_eq!(session.active_tab, 0);
+    assert_eq!(session.tabs[0].url, "https://example.com");
+    assert_eq!(session.section_at(0), TabSection::Regular);
+    assert_eq!(session.section_at(1), TabSection::Favourite);
+    write_session_atomic(&path, &session).unwrap();
+    let saved: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    assert!(saved["windows"][0].get("pinned").is_none());
+    assert_eq!(load_session(&path).unwrap(), Some(session));
+}

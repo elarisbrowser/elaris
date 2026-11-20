@@ -33,7 +33,6 @@ enum Action {
     Shortcut(Shortcut),
     Back,
     Forward,
-    Pin,
     Favourite,
     SplitLeft,
     SplitRight,
@@ -332,7 +331,6 @@ pub(crate) fn install(app: rune::AppHandle<AppState>) {
                 true,
             ),
             item("Move Tab to Favourites", Action::Favourite, "", false),
-            item("Pin Tab", Action::Pin, "", false),
             item("Split Left", Action::SplitLeft, "", false),
             item("Split Right", Action::SplitRight, "", false),
             item("Exit Split View", Action::ExitSplit, "", false),
@@ -436,13 +434,6 @@ fn apply_menu_state(snapshot: MenuState, mtm: MainThreadMarker) {
                 .is_some_and(|command| snapshot.enabled(command));
             unsafe { item.setEnabled(enabled) };
             match action_from_id(tag) {
-                Some(Action::Pin) => unsafe {
-                    item.setTitle(&NSString::from_str(if snapshot.pinned {
-                        "Unpin Tab"
-                    } else {
-                        "Pin Tab"
-                    }))
-                },
                 Some(Action::Favourite) => unsafe {
                     item.setTitle(&NSString::from_str(if snapshot.favourite {
                         "Remove from Favourites"
@@ -477,7 +468,6 @@ fn menu_command(action: Action) -> Option<MenuCommand> {
     Some(match action {
         Action::Back => MenuCommand::Back,
         Action::Forward => MenuCommand::Forward,
-        Action::Pin => MenuCommand::Pin,
         Action::Favourite => MenuCommand::Favourite,
         Action::SplitLeft | Action::SplitRight => MenuCommand::Split,
         Action::ExitSplit => MenuCommand::ExitSplit,
@@ -511,15 +501,13 @@ fn perform_action(state: &mut AppState, action: Action, tx: &mut Tx) {
                 state.browser.go_forward(tab);
             }
         }
-        Action::Pin | Action::Favourite => {
+        Action::Favourite => {
             if let Some(tab) = tab {
                 let section = state.browser.tab(tab).map(Tab::section);
-                let destination = match (action, section) {
-                    (Action::Pin, Some(TabSection::Pinned)) => TabSection::Regular,
-                    (Action::Pin, _) => TabSection::Pinned,
-                    (Action::Favourite, Some(TabSection::Favourite)) => TabSection::Regular,
-                    (Action::Favourite, _) => TabSection::Favourite,
-                    _ => return,
+                let destination = if section == Some(TabSection::Favourite) {
+                    TabSection::Regular
+                } else {
+                    TabSection::Favourite
                 };
                 state.move_tab_to_section_animated(tab, destination, tx);
             }
@@ -607,7 +595,6 @@ fn action_id(action: Action) -> isize {
         Action::Shortcut(shortcut) => 100 + shortcut_id(shortcut),
         Action::Back => 1,
         Action::Forward => 2,
-        Action::Pin => 3,
         Action::Favourite => 4,
         Action::SplitLeft => 5,
         Action::SplitRight => 6,
@@ -629,7 +616,6 @@ fn action_from_id(id: isize) -> Option<Action> {
     Some(match id {
         1 => Action::Back,
         2 => Action::Forward,
-        3 => Action::Pin,
         4 => Action::Favourite,
         5 => Action::SplitLeft,
         6 => Action::SplitRight,

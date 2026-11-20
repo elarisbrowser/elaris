@@ -44,7 +44,7 @@ pub(crate) struct TabDragState {
     incoming_visual: Option<DragVisual>,
     settling: Option<Settling>,
     tab_rects: HashMap<TabId, [f32; 4]>,
-    section_rects: [Option<[f32; 4]>; 3],
+    section_rects: [Option<[f32; 4]>; TabSection::ORDER.len()],
     favourite_grid: Option<[f32; 4]>,
     empty_favourite_area: Option<[f32; 4]>,
     placeholder: Option<(TabSection, [f32; 4])>,
@@ -63,7 +63,7 @@ impl Default for TabDragState {
             incoming_visual: None,
             settling: None,
             tab_rects: HashMap::new(),
-            section_rects: [None; 3],
+            section_rects: [None; TabSection::ORDER.len()],
             favourite_grid: None,
             empty_favourite_area: None,
             placeholder: None,
@@ -502,11 +502,6 @@ impl TabDragState {
         let in_list = self.viewport.is_some_and(|rect| contains(rect, point));
         let section = match self.section_at(point) {
             Some(TabSection::Favourite) => TabSection::Favourite,
-            Some(TabSection::Pinned)
-                if in_list && tabs.iter().any(|tab| tab.section() == TabSection::Pinned) =>
-            {
-                TabSection::Pinned
-            }
             _ if in_list
                 && self.section_rects[section_index(TabSection::Regular)]
                     .is_some_and(|rect| point[1] >= rect[1]) =>

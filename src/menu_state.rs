@@ -22,7 +22,6 @@ pub(crate) enum MenuCommand {
     Forward,
     Split,
     ExitSplit,
-    Pin,
     Favourite,
     Edit,
 }
@@ -36,7 +35,6 @@ pub(crate) struct MenuState {
     can_go_forward: bool,
     has_split: bool,
     pub(crate) sidebar_visible: bool,
-    pub(crate) pinned: bool,
     pub(crate) favourite: bool,
 }
 
@@ -52,7 +50,6 @@ impl MenuState {
             can_go_forward: tab.is_some_and(|tab| tab.can_go_forward),
             has_split: state.browser.displayed_split().is_some(),
             sidebar_visible: !state.sidebar.collapsed,
-            pinned: tab.is_some_and(|tab| tab.section() == TabSection::Pinned),
             favourite: tab.is_some_and(|tab| tab.section() == TabSection::Favourite),
         }
     }
@@ -68,7 +65,6 @@ impl MenuState {
             MenuCommand::CloseTab
             | MenuCommand::Find
             | MenuCommand::Reload
-            | MenuCommand::Pin
             | MenuCommand::Favourite => self.has_tab,
             MenuCommand::ReopenClosedTab => self.can_reopen,
             MenuCommand::NextTab | MenuCommand::PreviousTab => self.has_tab,
