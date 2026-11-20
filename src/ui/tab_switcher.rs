@@ -9,14 +9,16 @@ use rune::{
 use crate::app::AppState;
 use crate::internal::{InternalPage, InternalRoute};
 use crate::tab::{Tab, TabId};
-use crate::ui::{VIEWPORT, icons, theme::Theme};
+use crate::ui::{
+    VIEWPORT, icons,
+    theme::{self, Theme},
+};
 
 const PANEL: &str = "quick-tab-switcher";
 const LIST: &str = "quick-tab-list";
 pub(super) const ROW: f32 = 46.0;
 const WIDTH: f32 = 384.0;
 const VISIBLE_ROWS: usize = 6;
-const MOTION: Spring = Spring::new(0.14, 0.0);
 
 pub(crate) struct Switcher {
     origin: Option<TabId>,
@@ -85,7 +87,7 @@ pub(crate) fn cycle_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> 
 
 fn animate(tx: &mut Tx) {
     tx.animated();
-    tx.motion(MOTION);
+    tx.motion(theme::HIGHLIGHT_MOTION);
 }
 
 pub(crate) fn finish(state: &mut AppState, target: Option<TabId>, tx: &mut Tx) {
@@ -175,16 +177,22 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32, reduced: bool) 
         .candidates
         .iter()
         .position(|&id| id == switcher.selected)?;
-    let motion = if reduced { Spring::NONE } else { MOTION };
-    let mut items = col().key("quick-tab-items").w_full().child(
-        el().key("quick-tab-highlight")
-            .pin(Some(0.0), Some(0.0), Some(0.0), None)
-            .h(ROW)
-            .offset(0.0, index as f32 * ROW)
-            .offset_motion(motion)
-            .radius(radius::MD)
-            .fill(theme.overlay_selected),
-    );
+    let motion = if reduced {
+        Spring::NONE
+    } else {
+        theme::HIGHLIGHT_MOTION
+    };
+    let mut items = col()
+        .key("quick-tab-items")
+        .w_full()
+        .child(super::hover_highlight::selection(
+            "quick-tab-highlight",
+            index as f32 * ROW,
+            ROW,
+            radius::MD,
+            theme,
+            reduced,
+        ));
     for &id in &switcher.candidates {
         if let Some(tab) = state.browser.tab(id) {
             items = items.child(entry(tab, id == switcher.selected, theme));
@@ -208,7 +216,10 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32, reduced: bool) 
         .transition(if reduced {
             Transition::none()
         } else {
-            Transition::scale(0.97).springs(SpringPair::new(MOTION, Spring::new(0.11, 0.0)))
+            Transition::scale(0.97).springs(SpringPair::new(
+                theme::HIGHLIGHT_MOTION,
+                Spring::new(0.11, 0.0),
+            ))
         })
         .token_motion(motion)
         .child(

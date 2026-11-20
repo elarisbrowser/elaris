@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use rune::{Cx, El, Spring, Transition, Tx, col, el, row};
 use rune_kit::{Menu, MenuItem, Placement};
 
-use super::controls::{icon_button, row_button};
+use super::controls::{icon_button, icon_button_style, row_button};
 use super::sidebar::drag::PreviewItem;
 use super::sidebar::tabs::{drag_overlay, tab_drag_handler, tab_icon};
 use super::sidebar::{header, hover};
@@ -446,13 +446,14 @@ fn tab_view(state: &AppState, tab: &Tab, theme: &Theme) -> El {
     let label = tab.label();
     let icon = tab_icon(tab, active, theme::ICON, theme);
     let mut tile = if section == TabSection::Regular {
-        let close = icon_button(
+        let close = icon_button_style(
             &format!("close-{}", id.raw()),
             "Close tab",
             &icons::CLOSE,
             theme::CLOSE_BUTTON,
             theme,
         )
+        .hover(theme.hover)
         .on_press(move |state: &mut AppState| state.close(id));
         row_button(
             &key(id),
@@ -473,7 +474,6 @@ fn tab_view(state: &AppState, tab: &Tab, theme: &Theme) -> El {
             .center()
             .radius(theme::ROW_RADIUS)
             .continuous_corners()
-            .hover(theme.hover)
             .press(theme.press)
             .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
             .child(icon)

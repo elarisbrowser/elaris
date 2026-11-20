@@ -136,9 +136,8 @@ fn editor(state: &AppState, suggestions: &[Suggestion], theme: &Theme, reduced: 
 }
 
 fn results(state: &AppState, suggestions: &[Suggestion], theme: &Theme, results_limit: f32) -> El {
-    let mut results = col()
+    let results = col()
         .key("omnibox-results")
-        .instant_changes()
         .w_full()
         .max_h(results_limit.max(0.0))
         .px(if state.horizontal_tabs() {
@@ -146,12 +145,19 @@ fn results(state: &AppState, suggestions: &[Suggestion], theme: &Theme, results_
         } else {
             theme::ROW_PADDING
         })
-        .gap(theme::TAB_GAP)
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
         .role("listbox")
         .label("Suggestions");
+    let height = if state.horizontal_tabs() {
+        theme::ROW_HEIGHT
+    } else {
+        theme::OMNIBOX_ROW_HEIGHT
+    };
+    let mut rows = Vec::new();
+    let mut y = 0.0;
+    let mut selected_y = None;
     let mut previous = None;
     for (index, suggestion) in suggestions.iter().enumerate() {
         if previous != Some(suggestion.section) && suggestions.len() > 1 {
@@ -162,19 +168,38 @@ fn results(state: &AppState, suggestions: &[Suggestion], theme: &Theme, results_
                 Section::Navigate => None,
             };
             if let Some(label) = label {
-                results = results.child(
+                rows.push(
                     row()
                         .h(theme::OMNIBOX_LABEL_HEIGHT)
                         .pl(theme::ROW_PADDING)
                         .center_y()
                         .child(text(label).font(type_::LABEL).color(theme.text_muted)),
                 );
+                y += theme::OMNIBOX_LABEL_HEIGHT + theme::TAB_GAP;
             }
         }
         previous = Some(suggestion.section);
-        results = results.child(result_row(state, suggestion, index, theme));
+        if index == state.omnibox.selected {
+            selected_y = Some(y);
+        }
+        rows.push(result_row(state, suggestion, index, height, theme));
+        y += height + theme::TAB_GAP;
     }
-    results
+    let mut content = col()
+        .key("omnibox-result-rows")
+        .w_full()
+        .gap(theme::TAB_GAP);
+    if let Some(y) = selected_y {
+        content = content.child(super::hover_highlight::selection(
+            "omnibox-result-highlight",
+            y,
+            height,
+            theme::ROW_RADIUS,
+            theme,
+            state.sidebar.hover.reduced.get(),
+        ));
+    }
+    results.child(content.children(rows))
 }
 
 pub(super) fn address_bar(
@@ -203,7 +228,6 @@ pub(super) fn address_bar(
         .radius(theme::FIELD_RADIUS)
         .continuous_corners()
         .fill(theme.address_field)
-        .focus_within_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
         .token_motion(if reduced {
             rune::Spring::NONE
         } else {
@@ -366,42 +390,42 @@ fn search_engine_selector(state: &AppState, theme: &Theme, overlays: &mut Vec<El
         .build(&kit, overlays)
 }
 
-fn result_row(state: &AppState, suggestion: &Suggestion, index: usize, theme: &Theme) -> El {
-    let selected = state.omnibox.selected == index;
+fn result_row(
+    state: &AppState,
+    suggestion: &Suggestion,
+    index: usize,
+    height: f32,
+    theme: &Theme,
+) -> El {
     let glyph = glyph_for(state, suggestion, theme);
     let choice = suggestion.clone();
     let key = format!("omnibox-result-{index}");
     let mut row = row()
         .key(key)
         .w_full()
-        .h(if state.horizontal_tabs() {
-            theme::ROW_HEIGHT
-        } else {
-            theme::OMNIBOX_ROW_HEIGHT
-        })
+        .h(height)
         .px(theme::ROW_PADDING)
         .gap(theme::ROW_GAP)
         .center_y()
         .radius(theme::ROW_RADIUS)
         .continuous_corners()
-        .hover(theme.hover)
         .label(if suggestion.detail.is_empty() {
             suggestion.title.clone()
         } else {
             format!("{}, {}", suggestion.title, suggestion.detail)
         })
         .role("option")
-        .on_hover_change(move |state: &mut AppState, inside, _| {
-            if inside {
+        .on_hover_change(move |state: &mut AppState, inside, tx| {
+            if inside && state.omnibox.selected != index {
                 state.omnibox.selected = index;
+                tx.animated();
+            } else {
+                tx.live_only();
             }
         })
         .on_press_tx(move |state: &mut AppState, tx| {
             state.choose_suggestion(choice.clone(), tx);
         });
-    if selected {
-        row = row.fill(theme.overlay_selected);
-    }
     row = row
         .child(
             el().size(theme::CLOSE_BUTTON, theme::CLOSE_BUTTON)

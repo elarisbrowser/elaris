@@ -232,10 +232,12 @@ fn nav_button(
     theme: &Theme,
 ) -> El {
     let key = label.to_ascii_lowercase();
-    let button = icon_button(&key, label, glyph, theme::ICON_BUTTON, theme).disabled(!enabled);
     if enabled {
-        button.on_press(move |state: &mut AppState| state.with_active_tab(navigate))
+        icon_button(&key, label, glyph, theme::ICON_BUTTON, theme)
+            .on_press(move |state: &mut AppState| state.with_active_tab(navigate))
     } else {
-        button.opacity(theme.disabled_opacity)
+        crate::ui::controls::icon_button_style(&key, label, glyph, theme::ICON_BUTTON, theme)
+            .disabled(true)
+            .opacity(theme.disabled_opacity)
     }
 }

@@ -7,6 +7,7 @@ mod controls;
 mod downloads;
 mod find;
 pub(crate) mod horizontal_tabs;
+pub(crate) mod hover_highlight;
 mod icons;
 pub(crate) mod internal;
 mod omnibox;
@@ -163,6 +164,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     let height = cx
         .layout_size("window")
         .map_or(WINDOW_MIN_SIZE.1, |size| size[1]);
+    overlays.extend(hover_highlight::view(state, cx, &theme, reduced_motion));
     overlays.extend(tab_switcher::view(state, &theme, height, reduced_motion));
     let (hover_enter, hover_exit) = if reduced_motion {
         (rune::Anim::INSTANT, rune::Anim::INSTANT)

@@ -6,6 +6,7 @@
 use rune::tok::type_;
 use rune::{Color, El, Icon, el, icon, row, text};
 
+use super::hover_highlight::{self, Group};
 use super::theme::{self, Theme};
 
 /// A square button showing `glyph`, labelled for assistive technology and its tooltip.
@@ -16,11 +17,24 @@ pub(crate) fn icon_button(
     size: f32,
     theme: &Theme,
 ) -> El {
+    hover_highlight::attach(
+        icon_button_style(key, label, glyph, size, theme),
+        key,
+        Group::Controls,
+    )
+}
+
+pub(super) fn icon_button_style(
+    key: &str,
+    label: &str,
+    glyph: &'static Icon,
+    size: f32,
+    theme: &Theme,
+) -> El {
     el().key(key)
         .size(size, size)
         .center()
         .radius(theme::ICON_BUTTON_RADIUS)
-        .hover(theme.hover)
         .press(theme.press)
         .press_scale(theme::PRESS_SCALE)
         .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
@@ -51,7 +65,7 @@ pub(crate) fn row_button(
     color: Color,
     theme: &Theme,
 ) -> El {
-    row()
+    let row = row()
         .key(key)
         .w_full()
         .h(theme::ROW_HEIGHT)
@@ -61,7 +75,6 @@ pub(crate) fn row_button(
         .center_y()
         .radius(theme::ROW_RADIUS)
         .continuous_corners()
-        .hover(theme.hover)
         .press(theme.press)
         .press_scale(theme::PRESS_SCALE)
         .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
@@ -75,5 +88,6 @@ pub(crate) fn row_button(
                 .single_line()
                 .truncate()
                 .grow(1.0),
-        )
+        );
+    hover_highlight::attach(row, key, Group::Controls)
 }

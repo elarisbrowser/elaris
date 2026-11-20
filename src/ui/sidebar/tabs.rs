@@ -13,7 +13,7 @@ mod split;
 use crate::internal::{InternalPage, InternalRoute};
 use crate::tab::{Tab, TabId, TabSection};
 use crate::ui::TabDragMoveResult;
-use crate::ui::controls::{icon_button, row_button};
+use crate::ui::controls::{icon_button_style, row_button};
 use crate::ui::icons;
 use crate::ui::theme::{self, Theme};
 pub(crate) use context_menu::context_menu;
@@ -377,7 +377,6 @@ fn favourite_tile(
         .radius(theme::FAVOURITE_TILE_RADIUS)
         .continuous_corners()
         .motion(motion)
-        .hover(theme.hover)
         .press(theme.press)
         .press_scale(theme::PRESS_SCALE)
         .label(label)
@@ -437,13 +436,14 @@ fn tab_row(
     let hidden = state.tab_drag.is_hidden(id);
     let color = if active { theme.text } else { theme.text_muted };
     let leading = tab_icon(tab, active, theme::ICON, theme);
-    let close = icon_button(
+    let close = icon_button_style(
         &format!("close-{}", id.raw()),
         "Close tab",
         &icons::CLOSE,
         theme::CLOSE_BUTTON,
         theme,
     )
+    .hover(theme.hover)
     .on_press(move |state: &mut AppState| state.close(id));
     let close = if active {
         close

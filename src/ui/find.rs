@@ -186,7 +186,12 @@ fn button(
     disabled: bool,
     on_press: impl Fn(&mut AppState, &mut Tx) + 'static,
 ) -> El {
-    super::controls::icon_button(key, label, glyph, theme::FIND_BUTTON, theme)
+    let button = if disabled {
+        super::controls::icon_button_style(key, label, glyph, theme::FIND_BUTTON, theme)
+    } else {
+        super::controls::icon_button(key, label, glyph, theme::FIND_BUTTON, theme)
+    };
+    button
         .role("button")
         .focusable(!disabled)
         .disabled(disabled)

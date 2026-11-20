@@ -28,6 +28,7 @@ impl super::AppState {
     pub(super) fn prepare_tab_layout(&mut self, layout: TabLayout) {
         if self.settings.tab_layout != layout {
             self.cancel_tab_drag();
+            self.hover_highlight = None;
             self.tab_drag = Default::default();
             self.dismiss_context_menu();
             self.page_menu = Default::default();

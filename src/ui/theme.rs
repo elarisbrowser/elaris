@@ -257,6 +257,7 @@ pub(crate) const HEADER_GROUP_GAP: f32 = space::S3;
 /// How far buttons and rows shrink while pressed, springing back on release.
 pub(crate) const PRESS_SCALE: f32 = 0.97;
 
+pub(super) const HIGHLIGHT_MOTION: Spring = Spring::new(0.14, 0.0);
 pub(super) const HOVER_ENTER: Anim = Anim::new(Curve::tween(0.08, Easing::EASE_OUT));
 pub(super) const HOVER_EXIT: Anim = Anim::new(Curve::tween(0.15, Easing::EASE_OUT));
 

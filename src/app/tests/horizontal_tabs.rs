@@ -500,3 +500,77 @@ fn traffic_light_placeholders_follow_the_native_titlebar_position() {
         assert_eq!(rect(&window, "window-controls")[1], native_y);
     }
 }
+
+#[test]
+fn shared_hover_highlight_slides_between_tabs_and_snaps_with_reduced_motion() {
+    let mut state = AppState::new(Some("one.example"));
+    let first = state.browser.active_tab().unwrap().id();
+    let second = state.browser.open_tab("two.example").unwrap();
+    state.set_tab_layout(TabLayout::Horizontal);
+    let mut window = runtime(state, 960.0);
+    let start = center(rect(&window, &horizontal_tabs::key(first)));
+    let end = center(rect(&window, &horizontal_tabs::key(second)));
+
+    window.pointer_move(start[0], start[1]);
+    settle(&mut window);
+    let from = rect(&window, "horizontal-tabs-hover")[0];
+    window.pointer_move(end[0], end[1]);
+    window.frame(1.0 / 60.0);
+    let in_motion = rect(&window, "horizontal-tabs-hover")[0];
+    let to = rect(&window, &horizontal_tabs::key(second))[0];
+    assert!(
+        (from..to).contains(&in_motion),
+        "{from} -> {in_motion} -> {to}"
+    );
+    settle(&mut window);
+    assert_eq!(rect(&window, "horizontal-tabs-hover")[0], to);
+
+    window.set_system_reduced_motion(true);
+    window.pointer_move(start[0], start[1]);
+    window.frame(0.0);
+    assert_eq!(rect(&window, "horizontal-tabs-hover")[0], from);
+}
+
+#[test]
+fn shared_toolbar_hover_excludes_disabled_controls() {
+    let mut state = AppState::new(Some("one.example"));
+    state.set_tab_layout(TabLayout::Horizontal);
+    let mut window = runtime(state, 960.0);
+    let key = "controls-hover-horizontal-navigation";
+
+    let [x, y] = center(rect(&window, "back"));
+    window.pointer_move(x, y);
+    window.frame(0.0);
+    assert!(window.presented(key).is_none());
+
+    let [x, y] = center(rect(&window, "downloads-button"));
+    window.pointer_move(x, y);
+    settle(&mut window);
+    assert!(window.presented(key).is_some());
+    window.pointer_move(500.0, 280.0);
+    settle(&mut window);
+    assert!(window.presented(key).is_none());
+}
+
+#[test]
+fn omnibox_selection_slides_between_hovered_results() {
+    let mut state = AppState::new(Some("one.example"));
+    state.browser.open_tab("two.example").unwrap();
+    state.set_tab_layout(TabLayout::Horizontal);
+    let mut window = runtime(state, 960.0);
+    window.update(|state, _| state.open_omnibox(crate::omnibox::Mode::New));
+    settle(&mut window);
+    let from = rect(&window, "omnibox-result-highlight")[1];
+    let second = rect(&window, "omnibox-result-1");
+    let [x, y] = center(second);
+    window.pointer_move(x, y);
+    window.frame(1.0 / 60.0);
+    let moving = rect(&window, "omnibox-result-highlight")[1];
+    assert!(
+        (from..second[1]).contains(&moving),
+        "{from} -> {moving} -> {}",
+        second[1]
+    );
+    settle(&mut window);
+    assert_eq!(rect(&window, "omnibox-result-highlight")[1], second[1]);
+}

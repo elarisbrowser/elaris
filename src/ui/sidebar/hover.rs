@@ -98,14 +98,32 @@ pub(in crate::ui) fn eligible(state: &AppState, id: TabId) -> bool {
 }
 
 pub(in crate::ui) fn attach(tab: El, id: TabId) -> El {
+    use crate::tab::TabSection;
+    use crate::ui::hover_highlight::{self, Group};
     tab.on_hover_change(move |state: &mut AppState, inside, tx| {
+        let changed = state
+            .browser
+            .tab(id)
+            .map(crate::tab::Tab::section)
+            .is_some_and(|section| {
+                let (group, key) = if state.horizontal_tabs() {
+                    (Group::HorizontalTabs, crate::ui::horizontal_tabs::key(id))
+                } else if section == TabSection::Favourite {
+                    (Group::Favourites, format!("favourite-{}", id.raw()))
+                } else {
+                    (Group::Tabs, format!("tab-{}", id.raw()))
+                };
+                hover_highlight::update(state, &key, group, inside, tx)
+            });
         if inside && allowed(state) && eligible(state, id) {
             state.sidebar.hover.enter(id, tx.clock());
         } else {
             state.sidebar.hover.leave(id, tx.clock());
         }
         state.sidebar.hover.wake(tx);
-        tx.live_only();
+        if !changed {
+            tx.live_only();
+        }
     })
 }
 
