@@ -25,6 +25,30 @@ from .common import (
 BRIDGE_LIB_DIRS = (CPP_BUILD_DIR / "lib", ROOT / "build" / "ladybird-integrated" / "lib")
 
 
+def _run_artifacts_are_current(ui_only: bool) -> bool:
+    """Return whether a previous run's executable and (when enabled) bridge are current."""
+    executable = ROOT / "target" / "debug" / ("elaris.exe" if os.name == "nt" else "elaris")
+    if not executable.is_file():
+        return False
+
+    source_roots = [ROOT / "src", ROOT / "scripts", ROOT / "assets"]
+    inputs = [ROOT / name for name in ("Cargo.toml", "Cargo.lock", "build.rs", "rust-toolchain.toml")]
+    inputs.extend(path for source_root in source_roots if source_root.is_dir() for path in source_root.rglob("*"))
+    if not ui_only:
+        bridge = next((directory / f"libelaris_ladybird.{suffix}" for directory in BRIDGE_LIB_DIRS
+                       for suffix in ("dylib", "so", "a")
+                       if (directory / f"libelaris_ladybird.{suffix}").is_file()), None)
+        if bridge is None:
+            return False
+        inputs.extend(bridge_files())
+        inputs.extend((ROOT / "bridge" / "CMakeLists.txt", ROOT / "bridge" / "Peek.cmake"))
+
+    newest_input = max((path.stat().st_mtime_ns for path in inputs if path.is_file()), default=0)
+    if executable.stat().st_mtime_ns < newest_input:
+        return False
+    return ui_only or bridge.stat().st_mtime_ns >= newest_input
+
+
 def setup(args: argparse.Namespace) -> None:
     if not args.skip_system_deps:
         dependencies.install_system_dependencies()
@@ -83,6 +107,14 @@ def _configure_bridge_environment(bridge_dir: str) -> None:
 
 
 def launch(args: argparse.Namespace) -> None:
+    if _run_artifacts_are_current(args.ui):
+        executable = ROOT / "target" / "debug" / "elaris"
+        command = [str(executable)]
+        if args.url:
+            command.append(args.url)
+        command.extend(args.rune_args)
+        run(*command)
+        return
     command = ["cargo", "+stable", "run", "--locked"]
     if not args.ui:
         engine.build_for_elaris(args.jobs)
