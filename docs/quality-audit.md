@@ -21,4 +21,22 @@ history visits and then 128 complete session snapshots, draining each batch befo
 next. The local debug-build result is a focused before-and-after measurement, not a cross-platform
 benchmark; filesystem speed and build mode will change the absolute times.
 
+For a real browsing run, set `ELARIS_STORAGE_PERF=1` before launching the integrated build. Each
+session replacement then reports the cumulative write-attempt count, current and peak queued
+worker commands, and worst observed enqueue-to-save latency. This opt-in output is intended for
+measurement and is silent by default.
+
+On macOS Apple Silicon, an integrated debug build loaded a local page in Ladybird that changed its
+document title 100 times at 75 ms intervals. Across two runs, Elaris recorded 102 session write
+attempts per run, the peak worker queue depth was 2 commands, and worst enqueue-to-save latency
+ranged from 11.17 to 12.73 ms. After quit, each isolated profile stored the final
+`Storage pressure 100` title. This exercises the actual engine and storage worker with a repeatable
+page workload; it does not stand in for measurements on ordinary sites or other platforms.
+
+The concurrent headless registry stress ran six window producers through 384 create/transfer/close
+updates and verified all 384 distinct tab URLs remained in the final restored snapshot. Across
+three runs, peak queue depth ranged from 174 to 329 commands, the worker performed three session
+writes, and worst save latency ranged from 17.20 to 23.93 ms. The final-tab merge integration test
+also passed with the transfer session committed before source-window closure.
+
 See [Design and visual verification](ui-design.md) for the review matrix and observed timings.

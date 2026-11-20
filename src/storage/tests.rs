@@ -479,6 +479,58 @@ fn closing_waits_for_the_latest_session_snapshot() {
 }
 
 #[test]
+fn immediate_shutdown_drains_snapshot_burst_and_restores_latest_state() {
+    const SNAPSHOT_COUNT: usize = 192;
+
+    let temp = TempDir::new();
+    let paths = Paths::resolve_with(
+        Platform::Linux,
+        Some(&temp.0),
+        None,
+        None,
+        None,
+        None,
+        false,
+    )
+    .expect("resolve isolated storage paths");
+    let storage = Storage::open(paths.clone()).expect("open isolated storage");
+    let expected = Session::new(
+        vec![SessionTab {
+            url: "https://last-before-quit.example/".into(),
+            title: "Last intended session".into(),
+            favicon: None,
+        }],
+        0,
+    );
+
+    for index in 0..SNAPSHOT_COUNT {
+        storage
+            .save_session(Session::new(
+                vec![SessionTab {
+                    url: format!("https://snapshot-{index}.example/"),
+                    title: format!("Snapshot {index}"),
+                    favicon: None,
+                }],
+                0,
+            ))
+            .expect("queue session before immediate quit");
+    }
+    storage
+        .save_session(expected.clone())
+        .expect("queue final intended session");
+    storage
+        .flush_on_close()
+        .expect("quit waits for the last session replacement");
+    assert_eq!(storage.queue_metrics().queued, 0);
+    drop(storage);
+
+    let restored = Storage::open(paths)
+        .expect("reopen storage after shutdown")
+        .take_sessions();
+    assert_eq!(restored, Some(vec![expected]));
+}
+
+#[test]
 fn acknowledged_session_commit_is_a_snapshot_coalescing_barrier() {
     let temp = TempDir::new();
     let paths = Paths::resolve_with(

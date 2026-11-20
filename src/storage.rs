@@ -13,6 +13,7 @@
 use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, Once, OnceLock, RwLock};
 use std::thread::JoinHandle;
@@ -47,6 +48,67 @@ struct HistorySnapshot {
 pub(crate) type Notify = Arc<dyn Fn() + Send + Sync>;
 
 #[derive(Default)]
+struct QueueMetrics {
+    queued: AtomicUsize,
+    peak_queued: AtomicUsize,
+    session_writes: AtomicU64,
+    worst_session_latency_ns: AtomicU64,
+    report: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+#[cfg(test)]
+pub(crate) struct QueueMetricsSnapshot {
+    pub(crate) queued: usize,
+    pub(crate) peak_queued: usize,
+    pub(crate) session_writes: u64,
+    pub(crate) worst_session_latency: std::time::Duration,
+}
+
+impl QueueMetrics {
+    fn enqueue(&self, sender: &Sender<Command>, command: Command) -> Result<(), ()> {
+        let queued = self.queued.fetch_add(1, Ordering::Relaxed) + 1;
+        self.peak_queued.fetch_max(queued, Ordering::Relaxed);
+        if sender.send(command).is_err() {
+            self.queued.fetch_sub(1, Ordering::Relaxed);
+            return Err(());
+        }
+        Ok(())
+    }
+
+    fn dequeued(&self) {
+        self.queued.fetch_sub(1, Ordering::Relaxed);
+    }
+
+    fn session_write_finished(&self, queued_at: std::time::Instant) {
+        let writes = self.session_writes.fetch_add(1, Ordering::Relaxed) + 1;
+        let latency = queued_at.elapsed().as_nanos().min(u64::MAX as u128) as u64;
+        self.worst_session_latency_ns
+            .fetch_max(latency, Ordering::Relaxed);
+        if self.report {
+            eprintln!(
+                "Elaris storage: session_write_attempts={writes} queued={} peak_queued={} worst_save_ms={:.2}",
+                self.queued.load(Ordering::Relaxed),
+                self.peak_queued.load(Ordering::Relaxed),
+                self.worst_session_latency_ns.load(Ordering::Relaxed) as f64 / 1_000_000.0,
+            );
+        }
+    }
+
+    #[cfg(test)]
+    fn snapshot(&self) -> QueueMetricsSnapshot {
+        QueueMetricsSnapshot {
+            queued: self.queued.load(Ordering::Relaxed),
+            peak_queued: self.peak_queued.load(Ordering::Relaxed),
+            session_writes: self.session_writes.load(Ordering::Relaxed),
+            worst_session_latency: std::time::Duration::from_nanos(
+                self.worst_session_latency_ns.load(Ordering::Relaxed),
+            ),
+        }
+    }
+}
+
+#[derive(Default)]
 struct SharedHistory {
     snapshot: RwLock<HistorySnapshot>,
     notify: OnceLock<Notify>,
@@ -69,6 +131,7 @@ pub(crate) enum HistoryMutation {
 
 pub(crate) struct HistoryHandle {
     commands: Sender<Command>,
+    metrics: Arc<QueueMetrics>,
     shared: Arc<SharedHistory>,
 }
 
@@ -228,8 +291,8 @@ impl HistoryHandle {
     }
 
     fn send(&self, command: Command) -> Result<(), String> {
-        self.commands
-            .send(command)
+        self.metrics
+            .enqueue(&self.commands, command)
             .map_err(|_| "history storage worker has stopped".to_owned())
     }
 }
@@ -238,6 +301,7 @@ pub(crate) struct Storage {
     session: Mutex<Option<Vec<Session>>>,
     config_load: Mutex<Option<Result<ConfigLoad, String>>>,
     commands: Sender<Command>,
+    metrics: Arc<QueueMetrics>,
     history: HistoryHandle,
     config_events: Arc<Mutex<Vec<ConfigEvent>>>,
 }
@@ -271,10 +335,15 @@ impl Storage {
             }
         };
         let (commands, receiver) = mpsc::channel();
+        let metrics = Arc::new(QueueMetrics {
+            report: std::env::var_os("ELARIS_STORAGE_PERF").is_some(),
+            ..QueueMetrics::default()
+        });
         let shared = Arc::new(SharedHistory::default());
         let worker_shared = Arc::clone(&shared);
         let config_events = Arc::new(Mutex::new(Vec::new()));
         let worker_config_events = Arc::clone(&config_events);
+        let worker_metrics = Arc::clone(&metrics);
         let history_file = paths.history_file.clone();
         let session_file = paths.session_file.clone();
         let config_file = paths.config_file.clone();
@@ -288,14 +357,20 @@ impl Storage {
                     session_file,
                     config_file,
                     worker_config_events,
+                    worker_metrics,
                 );
             })?;
-        register_worker(commands.clone(), worker);
+        register_worker(commands.clone(), Arc::clone(&metrics), worker);
         Ok(Self {
             session: Mutex::new(session),
             config_load: Mutex::new(config_load),
             commands: commands.clone(),
-            history: HistoryHandle { commands, shared },
+            metrics: Arc::clone(&metrics),
+            history: HistoryHandle {
+                commands,
+                metrics,
+                shared,
+            },
             config_events,
         })
     }
@@ -316,8 +391,8 @@ impl Storage {
     }
 
     pub(crate) fn save_setting(&self, change: SettingsChange) -> Result<(), String> {
-        self.commands
-            .send(Command::SaveSetting(change))
+        self.metrics
+            .enqueue(&self.commands, Command::SaveSetting(change))
             .map_err(|_| "configuration storage worker has stopped".to_owned())
     }
 
@@ -327,14 +402,14 @@ impl Storage {
         kind: PermissionKind,
         state: PermissionState,
     ) -> Result<(), String> {
-        self.commands
-            .send(Command::SavePermission(origin, kind, state))
+        self.metrics
+            .enqueue(&self.commands, Command::SavePermission(origin, kind, state))
             .map_err(|_| "configuration storage worker has stopped".to_owned())
     }
 
     pub(crate) fn reload_configuration(&self) -> Result<(), String> {
-        self.commands
-            .send(Command::ReloadConfig)
+        self.metrics
+            .enqueue(&self.commands, Command::ReloadConfig)
             .map_err(|_| "configuration storage worker has stopped".to_owned())
     }
 
@@ -352,16 +427,22 @@ impl Storage {
         sessions: Vec<Session>,
         restore_on_launch: bool,
     ) -> Result<(), String> {
-        self.commands
-            .send(Command::SaveSessions(sessions, restore_on_launch, None))
+        self.metrics
+            .enqueue(
+                &self.commands,
+                Command::SaveSessions(sessions, restore_on_launch, None, std::time::Instant::now()),
+            )
             .map_err(|_| "session storage worker has stopped".to_owned())
     }
 
     /// Waits for the atomic replacement before an emptied window can close.
     pub(crate) fn commit_merged_session(&self, sessions: Vec<Session>) -> Result<(), String> {
         let (finished, pending) = mpsc::channel();
-        self.commands
-            .send(Command::SaveSessions(sessions, true, Some(finished)))
+        self.metrics
+            .enqueue(
+                &self.commands,
+                Command::SaveSessions(sessions, true, Some(finished), std::time::Instant::now()),
+            )
             .map_err(|_| "session storage worker has stopped".to_owned())?;
         pending
             .recv()
@@ -376,8 +457,8 @@ impl Storage {
     /// Give pending saves a chance to finish before the native host exits.
     pub(crate) fn flush_on_close(&self) -> Result<(), String> {
         let (finished, pending) = mpsc::channel();
-        self.commands
-            .send(Command::Flush(finished))
+        self.metrics
+            .enqueue(&self.commands, Command::Flush(finished))
             .map_err(|_| "storage worker has stopped".to_owned())?;
         pending
             .recv_timeout(std::time::Duration::from_secs(2))
@@ -387,11 +468,16 @@ impl Storage {
     pub(crate) fn set_notify(&self, notify: Notify) {
         let _ = self.history.shared.notify.set(notify);
     }
+
+    #[cfg(test)]
+    pub(crate) fn queue_metrics(&self) -> QueueMetricsSnapshot {
+        self.metrics.snapshot()
+    }
 }
 
 impl Drop for Storage {
     fn drop(&mut self) {
-        let _ = self.commands.send(Command::Shutdown);
+        let _ = self.metrics.enqueue(&self.commands, Command::Shutdown);
     }
 }
 
@@ -401,7 +487,12 @@ enum Command {
     Search(String),
     HistoryPage(u64, u64, String, Option<Cursor>),
     HistoryMutation(u64, HistoryMutation),
-    SaveSessions(Vec<Session>, bool, Option<Sender<Result<(), String>>>),
+    SaveSessions(
+        Vec<Session>,
+        bool,
+        Option<Sender<Result<(), String>>>,
+        std::time::Instant,
+    ),
     SaveSetting(SettingsChange),
     SavePermission(String, PermissionKind, PermissionState),
     ReloadConfig,
@@ -411,14 +502,19 @@ enum Command {
 
 struct Worker {
     commands: Sender<Command>,
+    metrics: Arc<QueueMetrics>,
     thread: JoinHandle<()>,
 }
 
-fn register_worker(commands: Sender<Command>, thread: JoinHandle<()>) {
+fn register_worker(commands: Sender<Command>, metrics: Arc<QueueMetrics>, thread: JoinHandle<()>) {
     WORKERS
         .lock()
         .expect("storage worker registry lock poisoned")
-        .push(Worker { commands, thread });
+        .push(Worker {
+            commands,
+            metrics,
+            thread,
+        });
     REGISTER_EXIT.call_once(|| {
         // SAFETY: the callback is a process-lifetime function with no captured state.
         unsafe {
@@ -438,7 +534,7 @@ extern "C" fn finish_workers_at_exit() {
             .unwrap_or_else(std::sync::PoisonError::into_inner),
     );
     for worker in &workers {
-        let _ = worker.commands.send(Command::Shutdown);
+        let _ = worker.metrics.enqueue(&worker.commands, Command::Shutdown);
     }
     for worker in workers {
         let _ = worker.thread.join();
@@ -452,6 +548,7 @@ fn run_worker(
     session_file: PathBuf,
     config_file: PathBuf,
     config_events: Arc<Mutex<Vec<ConfigEvent>>>,
+    metrics: Arc<QueueMetrics>,
 ) {
     let mut history = match History::open(&history_file) {
         Ok(history) => Some(history),
@@ -467,7 +564,19 @@ fn run_worker(
         refresh_history(history, &shared);
     }
     let mut pending_command = None;
-    while let Some(command) = pending_command.take().or_else(|| receiver.recv().ok()) {
+    loop {
+        let command = if let Some(command) = pending_command.take() {
+            metrics.dequeued();
+            command
+        } else {
+            match receiver.recv() {
+                Ok(command) => {
+                    metrics.dequeued();
+                    command
+                }
+                Err(_) => break,
+            }
+        };
         match command {
             Command::RecordVisit(url, title) => {
                 if let Some(history) = &history {
@@ -548,21 +657,21 @@ fn run_worker(
                     );
                 }
             }
-            Command::SaveSessions(sessions, restore_on_launch, None) => {
+            Command::SaveSessions(sessions, restore_on_launch, None, queued_at) => {
                 // Ordinary snapshots supersede adjacent snapshots. Keep the latest complete
                 // multi-window state, but stop at every other storage command and at explicit
                 // acknowledgements so ordering and transfer commit semantics remain intact.
-                let mut latest = (sessions, restore_on_launch);
-                loop {
-                    match receiver.try_recv() {
-                        Ok(Command::SaveSessions(sessions, restore_on_launch, None)) => {
-                            latest = (sessions, restore_on_launch);
+                let mut latest = (sessions, restore_on_launch, queued_at);
+                while let Ok(command) = receiver.try_recv() {
+                    match command {
+                        Command::SaveSessions(sessions, restore_on_launch, None, queued_at) => {
+                            metrics.dequeued();
+                            latest = (sessions, restore_on_launch, queued_at);
                         }
-                        Ok(command) => {
+                        command => {
                             pending_command = Some(command);
                             break;
                         }
-                        Err(mpsc::TryRecvError::Empty | mpsc::TryRecvError::Disconnected) => break,
                     }
                 }
                 if let Err(error) = write_sessions_atomic(&session_file, &latest.0, latest.1)
@@ -570,10 +679,12 @@ fn run_worker(
                 {
                     eprintln!("Elaris: {error}");
                 }
+                metrics.session_write_finished(latest.2);
             }
-            Command::SaveSessions(sessions, restore_on_launch, Some(finished)) => {
+            Command::SaveSessions(sessions, restore_on_launch, Some(finished), queued_at) => {
                 let result = write_sessions_atomic(&session_file, &sessions, restore_on_launch)
                     .map_err(|error| format!("cannot save session: {error}"));
+                metrics.session_write_finished(queued_at);
                 let _ = finished.send(result);
             }
             Command::SaveSetting(change) => {

@@ -2,8 +2,13 @@
 
 use super::*;
 use crate::omnibox;
-use crate::storage::SessionTab;
+use crate::storage::{Paths, SessionTab, Storage};
 use rune::Mods;
+use std::collections::{BTreeMap, HashSet};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+
+static NEXT_STORAGE_STRESS: AtomicU64 = AtomicU64::new(1);
 
 #[test]
 fn restored_sessions_keep_internal_pages_in_their_tab_positions() {
@@ -34,6 +39,105 @@ fn restored_sessions_keep_internal_pages_in_their_tab_positions() {
     assert!(state.browser.active_tab().unwrap().is_internal());
     assert!(state.browser.tabs()[0].engine.deferred_load);
     assert!(state.browser.tabs()[2].engine.deferred_load);
+}
+
+#[test]
+fn concurrent_window_churn_keeps_the_final_session_snapshot_complete() {
+    const WINDOWS: usize = 6;
+    const UPDATES_PER_WINDOW: usize = 64;
+
+    let id = NEXT_STORAGE_STRESS.fetch_add(1, Ordering::Relaxed);
+    let root = std::env::temp_dir().join(format!(
+        "elaris-window-session-stress-{}-{id}",
+        std::process::id()
+    ));
+    let paths = Paths {
+        application_dir: root.clone(),
+        profile_dir: root.join("profile"),
+        history_file: root.join("history.sqlite"),
+        session_file: root.join("session.json"),
+        config_file: root.join("config.toml"),
+    };
+    let storage = Arc::new(Storage::open(paths.clone()).expect("open isolated storage"));
+    let registry = Arc::new(Mutex::new(BTreeMap::new()));
+
+    let workers: Vec<_> = (0..WINDOWS)
+        .map(|window| {
+            let storage = Arc::clone(&storage);
+            let registry = Arc::clone(&registry);
+            std::thread::spawn(move || {
+                let window_id = 20_000 + window as u64;
+                let destination_id = 20_000 + ((window + 1) % WINDOWS) as u64;
+                for update in 0..UPDATES_PER_WINDOW {
+                    let mut sessions = registry.lock().expect("session registry poisoned");
+                    let mut source = sessions
+                        .remove(&window_id)
+                        .unwrap_or_else(|| Session::new(Vec::new(), 0));
+                    source.tabs.push(SessionTab {
+                        url: format!("https://window-{window}-update-{update}.example/"),
+                        title: format!("Window {window} update {update}"),
+                        favicon: None,
+                    });
+                    let destination = sessions
+                        .entry(destination_id)
+                        .or_insert_with(|| Session::new(Vec::new(), 0));
+                    destination.tabs.push(source.tabs.remove(0));
+                    if update % 11 == 0 {
+                        destination.tabs.append(&mut source.tabs);
+                    } else {
+                        sessions.insert(window_id, source);
+                    }
+                    super::super::send_session_registry_snapshot(&sessions, &storage, true);
+                }
+            })
+        })
+        .collect();
+    for worker in workers {
+        worker.join().expect("window persistence worker completes");
+    }
+
+    let expected: Vec<_> = {
+        let current = registry.lock().expect("session registry poisoned");
+        super::super::send_session_registry_snapshot(&current, &storage, true);
+        current.values().cloned().collect()
+    };
+    storage
+        .commit_merged_session(expected.clone())
+        .expect("acknowledge final multi-window snapshot");
+    storage
+        .flush_on_close()
+        .expect("drain all window snapshots");
+
+    let restore_storage = Storage::open(paths.clone()).expect("reopen window snapshot");
+    let restored = restore_storage
+        .take_sessions()
+        .expect("restore window snapshot");
+    assert_eq!(restored, expected);
+    let urls: Vec<_> = restored
+        .iter()
+        .flat_map(|session| session.tabs.iter().map(|tab| tab.url.as_str()))
+        .collect();
+    assert_eq!(urls.len(), WINDOWS * UPDATES_PER_WINDOW);
+    assert_eq!(
+        urls.iter().copied().collect::<HashSet<_>>().len(),
+        urls.len()
+    );
+
+    let metrics = storage.queue_metrics();
+    assert_eq!(metrics.queued, 0);
+    assert!(metrics.peak_queued > 0);
+    assert!(metrics.session_writes > 0);
+    assert!(!metrics.worst_session_latency.is_zero());
+    println!(
+        "headless window churn: peak_queue={} session_writes={} worst_save_ms={:.2}",
+        metrics.peak_queued,
+        metrics.session_writes,
+        metrics.worst_session_latency.as_secs_f64() * 1000.0,
+    );
+
+    drop(storage);
+    drop(restore_storage);
+    std::fs::remove_dir_all(root).expect("remove isolated stress profile");
 }
 #[test]
 fn split_session_restores_placement_ratio_and_focused_tab() {

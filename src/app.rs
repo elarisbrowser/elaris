@@ -589,25 +589,42 @@ pub(crate) fn reopen_or_create_window() {
 }
 
 fn save_registered_sessions(storage: &Storage, restore_on_launch: bool) {
-    let sessions = SESSION_REGISTRY
+    let registry = SESSION_REGISTRY
         .get_or_init(|| Mutex::new(BTreeMap::new()))
         .lock()
-        .expect("session registry poisoned")
-        .values()
-        .cloned()
-        .collect();
+        .expect("session registry poisoned");
+    send_session_registry_snapshot(&registry, storage, restore_on_launch);
+}
+
+fn send_session_registry_snapshot(
+    registry: &BTreeMap<u64, Session>,
+    storage: &Storage,
+    restore_on_launch: bool,
+) {
+    let sessions = registry.values().cloned().collect();
     if let Err(error) = storage.save_sessions_for_launch(sessions, restore_on_launch) {
         eprintln!("Elaris: {error}");
     }
 }
 
 pub(crate) fn store_window_session(id: u64, session: Session, storage: &Storage) {
-    SESSION_REGISTRY
-        .get_or_init(|| Mutex::new(BTreeMap::new()))
-        .lock()
-        .expect("session registry poisoned")
-        .insert(id, session);
-    save_registered_sessions(storage, true);
+    store_window_session_in(
+        SESSION_REGISTRY.get_or_init(|| Mutex::new(BTreeMap::new())),
+        id,
+        session,
+        storage,
+    );
+}
+
+fn store_window_session_in(
+    registry: &Mutex<BTreeMap<u64, Session>>,
+    id: u64,
+    session: Session,
+    storage: &Storage,
+) {
+    let mut registry = registry.lock().expect("session registry poisoned");
+    registry.insert(id, session);
+    send_session_registry_snapshot(&registry, storage, true);
 }
 
 fn seed_window_session(id: u64, session: Session) {
@@ -619,13 +636,21 @@ fn seed_window_session(id: u64, session: Session) {
 }
 
 pub(crate) fn remove_window_session(id: u64, storage: &Storage) {
-    if let Some(sessions) = SESSION_REGISTRY.get() {
-        sessions
-            .lock()
-            .expect("session registry poisoned")
-            .remove(&id);
-    }
-    save_registered_sessions(storage, true);
+    remove_window_session_from(
+        SESSION_REGISTRY.get_or_init(|| Mutex::new(BTreeMap::new())),
+        id,
+        storage,
+    );
+}
+
+fn remove_window_session_from(
+    registry: &Mutex<BTreeMap<u64, Session>>,
+    id: u64,
+    storage: &Storage,
+) {
+    let mut registry = registry.lock().expect("session registry poisoned");
+    registry.remove(&id);
+    send_session_registry_snapshot(&registry, storage, true);
 }
 
 pub(crate) fn save_closed_final_session(storage: &Storage) {
