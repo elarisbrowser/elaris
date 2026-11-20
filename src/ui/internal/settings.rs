@@ -100,11 +100,14 @@ fn appearance_section(state: &AppState, theme: &Theme, kit: &Kit, compact: bool)
     })
     .build(kit);
 
+    // Rune Kit's standard switch uses the strong icon token for its checked track.
+    let mut switch_kit = kit.clone();
+    switch_kit.c.std_icon_strong = kit.c.bg_accent;
     let glass = rune_kit::Switch::new(state.settings.glass_enabled)
         .standard()
         .label("Liquid glass background")
         .on_toggle(|state: &mut AppState| state.set_glass_enabled(!state.settings.glass_enabled))
-        .build(kit);
+        .build(&switch_kit);
     let opacity = tint_opacity_control(state.settings.tint_opacity, theme);
     section(
         "Appearance",
