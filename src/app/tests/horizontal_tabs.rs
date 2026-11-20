@@ -470,6 +470,7 @@ fn split_markers_follow_the_displayed_pair() {
     let marker = |id: TabId| format!("split-tab-marker-{}", id.raw());
     assert!(window.presented(&marker(first)).is_some());
     assert!(window.presented(&marker(second)).is_some());
+    assert!(window.presented("focused-pane-border").is_none());
     assert!(window.presented(&marker(third)).is_none());
 
     window.update(|state, _| state.activate(third));

@@ -97,7 +97,8 @@ pub(crate) fn view(
             pane = pane.pixels(&tab.surface.pixels);
         }
         pane = pane.child(child);
-        if ratio.is_some()
+        if !horizontal
+            && ratio.is_some()
             && id.is_some()
             && id == state.browser.active_tab().map(crate::tab::Tab::id)
         {
