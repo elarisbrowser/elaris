@@ -16,6 +16,13 @@ motion when revealing overlays or toolbars. The two theme tests use the [WCAG 2.
 criteria](https://www.w3.org/TR/WCAG22/#contrast-minimum) as a baseline. They model linear
 source-over on stable backgrounds and include the surfaces Rune Kit derives.
 
+## Tab layout
+
+Settings → Appearance → Tab Layout switches the chrome for all windows. The preference is stored
+as `[appearance].tab_layout` in `config.toml` and defaults to `"vertical"`. Both layouts use the
+same open tabs and Split View state. The horizontal strip scrolls sideways with a trackpad or
+Shift-wheel and reveals the newly selected tab when switching with the keyboard.
+
 ## Repeatable graphical check
 
 Set `ELARIS_DATA_DIR` to a new absolute temporary directory before launching a bridge-enabled

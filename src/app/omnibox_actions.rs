@@ -65,13 +65,17 @@ impl super::AppState {
                 history.search(query, 100)
             }
         });
-        omnibox::suggestions(
+        let mut suggestions = omnibox::suggestions(
             query,
             self.browser.tabs(),
             &history,
             self.sidebar.collapsed,
             self.settings.search_engine,
-        )
+        );
+        if self.horizontal_tabs() {
+            suggestions.retain(|suggestion| suggestion.action != Action::ToggleSidebar);
+        }
+        suggestions
     }
 
     pub(crate) fn request_history_search(&self) {

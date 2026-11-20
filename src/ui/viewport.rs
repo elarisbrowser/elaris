@@ -34,23 +34,29 @@ pub(crate) fn view(
     } else {
         theme::VIEWPORT_INSET
     };
+    let horizontal = state.horizontal_tabs();
+    let inset = if horizontal {
+        0.0
+    } else {
+        theme::VIEWPORT_INSET
+    };
     let viewport = rune::row()
         .key("viewport-container")
-        .h_full()
         .grow(1.0)
         // Its size comes from the window, never from the frame inside: otherwise the last
         // frame holds it open and a narrower window never reaches the page.
         .min_w(0.0)
         .min_h(0.0)
         // With the sidebar hidden, the page sits below the header and in from the left edge too.
-        .pt(top_padding)
-        .pl(if state.sidebar.collapsed {
-            theme::VIEWPORT_INSET
-        } else {
-            0.0
-        })
-        .pr(theme::VIEWPORT_INSET)
-        .pb(theme::VIEWPORT_INSET);
+        .pt(if horizontal { 0.0 } else { top_padding })
+        .pl(if state.sidebar.collapsed { inset } else { 0.0 })
+        .pr(inset)
+        .pb(inset);
+    let viewport = if horizontal {
+        viewport.w_full().h(0.0)
+    } else {
+        viewport.h_full()
+    };
     let panes = state.browser.visible_tabs();
     let preview = state.split_preview;
     let ratio = state.browser.displayed_split().map(|split| split.ratio);
@@ -77,7 +83,11 @@ pub(crate) fn view(
             .h_full()
             .fill(theme.page)
             .continuous_corners()
-            .clip_rounded(theme::VIEWPORT_RADIUS);
+            .clip_rounded(if horizontal {
+                0.0
+            } else {
+                theme::VIEWPORT_RADIUS
+            });
         if let Some(tab) = id
             .and_then(|id| state.browser.tab(id))
             .filter(|tab| !tab.is_internal())
@@ -250,7 +260,11 @@ pub(crate) fn page_origin(state: &AppState) -> [f32; 2] {
         .map_or(0.0, |split| {
             split::widths(state.browser.content_width(), split.ratio)[0] + split::DIVIDER
         });
-    [left + offset, top]
+    if state.horizontal_tabs() {
+        [offset, theme::HORIZONTAL_CHROME_HEIGHT]
+    } else {
+        [left + offset, top]
+    }
 }
 
 /// The page's latest frame fills the viewport over its appearance-aware background. During a live

@@ -36,6 +36,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     let configuration_changed = update_configuration(state, &polled);
     let shared_settings_changed = state.sync_shared_settings();
     let shared_permissions_changed = state.sync_shared_permissions();
+    crate::ui::horizontal_tabs::reveal_active(state, tx);
     record_history_updates(state, &polled);
     refresh_find_after_navigation(state, &polled);
     state.persist_session_if_changed();
@@ -122,7 +123,11 @@ fn update_tab_drag(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
             crate::ui::TabDragMoveResult::NoChange => {}
         }
         if let Some(y) = state.tab_drag.scroll_target(clock) {
-            tx.scroll_to_instant("tabs-scroll", 0.0, y);
+            if state.horizontal_tabs() {
+                tx.scroll_to_instant(crate::ui::horizontal_tabs::SCROLL, y, 0.0);
+            } else {
+                tx.scroll_to_instant("tabs-scroll", 0.0, y);
+            }
             tx.wake_after(std::time::Duration::ZERO);
         }
     }

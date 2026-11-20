@@ -81,7 +81,7 @@ impl Hover {
 
 pub(in crate::ui) fn allowed(state: &AppState) -> bool {
     state.browser.window_focused()
-        && !state.sidebar.collapsed
+        && (state.horizontal_tabs() || !state.sidebar.collapsed)
         && !state.tab_drag.is_dragging()
         && state.split_preview.is_none()
         && !state.omnibox.open

@@ -14,6 +14,9 @@ impl super::AppState {
     }
 
     pub(crate) fn activate(&mut self, tab: TabId) {
+        if self.horizontal_tabs() {
+            self.omnibox.close();
+        }
         crate::ui::dismiss_tab_preview(self);
         self.cancel_tab_drag();
         self.browser.activate_tab(tab);

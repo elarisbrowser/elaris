@@ -25,7 +25,8 @@ connection and writes session files, so neither page work nor browser-data write
 | `src/permissions.rs` | Per-origin permission overrides, defaults and decisions used by the app and site controls. |
 | `src/internal.rs` | Explicit `elaris://` route parsing for Elaris-owned native pages. |
 | `src/engine/` | The engine thread and everything it owns (see below). |
-| `src/ui/sidebar/drag.rs` and `drag/` | Tab drag state transitions, drop-target geometry and behavior tests. |
+| `src/ui/sidebar/drag.rs` and `drag/` | Shared tab drag state transitions, axis-specific drop geometry and behavior tests. |
+| `src/ui/horizontal_tabs.rs` | Horizontal tab strip, overflow scrolling and navigation toolbar. |
 | `src/ui/sidebar/tabs.rs` and `tabs/` | Tab section rendering and sidebar tab context actions. |
 | `src/input.rs` | Translates Rune pointer, wheel and key input into Ladybird input. |
 | `src/address.rs` | Classifies omnibox input and builds navigation or search URLs. |

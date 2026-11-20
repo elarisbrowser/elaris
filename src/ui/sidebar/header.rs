@@ -84,26 +84,6 @@ fn titlebar_visibility_changed(tx: &mut rune::Tx) {
 }
 
 fn header_content(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>, in_flow: bool) -> El {
-    let tab = state.browser.active_tab();
-    let buttons: [(&str, &'static Icon, bool, Navigate); 3] = [
-        (
-            "Back",
-            &icons::BACK,
-            tab.is_some_and(|t| t.can_go_back),
-            Browser::go_back,
-        ),
-        (
-            "Forward",
-            &icons::FORWARD,
-            tab.is_some_and(|t| t.can_go_forward),
-            Browser::go_forward,
-        ),
-        if tab.is_some_and(|tab| tab.loading) {
-            ("Stop loading", &icons::CLOSE, true, Browser::stop_loading)
-        } else {
-            ("Reload", &icons::RELOAD, tab.is_some(), Browser::reload)
-        },
-    ];
     let collapsed = state.sidebar.collapsed;
     let toggle_label = if collapsed {
         "Show sidebar"
@@ -144,56 +124,86 @@ fn header_content(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>, in_fl
         (header.w(state.sidebar.width), spacer())
     };
     header = header.child(gap);
-    for (label, glyph, enabled, navigate) in buttons {
-        header = header.child(nav_button(label, glyph, enabled, navigate, theme));
-    }
+    header = header.children(navigation(state, theme));
     if collapsed || in_flow {
         header = header.child(spacer());
     }
     #[cfg(target_os = "linux")]
     if in_flow {
-        if state.titlebar.can_minimize() {
-            header = header.child(
-                icon_button(
-                    "minimize-window",
-                    "Minimize window",
-                    &icons::MINIMIZE,
-                    theme::ICON_BUTTON,
-                    theme,
-                )
-                .on_press(|state: &mut AppState| state.titlebar.minimize()),
-            );
-        }
-        header = header
-            .child(
-                icon_button(
-                    "maximize-window",
-                    "Maximize or restore window",
-                    &icons::MAXIMIZE,
-                    theme::ICON_BUTTON,
-                    theme,
-                )
-                .on_press_tx(|_: &mut AppState, tx| tx.toggle_maximized()),
-            )
-            .child(
-                icon_button(
-                    "close-window",
-                    "Close window",
-                    &icons::CLOSE,
-                    theme::ICON_BUTTON,
-                    theme,
-                )
-                .on_press_tx(|_: &mut AppState, tx| tx.close_window()),
-            );
+        header = header.children(linux_window_controls(state, theme));
     }
     header
+}
+
+pub(in crate::ui) fn navigation(state: &AppState, theme: &Theme) -> impl Iterator<Item = El> {
+    let tab = state.browser.active_tab();
+    let buttons: [(&str, &'static Icon, bool, Navigate); 3] = [
+        (
+            "Back",
+            &icons::BACK,
+            tab.is_some_and(|t| t.can_go_back),
+            Browser::go_back,
+        ),
+        (
+            "Forward",
+            &icons::FORWARD,
+            tab.is_some_and(|t| t.can_go_forward),
+            Browser::go_forward,
+        ),
+        if tab.is_some_and(|tab| tab.loading) {
+            ("Stop loading", &icons::CLOSE, true, Browser::stop_loading)
+        } else {
+            ("Reload", &icons::RELOAD, tab.is_some(), Browser::reload)
+        },
+    ];
+    buttons
+        .into_iter()
+        .map(|(label, glyph, enabled, navigate)| nav_button(label, glyph, enabled, navigate, theme))
+}
+
+#[cfg(target_os = "linux")]
+pub(in crate::ui) fn linux_window_controls(state: &AppState, theme: &Theme) -> Vec<El> {
+    let mut controls = Vec::new();
+    if state.titlebar.can_minimize() {
+        controls.push(
+            icon_button(
+                "minimize-window",
+                "Minimize window",
+                &icons::MINIMIZE,
+                theme::ICON_BUTTON,
+                theme,
+            )
+            .on_press(|state: &mut AppState| state.titlebar.minimize()),
+        );
+    }
+    controls.push(
+        icon_button(
+            "maximize-window",
+            "Maximize or restore window",
+            &icons::MAXIMIZE,
+            theme::ICON_BUTTON,
+            theme,
+        )
+        .on_press_tx(|_: &mut AppState, tx| tx.toggle_maximized()),
+    );
+    controls.push(
+        icon_button(
+            "close-window",
+            "Close window",
+            &icons::CLOSE,
+            theme::ICON_BUTTON,
+            theme,
+        )
+        .on_press_tx(|_: &mut AppState, tx| tx.close_window()),
+    );
+    controls
 }
 
 /// Plain circles under the native window controls, which stay transparent until the pointer
 /// reaches them (`titlebar_controls`). `inset` is where the zoom button ends; with no controls
 /// over the content, as in full screen, it is zero and nothing is drawn.
 #[cfg(not(target_os = "linux"))]
-fn window_controls(inset: f32, theme: &Theme) -> El {
+pub(in crate::ui) fn window_controls(inset: f32, theme: &Theme) -> El {
     let size = Chrome::TRAFFIC_LIGHT;
     let gap = Chrome::TRAFFIC_PITCH - size;
     let width = 3.0 * size + 2.0 * gap;

@@ -57,6 +57,17 @@ fn placement(window: [f32; 2], sidebar_right: f32, anchor: [f32; 4]) -> [f32; 4]
     [x, y, width, media]
 }
 
+fn horizontal_placement(window: [f32; 2], anchor: [f32; 4]) -> [f32; 4] {
+    let width = WIDTH.min((window[0] - 2.0 * EDGE).max(0.0));
+    let x =
+        (anchor[0] + (anchor[2] - width) / 2.0).clamp(EDGE, (window[0] - EDGE - width).max(EDGE));
+    let y = anchor[1] + anchor[3] + GAP;
+    let aspect = THUMBNAIL_ASPECT.0 as f32 / THUMBNAIL_ASPECT.1 as f32;
+    let media = ((width - 2.0 * PADDING).max(0.0) / aspect)
+        .min((window[1] - y - EDGE - 2.0 * PADDING - GAP - LABELS).max(0.0));
+    [x, y, width, media]
+}
+
 fn address(tab: &Tab) -> &str {
     if tab.is_internal() {
         return &tab.url;
@@ -105,15 +116,26 @@ pub(super) fn view(
         return None;
     }
     let tab = state.browser.tab(id)?;
-    let prefix = if tab.section() == TabSection::Favourite {
-        "favourite"
-    } else {
-        "tab"
-    };
-    let anchor = cx.window_layout(&format!("{prefix}-{}", id.raw()))?;
-    let sidebar = cx.window_layout("sidebar")?;
     let window = cx.layout_size("window")?;
-    let [x, y, width, media_height] = placement(window, sidebar[0] + sidebar[2], anchor);
+    let [x, y, width, media_height] = if state.horizontal_tabs() {
+        let anchor = cx.window_layout(&super::horizontal_tabs::key(id))?;
+        let clip = cx.window_layout(super::horizontal_tabs::SCROLL)?;
+        let left = anchor[0].max(clip[0]);
+        let right = (anchor[0] + anchor[2]).min(clip[0] + clip[2]);
+        if left >= right {
+            return None;
+        }
+        horizontal_placement(window, [left, anchor[1], right - left, anchor[3]])
+    } else {
+        let prefix = if tab.section() == TabSection::Favourite {
+            "favourite"
+        } else {
+            "tab"
+        };
+        let anchor = cx.window_layout(&format!("{prefix}-{}", id.raw()))?;
+        let sidebar = cx.window_layout("sidebar")?;
+        placement(window, sidebar[0] + sidebar[2], anchor)
+    };
     let label = |value: &str, secondary: bool| {
         text(value)
             .font(if secondary { type_::LABEL } else { type_::BODY })
@@ -239,6 +261,24 @@ mod tests {
 
     fn preview(runtime: &Runtime<AppState>) -> Option<([f32; 4], f32)> {
         runtime.presented("tab-preview")
+    }
+
+    #[test]
+    fn horizontal_preview_anchors_below_a_tab_and_honours_reduced_motion() {
+        let (mut runtime, [_, second, _]) = runtime(true);
+        runtime.update(|state, _| {
+            state.set_tab_layout(crate::settings::TabLayout::Horizontal);
+        });
+        runtime.frame(1.0);
+        hover(&mut runtime, second, "horizontal-tab", 0.0);
+        runtime.frame(0.41);
+        let (rect, opacity) = preview(&runtime).unwrap();
+        let (tab, _) = runtime
+            .presented(&super::super::horizontal_tabs::key(second))
+            .unwrap();
+        assert!(rect[1] >= tab[1] + tab[3]);
+        assert!(rect[0] >= EDGE && rect[0] + rect[2] <= 1000.0 - EDGE);
+        assert_eq!(opacity, 1.0);
     }
 
     #[test]

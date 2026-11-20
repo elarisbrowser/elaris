@@ -23,6 +23,31 @@ impl StartupMode {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum TabLayout {
+    #[default]
+    Vertical,
+    Horizontal,
+}
+
+impl TabLayout {
+    pub(crate) const ALL: [Self; 2] = [Self::Vertical, Self::Horizontal];
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Vertical => "Vertical",
+            Self::Horizontal => "Horizontal",
+        }
+    }
+
+    pub(crate) fn config_key(self) -> &'static str {
+        match self {
+            Self::Vertical => "vertical",
+            Self::Horizontal => "horizontal",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) enum DownloadDirectory {
     #[default]
@@ -46,6 +71,7 @@ impl DownloadDirectory {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Settings {
+    pub(crate) tab_layout: TabLayout,
     pub(crate) appearance: Appearance,
     pub(crate) accent_color: AccentColor,
     pub(crate) search_engine: SearchEngine,
@@ -58,6 +84,7 @@ pub(crate) struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            tab_layout: TabLayout::default(),
             appearance: Appearance::System,
             accent_color: AccentColor::Blue,
             search_engine: SearchEngine::DuckDuckGo,
@@ -108,6 +135,7 @@ impl Settings {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum SettingsChange {
+    TabLayout(TabLayout),
     Appearance(Appearance),
     AccentColor(AccentColor),
     SearchEngine(SearchEngine),

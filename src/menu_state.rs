@@ -34,6 +34,7 @@ pub(crate) struct MenuState {
     can_go_back: bool,
     can_go_forward: bool,
     has_split: bool,
+    has_sidebar: bool,
     pub(crate) sidebar_visible: bool,
     pub(crate) favourite: bool,
 }
@@ -49,7 +50,8 @@ impl MenuState {
             can_go_back: tab.is_some_and(|tab| tab.can_go_back),
             can_go_forward: tab.is_some_and(|tab| tab.can_go_forward),
             has_split: state.browser.displayed_split().is_some(),
-            sidebar_visible: !state.sidebar.collapsed,
+            has_sidebar: !state.horizontal_tabs(),
+            sidebar_visible: !state.horizontal_tabs() && !state.sidebar.collapsed,
             favourite: tab.is_some_and(|tab| tab.section() == TabSection::Favourite),
         }
     }
@@ -58,7 +60,6 @@ impl MenuState {
         match command {
             MenuCommand::NewTab
             | MenuCommand::NewWindow
-            | MenuCommand::ToggleSidebar
             | MenuCommand::History
             | MenuCommand::Settings
             | MenuCommand::Edit => true,
@@ -66,6 +67,7 @@ impl MenuState {
             | MenuCommand::Find
             | MenuCommand::Reload
             | MenuCommand::Favourite => self.has_tab,
+            MenuCommand::ToggleSidebar => self.has_sidebar,
             MenuCommand::ReopenClosedTab => self.can_reopen,
             MenuCommand::NextTab | MenuCommand::PreviousTab => self.has_tab,
             MenuCommand::Back => self.can_go_back,

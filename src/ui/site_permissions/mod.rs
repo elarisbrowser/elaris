@@ -5,7 +5,7 @@
 mod content;
 mod menus;
 
-use rune::{El, KeyEvent, el, icon};
+use rune::{Cx, El, KeyEvent, el, icon};
 
 use crate::app::AppState;
 use crate::site_controls::SiteControlPresentation;
@@ -13,7 +13,13 @@ use crate::ui::icons;
 use crate::ui::site_control_style as design;
 use crate::ui::theme::{self, Theme};
 
-pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>, reduced_motion: bool) {
+pub(crate) fn view(
+    state: &AppState,
+    cx: &Cx<AppState>,
+    theme: &Theme,
+    layer: &mut Vec<El>,
+    reduced_motion: bool,
+) {
     if !state.site_permissions_open {
         return;
     }
@@ -24,7 +30,16 @@ pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>, reduced
         22.0,
         22.0,
     ]);
-    let x = (anchor[0] + anchor[2] / 2.0 - design::WIDTH / 2.0).max(10.0);
+    let center = anchor[0] + anchor[2] / 2.0;
+    let x = (center - design::WIDTH / 2.0).max(10.0);
+    let x = if state.horizontal_tabs() {
+        x.min(
+            cx.layout_size("window")
+                .map_or(x, |size| (size[0] - design::WIDTH - 10.0).max(10.0)),
+        )
+    } else {
+        x
+    };
     let arrow_y = anchor[1] + anchor[3] - 1.0;
     let y = arrow_y + 8.0;
 
@@ -43,7 +58,14 @@ pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>, reduced
         icon(&icons::SITE_POPOVER_ARROW, design::WIDTH)
             .key("site-controls-arrow")
             .size(20.0, 10.0)
-            .absolute(x + design::WIDTH / 2.0 - 10.0, arrow_y)
+            .absolute(
+                if state.horizontal_tabs() {
+                    center - 10.0
+                } else {
+                    x + design::WIDTH / 2.0 - 10.0
+                },
+                arrow_y,
+            )
             .color(theme.overlay_panel),
     );
     layer.push(content::popover(state, theme, &presentation, reduced_motion).absolute(x, y));

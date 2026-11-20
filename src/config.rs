@@ -12,9 +12,9 @@ use toml_edit::{DocumentMut, Item, Table, Value};
 use crate::address::SearchEngine;
 use crate::appearance::{AccentColor, Appearance};
 use crate::permissions::{PermissionKind, PermissionState, PermissionStore};
-use crate::settings::{DownloadDirectory, Settings, SettingsChange, StartupMode};
+use crate::settings::{DownloadDirectory, Settings, SettingsChange, StartupMode, TabLayout};
 
-const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\naccent = \"blue\"\nglass = true\ntint_opacity = 100\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n";
+const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\naccent = \"blue\"\nglass = true\ntint_opacity = 100\ntab_layout = \"vertical\"\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n";
 static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -50,6 +50,16 @@ pub(crate) fn parse(contents: &str) -> Result<ConfigLoad, String> {
     let mut settings = defaults.clone();
     let mut issues = Vec::new();
 
+    if let Some(value) = string_value(&document, "appearance", "tab_layout", &mut issues) {
+        if let Some(layout) = TabLayout::ALL
+            .into_iter()
+            .find(|layout| layout.config_key() == value)
+        {
+            settings.tab_layout = layout;
+        } else {
+            issues.push(format!("Invalid value for [appearance].tab_layout: {value:?}; expected vertical or horizontal"));
+        }
+    }
     if let Some(value) = string_value(&document, "appearance", "theme", &mut issues) {
         settings.appearance = match value.as_str() {
             "system" => Appearance::System,
@@ -289,6 +299,9 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
         Err(error) => return Err(format!("cannot read configuration: {error}")),
     };
     let (section, key, value) = match change {
+        SettingsChange::TabLayout(value) => {
+            ("appearance", "tab_layout", value.config_key().to_owned())
+        }
         SettingsChange::Appearance(value) => (
             "appearance",
             "theme",
@@ -392,6 +405,31 @@ fn write_atomic(path: &Path, contents: &[u8]) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tab_layout_defaults_to_vertical_and_round_trips() {
+        let directory = std::env::temp_dir().join(format!(
+            "elaris-config-tab-layout-{}-{}",
+            std::process::id(),
+            NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed)
+        ));
+        let path = directory.join("config.toml");
+        assert_eq!(parse("").unwrap().settings.tab_layout, TabLayout::Vertical);
+        for layout in [TabLayout::Horizontal, TabLayout::Vertical] {
+            write_change(&path, &SettingsChange::TabLayout(layout)).unwrap();
+            assert_eq!(
+                parse(&fs::read_to_string(&path).unwrap())
+                    .unwrap()
+                    .settings
+                    .tab_layout,
+                layout
+            );
+        }
+        let invalid = parse("[appearance]\ntab_layout = 'diagonal'").unwrap();
+        assert_eq!(invalid.settings.tab_layout, TabLayout::Vertical);
+        assert_eq!(invalid.issues.len(), 1);
+        fs::remove_dir_all(directory).unwrap();
+    }
 
     #[test]
     fn parses_defaults_and_known_settings() {

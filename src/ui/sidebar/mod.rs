@@ -12,7 +12,7 @@ pub(crate) mod drag;
 pub(crate) mod header;
 pub(crate) mod hover;
 pub(crate) mod resize;
-mod tabs;
+pub(super) mod tabs;
 
 use rune::tok::type_;
 use rune::{El, Tx, col, icon, text};
@@ -36,6 +36,8 @@ pub(crate) struct SidebarState {
     pub(crate) settling: bool,
     /// Hidden, leaving the page the window's width.
     pub(crate) collapsed: bool,
+    pub(in crate::ui) revealed_tab: Option<(crate::tab::TabId, crate::tab::TabSection, usize)>,
+    pub(in crate::ui) horizontal_tab_width: Option<f32>,
     pub(in crate::ui) hover: hover::Hover,
 }
 
@@ -45,6 +47,8 @@ impl Default for SidebarState {
             width: theme::SIDEBAR_WIDTH,
             settling: false,
             collapsed: false,
+            revealed_tab: None,
+            horizontal_tab_width: None,
             hover: hover::Hover::default(),
         }
     }
@@ -52,6 +56,9 @@ impl Default for SidebarState {
 
 /// Shows or hides the sidebar, springing the page to its new width.
 pub(crate) fn toggle(state: &mut AppState, tx: &mut Tx) {
+    if state.horizontal_tabs() {
+        return;
+    }
     state.site_permissions_open = false;
     #[cfg(target_os = "macos")]
     crate::site_popover_macos::close();
@@ -133,7 +140,6 @@ fn search_launcher(state: &AppState, theme: &Theme) -> El {
     let label = address
         .map(crate::address::compact_address)
         .unwrap_or("Search or type a URL");
-    let has_tab = state.browser.active_tab().is_some();
     let launcher = row_button(
         "omnibox-launcher",
         address.is_none().then(|| {
@@ -160,46 +166,48 @@ fn search_launcher(state: &AppState, theme: &Theme) -> El {
     .shortcut_hint("cmd+l")
     .focusable(true)
     .on_press_tx(app::open_from_launcher);
-    if has_tab {
-        #[cfg(target_os = "macos")]
-        let palette = super::site_control_style::Palette::from_theme(theme);
-        launcher.child(
-            super::controls::icon_button(
-                "site-controls",
-                "Site permissions and page information",
-                &icons::SITE_CONTROLS,
-                theme::CLOSE_BUTTON,
-                theme,
-            )
-            .on_layout_tx(|state: &mut AppState, rect, tx| {
-                state.site_controls_anchor = Some(rect);
-                #[cfg(target_os = "macos")]
-                crate::site_popover_macos::update_anchor(rect);
-                tx.live_only();
-            })
-            .on_press_tx(move |state: &mut AppState, _| {
-                #[cfg(target_os = "macos")]
-                let open = state.site_controls_anchor.is_some_and(|anchor| {
-                    crate::site_popover_macos::show(
-                        state.site_control_presentation(),
-                        anchor,
-                        palette,
-                    )
-                });
-                #[cfg(target_os = "linux")]
-                let open = !state.site_permissions_open;
-                state.site_permissions_open = open;
-                state.permission_menu = None;
-                state.site_overflow_open = false;
-            }),
-        )
+    if state.browser.active_tab().is_some() {
+        launcher.child(site_controls(theme))
     } else {
         launcher
     }
 }
 
+pub(super) fn site_controls(theme: &Theme) -> El {
+    #[cfg(target_os = "macos")]
+    let palette = super::site_control_style::Palette::from_theme(theme);
+    super::controls::icon_button(
+        "site-controls",
+        "Site permissions and page information",
+        &icons::SITE_CONTROLS,
+        theme::CLOSE_BUTTON,
+        theme,
+    )
+    .on_layout_tx(|state: &mut AppState, rect, tx| {
+        state.site_controls_anchor = Some(rect);
+        #[cfg(target_os = "macos")]
+        crate::site_popover_macos::update_anchor(rect);
+        tx.live_only();
+    })
+    .on_press_tx(move |state: &mut AppState, tx| {
+        if state.horizontal_tabs() && state.omnibox.open {
+            state.omnibox.close();
+            tx.focus(super::viewport::focus_key(&state.browser), false);
+        }
+        #[cfg(target_os = "macos")]
+        let open = state.site_controls_anchor.is_some_and(|anchor| {
+            crate::site_popover_macos::show(state.site_control_presentation(), anchor, palette)
+        });
+        #[cfg(target_os = "linux")]
+        let open = !state.site_permissions_open;
+        state.site_permissions_open = open;
+        state.permission_menu = None;
+        state.site_overflow_open = false;
+    })
+}
+
 /// A quiet button at the foot of the sidebar that steps through System, Light and Dark.
-fn appearance(current: Appearance, theme: &Theme) -> El {
+pub(super) fn appearance(current: Appearance, theme: &Theme) -> El {
     let glyph = match current {
         Appearance::System => &icons::SYSTEM,
         Appearance::Light => &icons::LIGHT,

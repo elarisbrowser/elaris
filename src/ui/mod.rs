@@ -6,6 +6,7 @@
 mod controls;
 mod downloads;
 mod find;
+pub(crate) mod horizontal_tabs;
 mod icons;
 pub(crate) mod internal;
 mod omnibox;
@@ -31,9 +32,7 @@ pub(crate) use sidebar::{
 pub(crate) use theme::{TAB_REORDER_MOTION, TRAFFIC_LIGHTS, WINDOW_MIN_SIZE};
 
 use rune::SystemMaterial;
-#[cfg(target_os = "linux")]
-use rune::col;
-use rune::{Cx, El, row};
+use rune::{Cx, El, col, row};
 
 use crate::app::AppState;
 
@@ -62,56 +61,68 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     state.browser.note_dark(dark);
     let mut overlays = Vec::new();
 
-    #[cfg(target_os = "linux")]
-    let mut window = {
-        let mut content = row()
-            .key("window-content")
-            .w_full()
-            .grow(1.0)
-            .min_h(0.0)
-            .child(sidebar::view(state, &theme, &mut overlays, reduced_motion))
-            .child(viewport::view(state, &theme, &mut overlays, reduced_motion));
-        if !state.sidebar.collapsed {
-            content = content.child(sidebar::resize::handle(state.sidebar.width));
-        }
-        let mut window = col().key("window").w_full().h_full().fill(theme.window);
-        if state.settings.glass_enabled {
-            window = window.system_material(SystemMaterial::Glass).child(
-                rune::el()
-                    .key("window-tint")
-                    .absolute(0.0, 0.0)
-                    .w_full()
-                    .h_full()
-                    .fill(theme.window),
-            );
-        }
-        window
-            .child(sidebar::header::view(state, &theme, cx))
-            .child(content)
-    };
-    #[cfg(not(target_os = "linux"))]
-    let mut window = {
-        // The header and resize handle sit over the sidebar and page on macOS.
-        let mut window = row().key("window").w_full().h_full().fill(theme.window);
-        if state.settings.glass_enabled {
-            window = window.system_material(SystemMaterial::Glass).child(
-                rune::el()
-                    .key("window-tint")
-                    .absolute(0.0, 0.0)
-                    .w_full()
-                    .h_full()
-                    .fill(theme.window),
-            );
-        }
+    let horizontal = state.horizontal_tabs();
+    let mut window = if horizontal || cfg!(target_os = "linux") {
+        col()
+    } else {
+        row()
+    }
+    .key("window")
+    .w_full()
+    .h_full()
+    .fill(theme.window);
+    if state.settings.glass_enabled {
+        window = window.system_material(SystemMaterial::Glass).child(
+            rune::el()
+                .key("window-tint")
+                .absolute(0.0, 0.0)
+                .w_full()
+                .h_full()
+                .fill(theme.window),
+        );
+    }
+    if horizontal {
         window = window
-            .child(sidebar::view(state, &theme, &mut overlays, reduced_motion))
-            .child(viewport::view(state, &theme, &mut overlays, reduced_motion))
-            .child(sidebar::header::view(state, &theme, cx));
-        if !state.sidebar.collapsed {
-            window = window.child(sidebar::resize::handle(state.sidebar.width));
+            .child(horizontal_tabs::view(
+                state,
+                cx,
+                &theme,
+                &mut overlays,
+                reduced_motion,
+            ))
+            .child(viewport::view(state, &theme, &mut overlays, reduced_motion));
+    } else {
+        #[cfg(target_os = "linux")]
+        {
+            window = window.child(sidebar::header::view(state, &theme, cx));
         }
-        window
-    };
+        let sidebar = sidebar::view(state, &theme, &mut overlays, reduced_motion);
+        let page = viewport::view(state, &theme, &mut overlays, reduced_motion);
+        #[cfg(target_os = "linux")]
+        {
+            let mut content = row()
+                .key("window-content")
+                .w_full()
+                .grow(1.0)
+                .min_h(0.0)
+                .child(sidebar)
+                .child(page);
+            if !state.sidebar.collapsed {
+                content = content.child(sidebar::resize::handle(state.sidebar.width));
+            }
+            window = window.child(content);
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            window = window
+                .child(sidebar)
+                .child(page)
+                .child(sidebar::header::view(state, &theme, cx));
+            if !state.sidebar.collapsed {
+                window = window.child(sidebar::resize::handle(state.sidebar.width));
+            }
+        }
+    }
     if state.browser.peek.is_some() {
         window = window.child(peek::backdrop());
     }
@@ -121,14 +132,16 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         {
             overlays.push(find);
         }
-        if let Some(overlay) = omnibox::view(
-            state,
-            &theme,
-            cx.layout_size("window")
-                .map_or(WINDOW_MIN_SIZE.1, |size| size[1]),
-            reduced_motion,
-            &mut overlays,
-        ) {
+        if !horizontal
+            && let Some(overlay) = omnibox::view(
+                state,
+                &theme,
+                cx.layout_size("window")
+                    .map_or(WINDOW_MIN_SIZE.1, |size| size[1]),
+                reduced_motion,
+                &mut overlays,
+            )
+        {
             window = window.child(overlay);
         }
     }
@@ -136,9 +149,11 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     viewport::menu::view(state, &theme, &mut overlays);
     sidebar::context_menu(state, &theme, &mut overlays);
     #[cfg(target_os = "linux")]
-    site_permissions::view(state, &theme, &mut overlays, reduced_motion);
+    site_permissions::view(state, cx, &theme, &mut overlays, reduced_motion);
     #[cfg(target_os = "linux")]
-    overlays.push(sidebar::header::hover_zone());
+    if !horizontal {
+        overlays.push(sidebar::header::hover_zone());
+    }
     let height = cx
         .layout_size("window")
         .map_or(WINDOW_MIN_SIZE.1, |size| size[1]);

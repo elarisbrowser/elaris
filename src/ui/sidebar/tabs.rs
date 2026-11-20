@@ -91,6 +91,17 @@ pub(super) fn view(
     }
     sidebar_tabs = sidebar_tabs.child(scroll);
 
+    drag_overlay(state, theme, overlays, reduced_motion);
+    sidebar_tabs
+}
+
+pub(in crate::ui) fn drag_overlay(
+    state: &AppState,
+    theme: &Theme,
+    overlays: &mut Vec<El>,
+    reduced_motion: bool,
+) {
+    let active = state.browser.active_tab().map(Tab::id);
     let show_inline = {
         #[cfg(target_os = "macos")]
         let show = !crate::drag_overlay_macos::shown();
@@ -113,7 +124,7 @@ pub(super) fn view(
         && let Some(tab) = state.browser.tab(visual.tab)
     {
         let peer = state.browser.split.and_then(|split| {
-            if split.panes.contains(&Some(visual.tab)) {
+            if !state.horizontal_tabs() && split.panes.contains(&Some(visual.tab)) {
                 split
                     .panes
                     .into_iter()
@@ -153,7 +164,6 @@ pub(super) fn view(
             ));
         }
     }
-    sidebar_tabs
 }
 
 fn favourites(
@@ -497,7 +507,7 @@ fn tab_row(
     super::hover::attach(row, id)
 }
 
-fn tab_icon(tab: &Tab, active: bool, size: f32, theme: &Theme) -> El {
+pub(in crate::ui) fn tab_icon(tab: &Tab, active: bool, size: f32, theme: &Theme) -> El {
     let color = if active { theme.text } else { theme.text_muted };
     if let Some(favicon) = &tab.favicon {
         el().size(size, size).center().pixels(favicon)
@@ -601,7 +611,7 @@ fn dragging_single_page(state: &AppState, id: TabId) -> bool {
     state.browser.displayed_split().is_none() && state.browser.visible_tabs()[0] == Some(id)
 }
 
-fn tab_drag_handler(row: El, id: TabId, members: Vec<TabId>) -> El {
+pub(in crate::ui) fn tab_drag_handler(row: El, id: TabId, members: Vec<TabId>) -> El {
     row.on_drag(move |state: &mut AppState, drag, tx| match drag.phase {
         rune::Phase::Down => {
             super::hover::dismiss(state);

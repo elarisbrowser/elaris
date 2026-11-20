@@ -7,12 +7,40 @@ use crate::appearance::{AccentColor, Appearance};
 use crate::config::ConfigLoad;
 use crate::internal::InternalPage;
 use crate::permissions::{PermissionDecision, PermissionKind, PermissionState, PermissionStore};
-use crate::settings::{DownloadDirectory, SettingsChange, StartupMode};
+use crate::settings::{DownloadDirectory, SettingsChange, StartupMode, TabLayout};
 #[cfg(target_os = "macos")]
 use crate::site_controls::SiteControlPresentation;
 use crate::tab::TabId;
 
 impl super::AppState {
+    pub(crate) fn horizontal_tabs(&self) -> bool {
+        self.settings.tab_layout == TabLayout::Horizontal
+    }
+
+    pub(crate) fn set_tab_layout(&mut self, layout: TabLayout) {
+        if self.settings.tab_layout != layout {
+            self.prepare_tab_layout(layout);
+            self.settings.tab_layout = layout;
+            self.save_setting(SettingsChange::TabLayout(layout));
+        }
+    }
+
+    pub(super) fn prepare_tab_layout(&mut self, layout: TabLayout) {
+        if self.settings.tab_layout != layout {
+            self.cancel_tab_drag();
+            self.tab_drag = Default::default();
+            self.dismiss_context_menu();
+            self.page_menu = Default::default();
+            crate::ui::dismiss_tab_preview(self);
+            self.site_controls_anchor = None;
+            #[cfg(target_os = "macos")]
+            if self.site_permissions_open {
+                crate::site_popover_macos::close();
+            }
+            self.site_permissions_open = false;
+        }
+    }
+
     pub(crate) fn set_appearance(&mut self, appearance: Appearance) {
         if self.settings.appearance == appearance {
             return;
@@ -136,6 +164,7 @@ impl super::AppState {
 
     pub(super) fn apply_config_load(&mut self, load: ConfigLoad) {
         let previous_download_directory = self.engine_download_directory();
+        self.prepare_tab_layout(load.settings.tab_layout);
         self.settings = load.settings;
         super::publish_settings(&self.settings);
         self.permission_store = load.permissions;

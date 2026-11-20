@@ -122,7 +122,8 @@ pub(crate) fn dispatch(state: &mut AppState, shortcut: Shortcut, tx: &mut Tx) {
             }
         }
         Shortcut::Reload => state.with_active_tab(Browser::reload),
-        Shortcut::ToggleSidebar => ui::toggle_sidebar(state, tx),
+        Shortcut::ToggleSidebar if !state.horizontal_tabs() => ui::toggle_sidebar(state, tx),
+        Shortcut::ToggleSidebar => {}
         Shortcut::OpenSettings => app::open_settings(state, tx),
         Shortcut::OpenHistory => app::open_history(state, tx),
         Shortcut::PreviousTab

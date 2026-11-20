@@ -11,7 +11,7 @@ use rune_kit::{Button, ButtonVariant, Kit, SegmentedControl, Select, SelectAppea
 use crate::address::SearchEngine;
 use crate::app::AppState;
 use crate::appearance::{AccentColor, Appearance};
-use crate::settings::{DownloadDirectory, StartupMode};
+use crate::settings::{DownloadDirectory, StartupMode, TabLayout};
 use crate::ui::theme::{self, Theme};
 
 const CONTENT_WIDTH: f32 = 720.0;
@@ -85,6 +85,21 @@ fn appearance_section(state: &AppState, theme: &Theme, kit: &Kit, compact: bool)
     })
     .build(kit);
 
+    let tab_layout = SegmentedControl::new(
+        &TabLayout::ALL.map(TabLayout::label),
+        TabLayout::ALL
+            .iter()
+            .position(|layout| *layout == state.settings.tab_layout),
+    )
+    .width(Some(CONTROL_WIDTH))
+    .label("Tab Layout")
+    .on_pick(|state: &mut AppState, index, tx| {
+        state.set_tab_layout(TabLayout::ALL[index]);
+        tx.animated();
+        tx.motion(theme::SIDEBAR_TOGGLE);
+    })
+    .build(kit);
+
     let glass = rune_kit::Switch::new(state.settings.glass_enabled)
         .standard()
         .label("Liquid glass background")
@@ -102,6 +117,13 @@ fn appearance_section(state: &AppState, theme: &Theme, kit: &Kit, compact: bool)
                     "Choose how Elaris and webpages look.",
                     theme,
                     control,
+                    compact,
+                ))
+                .child(setting_row(
+                    "Tab Layout",
+                    "Choose where open tabs appear.",
+                    theme,
+                    tab_layout,
                     compact,
                 ))
                 .child(setting_row(

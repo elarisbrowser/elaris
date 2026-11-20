@@ -50,7 +50,11 @@ pub(crate) fn trigger(state: &AppState, theme: &Theme, layer: &mut Vec<El>) -> E
     Popover::new("downloads-popover")
         .trigger(button)
         .title("Downloads")
-        .placement(Placement::TopStart)
+        .placement(if state.horizontal_tabs() {
+            Placement::BottomEnd
+        } else {
+            Placement::TopStart
+        })
         .gutter(6.0)
         .padding(8.0)
         .open(open)

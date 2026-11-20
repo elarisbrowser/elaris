@@ -38,6 +38,7 @@ pub(crate) enum PreviewItem {
 }
 
 pub(crate) struct TabDragState {
+    horizontal: bool,
     gesture: Option<Gesture>,
     incoming: Option<(TabId, TabDropTarget)>,
     outside: bool,
@@ -57,6 +58,7 @@ pub(crate) struct TabDragState {
 impl Default for TabDragState {
     fn default() -> Self {
         Self {
+            horizontal: false,
             gesture: None,
             incoming: None,
             outside: false,
@@ -140,6 +142,11 @@ impl TabDragState {
         self.viewport = Some(rect);
     }
 
+    pub(crate) fn set_horizontal_viewport(&mut self, rect: [f32; 4]) {
+        self.horizontal = true;
+        self.set_viewport(rect);
+    }
+
     pub(crate) fn set_section_rect(
         &mut self,
         section: TabSection,
@@ -155,7 +162,8 @@ impl TabDragState {
             {
                 self.empty_favourite_area = None;
             }
-            if let Some(settling) = self.settling.as_mut()
+            if !self.horizontal
+                && let Some(settling) = self.settling.as_mut()
                 && settling.target_section == section
                 && settling.target_pending
             {
@@ -480,6 +488,10 @@ impl TabDragState {
         }
     }
 
+    pub(crate) fn has_preview(&self) -> bool {
+        self.is_dragging() || self.incoming.is_some()
+    }
+
     pub(crate) fn is_dragging(&self) -> bool {
         matches!(self.gesture, Some(Gesture::Dragging(_)))
     }
@@ -500,15 +512,19 @@ impl TabDragState {
 
     pub(crate) fn incoming_target(&self, tabs: &[Tab], point: [f32; 2]) -> Option<TabDropTarget> {
         let in_list = self.viewport.is_some_and(|rect| contains(rect, point));
-        let section = match self.section_at(point) {
-            Some(TabSection::Favourite) => TabSection::Favourite,
-            _ if in_list
-                && self.section_rects[section_index(TabSection::Regular)]
-                    .is_some_and(|rect| point[1] >= rect[1]) =>
-            {
-                TabSection::Regular
+        let section = if self.horizontal {
+            self.section_at(point)?
+        } else {
+            match self.section_at(point) {
+                Some(TabSection::Favourite) => TabSection::Favourite,
+                _ if in_list
+                    && self.section_rects[section_index(TabSection::Regular)]
+                        .is_some_and(|rect| point[1] >= rect[1]) =>
+                {
+                    TabSection::Regular
+                }
+                _ => return None,
             }
-            _ => return None,
         };
         let index = self.insertion_index(
             tabs,
@@ -699,12 +715,22 @@ impl TabDragState {
             self.last_scroll_tick = None;
             return None;
         }
-        let [_, top, _, height] = self.viewport?;
-        let pointer_y = dragging.pressed.pointer[1];
+        self.edge_scroll_target(now, dragging.pressed.pointer)
+    }
+
+    pub(crate) fn edge_scroll_target(&mut self, now: f64, pointer: [f32; 2]) -> Option<f32> {
+        let viewport = self.viewport?;
+        let axis = usize::from(!self.horizontal);
+        let start = viewport[axis];
+        let end = start + viewport[axis + 2];
+        if self.horizontal && !(viewport[1]..=viewport[1] + viewport[3]).contains(&pointer[1]) {
+            self.last_scroll_tick = None;
+            return None;
+        }
+        let position = pointer[axis];
         let edge = theme::TAB_DRAG_SCROLL_EDGE;
-        let top_pressure = ((top + edge - pointer_y) / edge).clamp(0.0, 1.0);
-        let bottom = top + height;
-        let bottom_pressure = ((pointer_y - (bottom - edge)) / edge).clamp(0.0, 1.0);
+        let top_pressure = ((start + edge - position) / edge).clamp(0.0, 1.0);
+        let bottom_pressure = ((position - (end - edge)) / edge).clamp(0.0, 1.0);
         let pressure = if top_pressure > 0.0 {
             -top_pressure * top_pressure
         } else {
@@ -723,8 +749,9 @@ impl TabDragState {
             .last_scroll_tick
             .replace(now)
             .map_or(1.0 / 60.0, |last| (now - last).clamp(0.0, 0.05));
-        let y = (offset + pressure * theme::TAB_DRAG_SCROLL_MAX * elapsed as f32).clamp(0.0, max);
-        ((y - offset).abs() > 0.01).then_some(y)
+        let next =
+            (offset + pressure * theme::TAB_DRAG_SCROLL_MAX * elapsed as f32).clamp(0.0, max);
+        ((next - offset).abs() > 0.01).then_some(next)
     }
 
     /// Keeps the shared transition above the sidebar until Rune's drop spring has landed.
@@ -796,6 +823,14 @@ impl TabDragState {
         } else if let Some(tab) = items.clone().next_back()
             && let Some(rect) = self.tab_rects.get(&tab.id())
         {
+            if self.horizontal {
+                return [
+                    rect[0] + rect[2] + theme::TAB_GAP,
+                    rect[1],
+                    rect[2],
+                    rect[3],
+                ];
+            }
             return [
                 rect[0],
                 rect[1] + rect[3] + theme::TAB_GAP,
@@ -804,6 +839,14 @@ impl TabDragState {
             ];
         }
         let section = self.section_rects[section_index(target.section)].unwrap_or([0.0; 4]);
+        if self.horizontal {
+            let width = if target.section == TabSection::Regular {
+                theme::HORIZONTAL_TAB_MIN
+            } else {
+                theme::HORIZONTAL_COMPACT_TAB
+            };
+            return [section[0], section[1], width, theme::HORIZONTAL_TAB_HEIGHT];
+        }
         [
             section[0],
             section[1] + section[3] - theme::ROW_HEIGHT,
@@ -833,15 +876,27 @@ impl TabDragState {
     }
 
     fn section_at(&self, point: [f32; 2]) -> Option<TabSection> {
+        if self.horizontal && !self.viewport.is_some_and(|rect| contains(rect, point)) {
+            return None;
+        }
         if self
             .empty_favourite_area
             .is_some_and(|area| contains(area, point) && point[1] < area[1] + area[3])
         {
             return Some(TabSection::Favourite);
         }
-        TabSection::ORDER.into_iter().find(|section| {
-            self.section_rects[section_index(*section)].is_some_and(|rect| contains(rect, point))
-        })
+        TabSection::ORDER
+            .into_iter()
+            .find(|section| {
+                self.section_rects[section_index(*section)]
+                    .is_some_and(|rect| contains(rect, point))
+            })
+            .or_else(|| {
+                (self.horizontal
+                    && self.section_rects[section_index(TabSection::Regular)]
+                        .is_some_and(|rect| point[0] >= rect[0]))
+                .then_some(TabSection::Regular)
+            })
     }
 
     fn insertion_index(
@@ -869,7 +924,19 @@ impl TabDragState {
                 previous.is_some_and(|target| target.section == section && index >= target.index);
             let moving_up =
                 previous.is_some_and(|target| target.section == section && index < target.index);
-            if rect_before_pointer(*rect, pointer, moving_down, moving_up) {
+            let before = if self.horizontal {
+                let hysteresis = if moving_down {
+                    TARGET_HYSTERESIS
+                } else if moving_up {
+                    -TARGET_HYSTERESIS
+                } else {
+                    0.0
+                };
+                pointer[0] > rect[0] + rect[2] / 2.0 + hysteresis
+            } else {
+                rect_before_pointer(*rect, pointer, moving_down, moving_up)
+            };
+            if before {
                 index += 1;
             } else {
                 break;

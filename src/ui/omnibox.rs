@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Rune's native, window-centred presentation for the omnibox.
+//! The shared omnibox editor and results, hosted by the active tab layout.
 
 use rune::tok::type_;
-use rune::{El, ScrollSpec, Transition, Tx, col, el, icon, row, text, text_input};
+use rune::{Cx, El, ScrollSpec, Transition, Tx, col, el, icon, row, text, text_input};
 use rune_kit::{Menu, MenuItem};
 
 use crate::address::SearchEngine;
@@ -23,11 +23,6 @@ pub(crate) fn view(
     }
 
     let suggestions = state.suggestions();
-    let mut field = text_input(&state.omnibox.input, theme::OMNIBOX_INPUT_TEXT);
-    if !suggestions.is_empty() {
-        field = field.active_descendant(format!("omnibox-result-{}", state.omnibox.selected));
-    }
-    let selector = search_engine_selector(state, theme, overlays);
     let input = row()
         .key("omnibox-input-row")
         .w_full()
@@ -35,70 +30,12 @@ pub(crate) fn view(
         .px(theme::FIELD_PADDING + 4.0)
         .gap(theme::ROW_GAP + 4.0)
         .center_y()
-        .child(selector)
-        .child(
-            field
-                .key("omnibox-input")
-                .single_line()
-                .grow(1.0)
-                .min_w(0.0)
-                .color(theme.text)
-                .caret(theme.text, theme.selection)
-                .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
-                .placeholder("Search or type a URL", theme.text_muted)
-                .label("Search or type a URL")
-                .autofocus()
-                .on_edit(|state: &mut AppState| &mut state.omnibox.input)
-                .on_input_change(move |state: &mut AppState, tx| {
-                    if reduced_motion {
-                        tx.instant();
-                    } else {
-                        tx.animated();
-                    }
-                    state.omnibox.selected = 0;
-                    state.omnibox.selection_moved = false;
-                    state.request_history_search();
-                })
-                .on_input_key(app::omnibox_input_key)
-                .on_submit(app::submit_omnibox),
-        );
+        .child(search_engine_selector(state, theme, overlays))
+        .child(editor(state, &suggestions, theme, reduced_motion));
 
     let available = (height - 2.0 * theme::FIELD_PADDING).min(theme::OMNIBOX_MAX_HEIGHT);
     let results_limit = available - theme::OMNIBOX_INPUT_HEIGHT - theme::OMNIBOX_FOOTER_HEIGHT;
-    let mut results = col()
-        .key("omnibox-results")
-        .instant_changes()
-        .w_full()
-        .max_h(results_limit.max(0.0))
-        .px(theme::ROW_PADDING)
-        .gap(theme::TAB_GAP)
-        .scroll(ScrollSpec {
-            stick_bottom: false,
-        })
-        .role("listbox")
-        .label("Suggestions");
-    let mut previous = None;
-    for (index, suggestion) in suggestions.iter().enumerate() {
-        if previous != Some(suggestion.section) && suggestions.len() > 1 {
-            let label = match suggestion.section {
-                Section::OpenTabs => Some("Open tabs"),
-                Section::Recent => Some("Recent"),
-                Section::QuickActions => Some("Actions"),
-                Section::Navigate => None,
-            };
-            if let Some(label) = label {
-                results = results.child(
-                    row()
-                        .h(theme::OMNIBOX_LABEL_HEIGHT)
-                        .pl(theme::ROW_PADDING)
-                        .center_y()
-                        .child(text(label).font(type_::LABEL).color(theme.text_muted)),
-                );
-            }
-        }
-        previous = Some(suggestion.section);
-        results = results.child(result_row(state, suggestion, index, theme));
-    }
+    let results = results(state, &suggestions, theme, results_limit);
     let hints = match suggestions.len() {
         0 => state.address_error.as_deref().unwrap_or("Esc  Close"),
         1 if !state.omnibox.input.text.trim().is_empty() || state.omnibox.selection_moved => {
@@ -160,20 +97,242 @@ pub(crate) fn view(
     )
 }
 
+fn editor(state: &AppState, suggestions: &[Suggestion], theme: &Theme, reduced: bool) -> El {
+    let style = if state.horizontal_tabs() {
+        type_::BODY
+    } else {
+        theme::OMNIBOX_INPUT_TEXT
+    };
+    let mut field = text_input(&state.omnibox.input, style);
+    if !suggestions.is_empty() {
+        field = field.active_descendant(format!("omnibox-result-{}", state.omnibox.selected));
+    }
+    if !state.horizontal_tabs() {
+        field = field.focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus);
+    }
+    field
+        .key("omnibox-input")
+        .single_line()
+        .grow(1.0)
+        .min_w(0.0)
+        .color(theme.text)
+        .caret(theme.text, theme.selection)
+        .placeholder("Search or type a URL", theme.text_muted)
+        .label("Search or type a URL")
+        .autofocus()
+        .on_edit(|state: &mut AppState| &mut state.omnibox.input)
+        .on_input_change(move |state: &mut AppState, tx| {
+            if reduced {
+                tx.instant();
+            } else {
+                tx.animated();
+            }
+            state.omnibox.selected = 0;
+            state.omnibox.selection_moved = false;
+            state.request_history_search();
+        })
+        .on_input_key(app::omnibox_input_key)
+        .on_submit(app::submit_omnibox)
+}
+
+fn results(state: &AppState, suggestions: &[Suggestion], theme: &Theme, results_limit: f32) -> El {
+    let mut results = col()
+        .key("omnibox-results")
+        .instant_changes()
+        .w_full()
+        .max_h(results_limit.max(0.0))
+        .px(if state.horizontal_tabs() {
+            0.0
+        } else {
+            theme::ROW_PADDING
+        })
+        .gap(theme::TAB_GAP)
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        })
+        .role("listbox")
+        .label("Suggestions");
+    let mut previous = None;
+    for (index, suggestion) in suggestions.iter().enumerate() {
+        if previous != Some(suggestion.section) && suggestions.len() > 1 {
+            let label = match suggestion.section {
+                Section::OpenTabs => Some("Open tabs"),
+                Section::Recent => Some("Recent"),
+                Section::QuickActions => Some("Actions"),
+                Section::Navigate => None,
+            };
+            if let Some(label) = label {
+                results = results.child(
+                    row()
+                        .h(theme::OMNIBOX_LABEL_HEIGHT)
+                        .pl(theme::ROW_PADDING)
+                        .center_y()
+                        .child(text(label).font(type_::LABEL).color(theme.text_muted)),
+                );
+            }
+        }
+        previous = Some(suggestion.section);
+        results = results.child(result_row(state, suggestion, index, theme));
+    }
+    results
+}
+
+pub(super) fn address_bar(
+    state: &AppState,
+    cx: &Cx<AppState>,
+    theme: &Theme,
+    reduced: bool,
+    overlays: &mut Vec<El>,
+) -> El {
+    let address = state
+        .browser
+        .active_tab()
+        .map(|tab| tab.url.as_str())
+        .filter(|url| !url.is_empty() && *url != "about:blank");
+    let editing =
+        state.omnibox.open && state.browser.peek.is_none() && state.tab_switcher.is_none();
+    let mut bar = row()
+        .key("horizontal-address-bar")
+        .w(0.0)
+        .min_w(0.0)
+        .grow(1.0)
+        .h(theme::HORIZONTAL_FIELD_HEIGHT)
+        .px(theme::ROW_PADDING)
+        .gap(theme::ROW_GAP)
+        .center_y()
+        .radius(theme::FIELD_RADIUS)
+        .continuous_corners()
+        .fill(theme.address_field)
+        .focus_within_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
+        .token_motion(if reduced {
+            rune::Spring::NONE
+        } else {
+            theme::OMNIBOX_MOTION
+        });
+    if state.browser.active_tab().is_some() {
+        bar = bar.child(super::sidebar::site_controls(theme).press_scale(1.0));
+    }
+    if editing {
+        let suggestions = state.suggestions();
+        let mut engine_menu = Vec::new();
+        bar = bar
+            .child(search_engine_selector(state, theme, &mut engine_menu))
+            .child(editor(state, &suggestions, theme, reduced));
+        if let Some([x, y, width, height]) = cx.window_layout("horizontal-address-bar") {
+            let top = y + height + theme::NAV_GAP;
+            overlays.push(
+                el().key("address-results-dismiss")
+                    .absolute(0.0, theme::HORIZONTAL_CHROME_HEIGHT)
+                    .w_full()
+                    .h_full()
+                    .a11y_hidden()
+                    .on_press_tx(|state: &mut AppState, tx| {
+                        state.omnibox.close();
+                        tx.focus(super::viewport::focus_key(&state.browser), false);
+                    }),
+            );
+            if !suggestions.is_empty() || state.address_error.is_some() {
+                let available = cx
+                    .layout_size("window")
+                    .map_or(theme::OMNIBOX_MAX_HEIGHT, |size| size[1] - top)
+                    .min(theme::OMNIBOX_MAX_HEIGHT);
+                let panel = col()
+                    .key("address-suggestions")
+                    .absolute(x, top)
+                    .w(width)
+                    .padding(theme::ROW_PADDING)
+                    .radius(theme::FIELD_RADIUS)
+                    .continuous_corners()
+                    .fill(theme.overlay_panel)
+                    .border(theme::OMNIBOX_BORDER_WIDTH, theme.overlay_border)
+                    .shadow(
+                        theme::OMNIBOX_SHADOW_Y,
+                        theme::OMNIBOX_SHADOW_BLUR,
+                        theme.overlay_shadow,
+                    )
+                    .preserve_focus_on_press(true)
+                    .transition(if reduced {
+                        Transition::none()
+                    } else {
+                        Transition::offset(0.0, -theme::TAB_GAP).combined(Transition::opacity())
+                    })
+                    .child(results(
+                        state,
+                        &suggestions,
+                        theme,
+                        available - 2.0 * theme::ROW_PADDING,
+                    ));
+                overlays.push(if let Some(error) = &state.address_error {
+                    panel.child(
+                        text(error)
+                            .font(type_::LABEL)
+                            .color(theme.text_muted)
+                            .px(theme::ROW_PADDING),
+                    )
+                } else {
+                    panel
+                });
+            }
+        }
+        // The picker must receive presses before the suggestions and their dismissal surface.
+        overlays.extend(engine_menu);
+    } else {
+        let label = address
+            .map(crate::address::compact_address)
+            .unwrap_or("Search or type a URL");
+        bar = bar.child(
+            row()
+                .key("omnibox-launcher")
+                .w(0.0)
+                .min_w(0.0)
+                .grow(1.0)
+                .h_full()
+                .center_y()
+                .role("button")
+                .label("Search or type a URL")
+                .help(state.status().or(address).unwrap_or("Search or type a URL"))
+                .focusable(true)
+                .shortcut_hint("cmd+l")
+                .on_press_tx(app::open_from_launcher)
+                .child(
+                    text(label)
+                        .font(type_::BODY)
+                        .color(if address.is_some() {
+                            theme.text
+                        } else {
+                            theme.text_muted
+                        })
+                        .single_line()
+                        .truncate(),
+                ),
+        );
+    }
+    bar
+}
+
 fn search_engine_selector(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
     let engine = state.settings.search_engine;
     let label = format!("Search engine: {}", engine.label());
+    let height = if state.horizontal_tabs() {
+        theme::CLOSE_BUTTON
+    } else {
+        theme::OMNIBOX_SEARCH_BUTTON_HEIGHT
+    };
     let trigger = row()
         .key("search-engine-button")
-        .h(theme::OMNIBOX_SEARCH_BUTTON_HEIGHT)
+        .h(height)
         .px(theme::OMNIBOX_SEARCH_BUTTON_PADDING)
         .gap(theme::OMNIBOX_SEARCH_BUTTON_GAP)
         .center_y()
-        .radius(theme::OMNIBOX_SEARCH_BUTTON_HEIGHT / 2.0)
+        .radius(height / 2.0)
         .fill(theme.address_field)
         .hover(theme.hover)
         .press(theme.press)
-        .press_scale(theme::PRESS_SCALE)
+        .press_scale(if state.horizontal_tabs() {
+            1.0
+        } else {
+            theme::PRESS_SCALE
+        })
         .label(label.clone())
         .help(format!("{label}. Click to change."))
         .role("button")
@@ -215,7 +374,11 @@ fn result_row(state: &AppState, suggestion: &Suggestion, index: usize, theme: &T
     let mut row = row()
         .key(key)
         .w_full()
-        .h(theme::OMNIBOX_ROW_HEIGHT)
+        .h(if state.horizontal_tabs() {
+            theme::ROW_HEIGHT
+        } else {
+            theme::OMNIBOX_ROW_HEIGHT
+        })
         .px(theme::ROW_PADDING)
         .gap(theme::ROW_GAP)
         .center_y()

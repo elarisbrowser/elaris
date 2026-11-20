@@ -145,9 +145,16 @@ pub(super) fn poll(state: &mut AppState, tx: &mut Tx) -> bool {
     }
     if let Some(drag) = DRAG.get() {
         if drag.destination == state.window_id {
+            if drag.phase == Phase::Hovering
+                && state.horizontal_tabs()
+                && let Some(x) = state.tab_drag.edge_scroll_target(tx.clock(), drag.point)
+            {
+                tx.scroll_to_instant(crate::ui::horizontal_tabs::SCROLL, x, 0.0);
+                tx.wake_after(Duration::ZERO);
+            }
             let target = match drag.phase {
                 Phase::Ready(target) | Phase::Submitted(target) => Some(target),
-                _ if !state.sidebar.collapsed => state
+                _ if state.horizontal_tabs() || !state.sidebar.collapsed => state
                     .tab_drag
                     .incoming_target(state.browser.tabs(), drag.point),
                 _ => None,
@@ -400,6 +407,56 @@ mod tests {
             None
         );
     }
+    #[test]
+    fn horizontal_destination_uses_its_own_drop_geometry() {
+        use crate::settings::TabLayout;
+        use crate::tab::{Tab, TabSection};
+
+        let source = AppState::new(Some("source.example"));
+        let mut destination = AppState::new(Some("destination.example"));
+        destination.set_tab_layout(TabLayout::Horizontal);
+        let existing = destination.browser.active_tab().map(Tab::id).unwrap();
+        let incoming = source.browser.active_tab().map(Tab::id).unwrap();
+        let mut runtime = rune::Runtime::new(
+            destination,
+            crate::ui::view,
+            (900.0, 640.0),
+            rune::Env::default(),
+        );
+        runtime.frame(0.0);
+        runtime.frame(0.0);
+        let [x, y, w, h] = runtime.state.tab_drag.tab_rect(existing).unwrap();
+        let point = [x + 0.75 * w, y + 0.5 * h];
+        let destination = &mut runtime.state;
+        DRAG.set(Some(IncomingDrag {
+            source: source.window_id,
+            destination: destination.window_id,
+            tab: incoming,
+            point,
+            visual: DragVisual {
+                tab: incoming,
+                section: TabSection::Regular,
+                to: point,
+                to_size: [w, h],
+                settling: false,
+            },
+            phase: Phase::Released,
+            deadline: Some(Instant::now() + Duration::from_secs(2)),
+        }));
+        assert!(poll(destination, &mut Tx::default()));
+        let ready = DRAG.get().map(|drag| drag.phase);
+        clear(source.window_id);
+        assert!(matches!(
+            ready,
+            Some(Phase::Ready(TabDropTarget {
+                section: TabSection::Regular,
+                index: 1,
+            }))
+        ));
+        assert!(source.browser.tab(incoming).is_some());
+        assert!(destination.browser.tab(existing).is_some());
+    }
+
     #[test]
     fn expired_release_clears_preview_without_removing_the_source_tab() {
         let source = AppState::new(Some("one.example"));

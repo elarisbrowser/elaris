@@ -8,6 +8,7 @@ pub(super) fn active_url(state: &AppState) -> &str {
 
 mod find;
 mod history;
+mod horizontal_tabs;
 mod omnibox;
 mod session;
 mod settings;

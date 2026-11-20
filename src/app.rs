@@ -420,6 +420,7 @@ impl AppState {
                 false
             } else {
                 let previous = self.engine_download_directory();
+                self.prepare_tab_layout(settings.tab_layout);
                 self.settings = settings;
                 let current = self.engine_download_directory();
                 if previous != current {
