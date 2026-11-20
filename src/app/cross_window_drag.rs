@@ -9,6 +9,9 @@ use super::{AppState, WINDOW_REGISTRY};
 use crate::tab::TabId;
 use crate::ui::{DragVisual, TabDropTarget};
 
+#[cfg(target_os = "macos")]
+const RELEASE_EVENT_GRACE: Duration = Duration::from_millis(16);
+
 thread_local! {
     static APPEARANCE: RefCell<Option<DragAppearance>> = const { RefCell::new(None) };
     static DRAG: Cell<Option<IncomingDrag>> = const { Cell::new(None) };
@@ -211,13 +214,14 @@ fn expire(state: &mut AppState, tx: &mut Tx) -> bool {
         // SAFETY: Rune polls the source window on AppKit's main thread.
         if unsafe { NSEvent::pressedMouseButtons() } & 1 == 0 {
             if drag.deadline.is_none() {
-                drag.deadline = Some(Instant::now() + Duration::from_millis(150));
+                drag.deadline = Some(Instant::now() + RELEASE_EVENT_GRACE);
                 DRAG.set(Some(drag));
             }
         } else {
             drag.deadline = None;
             DRAG.set(Some(drag));
-            tx.wake_after(Duration::from_millis(40));
+            // Let Rune pace pointer sampling to the active display.
+            tx.wake_after(Duration::ZERO);
         }
     }
     let Some(deadline) = drag.deadline else {
