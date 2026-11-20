@@ -40,6 +40,8 @@ pub(crate) enum PreviewItem {
 pub(crate) struct TabDragState {
     gesture: Option<Gesture>,
     incoming: Option<(TabId, TabDropTarget)>,
+    outside: bool,
+    incoming_visual: Option<DragVisual>,
     settling: Option<Settling>,
     tab_rects: HashMap<TabId, [f32; 4]>,
     section_rects: [Option<[f32; 4]>; 3],
@@ -57,6 +59,8 @@ impl Default for TabDragState {
         Self {
             gesture: None,
             incoming: None,
+            outside: false,
+            incoming_visual: None,
             settling: None,
             tab_rects: HashMap::new(),
             section_rects: [None; 3],
@@ -108,7 +112,7 @@ struct Settling {
     deadline: Option<f64>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub(crate) struct DragVisual {
     pub(crate) tab: TabId,
     pub(crate) section: TabSection,
@@ -266,6 +270,7 @@ impl TabDragState {
         size: [f32; 2],
     ) {
         self.gesture = None;
+        self.outside = false;
         self.last_scroll_tick = None;
         let Some(tab_index) = tabs.iter().position(|candidate| candidate.id() == tab) else {
             return;
@@ -483,6 +488,12 @@ impl TabDragState {
                 .is_some_and(|settling| settling.tab == tab)
     }
 
+    pub(crate) fn set_outside(&mut self, outside: bool) -> bool {
+        let changed = self.outside != outside;
+        self.outside = outside;
+        changed
+    }
+
     pub(crate) fn incoming_target(&self, tabs: &[Tab], point: [f32; 2]) -> Option<TabDropTarget> {
         let section = self.section_at(point)?;
         if section != TabSection::Favourite
@@ -509,6 +520,12 @@ impl TabDragState {
         changed
     }
 
+    pub(crate) fn set_incoming_visual(&mut self, visual: Option<DragVisual>) -> bool {
+        let changed = self.incoming_visual != visual;
+        self.incoming_visual = visual;
+        changed
+    }
+
     /// The displayed order for a sidebar section, with distinct source and destination slots.
     pub(crate) fn preview_items(&self, tabs: &[Tab], section: TabSection) -> Vec<PreviewItem> {
         let mut items: Vec<_> = tabs
@@ -517,6 +534,11 @@ impl TabDragState {
             .map(|tab| PreviewItem::Tab(tab.id()))
             .collect();
         let Some(Gesture::Dragging(dragging)) = &self.gesture else {
+            if self.outside
+                && let Some(settling) = &self.settling
+            {
+                items.retain(|item| *item != PreviewItem::Tab(settling.tab));
+            }
             if let Some((id, target)) = self
                 .incoming
                 .filter(|(_, target)| target.section == section)
@@ -532,6 +554,9 @@ impl TabDragState {
             items.retain(|item| {
                 !matches!(item, PreviewItem::Tab(id) if dragging.pressed.members.contains(id))
             });
+        }
+        if self.outside {
+            return items;
         }
         let target = dragging.target.filter(|_| dragging.valid);
         if dragging.pressed.source.section == section {
@@ -590,6 +615,27 @@ impl TabDragState {
         }
     }
 
+    pub(crate) fn settle_incoming(&mut self, visual: DragVisual, target: TabDropTarget) {
+        let from = [
+            visual.to[0],
+            visual.to[1],
+            visual.to_size[0],
+            visual.to_size[1],
+        ];
+        let to = self
+            .placeholder
+            .filter(|(section, _)| *section == target.section)
+            .map_or(from, |(_, rect)| rect);
+        self.transition(
+            visual.tab,
+            visual.section,
+            target.section,
+            target.index,
+            from,
+            to,
+        );
+    }
+
     /// Starts the same shared-element settle used by a pointer drop, for a menu action.
     pub(crate) fn transition(
         &mut self,
@@ -625,6 +671,10 @@ impl TabDragState {
             self.last_scroll_tick = None;
             return None;
         };
+        if self.outside {
+            self.last_scroll_tick = None;
+            return None;
+        }
         let [_, top, _, height] = self.viewport?;
         let pointer_y = dragging.pressed.pointer[1];
         let edge = theme::TAB_DRAG_SCROLL_EDGE;
@@ -655,6 +705,9 @@ impl TabDragState {
 
     /// Keeps the shared transition above the sidebar until Rune's drop spring has landed.
     pub(crate) fn settle_tick(&mut self, now: f64) -> bool {
+        if self.outside {
+            return false;
+        }
         let Some(settling) = &mut self.settling else {
             return false;
         };
@@ -682,6 +735,9 @@ impl TabDragState {
     }
 
     pub(crate) fn settle_wake(&self) -> Option<Duration> {
+        if self.outside {
+            return None;
+        }
         self.settling.as_ref().and_then(|settling| {
             (settling.target_pending || settling.deadline.is_some())
                 .then_some(Duration::from_millis(16))

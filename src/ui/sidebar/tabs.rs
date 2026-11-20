@@ -107,7 +107,30 @@ pub(super) fn view(
     }
     sidebar_tabs = sidebar_tabs.child(scroll);
 
-    if let Some(visual) = state.tab_drag.visual()
+    let incoming =
+        crate::app::cross_window_drag::incoming_visual(state.window_id, |appearance, visual| {
+            let size = if visual.section == TabSection::Favourite {
+                theme::FAVOURITE_ICON
+            } else {
+                theme::ICON
+            };
+            let icon = appearance.favicon.as_ref().map_or_else(
+                || icon(&icons::PAGE, size).color(theme.text),
+                |favicon| el().size(size, size).center().pixels(favicon),
+            );
+            single_drag_visual(
+                &appearance.label,
+                icon,
+                false,
+                visual,
+                theme,
+                reduced_motion,
+            )
+        });
+    if let Some(incoming) = incoming {
+        overlays.push(incoming);
+    } else if !crate::app::cross_window_drag::shows_elsewhere(state.window_id)
+        && let Some(visual) = state.tab_drag.visual()
         && let Some(tab) = state.browser.tab(visual.tab)
     {
         let peer = state.browser.split.and_then(|split| {
@@ -632,6 +655,7 @@ fn tab_drag_handler(row: El, id: TabId, members: Vec<TabId>) -> El {
             let external = active
                 && members.len() == 1
                 && crate::app::cross_window_drag::track(state, id, drag, false);
+            let outside_changed = state.tab_drag.set_outside(external);
             if !active {
                 crate::app::cross_window_drag::clear(state.window_id);
             }
@@ -645,21 +669,29 @@ fn tab_drag_handler(row: El, id: TabId, members: Vec<TabId>) -> El {
             if state.tab_drag.is_dragging() || result == TabDragMoveResult::Cancelled {
                 tx.animated();
             }
-            if matches!(
-                result,
-                TabDragMoveResult::PreviewChanged | TabDragMoveResult::Cancelled
-            ) {
+            if outside_changed
+                || matches!(
+                    result,
+                    TabDragMoveResult::PreviewChanged | TabDragMoveResult::Cancelled
+                )
+            {
                 tx.motion(theme::TAB_REORDER_MOTION);
             }
         }
         rune::Phase::Up => {
             let active = !drag.cancelled() && state.tab_drag.is_dragging();
+            if active && members.len() == 1 {
+                state
+                    .tab_drag
+                    .move_to(state.browser.tabs(), drag.window_point());
+            }
             let external = active
                 && members.len() == 1
                 && crate::app::cross_window_drag::track(state, id, drag, true);
             if !external {
                 crate::app::cross_window_drag::clear(state.window_id);
             }
+            state.tab_drag.set_outside(external);
             let side = (active && !external)
                 .then(|| crate::ui::viewport::drop_side(state, id, drag.window_point()))
                 .flatten();
@@ -702,18 +734,11 @@ fn tab_drag_visual(
     reduced_motion: bool,
 ) -> El {
     let favourite = visual.section == TabSection::Favourite;
-    let title_visible = !favourite;
-    let motion = if reduced_motion {
-        Spring::NONE
-    } else {
-        theme::TAB_REORDER_MOTION
-    };
     let icon_size = if favourite {
         theme::FAVOURITE_ICON
     } else {
         theme::ICON
     };
-    let title_width = if favourite { 0.0 } else { 1.0 };
     if let Some(peer) = peer.filter(|_| !favourite && active_tab.is_some()) {
         let mut group = row()
             .key("tab-drag-visual")
@@ -769,6 +794,32 @@ fn tab_drag_visual(
             .child(group.absolute(visual.to[0], visual.to[1]));
     }
     let active = active_tab == Some(tab.id());
+    single_drag_visual(
+        tab.label(),
+        tab_icon(tab, active, icon_size, theme),
+        active,
+        visual,
+        theme,
+        reduced_motion,
+    )
+}
+
+fn single_drag_visual(
+    label: &str,
+    icon: El,
+    active: bool,
+    visual: super::drag::DragVisual,
+    theme: &Theme,
+    reduced_motion: bool,
+) -> El {
+    let favourite = visual.section == TabSection::Favourite;
+    let title_visible = !favourite;
+    let title_width = if favourite { 0.0 } else { 1.0 };
+    let motion = if reduced_motion {
+        Spring::NONE
+    } else {
+        theme::TAB_REORDER_MOTION
+    };
     let mut row = row()
         .key("tab-drag-visual")
         .size(visual.to_size[0], visual.to_size[1])
@@ -787,13 +838,9 @@ fn tab_drag_visual(
         })
         .continuous_corners()
         .clip_soft(0.0)
+        .child(icon.key("drag-tab-icon").motion(motion))
         .child(
-            tab_icon(tab, active, icon_size, theme)
-                .key("drag-tab-icon")
-                .motion(motion),
-        )
-        .child(
-            text(tab.label())
+            text(label)
                 .key("drag-tab-title")
                 .font(type_::BODY)
                 .color(if active { theme.text } else { theme.text_muted })

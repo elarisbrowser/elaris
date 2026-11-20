@@ -44,5 +44,12 @@ detect occlusion by other applications. Wayland provides no desktop coordinates
 through Rune and retains in-window dragging.
 
 Cross-window gestures here move a single tab. Split groups retain their
-local drag behavior. A pointer-following visual outside the source window and
-the final cross-window settle are still pending.
+local drag behavior. While the pointer is over another Elaris window, the
+destination shows the original title and favicon under the grab point. The
+source list closes the gap while the destination holds its insertion slot
+through commit. The preview then settles into the laid-out row or Favourites
+tile using the existing Rune spring and reduced-motion behavior. A cancelled
+handoff restores the source layout and return animation.
+
+The floating tab is drawn inside eligible Elaris windows. A desktop overlay
+for the space between native windows and detachment remain separate work.

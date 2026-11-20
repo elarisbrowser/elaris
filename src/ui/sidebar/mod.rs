@@ -24,7 +24,7 @@ use super::theme::{self, Theme};
 use crate::app::{self, AppState};
 use crate::appearance::Appearance;
 pub(crate) use drag::MoveResult as TabDragMoveResult;
-pub(crate) use drag::{TabDragState, TabDropTarget};
+pub(crate) use drag::{DragVisual, TabDragState, TabDropTarget};
 
 /// How the sidebar is laid out: what the window shows of it, not of the browser.
 pub(crate) struct SidebarState {

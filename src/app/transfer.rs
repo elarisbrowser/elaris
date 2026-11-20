@@ -136,6 +136,7 @@ impl AppState {
             true
         });
         if changed {
+            super::cross_window_drag::clear(self.window_id);
             crate::engine::wake_all_windows();
         }
         changed
@@ -169,12 +170,14 @@ impl AppState {
                             )
                             .is_err()
                     {
+                        super::cross_window_drag::clear(id);
                         return true;
                     }
                     Phase::Prepared
                 }
                 Phase::Prepared if id == transfer.source => {
                     let Some(moved) = InTransit::extract(self, transfer.tab) else {
+                        super::cross_window_drag::clear(id);
                         return true;
                     };
                     Phase::InTransit(Box::new(moved))
@@ -188,6 +191,7 @@ impl AppState {
                         transfer.index,
                     ) {
                         Ok(()) => {
+                            super::cross_window_drag::finish(self, transfer.tab, true, tx);
                             if let Some(window) = WINDOW_REGISTRY.get().and_then(|registry| {
                                 registry
                                     .lock()
@@ -204,6 +208,7 @@ impl AppState {
                             Phase::Committed(moved.source_session)
                         }
                         Err(error) => {
+                            super::cross_window_drag::finish(self, transfer.tab, false, tx);
                             eprintln!("Elaris: {error}");
                             Phase::Cancelled(moved)
                         }
@@ -211,6 +216,7 @@ impl AppState {
                 }
                 Phase::Committed(session) if id == transfer.source => {
                     self.last_saved_session = Some(session);
+                    self.tab_drag.cancel();
                     return true;
                 }
                 Phase::InTransit(mut moved) if id == transfer.source => {

@@ -1,15 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 use rune::{Drag, Tx, WindowHandle};
 
 use super::{AppState, WINDOW_REGISTRY};
 use crate::tab::TabId;
-use crate::ui::TabDropTarget;
+use crate::ui::{DragVisual, TabDropTarget};
 
 thread_local! {
+    static APPEARANCE: RefCell<Option<DragAppearance>> = const { RefCell::new(None) };
     static DRAG: Cell<Option<IncomingDrag>> = const { Cell::new(None) };
+}
+
+pub(crate) struct DragAppearance {
+    pub(crate) label: String,
+    pub(crate) favicon: Option<rune::Pixels>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -18,6 +24,7 @@ struct IncomingDrag {
     destination: u64,
     tab: TabId,
     point: [f32; 2],
+    visual: DragVisual,
     phase: Phase,
 }
 
@@ -26,23 +33,41 @@ enum Phase {
     Hovering,
     Released,
     Ready(TabDropTarget),
+    Submitted(TabDropTarget),
 }
 
 /// Returns whether the pointer is over another browser window. The destination computes the
 /// insertion target from its own layout, using the release point again before requesting a move.
 pub(crate) fn track(state: &AppState, tab: TabId, drag: &Drag, release: bool) -> bool {
-    let incoming = locate(state.window_id, drag).map(|(destination, point)| IncomingDrag {
-        source: state.window_id,
-        destination,
-        tab,
-        point,
-        phase: if release {
-            Phase::Released
-        } else {
-            Phase::Hovering
-        },
+    let incoming = locate(state.window_id, drag).and_then(|(destination, point)| {
+        let mut visual = state.tab_drag.visual()?;
+        let local = drag.window_point();
+        visual.to = [
+            point[0] + visual.to[0] - local[0],
+            point[1] + visual.to[1] - local[1],
+        ];
+        Some(IncomingDrag {
+            source: state.window_id,
+            destination,
+            tab,
+            point,
+            visual,
+            phase: if release {
+                Phase::Released
+            } else {
+                Phase::Hovering
+            },
+        })
     });
     if let Some(incoming) = incoming {
+        if !DRAG.get().is_some_and(|active| active.tab == tab)
+            && let Some(tab) = state.browser.tab(tab)
+        {
+            APPEARANCE.replace(Some(DragAppearance {
+                label: tab.label().to_owned(),
+                favicon: tab.favicon.clone(),
+            }));
+        }
         publish(Some(incoming));
         true
     } else {
@@ -63,8 +88,42 @@ pub(crate) fn clear(window: u64) -> bool {
 }
 
 fn publish(incoming: Option<IncomingDrag>) {
+    if incoming.is_none() {
+        APPEARANCE.replace(None);
+    }
     if DRAG.replace(incoming) != incoming {
         crate::engine::wake_all_windows();
+    }
+}
+
+pub(crate) fn incoming_visual<T>(
+    window: u64,
+    draw: impl FnOnce(&DragAppearance, DragVisual) -> T,
+) -> Option<T> {
+    let drag = DRAG.get().filter(|drag| drag.destination == window)?;
+    APPEARANCE.with_borrow(|appearance| Some(draw(appearance.as_ref()?, drag.visual)))
+}
+
+pub(crate) fn shows_elsewhere(window: u64) -> bool {
+    DRAG.get().is_some_and(|drag| drag.source == window)
+}
+
+pub(super) fn finish(state: &mut AppState, tab: TabId, success: bool, tx: &mut Tx) {
+    let Some(drag) = DRAG
+        .get()
+        .filter(|drag| drag.tab == tab && drag.destination == state.window_id)
+    else {
+        return;
+    };
+    if let Phase::Submitted(target) = drag.phase {
+        if success {
+            state.tab_drag.settle_incoming(drag.visual, target);
+        }
+        state.tab_drag.set_incoming(None);
+        state.tab_drag.set_incoming_visual(None);
+        tx.animated();
+        tx.motion(crate::ui::TAB_REORDER_MOTION);
+        publish(None);
     }
 }
 
@@ -72,13 +131,13 @@ pub(super) fn poll(state: &mut AppState, tx: &mut Tx) -> bool {
     let mut preview = None;
     if let Some(drag) = DRAG.get() {
         if drag.destination == state.window_id {
-            let target = (!state.sidebar.collapsed)
-                .then(|| {
-                    state
-                        .tab_drag
-                        .incoming_target(state.browser.tabs(), drag.point)
-                })
-                .flatten();
+            let target = match drag.phase {
+                Phase::Ready(target) | Phase::Submitted(target) => Some(target),
+                _ if !state.sidebar.collapsed => state
+                    .tab_drag
+                    .incoming_target(state.browser.tabs(), drag.point),
+                _ => None,
+            };
             preview = target.map(|target| (drag.tab, target));
             if drag.phase == Phase::Released {
                 publish(target.map(|target| IncomingDrag {
@@ -89,20 +148,30 @@ pub(super) fn poll(state: &mut AppState, tx: &mut Tx) -> bool {
         } else if drag.source == state.window_id
             && let Phase::Ready(target) = drag.phase
         {
-            publish(None);
             if state.request_tab_transfer(drag.tab, drag.destination, target.section, target.index)
             {
-                state.tab_drag.cancel();
+                publish(Some(IncomingDrag {
+                    phase: Phase::Submitted(target),
+                    ..drag
+                }));
+            } else {
+                publish(None);
             }
         }
     }
 
-    if state.tab_drag.set_incoming(preview) {
+    let drag = DRAG.get();
+    let visual = drag
+        .filter(|drag| drag.destination == state.window_id)
+        .map(|drag| drag.visual);
+    let layout_changed = state.tab_drag.set_incoming(preview)
+        | state.tab_drag.set_outside(shows_elsewhere(state.window_id));
+    let visual_changed = state.tab_drag.set_incoming_visual(visual);
+    if layout_changed {
         tx.animated();
         tx.motion(crate::ui::TAB_REORDER_MOTION);
-        return true;
     }
-    false
+    layout_changed || visual_changed
 }
 
 fn locate(source: u64, drag: &Drag) -> Option<(u64, [f32; 2])> {

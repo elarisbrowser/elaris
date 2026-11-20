@@ -464,3 +464,56 @@ fn incoming_tab_can_preview_an_empty_favourites_region() {
         }
     );
 }
+
+#[test]
+fn outgoing_drag_keeps_source_gap_closed_until_handoff_resolves() {
+    let tabs = tabs(3);
+    let mut state = TabDragState::default();
+    begin(&mut state, &tabs, 1);
+    state.move_to(&tabs, [320.0, 155.0]);
+    state.set_outside(true);
+    let remaining = [
+        PreviewItem::Tab(tabs[0].id()),
+        PreviewItem::Tab(tabs[2].id()),
+    ];
+    assert_eq!(state.preview_items(&tabs, TabSection::Regular), remaining);
+
+    state.end(&tabs, true);
+    assert_eq!(state.preview_items(&tabs, TabSection::Regular), remaining);
+    assert!(!state.settle_tick(1.0));
+    state.set_outside(false);
+    assert_eq!(state.preview_items(&tabs, TabSection::Regular).len(), 3);
+    assert!(state.visual().unwrap().settling);
+}
+
+#[test]
+fn incoming_drop_settles_from_pointer_into_laid_out_favourite_tile() {
+    let mut tabs = tabs(1);
+    tabs[0].section = TabSection::Favourite;
+    let id = tabs[0].id();
+    let mut state = TabDragState::default();
+    let target = TabDropTarget {
+        section: TabSection::Favourite,
+        index: 0,
+    };
+    state.record_placeholder(target.section, [10.0, 80.0, 220.0, 58.0]);
+    state.settle_incoming(
+        DragVisual {
+            tab: id,
+            section: TabSection::Regular,
+            to: [80.0, 125.0],
+            to_size: [240.0, 34.0],
+            settling: false,
+        },
+        target,
+    );
+
+    assert_eq!(state.visual().unwrap().to, [80.0, 125.0]);
+    assert!(state.is_hidden(id));
+    assert!(state.record_tab_rect(target.section, id, [12.0, 88.0, 218.0, 56.0]));
+    let visual = state.visual().unwrap();
+    assert!(visual.settling);
+    assert_eq!(visual.section, TabSection::Favourite);
+    assert_eq!(visual.to, [12.0, 88.0]);
+    assert_eq!(visual.to_size, [218.0, 56.0]);
+}
