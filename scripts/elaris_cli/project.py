@@ -118,12 +118,12 @@ def rune_dev_launcher() -> Path:
             package
             for package in packages
             if package["name"] == "rune"
-            and (package.get("source") or "").startswith("git+https://github.com/anomalyco/rune?")
+            and (package.get("source") or "").startswith("git+https://github.com/elarisbrowser/rune?")
         ),
         None,
     )
     if rune is None:
-        raise SystemExit("elaris: the pinned anomalyco/rune dependency was not found")
+        raise SystemExit("elaris: the pinned elarisbrowser/rune dependency was not found")
 
     rune_dir = Path(rune["manifest_path"]).parent
     launcher = rune_dir.parent.parent / "scripts" / "rune-dev"

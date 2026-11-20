@@ -6,14 +6,14 @@ license = "GPL-3.0-only"
 rust-version = "1.89"
 
 [dependencies.rune]
-git = "https://github.com/anomalyco/rune"
-rev = "cca5df6fafb4721d96fe105f126ebfd2ec351bb6"
+git = "https://github.com/elarisbrowser/rune"
+rev = "9553c9a7d7d1e5e038d14e0b313513e95b4fb8bb"
 default-features = false
 features = ["accessibility", "embedded-fonts", "metal-backend", "native-file-dialog", "svg", "tooling"]
 
 [dependencies.rune-kit]
-git = "https://github.com/anomalyco/rune"
-rev = "cca5df6fafb4721d96fe105f126ebfd2ec351bb6"
+git = "https://github.com/elarisbrowser/rune"
+rev = "9553c9a7d7d1e5e038d14e0b313513e95b4fb8bb"
 
 [dependencies.rusqlite]
 version = "0.32"
@@ -50,6 +50,7 @@ features = [
     "NSButtonCell",
     "NSBox",
     "NSColor",
+    "NSCell",
     "NSControl",
     "NSEvent",
     "NSFont",
@@ -90,11 +91,11 @@ opt-level = 1
 
 # Rune needs its matching patched platform and text crates when used outside its workspace.
 [patch.crates-io.parley_engine]
-git = "https://github.com/anomalyco/rune"
-rev = "cca5df6fafb4721d96fe105f126ebfd2ec351bb6"
+git = "https://github.com/elarisbrowser/rune"
+rev = "9553c9a7d7d1e5e038d14e0b313513e95b4fb8bb"
 package = "parley_engine"
 
 [patch.crates-io.winit]
-git = "https://github.com/anomalyco/rune"
-rev = "cca5df6fafb4721d96fe105f126ebfd2ec351bb6"
+git = "https://github.com/elarisbrowser/rune"
+rev = "9553c9a7d7d1e5e038d14e0b313513e95b4fb8bb"
 package = "winit"
