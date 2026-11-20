@@ -62,6 +62,8 @@ pub(super) fn view(
     if state.tab_drag.has_preview()
         || !state.browser.window_focused()
         || state.tab_switcher.is_some()
+        || state.context_menu().is_some()
+        || state.page_menu.open()
     {
         return None;
     }
@@ -153,4 +155,83 @@ pub(super) fn selection(
         .fill(theme.overlay_selected)
         .inert()
         .a11y_hidden()
+}
+
+// Rune Kit focuses the menu item under the pointer and uses that same focus for arrow keys.
+pub(crate) fn poll_context_menu(state: &mut AppState, tx: &mut Tx) -> bool {
+    let scope = if state.context_menu().is_some() {
+        "sidebar-context-menu-item"
+    } else if state.page_menu.open() {
+        "page-context-menu-item"
+    } else {
+        ""
+    };
+    let item = tx
+        .focused()
+        .filter(|key| !scope.is_empty() && key.starts_with(scope));
+    if item == state.context_menu_highlight.as_deref() {
+        return false;
+    }
+    state.context_menu_highlight = item.map(str::to_owned);
+    tx.animated();
+    true
+}
+
+pub(in crate::ui) fn build_context_menu(
+    state: &AppState,
+    menu: rune_kit::Menu,
+    theme: &Theme,
+    layer: &mut Vec<El>,
+) {
+    let mut kit = theme.kit(theme.overlay_panel);
+    if state.context_menu_highlight.is_some() {
+        kit.c.hover = rune::Color::TRANSPARENT;
+    }
+    let before = layer.len();
+    menu.build(&kit, layer);
+    if layer.len() > before
+        && let Some(surface) = layer.pop()
+    {
+        layer.push(surface.on_pointer_move_local(|_: &mut AppState, _, tx| {
+            tx.wake_after(std::time::Duration::ZERO);
+            tx.live_only();
+        }));
+    }
+}
+
+pub(super) fn context_menu_view(
+    state: &AppState,
+    cx: &Cx<AppState>,
+    theme: &Theme,
+    reduced: bool,
+) -> Option<El> {
+    let item = state.context_menu_highlight.as_deref()?;
+    let surface = if state.context_menu().is_some() {
+        "sidebar-context-menu-menu"
+    } else if state.page_menu.open() {
+        "page-context-menu-menu"
+    } else {
+        return None;
+    };
+    let [left, top, w, h] = cx.window_layout(surface)?;
+    let [x, y, width, height] = cx.window_layout(item)?;
+    let x0 = x.max(left);
+    let y0 = y.max(top);
+    let width = (x + width).min(left + w) - x0;
+    let height = (y + height).min(top + h) - y0;
+    (width > 0.0 && height > 0.0).then(|| {
+        el().key("context-menu-hover-highlight")
+            .absolute(0.0, 0.0)
+            .size(width, height)
+            .offset(x0, y0)
+            .offset_motion(if reduced {
+                Spring::NONE
+            } else {
+                theme::HIGHLIGHT_MOTION
+            })
+            .radius(rune::tok::radius::SM)
+            .fill(theme.hover)
+            .inert()
+            .a11y_hidden()
+    })
 }

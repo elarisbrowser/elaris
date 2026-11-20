@@ -29,6 +29,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     let peek_changed = update_peek(state, previous_peek, clock, tx);
     close_site_controls_after_navigation(state, &polled);
 
+    let context_menu_changed = crate::ui::hover_highlight::poll_context_menu(state, tx);
     let switcher_changed = crate::ui::tab_switcher::reconcile(state, tx);
     state.sync_find_tab();
     update_find_selection(state, &polled);
@@ -59,6 +60,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         || configuration_changed
         || shared_settings_changed
         || shared_permissions_changed
+        || context_menu_changed
         || switcher_changed
         || tab_drag_changed
 }

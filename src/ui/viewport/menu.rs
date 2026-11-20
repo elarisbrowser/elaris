@@ -110,6 +110,5 @@ pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
             s.browser.send(id, ViewCommand::Edit(Edit::SelectAll))
         }));
     }
-    let kit = theme.kit(theme.overlay_panel);
-    menu.build(&kit, layer);
+    crate::ui::hover_highlight::build_context_menu(state, menu, theme, layer);
 }

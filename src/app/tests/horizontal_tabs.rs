@@ -574,3 +574,39 @@ fn omnibox_selection_slides_between_hovered_results() {
     settle(&mut window);
     assert_eq!(rect(&window, "omnibox-result-highlight")[1], second[1]);
 }
+
+#[test]
+fn context_menu_highlight_slides_between_items() {
+    let mut state = AppState::new(Some("one.example"));
+    let tab = state.browser.active_tab().unwrap().id();
+    state.set_tab_layout(TabLayout::Horizontal);
+    let mut window = runtime(state, 960.0);
+    let [x, y] = center(rect(&window, &horizontal_tabs::key(tab)));
+    window.secondary_down(x, y);
+    window.secondary_up(x, y);
+    settle(&mut window);
+    let first = rect(&window, "sidebar-context-menu-item0");
+    let second = rect(&window, "sidebar-context-menu-item1");
+    let indicator = "context-menu-hover-highlight";
+
+    let [x, y] = center(first);
+    window.pointer_move(x, y);
+    settle(&mut window);
+    assert_eq!(rect(&window, indicator)[1], first[1]);
+
+    let [x, y] = center(second);
+    window.pointer_move(x, y);
+    window.frame(1.0 / 60.0);
+    window.frame(1.0 / 60.0);
+    let moving = rect(&window, indicator)[1];
+    assert!((first[1]..second[1]).contains(&moving), "{moving}");
+    settle(&mut window);
+    assert_eq!(rect(&window, indicator)[1], second[1]);
+
+    window.key(rune::KeyEvent {
+        key: rune::Key::Up,
+        mods: Mods::default(),
+    });
+    settle(&mut window);
+    assert_eq!(rect(&window, indicator)[1], first[1]);
+}

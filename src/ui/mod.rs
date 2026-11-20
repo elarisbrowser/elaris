@@ -165,6 +165,12 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         .layout_size("window")
         .map_or(WINDOW_MIN_SIZE.1, |size| size[1]);
     overlays.extend(hover_highlight::view(state, cx, &theme, reduced_motion));
+    overlays.extend(hover_highlight::context_menu_view(
+        state,
+        cx,
+        &theme,
+        reduced_motion,
+    ));
     overlays.extend(tab_switcher::view(state, &theme, height, reduced_motion));
     let (hover_enter, hover_exit) = if reduced_motion {
         (rune::Anim::INSTANT, rune::Anim::INSTANT)

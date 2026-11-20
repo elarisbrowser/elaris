@@ -124,6 +124,5 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
                 app::open_settings(state, tx);
             }),
         );
-    let kit = theme.kit(theme.overlay_panel);
-    menu.build(&kit, layer);
+    crate::ui::hover_highlight::build_context_menu(state, menu, theme, layer);
 }
