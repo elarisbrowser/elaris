@@ -58,8 +58,10 @@ pub(crate) fn on_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> boo
         tx.motion(ui::TAB_REORDER_MOTION);
         return true;
     }
-    if event.key == Key::Escape && state.has_split_picker() {
-        state.browser.exit_split(None);
+    if event.key == Key::Escape
+        && let Some(side) = state.split_picker_side()
+    {
+        state.browser.cancel_split_picker(side);
         tx.focus(ui::viewport::focus_key(&state.browser), false);
         tx.animated();
         return true;

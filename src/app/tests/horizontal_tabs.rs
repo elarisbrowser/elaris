@@ -715,3 +715,30 @@ fn dropping_tabs_into_the_next_tile_adds_panes_until_the_limit() {
     let after = rect(&window, &first_key)[2];
     assert!((after - before - 80.0).abs() <= 1.0);
 }
+
+#[test]
+fn escape_cancels_only_the_extra_split_picker() {
+    let mut state = AppState::new(Some("one.example"));
+    let first = state.browser.active_tab().unwrap().id();
+    let second = state.browser.open_tab("two.example").unwrap();
+    state.set_split_view_limit(4);
+    state.browser.activate_tab(first);
+    state.place_split_tab(second, 1);
+    assert!(state.browser.add_split_pane());
+    let mut window = runtime(state, 1000.0);
+    window.update(|state, tx| {
+        assert!(crate::shortcuts::on_key(
+            state,
+            &rune::KeyEvent {
+                key: rune::Key::Escape,
+                mods: Mods::default(),
+            },
+            tx
+        ));
+    });
+    assert_eq!(
+        window.state.browser.visible_tabs(),
+        [Some(first), Some(second)]
+    );
+    assert_eq!(window.state.browser.active_tab().unwrap().id(), second);
+}

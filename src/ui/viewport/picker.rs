@@ -77,13 +77,7 @@ pub(super) fn view(state: &AppState, theme: &Theme, side: usize) -> El {
             tx.focus(focus_key(&state.browser), false);
         }));
     }
-    let key = if state
-        .browser
-        .visible_tabs()
-        .iter()
-        .position(Option::is_none)
-        == Some(side)
-    {
+    let key = if state.split_picker_side() == Some(side) {
         PICKER.to_owned()
     } else {
         format!("{PICKER}-{side}")

@@ -118,9 +118,15 @@ impl super::AppState {
     }
 
     pub(crate) fn has_split_picker(&self) -> bool {
+        self.split_picker_side().is_some()
+    }
+
+    pub(crate) fn split_picker_side(&self) -> Option<usize> {
         self.browser
-            .split
-            .is_some_and(|split| split.panes(self.browser.split_view_limit).contains(&None))
+            .split?
+            .panes(self.browser.split_view_limit)
+            .iter()
+            .position(Option::is_none)
     }
 
     pub(crate) fn cancel_tab_drag(&mut self) -> bool {
