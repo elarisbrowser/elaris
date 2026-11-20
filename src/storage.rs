@@ -10,9 +10,9 @@
 
 //! Elaris-owned data paths, history worker, and versioned session files.
 
+use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, Once, OnceLock, RwLock};
 use std::thread::JoinHandle;
@@ -23,7 +23,7 @@ mod paths;
 mod session;
 
 pub(crate) use paths::{Paths, default_download_directory};
-use session::write_session_atomic;
+use session::write_sessions_atomic;
 pub(crate) use session::{Session, SessionFavicon, SessionSplit, SessionTab};
 
 use crate::config::{self, ConfigLoad};
@@ -31,15 +31,16 @@ use crate::permissions::{PermissionKind, PermissionState};
 use crate::settings::SettingsChange;
 
 const HISTORY_CACHE_LIMIT: usize = 100;
+const HISTORY_SEARCH_CACHE_LIMIT: usize = 32;
 static WORKERS: Mutex<Vec<Worker>> = Mutex::new(Vec::new());
 static REGISTER_EXIT: Once = Once::new();
+static PROCESS_STORAGE: OnceLock<Result<Arc<Storage>, String>> = OnceLock::new();
 
 #[derive(Default)]
 struct HistorySnapshot {
     recent: Vec<Entry>,
     frequent: Vec<Entry>,
-    query: Option<String>,
-    matches: Vec<Entry>,
+    searches: HashMap<String, Vec<Entry>>,
     revision: u64,
 }
 
@@ -49,14 +50,15 @@ pub(crate) type Notify = Arc<dyn Fn() + Send + Sync>;
 struct SharedHistory {
     snapshot: RwLock<HistorySnapshot>,
     notify: OnceLock<Notify>,
-    page_revision: AtomicU64,
+    page_revisions: Mutex<HashMap<u64, u64>>,
+    active_windows: Mutex<std::collections::HashSet<u64>>,
     history_events: Mutex<Vec<HistoryEvent>>,
 }
 
 #[derive(Debug)]
 pub(crate) enum HistoryEvent {
-    Page(u64, Result<Page, String>),
-    Mutation(Result<HistoryMutation, String>),
+    Page(u64, u64, Result<Page, String>),
+    Mutation(u64, Result<HistoryMutation, String>),
 }
 
 #[derive(Debug)]
@@ -84,6 +86,18 @@ impl HistoryHandle {
         if query.is_empty() {
             return Ok(());
         }
+        let mut snapshot = self
+            .shared
+            .snapshot
+            .write()
+            .expect("history snapshot lock poisoned");
+        if snapshot.searches.len() >= HISTORY_SEARCH_CACHE_LIMIT
+            && !snapshot.searches.contains_key(query)
+            && let Some(oldest) = snapshot.searches.keys().next().cloned()
+        {
+            snapshot.searches.remove(&oldest);
+        }
+        drop(snapshot);
         self.send(Command::Search(query.to_owned()))
     }
 
@@ -117,10 +131,14 @@ impl HistoryHandle {
             .snapshot
             .read()
             .expect("history snapshot lock poisoned");
-        if snapshot.query.as_deref() != Some(query.trim()) {
-            return Vec::new();
-        }
-        snapshot.matches.iter().take(limit).cloned().collect()
+        snapshot
+            .searches
+            .get(query.trim())
+            .into_iter()
+            .flatten()
+            .take(limit)
+            .cloned()
+            .collect()
     }
 
     pub(crate) fn revision(&self) -> u64 {
@@ -133,26 +151,80 @@ impl HistoryHandle {
 
     pub(crate) fn request_page(
         &self,
+        window: u64,
         revision: u64,
         query: &str,
         after: Option<Cursor>,
     ) -> Result<(), String> {
-        self.shared.page_revision.store(revision, Ordering::Relaxed);
-        self.send(Command::HistoryPage(revision, query.to_owned(), after))
+        self.shared
+            .page_revisions
+            .lock()
+            .expect("history page revisions poisoned")
+            .insert(window, revision);
+        self.shared
+            .active_windows
+            .lock()
+            .expect("history window registry poisoned")
+            .insert(window);
+        self.send(Command::HistoryPage(
+            window,
+            revision,
+            query.to_owned(),
+            after,
+        ))
     }
 
-    pub(crate) fn mutate(&self, mutation: HistoryMutation) -> Result<(), String> {
-        self.send(Command::HistoryMutation(mutation))
+    pub(crate) fn mutate(&self, window: u64, mutation: HistoryMutation) -> Result<(), String> {
+        self.shared
+            .active_windows
+            .lock()
+            .expect("history window registry poisoned")
+            .insert(window);
+        self.send(Command::HistoryMutation(window, mutation))
     }
 
-    pub(crate) fn take_events(&self) -> Vec<HistoryEvent> {
-        std::mem::take(
-            &mut *self
-                .shared
-                .history_events
-                .lock()
-                .expect("history events lock poisoned"),
-        )
+    pub(crate) fn forget_window(&self, window: u64) {
+        self.shared
+            .page_revisions
+            .lock()
+            .expect("history page revisions poisoned")
+            .remove(&window);
+        self.shared
+            .active_windows
+            .lock()
+            .expect("history window registry poisoned")
+            .remove(&window);
+        self.shared
+            .history_events
+            .lock()
+            .expect("history events lock poisoned")
+            .retain(|event| match event {
+                HistoryEvent::Page(owner, _, _) | HistoryEvent::Mutation(owner, _) => {
+                    *owner != window
+                }
+            });
+    }
+
+    pub(crate) fn take_events(&self, window: u64) -> Vec<HistoryEvent> {
+        let mut events = self
+            .shared
+            .history_events
+            .lock()
+            .expect("history events lock poisoned");
+        let mut owned = Vec::new();
+        let mut remaining = Vec::new();
+        for event in events.drain(..) {
+            let event_window = match &event {
+                HistoryEvent::Page(owner, _, _) | HistoryEvent::Mutation(owner, _) => *owner,
+            };
+            if event_window == window {
+                owned.push(event);
+            } else {
+                remaining.push(event);
+            }
+        }
+        *events = remaining;
+        owned
     }
 
     fn send(&self, command: Command) -> Result<(), String> {
@@ -163,8 +235,8 @@ impl HistoryHandle {
 }
 
 pub(crate) struct Storage {
-    session: Option<Session>,
-    config_load: Option<Result<ConfigLoad, String>>,
+    session: Mutex<Option<Vec<Session>>>,
+    config_load: Mutex<Option<Result<ConfigLoad, String>>>,
     commands: Sender<Command>,
     history: HistoryHandle,
     config_events: Arc<Mutex<Vec<ConfigEvent>>>,
@@ -176,10 +248,19 @@ pub(crate) enum ConfigEvent {
 }
 
 impl Storage {
+    pub(crate) fn open_shared(paths: Paths) -> io::Result<Arc<Self>> {
+        match PROCESS_STORAGE
+            .get_or_init(|| Self::open(paths).map(Arc::new).map_err(|e| e.to_string()))
+        {
+            Ok(storage) => Ok(Arc::clone(storage)),
+            Err(error) => Err(io::Error::other(error.clone())),
+        }
+    }
+
     pub(crate) fn open(paths: Paths) -> io::Result<Self> {
         paths.create_directories()?;
         let config_load = Some(config::load_or_create(&paths.config_file));
-        let session = match session::load_session(&paths.session_file) {
+        let session = match session::load_sessions(&paths.session_file) {
             Ok(session) => session,
             Err(error) => {
                 eprintln!(
@@ -211,24 +292,27 @@ impl Storage {
             })?;
         register_worker(commands.clone(), worker);
         Ok(Self {
-            session,
-            config_load,
+            session: Mutex::new(session),
+            config_load: Mutex::new(config_load),
             commands: commands.clone(),
             history: HistoryHandle { commands, shared },
             config_events,
         })
     }
 
-    pub(crate) fn take_session(&mut self) -> Option<Session> {
-        self.session.take()
+    pub(crate) fn take_sessions(&self) -> Option<Vec<Session>> {
+        self.session.lock().expect("session lock poisoned").take()
     }
 
     pub(crate) fn history(&self) -> &HistoryHandle {
         &self.history
     }
 
-    pub(crate) fn take_config_load(&mut self) -> Option<Result<ConfigLoad, String>> {
-        self.config_load.take()
+    pub(crate) fn take_config_load(&self) -> Option<Result<ConfigLoad, String>> {
+        self.config_load
+            .lock()
+            .expect("configuration load lock poisoned")
+            .clone()
     }
 
     pub(crate) fn save_setting(&self, change: SettingsChange) -> Result<(), String> {
@@ -263,10 +347,19 @@ impl Storage {
         )
     }
 
-    pub(crate) fn save_session(&self, session: Session) -> Result<(), String> {
+    pub(crate) fn save_sessions_for_launch(
+        &self,
+        sessions: Vec<Session>,
+        restore_on_launch: bool,
+    ) -> Result<(), String> {
         self.commands
-            .send(Command::SaveSession(session))
+            .send(Command::SaveSessions(sessions, restore_on_launch))
             .map_err(|_| "session storage worker has stopped".to_owned())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn save_session(&self, session: Session) -> Result<(), String> {
+        self.save_sessions_for_launch(vec![session], true)
     }
 
     /// Give pending saves a chance to finish before the native host exits.
@@ -295,9 +388,9 @@ enum Command {
     RecordVisit(String, String),
     UpdateTitle(String, String),
     Search(String),
-    HistoryPage(u64, String, Option<Cursor>),
-    HistoryMutation(HistoryMutation),
-    SaveSession(Session),
+    HistoryPage(u64, u64, String, Option<Cursor>),
+    HistoryMutation(u64, HistoryMutation),
+    SaveSessions(Vec<Session>, bool),
     SaveSetting(SettingsChange),
     SavePermission(String, PermissionKind, PermissionState),
     ReloadConfig,
@@ -383,8 +476,14 @@ fn run_worker(
             Command::Search(query) => {
                 update_search_cache(history.as_ref(), &shared, query);
             }
-            Command::HistoryPage(revision, query, after) => {
-                if revision != shared.page_revision.load(Ordering::Relaxed) {
+            Command::HistoryPage(window, revision, query, after) => {
+                if shared
+                    .page_revisions
+                    .lock()
+                    .expect("history page revisions poisoned")
+                    .get(&window)
+                    != Some(&revision)
+                {
                     continue;
                 }
                 if history.is_none() {
@@ -397,11 +496,17 @@ fn run_worker(
                     .as_ref()
                     .and_then(|history| history.page(&query, after.as_ref()).ok())
                     .ok_or_else(|| "Could not load browsing history.".to_owned());
-                if revision == shared.page_revision.load(Ordering::Relaxed) {
-                    publish_history(&shared, HistoryEvent::Page(revision, result));
+                if shared
+                    .page_revisions
+                    .lock()
+                    .expect("history page revisions poisoned")
+                    .get(&window)
+                    == Some(&revision)
+                {
+                    publish_history(&shared, HistoryEvent::Page(window, revision, result));
                 }
             }
-            Command::HistoryMutation(mutation) => {
+            Command::HistoryMutation(window, mutation) => {
                 let result = history.as_ref().and_then(|history| {
                     let result = match &mutation {
                         HistoryMutation::Remove(url) => history.remove(url).map(|_| ()),
@@ -416,15 +521,25 @@ fn run_worker(
                     HistoryMutation::Remove(_) => "Could not remove this address from history.",
                     HistoryMutation::Clear => "Could not clear browsing history.",
                 };
-                publish_history(
-                    &shared,
-                    HistoryEvent::Mutation(
-                        result.map(|()| mutation).ok_or_else(|| message.to_owned()),
-                    ),
-                );
+                let active = shared
+                    .active_windows
+                    .lock()
+                    .expect("history window registry poisoned")
+                    .contains(&window);
+                if active {
+                    publish_history(
+                        &shared,
+                        HistoryEvent::Mutation(
+                            window,
+                            result.map(|()| mutation).ok_or_else(|| message.to_owned()),
+                        ),
+                    );
+                }
             }
-            Command::SaveSession(session) => {
-                if let Err(error) = write_session_atomic(&session_file, &session) {
+            Command::SaveSessions(sessions, restore_on_launch) => {
+                if let Err(error) =
+                    write_sessions_atomic(&session_file, &sessions, restore_on_launch)
+                {
                     eprintln!("Elaris: cannot save session: {error}");
                 }
             }
@@ -480,20 +595,26 @@ fn refresh_history(history: &History, shared: &SharedHistory) {
             eprintln!("Elaris: cannot read frequent history: {error}");
             Vec::new()
         });
-    let query = shared
+    let queries: Vec<String> = shared
         .snapshot
         .read()
         .expect("history snapshot lock poisoned")
-        .query
-        .clone();
-    let matches = query.as_ref().map_or_else(Vec::new, |query| {
-        history
-            .search(query, HISTORY_CACHE_LIMIT)
-            .unwrap_or_else(|error| {
-                eprintln!("Elaris: cannot search history: {error}");
-                Vec::new()
-            })
-    });
+        .searches
+        .keys()
+        .cloned()
+        .collect();
+    let searches: HashMap<String, Vec<Entry>> = queries
+        .into_iter()
+        .map(|query| {
+            let matches = history
+                .search(&query, HISTORY_CACHE_LIMIT)
+                .unwrap_or_else(|error| {
+                    eprintln!("Elaris: cannot search history: {error}");
+                    Vec::new()
+                });
+            (query, matches)
+        })
+        .collect();
     {
         let mut snapshot = shared
             .snapshot
@@ -501,7 +622,7 @@ fn refresh_history(history: &History, shared: &SharedHistory) {
             .expect("history snapshot lock poisoned");
         snapshot.recent = recent;
         snapshot.frequent = frequent;
-        snapshot.matches = matches;
+        snapshot.searches = searches;
         snapshot.revision = snapshot.revision.wrapping_add(1);
     }
     notify(shared);
@@ -515,8 +636,7 @@ fn update_search_cache(history: Option<&History>, shared: &SharedHistory, query:
         .snapshot
         .write()
         .expect("history snapshot lock poisoned");
-    snapshot.query = Some(query);
-    snapshot.matches = matches;
+    snapshot.searches.insert(query, matches);
     snapshot.revision = snapshot.revision.wrapping_add(1);
     drop(snapshot);
     notify(shared);

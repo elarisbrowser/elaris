@@ -35,8 +35,8 @@ fn downloads_are_queued_with_a_stable_id_and_can_be_cancelled() {
         .start_download(DownloadRequest::new("https://example.com/archive.zip"))
         .expect("an HTTP download can be queued");
 
-    let download = browser
-        .downloads()
+    let downloads = browser.downloads();
+    let download = downloads
         .iter()
         .find(|download| download.id == id)
         .expect("queued download is visible immediately");

@@ -19,7 +19,7 @@
 
 use std::cell::Cell;
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 mod downloads;
@@ -98,14 +98,14 @@ pub(crate) struct Browser {
     promoted_visit: Option<(TabId, String, String)>,
     pub(crate) split: Option<split::Split>,
     recent: Vec<TabId>,
-    next_id: u64,
     input: input_routing::Held,
     /// None until the app connects one, and in a build without an engine.
     engine: Option<Engine>,
     /// Why there is no engine, which every tab shows.
     engine_error: Option<String>,
     /// Downloads belong to the browser process, not to the tab that requested them.
-    downloads: Vec<Download>,
+    downloads: Arc<Mutex<Vec<Download>>>,
+    last_download_snapshot: Vec<Download>,
     window: Window,
     /// Development timing: the last poll.
     last_poll: Option<Instant>,
@@ -136,11 +136,11 @@ impl Default for Browser {
             promoted_visit: None,
             split: None,
             recent: Vec::new(),
-            next_id: 1,
             input: Default::default(),
             engine: None,
             engine_error: None,
-            downloads: Vec::new(),
+            downloads: Arc::new(Mutex::new(Vec::new())),
+            last_download_snapshot: Vec::new(),
             window: Window {
                 scale: Cell::new(1.0),
                 dark: Cell::new(None),
@@ -371,9 +371,7 @@ impl Browser {
     }
 
     fn next_page_id(&mut self) -> TabId {
-        let id = TabId::from_raw(self.next_id);
-        self.next_id += 1;
-        id
+        TabId::next()
     }
 
     fn insert_tab_with_state(
@@ -500,6 +498,7 @@ impl Browser {
         let is_internal = self.tab(id).ok_or(Error::NoSuchTab(id))?.is_internal();
         if !is_internal && let Some(engine) = &self.engine {
             engine.send(Command::Close(id));
+            engine.discard_tab_updates(id);
         }
         let internal = Tab::new_internal(id, route);
         *self.tab_mut(id).ok_or(Error::NoSuchTab(id))? = internal;
@@ -630,6 +629,7 @@ impl Browser {
         }
         let is_internal = self.tabs[index].is_internal();
         self.tabs.remove(index);
+        id.release();
         self.recent.retain(|&tab| tab != id);
         if !is_internal && let Some(engine) = &self.engine {
             engine.send(Command::Close(id));
@@ -663,6 +663,12 @@ impl Browser {
             .filter(|tab| tab.id() != id && !tab.is_internal())
             .map(Tab::id)
             .collect();
+        let removed: Vec<TabId> = self
+            .tabs
+            .iter()
+            .filter(|tab| tab.id() != id)
+            .map(Tab::id)
+            .collect();
         if self.active != Some(id) {
             self.reset_input();
         }
@@ -671,7 +677,11 @@ impl Browser {
         if let Some(engine) = &self.engine {
             for tab in closed {
                 engine.send(Command::Close(tab));
+                engine.discard_tab_updates(tab);
             }
+        }
+        for tab in removed {
+            tab.release();
         }
         self.recent.retain(|&tab| tab == id);
         self.activate_tab(id);
@@ -741,6 +751,28 @@ impl Browser {
                 engine.send(Command::View(tab.id(), ViewCommand::Visible(false)));
             }
         }
+    }
+
+    /// Releases every view owned by a window that is being destroyed. The engine itself remains
+    /// shared with the other live windows.
+    pub(crate) fn close_window_views(&mut self) {
+        self.suspend_window();
+        self.dismiss_peek();
+        for tab in &self.tabs {
+            let id = tab.id();
+            if !tab.is_internal()
+                && let Some(engine) = &self.engine
+            {
+                engine.discard_tab_updates(id);
+                engine.send(Command::Close(id));
+            }
+            id.release();
+        }
+        self.tabs.clear();
+        self.recent.clear();
+        self.active = None;
+        self.split = None;
+        self.promoted_visit = None;
     }
 
     pub(crate) fn set_viewport_focus(&mut self, focused: bool) -> bool {

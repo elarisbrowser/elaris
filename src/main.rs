@@ -32,23 +32,34 @@ use std::sync::Arc;
 
 #[cfg(target_os = "linux")]
 use rune::raw_window_handle::RawWindowHandle;
-use rune::{App, AppSpec, Chrome, WindowOptions};
+use rune::{App, AppSpec, Chrome, WindowOptions, WindowSpec};
 
 fn main() {
-    let spec = AppSpec {
+    let app = configure_app(App::new(app_spec(app::AppState::default)));
+    #[cfg(target_os = "macos")]
+    let app = app.keep_running().release_gpu_when_closed();
+    let app_handle = app.handle();
+    let app = app.on_ready(move |_| {
+        #[cfg(target_os = "macos")]
+        menu_macos::install(app_handle.clone());
+        start_window_workers(app_handle.clone());
+    });
+    app.run();
+}
+
+fn app_spec(init: fn() -> app::AppState) -> AppSpec<app::AppState> {
+    AppSpec {
         // Headless tooling has no native `on_ready`; connect workers there.
         setup: Some(app::setup_headless),
         poll: Some(app::poll),
         on_key: Some(shortcuts::on_key),
         min_size: Some(ui::WINDOW_MIN_SIZE),
-        ..AppSpec::new(
-            app::APP_NAME,
-            (960.0, 640.0),
-            app::AppState::default,
-            ui::view,
-        )
-    };
-    let app = App::new(spec)
+        ..AppSpec::new(app::APP_NAME, (960.0, 640.0), init, ui::view)
+    }
+}
+
+fn configure_app(app: App<app::AppState>) -> App<app::AppState> {
+    let app = app
         .window_options(WindowOptions {
             transparent: true,
             #[cfg(target_os = "linux")]
@@ -61,12 +72,12 @@ fn main() {
             traffic_lights: Some(ui::TRAFFIC_LIGHTS),
             ..Chrome::DEFAULT
         });
-    #[cfg(target_os = "macos")]
-    let app = app.keep_running().release_gpu_when_closed();
     #[cfg(target_os = "linux")]
     let app = {
         let app_handle = app.handle();
         app.on_window(move |window| {
+            let retained_window = window.clone();
+            let register_handle = app_handle.clone();
             let x11_window = window
                 .with_raw_handle(|handle| match handle.as_raw() {
                     RawWindowHandle::Xlib(handle) => Some(handle.window),
@@ -74,24 +85,21 @@ fn main() {
                 })
                 .ok()
                 .flatten();
-            app_handle.update(move |state, _| state.titlebar.set_x11_window(x11_window));
+            register_handle.update(move |state, _| {
+                state.titlebar.set_x11_window(x11_window);
+                app::register_window(state.window_id, retained_window);
+            });
         })
     };
-    let app_handle = app.handle();
-    let app = app.on_ready(move |_| {
-        #[cfg(target_os = "macos")]
-        menu_macos::install(app_handle.clone());
-        let wake_handle = app_handle.clone();
-        let waker: rune::Waker = Arc::new(move || wake_handle.wake());
-        let app_handle = app_handle.clone();
-        app_handle.update(move |state, _| {
-            app::start_workers(state, waker);
-        });
-    });
     #[cfg(target_os = "macos")]
     let app = {
         let app_handle = app.handle();
         app.on_window(move |window| {
+            let retained_window = window.clone();
+            let register_handle = app_handle.clone();
+            register_handle.update(move |state, _| {
+                app::register_window(state.window_id, retained_window);
+            });
             window_macos::install(window);
             titlebar_controls::install(window);
             site_popover_macos::install(window, app_handle.clone());
@@ -106,5 +114,43 @@ fn main() {
         .on_focus(app::on_window_focus)
         .on_close(app::window_closed)
         .on_quit(app::shut_down)
-        .run();
+        .on_reopen(app::on_reopen)
+}
+
+fn start_window_workers(handle: rune::AppHandle<app::AppState>) {
+    let wake_handle = handle.clone();
+    let waker: rune::Waker = Arc::new(move || wake_handle.wake());
+    let menu_handle = handle.clone();
+    handle.update(move |state, _| {
+        app::start_workers(state, waker);
+        let restored = state.take_restored_windows();
+        #[cfg(target_os = "macos")]
+        menu_macos::register_window(state.window_id, menu_handle);
+        for session in restored {
+            open_browser_window_with_session(session);
+        }
+    });
+}
+
+/// Queues a full browser window in Rune's current event loop turn.
+pub(crate) fn open_browser_window() {
+    queue_browser_window(app::AppState::new_window());
+}
+
+fn open_browser_window_with_session(session: storage::Session) {
+    queue_browser_window(app::AppState::new_window_from_session(session));
+}
+
+fn queue_browser_window(state: app::AppState) {
+    let key = format!("elaris-window-{}", state.window_id);
+    let window_id = state.window_id;
+    let app = configure_app(App::new(app_spec(app::AppState::new_window)).init(move || state));
+    #[cfg(target_os = "macos")]
+    let app = app.keep_running().release_gpu_when_closed();
+    let handle = app.handle();
+    let app = app.on_ready(move |_| start_window_workers(handle.clone()));
+    let spec = WindowSpec::from_app(key, app);
+    let handle = rune::open_window(spec);
+    app::register_window(window_id, handle.clone());
+    handle.open();
 }

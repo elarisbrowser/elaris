@@ -2,7 +2,8 @@
 
 //! Native macOS application menus, dispatched into Elaris's shared browser actions.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 
 use objc2_05::rc::Retained;
 use objc2_05::runtime::{AnyClass, AnyObject, AnyProtocol, ClassBuilder, ProtocolObject, Sel};
@@ -22,7 +23,8 @@ thread_local! {
     static MENU_ITEMS: RefCell<Vec<Retained<NSMenuItem>>> = const { RefCell::new(Vec::new()) };
     static FULL_SCREEN_ITEM: RefCell<Option<Retained<NSMenuItem>>> = const { RefCell::new(None) };
     static MENU_STATE: RefCell<Option<MenuState>> = const { RefCell::new(None) };
-    static APP_HANDLE: RefCell<Option<rune::AppHandle<AppState>>> = const { RefCell::new(None) };
+    static APP_HANDLES: RefCell<HashMap<u64, rune::AppHandle<AppState>>> = RefCell::new(HashMap::new());
+    static ACTIVE_WINDOW: Cell<Option<u64>> = const { Cell::new(None) };
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -208,7 +210,7 @@ fn native_selector(title: &str) -> Sel {
 
 /// Installs Elaris's native menu bar on the AppKit main thread.
 pub(crate) fn install(app: rune::AppHandle<AppState>) {
-    APP_HANDLE.with(|slot| *slot.borrow_mut() = Some(app));
+    let _ = app;
     let mtm = MainThreadMarker::new().expect("AppKit menus install on the main thread");
     let application = NSApplication::sharedApplication(mtm);
     let target: Retained<ProtocolObject<dyn NSMenuDelegate>> =
@@ -239,6 +241,12 @@ pub(crate) fn install(app: rune::AppHandle<AppState>) {
     let file = menu(
         "File",
         &[
+            item(
+                "New Window",
+                Action::Shortcut(Shortcut::NewWindow),
+                "n",
+                false,
+            ),
             item("New Tab", Action::Shortcut(Shortcut::NewTab), "t", false),
             item("Close Tab", Action::Shortcut(Shortcut::Close), "w", false),
             item(
@@ -370,8 +378,36 @@ pub(crate) fn install(app: rune::AppHandle<AppState>) {
     MENU_ITEMS.with(|slot| *slot.borrow_mut() = items);
 }
 
+pub(crate) fn register_window(id: u64, app: rune::AppHandle<AppState>) {
+    APP_HANDLES.with(|handles| {
+        handles.borrow_mut().insert(id, app);
+    });
+}
+
+pub(crate) fn set_active_window(id: u64, active: bool) {
+    if active {
+        ACTIVE_WINDOW.with(|slot| slot.set(Some(id)));
+    } else {
+        ACTIVE_WINDOW.with(|slot| {
+            if slot.get() == Some(id) {
+                slot.set(None);
+            }
+        });
+    }
+}
+
+pub(crate) fn unregister_window(id: u64) {
+    APP_HANDLES.with(|handles| {
+        handles.borrow_mut().remove(&id);
+    });
+    set_active_window(id, false);
+}
+
 /// Refreshes native item availability and labels after Rune builds the current browser state.
 pub(crate) fn refresh(state: &AppState) {
+    if ACTIVE_WINDOW.with(Cell::get) != Some(state.window_id) {
+        return;
+    }
     let snapshot = MenuState::from(state);
     MENU_STATE.with(|slot| *slot.borrow_mut() = Some(snapshot));
     if let Some(mtm) = MainThreadMarker::new() {
@@ -445,6 +481,7 @@ fn menu_command(action: Action) -> Option<MenuCommand> {
         Action::ExitSplit => MenuCommand::ExitSplit,
         Action::Edit(_) => MenuCommand::Edit,
         Action::Shortcut(Shortcut::NewTab) => MenuCommand::NewTab,
+        Action::Shortcut(Shortcut::NewWindow) => MenuCommand::NewWindow,
         Action::Shortcut(Shortcut::Close) => MenuCommand::CloseTab,
         Action::Shortcut(Shortcut::ReopenClosedTab) => MenuCommand::ReopenClosedTab,
         Action::Shortcut(Shortcut::Find) => MenuCommand::Find,
@@ -529,11 +566,15 @@ unsafe extern "C" fn menu_action(_: &AnyObject, _: Sel, sender: &AnyObject) {
     let Some(action) = action_from_id(tag) else {
         return;
     };
-    APP_HANDLE.with(|handle| {
-        if let Some(handle) = handle.borrow().as_ref() {
-            handle.update(move |state, tx| perform_action(state, action, tx));
-        }
-    });
+    let handle = ACTIVE_WINDOW
+        .with(Cell::get)
+        .and_then(|id| APP_HANDLES.with(|handles| handles.borrow().get(&id).cloned()))
+        .or_else(|| APP_HANDLES.with(|handles| handles.borrow().values().next().cloned()));
+    if let Some(handle) = handle {
+        handle.update(move |state, tx| perform_action(state, action, tx));
+    } else if action == Action::Shortcut(Shortcut::NewWindow) {
+        crate::open_browser_window();
+    }
 }
 
 fn menu_target_class() -> &'static AnyClass {

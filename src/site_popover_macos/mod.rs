@@ -7,6 +7,7 @@ mod content;
 mod native;
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 
 use objc2_05::msg_send_id;
 use objc2_05::rc::Retained;
@@ -55,11 +56,14 @@ pub(super) struct BuiltContent {
 }
 
 thread_local! {
-    pub(super) static HOST: RefCell<Option<Host>> = const { RefCell::new(None) };
-    pub(super) static APP_HANDLE: RefCell<Option<rune::AppHandle<AppState>>> = const { RefCell::new(None) };
+    pub(super) static HOSTS: RefCell<HashMap<String, Host>> = RefCell::new(HashMap::new());
+    pub(super) static APP_HANDLES: RefCell<HashMap<String, rune::AppHandle<AppState>>> = RefCell::new(HashMap::new());
+    static WINDOW_KEYS: RefCell<HashMap<u64, String>> = RefCell::new(HashMap::new());
+    static ACTIVE_KEY: RefCell<Option<String>> = const { RefCell::new(None) };
 }
 
 pub(crate) fn install(window: &RuneWindowHandle, app: rune::AppHandle<AppState>) {
+    let key = window.key().to_owned();
     let result = window.with_raw_handle(|handle| {
         let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
             return;
@@ -79,19 +83,30 @@ pub(crate) fn install(window: &RuneWindowHandle, app: rune::AppHandle<AppState>)
             popover.setBehavior(NSPopoverBehavior::Transient);
             popover.setAnimates(true);
         }
-        HOST.with(|host| {
-            *host.borrow_mut() = Some(Host {
-                anchor_view,
-                popover,
-                controller: None,
-                presentation: None,
-                statuses: Vec::new(),
-                hover_surfaces: Vec::new(),
-                action_target: None,
-                _escape_monitor: escape_monitor,
+        HOSTS.with(|hosts| {
+            hosts.borrow_mut().insert(
+                key.clone(),
+                Host {
+                    anchor_view,
+                    popover,
+                    controller: None,
+                    presentation: None,
+                    statuses: Vec::new(),
+                    hover_surfaces: Vec::new(),
+                    action_target: None,
+                    _escape_monitor: escape_monitor,
+                },
+            );
+        });
+        APP_HANDLES.with(|handles| {
+            handles.borrow_mut().insert(key.clone(), app.clone());
+        });
+        let key = key.clone();
+        app.update(move |state, _| {
+            WINDOW_KEYS.with(|keys| {
+                keys.borrow_mut().insert(state.window_id, key);
             });
         });
-        APP_HANDLE.with(|slot| *slot.borrow_mut() = Some(app));
     });
     if let Err(error) = result {
         eprintln!("Elaris: cannot attach site popover to Rune window: {error}");
@@ -99,9 +114,8 @@ pub(crate) fn install(window: &RuneWindowHandle, app: rune::AppHandle<AppState>)
 }
 /// Opens the native popover at the Rune button's current logical-point bounds.
 pub(crate) fn show(data: SiteControlPresentation, anchor: [f32; 4], palette: Palette) -> bool {
-    HOST.with(|slot| {
-        let mut slot = slot.borrow_mut();
-        let Some(host) = slot.as_mut() else {
+    with_active_host(|host| {
+        let Some(host) = host else {
             return false;
         };
         // Native transient dismissal handles outside clicks; the local key monitor handles Escape.
@@ -154,9 +168,8 @@ pub(crate) fn show(data: SiteControlPresentation, anchor: [f32; 4], palette: Pal
 
 /// Updates the attached button bounds after Rune relayouts the sidebar or window.
 pub(crate) fn update_anchor(anchor: [f32; 4]) {
-    HOST.with(|host| {
-        let mut host = host.borrow_mut();
-        let Some(host) = host.as_mut() else {
+    with_active_host(|host| {
+        let Some(host) = host else {
             return;
         };
         if !unsafe { host.popover.isShown() } {
@@ -170,21 +183,51 @@ pub(crate) fn update_anchor(anchor: [f32; 4]) {
 
 /// Closes the transient popover if the active page or its tab changes.
 pub(crate) fn close() {
-    HOST.with(|host| {
-        if let Some(host) = host.borrow_mut().as_mut() {
+    with_active_host(|host| {
+        if let Some(host) = host {
             close_host(host);
         }
     });
 }
 
 /// Releases the native host before Rune destroys its window on the final-window close path.
-pub(crate) fn detach_window() {
-    HOST.with(|host| {
-        if let Some(mut host) = host.borrow_mut().take() {
+pub(crate) fn activate_window(id: u64) {
+    WINDOW_KEYS.with(|keys| {
+        if let Some(key) = keys.borrow().get(&id).cloned() {
+            ACTIVE_KEY.with(|active| *active.borrow_mut() = Some(key));
+        }
+    });
+}
+
+pub(crate) fn detach_window(id: u64) {
+    let key = WINDOW_KEYS.with(|keys| keys.borrow_mut().remove(&id));
+    let Some(key) = key else { return };
+    HOSTS.with(|hosts| {
+        if let Some(mut host) = hosts.borrow_mut().remove(&key) {
             close_host(&mut host);
         }
     });
-    APP_HANDLE.with(|app| *app.borrow_mut() = None);
+    APP_HANDLES.with(|handles| {
+        handles.borrow_mut().remove(&key);
+    });
+    ACTIVE_KEY.with(|active| {
+        if active.borrow().as_ref() == Some(&key) {
+            *active.borrow_mut() = None;
+        }
+    });
+}
+
+pub(super) fn active_app_handle() -> Option<rune::AppHandle<AppState>> {
+    let key = ACTIVE_KEY.with(|active| active.borrow().clone())?;
+    APP_HANDLES.with(|handles| handles.borrow().get(&key).cloned())
+}
+
+pub(super) fn with_active_host<R>(f: impl FnOnce(Option<&mut Host>) -> R) -> R {
+    let key = ACTIVE_KEY.with(|active| active.borrow().clone());
+    HOSTS.with(|hosts| {
+        let mut hosts = hosts.borrow_mut();
+        f(key.and_then(|key| hosts.get_mut(&key)))
+    })
 }
 
 pub(super) fn close_host(host: &mut Host) {

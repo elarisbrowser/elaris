@@ -19,10 +19,11 @@ mod thread;
 #[cfg(any(test, feature = "ladybird-bridge"))]
 mod thumbnails;
 
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use elaris::downloads::{DownloadId, Request as DownloadRequest, Update as DownloadUpdate};
 use elaris::ladybird::{Favicon, KeyEvent, MouseEvent};
@@ -34,6 +35,36 @@ pub(crate) const THUMBNAIL_ASPECT: (u32, u32) = (16, 9);
 
 /// Wakes the UI so it reads new updates.
 pub(crate) type Notify = Arc<dyn Fn() + Send + Sync>;
+
+static WINDOW_WAKERS: Mutex<Option<HashMap<u64, Notify>>> = Mutex::new(None);
+
+pub(crate) fn register_window_waker(window: u64, notify: Notify) {
+    let mut slot = WINDOW_WAKERS
+        .lock()
+        .expect("window waker registry poisoned");
+    slot.get_or_insert_with(HashMap::new).insert(window, notify);
+}
+
+pub(crate) fn unregister_window_waker(window: u64) {
+    if let Some(wakers) = WINDOW_WAKERS
+        .lock()
+        .expect("window waker registry poisoned")
+        .as_mut()
+    {
+        wakers.remove(&window);
+    }
+}
+
+pub(crate) fn wake_all_windows() {
+    let wakers = WINDOW_WAKERS
+        .lock()
+        .expect("window waker registry poisoned");
+    if let Some(wakers) = wakers.as_ref() {
+        for notify in wakers.values() {
+            notify();
+        }
+    }
+}
 
 /// Wakes the engine thread for new commands. Set once Ladybird has started; until then commands
 /// wait in the queue, and the engine reads them as soon as it starts.
@@ -255,10 +286,16 @@ pub(crate) struct FindResult {
 /// The browser's handle on the engine thread. Nothing it does blocks.
 // A build without the bridge never starts an engine.
 #[cfg_attr(not(feature = "ladybird-bridge"), allow(dead_code))]
+#[derive(Clone)]
 pub(crate) struct Engine {
     commands: Sender<Command>,
-    updates: Receiver<Update>,
+    updates: Arc<SharedUpdates>,
     wake: Wake,
+}
+
+struct SharedUpdates {
+    receiver: Mutex<Receiver<Update>>,
+    pending: Mutex<VecDeque<Update>>,
 }
 
 #[cfg_attr(not(feature = "ladybird-bridge"), allow(dead_code))]
@@ -283,6 +320,20 @@ impl Engine {
         }
     }
 
+    /// Starts Ladybird once for the process. Every browser window gets a command handle to the
+    /// same runtime; updates are demultiplexed by globally unique tab IDs when each window polls.
+    pub(crate) fn start_shared(
+        notify: Notify,
+        profile: std::path::PathBuf,
+        download_directory: Option<std::path::PathBuf>,
+        display_refresh_rate: f64,
+    ) -> Result<Self, String> {
+        static ENGINE: OnceLock<Result<Engine, String>> = OnceLock::new();
+        ENGINE
+            .get_or_init(|| Self::start(notify, profile, download_directory, display_refresh_rate))
+            .clone()
+    }
+
     /// Queues `command` and wakes the engine for it.
     pub(crate) fn send(&self, command: Command) {
         if self.commands.send(command).is_ok()
@@ -292,15 +343,60 @@ impl Engine {
         }
     }
 
-    /// The updates that arrived since the last call.
-    pub(crate) fn updates(&self) -> impl Iterator<Item = Update> + '_ {
-        self.updates.try_iter()
+    /// Takes only updates owned by this window's tabs. Other windows' notifications remain queued.
+    pub(crate) fn updates_for(&self, tabs: &[TabId]) -> Vec<Update> {
+        let mut pending = self
+            .updates
+            .pending
+            .lock()
+            .expect("engine update queue poisoned");
+        let receiver = self
+            .updates
+            .receiver
+            .lock()
+            .expect("engine update receiver poisoned");
+        pending.extend(receiver.try_iter());
+        let mut owned = Vec::new();
+        let mut retained = VecDeque::new();
+        while let Some(update) = pending.pop_front() {
+            match update_tab(&update) {
+                Some(id) if !id.is_live() => {}
+                Some(id) if tabs.contains(&id) => owned.push(update),
+                Some(_) => retained.push_back(update),
+                None => owned.push(update),
+            }
+        }
+        *pending = retained;
+        owned
+    }
+
+    /// Drops queued notifications for a view that its owning window has destroyed.
+    pub(crate) fn discard_tab_updates(&self, tab: TabId) {
+        let mut pending = self
+            .updates
+            .pending
+            .lock()
+            .expect("engine update queue poisoned");
+        pending.retain(|update| update_tab(update) != Some(tab));
     }
 
     /// Asks the engine to close every view and stop, without waiting for it; the process waits
     /// for it as it exits.
     pub(crate) fn shut_down(&self) {
         self.send(Command::Shutdown);
+    }
+}
+
+fn update_tab(update: &Update) -> Option<TabId> {
+    match update {
+        Update::Tab(id, _)
+        | Update::Thumbnail(id, _)
+        | Update::FindSelection(id, _, _)
+        | Update::NewTab(id, _, _, _)
+        | Update::Peek(id, _, _)
+        | Update::ContextMenu(id, _)
+        | Update::Clipboard(id, _) => Some(*id),
+        _ => None,
     }
 }
 
@@ -342,7 +438,10 @@ impl Engine {
         let (sender, updates) = std::sync::mpsc::channel();
         let engine = Self {
             commands,
-            updates,
+            updates: Arc::new(SharedUpdates {
+                receiver: Mutex::new(updates),
+                pending: Mutex::new(VecDeque::new()),
+            }),
             wake: Wake::default(),
         };
         let fake = FakeEngine {

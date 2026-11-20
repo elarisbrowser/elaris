@@ -3,7 +3,7 @@
 use super::paths::{
     Platform, application_dir, config_directory, parse_xdg_download_directory, profile_directory,
 };
-use super::session::{load_session, write_session_atomic};
+use super::session::{load_session, load_sessions, write_session_atomic, write_sessions_atomic};
 use super::*;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -57,10 +57,10 @@ fn history_worker_reports_failed_writes_and_refreshes_omnibox_after_success() {
     let storage = Storage::open(paths.clone()).unwrap();
     let history = storage.history();
     history.request_search("github").unwrap();
-    history.request_page(1, "", None).unwrap();
+    history.request_page(7, 1, "", None).unwrap();
     storage.flush_on_close().unwrap();
     assert!(
-        matches!(history.take_events().as_slice(), [HistoryEvent::Page(1, Ok(page))]
+        matches!(history.take_events(7).as_slice(), [HistoryEvent::Page(7, 1, Ok(page))]
             if page.entries.len() == 1)
     );
     assert_eq!(history.search("github", 10).len(), 1);
@@ -69,11 +69,11 @@ fn history_worker_reports_failed_writes_and_refreshes_omnibox_after_success() {
         HistoryMutation::Remove("https://github.com/".into()),
         HistoryMutation::Clear,
     ] {
-        history.mutate(operation).unwrap();
+        history.mutate(7, operation).unwrap();
         storage.flush_on_close().unwrap();
         assert!(matches!(
-            history.take_events().as_slice(),
-            [HistoryEvent::Mutation(Err(_))]
+            history.take_events(7).as_slice(),
+            [HistoryEvent::Mutation(7, Err(_))]
         ));
         assert_eq!(history.recent(10).len(), 1);
         assert_eq!(history.search("github", 10).len(), 1);
@@ -81,12 +81,12 @@ fn history_worker_reports_failed_writes_and_refreshes_omnibox_after_success() {
 
     database.execute_batch("DROP TRIGGER block_delete").unwrap();
     history
-        .mutate(HistoryMutation::Remove("https://github.com/".into()))
+        .mutate(7, HistoryMutation::Remove("https://github.com/".into()))
         .unwrap();
     storage.flush_on_close().unwrap();
     assert!(matches!(
-        history.take_events().as_slice(),
-        [HistoryEvent::Mutation(Ok(HistoryMutation::Remove(_)))]
+        history.take_events(7).as_slice(),
+        [HistoryEvent::Mutation(7, Ok(HistoryMutation::Remove(_)))]
     ));
     assert!(history.search("github", 10).is_empty());
     assert!(history.frequent(10).is_empty());
@@ -97,11 +97,11 @@ fn history_worker_reports_failed_writes_and_refreshes_omnibox_after_success() {
     history
         .record_visit("https://example.org/", "Example")
         .unwrap();
-    history.mutate(HistoryMutation::Clear).unwrap();
-    history.request_page(2, "github", None).unwrap();
+    history.mutate(7, HistoryMutation::Clear).unwrap();
+    history.request_page(7, 2, "github", None).unwrap();
     storage.flush_on_close().unwrap();
-    assert!(matches!(history.take_events().as_slice(), [
-            HistoryEvent::Mutation(Ok(HistoryMutation::Clear)), HistoryEvent::Page(2, Ok(page))
+    assert!(matches!(history.take_events(7).as_slice(), [
+            HistoryEvent::Mutation(7, Ok(HistoryMutation::Clear)), HistoryEvent::Page(7, 2, Ok(page))
         ] if page.entries.is_empty()));
     assert!(history.search("github", 10).is_empty());
     assert!(
@@ -110,6 +110,37 @@ fn history_worker_reports_failed_writes_and_refreshes_omnibox_after_success() {
             .recent(10)
             .unwrap()
             .is_empty()
+    );
+}
+
+#[test]
+fn shared_history_page_results_stay_with_the_requesting_window() {
+    let temp = TempDir::new();
+    let paths = Paths::resolve_with(
+        Platform::Linux,
+        Some(&temp.0),
+        None,
+        None,
+        None,
+        None,
+        false,
+    )
+    .unwrap();
+    let storage = Storage::open(paths).unwrap();
+    let history = storage.history();
+    history.record_visit("https://one.example/", "One").unwrap();
+    history.record_visit("https://two.example/", "Two").unwrap();
+    history.request_page(101, 1, "one", None).unwrap();
+    history.request_page(202, 1, "two", None).unwrap();
+    storage.flush_on_close().unwrap();
+
+    let first = history.take_events(101);
+    let second = history.take_events(202);
+    assert!(
+        matches!(first.as_slice(), [HistoryEvent::Page(101, 1, Ok(page))] if page.entries.len() == 1)
+    );
+    assert!(
+        matches!(second.as_slice(), [HistoryEvent::Page(202, 1, Ok(page))] if page.entries.len() == 1)
     );
 }
 
@@ -463,6 +494,36 @@ fn session_write_replaces_atomically_and_leaves_no_temporary_file() {
     write_session_atomic(&path, &session).unwrap();
     assert_eq!(load_session(&path).unwrap(), Some(session));
     assert_eq!(fs::read_dir(&temp.0).unwrap().count(), 1);
+}
+
+#[test]
+fn multi_window_sessions_round_trip_and_legacy_single_sessions_still_load() {
+    let temp = TempDir::new();
+    let path = temp.0.join("session.json");
+    let first = Session::new(
+        vec![SessionTab {
+            url: "https://first.example/".into(),
+            title: "First".into(),
+            favicon: None,
+        }],
+        0,
+    );
+    let second = Session::new(
+        vec![SessionTab {
+            url: "https://second.example/".into(),
+            title: "Second".into(),
+            favicon: None,
+        }],
+        0,
+    );
+    write_sessions_atomic(&path, &[first.clone(), second.clone()], true).unwrap();
+    assert_eq!(load_sessions(&path).unwrap(), Some(vec![first, second]));
+
+    write_sessions_atomic(&path, &[Session::new(Vec::new(), 0)], false).unwrap();
+    assert!(load_sessions(&path).unwrap().is_none());
+
+    fs::write(&path, r#"{"version":4,"tabs":[],"active_tab":0}"#).unwrap();
+    assert_eq!(load_sessions(&path).unwrap().unwrap().len(), 1);
 }
 
 #[test]

@@ -7,6 +7,7 @@ use crate::tab::TabSection;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum MenuCommand {
+    NewWindow,
     NewTab,
     CloseTab,
     ReopenClosedTab,
@@ -59,6 +60,7 @@ impl MenuState {
     pub(crate) fn enabled(self, command: MenuCommand) -> bool {
         match command {
             MenuCommand::NewTab
+            | MenuCommand::NewWindow
             | MenuCommand::ToggleSidebar
             | MenuCommand::History
             | MenuCommand::Settings

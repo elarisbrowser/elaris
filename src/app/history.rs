@@ -33,7 +33,7 @@ impl HistoryPage {
     }
 
     pub(crate) fn receive(&mut self, event: HistoryEvent) -> bool {
-        let HistoryEvent::Page(revision, result) = event else {
+        let HistoryEvent::Page(_, revision, result) = event else {
             return false;
         };
         if revision != self.revision {
@@ -61,6 +61,7 @@ impl AppState {
             storage
                 .history()
                 .request_page(
+                    self.window_id,
                     revision,
                     &history.input.text,
                     history.previous.last().cloned(),
@@ -69,6 +70,7 @@ impl AppState {
         });
         if !result {
             history.receive(HistoryEvent::Page(
+                self.window_id,
                 revision,
                 Err("Browsing history is unavailable.".into()),
             ));
@@ -125,7 +127,7 @@ impl AppState {
         self.history_page.writing = self
             .storage
             .as_ref()
-            .is_some_and(|storage| storage.history().mutate(mutation).is_ok());
+            .is_some_and(|storage| storage.history().mutate(self.window_id, mutation).is_ok());
         if !self.history_page.writing {
             self.history_page.action_error =
                 Some("Could not save changes to browsing history.".into());
@@ -164,13 +166,12 @@ impl AppState {
             self.request_history_page();
             changed = true;
         }
-        let events = self
-            .storage
-            .as_ref()
-            .map_or_else(Vec::new, |storage| storage.history().take_events());
+        let events = self.storage.as_ref().map_or_else(Vec::new, |storage| {
+            storage.history().take_events(self.window_id)
+        });
         for event in events {
             match event {
-                HistoryEvent::Mutation(result) => {
+                HistoryEvent::Mutation(_, result) => {
                     changed = true;
                     self.history_page.writing = false;
                     match result {
@@ -227,12 +228,14 @@ mod tests {
         state.input.replace_text("missing");
         let newer = state.request();
         assert!(!state.receive(HistoryEvent::Page(
+            1,
             initial,
             db.page("", None).map_err(|e| e.to_string())
         )));
         assert!(state.loading);
         assert!(state.page.is_none());
         assert!(state.receive(HistoryEvent::Page(
+            1,
             newer,
             db.page("missing", None).map_err(|e| e.to_string())
         )));

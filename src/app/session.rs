@@ -151,10 +151,8 @@ impl super::AppState {
 
     fn queue_session(&mut self, session: Session) {
         if let Some(storage) = &self.storage {
-            match storage.save_session(session.clone()) {
-                Ok(()) => self.last_saved_session = Some(session),
-                Err(error) => eprintln!("Elaris: {error}"),
-            }
+            super::store_window_session(self.window_id, session.clone(), storage);
+            self.last_saved_session = Some(session);
         }
     }
 

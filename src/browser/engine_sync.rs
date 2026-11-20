@@ -3,12 +3,11 @@
 use std::time::Instant;
 
 use super::{Browser, Polled, peek, split};
-use crate::engine::{Command, Engine, Update, ViewCommand};
+use crate::engine::{Command, Update, ViewCommand};
 use crate::input;
 use crate::internal::InternalRoute;
 use crate::perf::{self, Stage};
 use crate::tab::Tab;
-use elaris::downloads::Status as DownloadStatus;
 
 impl Browser {
     /// Forwards what changed to the engine and takes in what it reported. Rune calls it at the
@@ -25,7 +24,14 @@ impl Browser {
         self.sync_engine();
         // Collected first: taking them in needs the browser, which the engine is part of.
         // Empty, as most polls are, it allocates nothing.
-        let updates: Vec<Update> = self.engine.iter().flat_map(Engine::updates).collect();
+        let mut tab_ids: Vec<_> = self.tabs.iter().map(Tab::id).collect();
+        if let Some(peek) = &self.peek {
+            tab_ids.push(peek.page.id());
+        }
+        let updates: Vec<Update> = self
+            .engine
+            .as_ref()
+            .map_or_else(Vec::new, |engine| engine.updates_for(&tab_ids));
         for update in updates {
             match update {
                 // A tab closed since the engine reported this has nothing to show it.
@@ -153,17 +159,12 @@ impl Browser {
                     polled.changed = true;
                 }
                 Update::DownloadStartFailed(id, error) => {
-                    if let Some(download) = self.downloads.iter_mut().find(|item| item.id == id) {
-                        download.status = DownloadStatus::Failed;
-                        download.error = Some(error);
-                        polled.changed = true;
-                    }
+                    self.fail_download_start(id, error);
+                    polled.changed = true;
                 }
                 Update::DownloadActionFailed(id, error) => {
-                    if let Some(download) = self.downloads.iter_mut().find(|item| item.id == id) {
-                        download.error = Some(error);
-                        polled.changed = true;
-                    }
+                    self.set_download_error(id, error);
+                    polled.changed = true;
                 }
                 Update::DownloadDirectoryFailed(error) => {
                     polled.download_directory_error = Some(error);
@@ -180,6 +181,11 @@ impl Browser {
         if let Some(peek) = &mut self.peek {
             let frames = peek.page.surface.frames();
             polled.animating |= std::mem::replace(&mut peek.page.engine.frames, frames) != frames;
+        }
+        let downloads = self.downloads();
+        if self.last_download_snapshot != downloads {
+            self.last_download_snapshot = downloads;
+            polled.changed = true;
         }
         polled
     }

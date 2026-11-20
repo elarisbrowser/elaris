@@ -12,6 +12,17 @@ fn starts_with_an_empty_window_without_an_about_blank_tab() {
     assert_eq!(state.omnibox.input.text, "");
     assert_eq!(state.address_error, None);
 }
+
+#[test]
+fn a_new_browser_window_has_independent_empty_window_state() {
+    let first = AppState::new(Some("first.example"));
+    let second = AppState::new_window();
+    assert_ne!(first.window_id, second.window_id);
+    assert!(first.browser.active_tab().is_some());
+    assert!(second.browser.active_tab().is_none());
+    assert!(second.browser.tabs().is_empty());
+    assert!(second.omnibox.open);
+}
 #[test]
 fn blank_window_startup_does_not_create_a_web_tab() {
     let mut state = AppState::new(None);

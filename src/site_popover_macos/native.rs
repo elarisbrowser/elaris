@@ -12,7 +12,7 @@ use objc2_app_kit_02::{
 };
 use objc2_foundation_02::{MainThreadMarker, NSPoint, NSRect, NSSize, NSString};
 
-use super::HOST;
+use super::with_active_host;
 
 pub(super) fn add_subview(parent: &NSView, child: &NSView) {
     // SAFETY: both views are retained and AppKit mutates this hierarchy on its main thread.
@@ -133,12 +133,8 @@ fn update_hover_surface(tag: isize, hovered: bool) {
     let Ok(index) = usize::try_from(tag) else {
         return;
     };
-    HOST.with(|slot| {
-        let host = slot.borrow();
-        let Some(surface) = host
-            .as_ref()
-            .and_then(|host| host.hover_surfaces.get(index))
-        else {
+    with_active_host(|host| {
+        let Some(surface) = host.and_then(|host| host.hover_surfaces.get(index)) else {
             return;
         };
         // SAFETY: tracking callbacks and their views are on AppKit's main thread.

@@ -7,6 +7,9 @@ use crate::engine::{FindResult, Surface, TabUpdate, Thumbnail};
 use crate::internal::InternalRoute;
 use rune::Pixels;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 /// A tab's position in the sidebar. Tabs remain the same live objects when this changes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -27,14 +30,44 @@ impl TabSection {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct TabId(u64);
 
+static NEXT_TAB_ID: AtomicU64 = AtomicU64::new(1);
+static LIVE_TAB_IDS: OnceLock<Mutex<HashSet<u64>>> = OnceLock::new();
+
 impl TabId {
     /// The number Ladybird tags the tab's view and events with.
     pub(crate) fn raw(self) -> u64 {
         self.0
     }
 
+    #[cfg_attr(not(any(test, feature = "ladybird-bridge")), allow(dead_code))]
     pub(crate) fn from_raw(raw: u64) -> Self {
         Self(raw)
+    }
+
+    pub(crate) fn next() -> Self {
+        let id = Self(NEXT_TAB_ID.fetch_add(1, Ordering::Relaxed));
+        LIVE_TAB_IDS
+            .get_or_init(|| Mutex::new(HashSet::new()))
+            .lock()
+            .expect("live tab registry poisoned")
+            .insert(id.0);
+        id
+    }
+
+    pub(crate) fn release(self) {
+        if let Some(ids) = LIVE_TAB_IDS.get() {
+            ids.lock()
+                .expect("live tab registry poisoned")
+                .remove(&self.0);
+        }
+    }
+
+    pub(crate) fn is_live(self) -> bool {
+        LIVE_TAB_IDS.get().is_some_and(|ids| {
+            ids.lock()
+                .expect("live tab registry poisoned")
+                .contains(&self.0)
+        })
     }
 }
 

@@ -2,6 +2,7 @@
 
 //! The engine thread: starting it, its loop, and finishing it as the process exits.
 
+use std::collections::VecDeque;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex, Once};
 use std::thread::JoinHandle;
@@ -95,7 +96,10 @@ pub(super) fn start(
     });
     Ok(Engine {
         commands,
-        updates,
+        updates: Arc::new(super::SharedUpdates {
+            receiver: Mutex::new(updates),
+            pending: Mutex::new(VecDeque::new()),
+        }),
         wake,
     })
 }

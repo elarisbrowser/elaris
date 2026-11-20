@@ -3,7 +3,7 @@
 use rune::Tx;
 
 use super::super::{APP_NAME, AppState};
-use crate::storage::{self, Storage};
+use crate::storage;
 use crate::tab::{Tab, TabId};
 
 /// Rune's per-frame hook: forwards UI changes to the browser and shows what it reported.
@@ -21,6 +21,8 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     update_find_selection(state, &polled);
     let tab_drag_changed = update_tab_drag(state, clock, tx);
     let configuration_changed = update_configuration(state, &polled);
+    let shared_settings_changed = state.sync_shared_settings();
+    let shared_permissions_changed = state.sync_shared_permissions();
     record_history_updates(state, &polled);
     refresh_find_after_navigation(state, &polled);
     state.persist_session_if_changed();
@@ -37,6 +39,8 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         || settling
         || focus_changed
         || configuration_changed
+        || shared_settings_changed
+        || shared_permissions_changed
         || switcher_changed
         || tab_drag_changed
 }
@@ -122,7 +126,7 @@ fn update_configuration(state: &mut AppState, polled: &crate::browser::Polled) -
     let events = state
         .storage
         .as_ref()
-        .map_or_else(Vec::new, Storage::take_config_events);
+        .map_or_else(Vec::new, |storage| storage.take_config_events());
     let mut changed = polled.download_directory_error.is_some();
     for event in events {
         match event {

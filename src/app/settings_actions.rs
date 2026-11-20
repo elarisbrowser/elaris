@@ -10,7 +10,6 @@ use crate::permissions::{PermissionDecision, PermissionKind, PermissionState, Pe
 use crate::settings::{DownloadDirectory, SettingsChange, StartupMode};
 #[cfg(target_os = "macos")]
 use crate::site_controls::SiteControlPresentation;
-use crate::storage::Storage;
 use crate::tab::TabId;
 
 impl super::AppState {
@@ -97,6 +96,7 @@ impl super::AppState {
     }
 
     fn save_setting(&mut self, change: SettingsChange) {
+        super::publish_settings(&self.settings);
         if let Some(storage) = &self.storage
             && let Err(error) = storage.save_setting(change)
         {
@@ -109,7 +109,7 @@ impl super::AppState {
             .storage
             .as_ref()
             .ok_or_else(|| "Configuration storage is unavailable".to_owned())
-            .and_then(Storage::reload_configuration);
+            .and_then(|storage| storage.reload_configuration());
         if let Err(error) = result {
             self.configuration_issue = Some(error);
         }
@@ -137,7 +137,9 @@ impl super::AppState {
     pub(super) fn apply_config_load(&mut self, load: ConfigLoad) {
         let previous_download_directory = self.engine_download_directory();
         self.settings = load.settings;
+        super::publish_settings(&self.settings);
         self.permission_store = load.permissions;
+        super::publish_permissions(&self.permission_store);
         let download_directory = self.engine_download_directory();
         if previous_download_directory != download_directory {
             self.browser.set_download_directory(download_directory);
@@ -174,6 +176,7 @@ impl super::AppState {
             return;
         };
         self.permission_store.set(&origin, kind, permission);
+        super::publish_permissions(&self.permission_store);
         if let Some(storage) = &self.storage
             && let Err(error) = storage.save_permission(origin, kind, permission)
         {
@@ -186,6 +189,7 @@ impl super::AppState {
             return;
         };
         self.permission_store.reset(&origin);
+        super::publish_permissions(&self.permission_store);
         for kind in PermissionKind::ALL {
             if let Some(storage) = &self.storage
                 && let Err(error) =

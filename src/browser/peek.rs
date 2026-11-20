@@ -121,8 +121,10 @@ impl Browser {
     }
 
     fn destroy_peek(&self, peek: PeekState) {
+        peek.page.id().release();
         if let Some(engine) = &self.engine {
             engine.send(Command::Close(peek.page.id()));
+            engine.discard_tab_updates(peek.page.id());
         }
     }
 

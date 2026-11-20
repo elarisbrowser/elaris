@@ -120,19 +120,55 @@ impl Session {
     }
 }
 
-pub(super) fn load_session(path: &Path) -> io::Result<Option<Session>> {
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SessionCollection {
+    format: u8,
+    #[serde(default = "restore_sessions_by_default")]
+    restore_on_launch: bool,
+    windows: Vec<Session>,
+}
+
+fn restore_sessions_by_default() -> bool {
+    true
+}
+
+pub(super) fn load_sessions(path: &Path) -> io::Result<Option<Vec<Session>>> {
     let bytes = match fs::read(path) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error),
     };
-    let session: Session = serde_json::from_slice(&bytes)
+    let value: serde_json::Value = serde_json::from_slice(&bytes)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-    Ok(session.is_supported().then_some(session))
+    let sessions = if value.get("windows").is_some() {
+        let collection: SessionCollection = serde_json::from_value(value)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+        if collection.format != 1 || !collection.restore_on_launch {
+            return Ok(None);
+        }
+        collection.windows
+    } else {
+        // Version 1 through 4 single-window files remain valid and migrate on their next save.
+        vec![
+            serde_json::from_value(value)
+                .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?,
+        ]
+    };
+    Ok((!sessions.is_empty() && sessions.iter().all(Session::is_supported)).then_some(sessions))
 }
 
-pub(super) fn write_session_atomic(path: &Path, session: &Session) -> io::Result<()> {
-    let bytes = serde_json::to_vec(session)
+pub(super) fn write_sessions_atomic(
+    path: &Path,
+    sessions: &[Session],
+    restore_on_launch: bool,
+) -> io::Result<()> {
+    let collection = SessionCollection {
+        format: 1,
+        restore_on_launch,
+        windows: sessions.to_vec(),
+    };
+    let bytes = serde_json::to_vec(&collection)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     let id = NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed);
     let timestamp = std::time::SystemTime::now()
@@ -166,4 +202,14 @@ pub(super) fn write_session_atomic(path: &Path, session: &Session) -> io::Result
         let _ = fs::remove_file(&temp);
     }
     result
+}
+
+#[cfg(test)]
+pub(super) fn load_session(path: &Path) -> io::Result<Option<Session>> {
+    Ok(load_sessions(path)?.and_then(|sessions| sessions.into_iter().next()))
+}
+
+#[cfg(test)]
+pub(super) fn write_session_atomic(path: &Path, session: &Session) -> io::Result<()> {
+    write_sessions_atomic(path, std::slice::from_ref(session), true)
 }

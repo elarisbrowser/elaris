@@ -79,10 +79,22 @@ fn split_session_keeps_its_group_when_a_nonmember_tab_is_active() {
     let mut restored = AppState::new(None);
     restored.restore_session(&session);
 
-    assert_eq!(restored.browser.visible_tabs(), [Some(other), None]);
+    let restored_other = restored.browser.active_tab().unwrap().id();
+    assert_ne!(restored_other, other);
     assert_eq!(
-        restored.browser.split.map(|split| split.panes),
-        Some([Some(left), Some(right)])
+        restored.browser.tab(restored_other).unwrap().url,
+        "https://three.example"
+    );
+    let split = restored.browser.split.unwrap();
+    let left = split.panes[0].unwrap();
+    let right = split.panes[1].unwrap();
+    assert_eq!(
+        restored.browser.tab(left).unwrap().url,
+        "https://one.example"
+    );
+    assert_eq!(
+        restored.browser.tab(right).unwrap().url,
+        "https://two.example"
     );
     restored.activate(right);
     assert_eq!(restored.browser.visible_tabs(), [Some(left), Some(right)]);

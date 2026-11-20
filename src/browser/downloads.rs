@@ -9,8 +9,19 @@ use elaris::downloads::{
 
 impl Browser {
     /// The browser's downloads, including work initiated by a webpage.
-    pub(crate) fn downloads(&self) -> &[Download] {
-        &self.downloads
+    pub(crate) fn downloads(&self) -> Vec<Download> {
+        self.downloads
+            .lock()
+            .expect("download list poisoned")
+            .clone()
+    }
+
+    #[cfg(not(test))]
+    pub(crate) fn share_downloads(
+        &mut self,
+        downloads: std::sync::Arc<std::sync::Mutex<Vec<Download>>>,
+    ) {
+        self.downloads = downloads;
     }
 
     pub(crate) fn set_download_directory(&self, directory: Option<std::path::PathBuf>) {
@@ -52,7 +63,10 @@ impl Browser {
         }
         request.url.clone_from(&url);
         let id = DownloadId::next().map_err(Error::Download)?;
-        self.downloads.push(Download::pending(id, &request, url));
+        self.downloads
+            .lock()
+            .expect("download list poisoned")
+            .push(Download::pending(id, &request, url));
         engine.send(Command::StartDownload(id, request));
         Ok(id)
     }
@@ -85,10 +99,13 @@ impl Browser {
         self.send_download_action(id, DownloadAction::Reveal)
     }
 
-    fn download(&self, id: DownloadId) -> Result<&Download, Error> {
+    fn download(&self, id: DownloadId) -> Result<Download, Error> {
         self.downloads
+            .lock()
+            .expect("download list poisoned")
             .iter()
             .find(|download| download.id == id)
+            .cloned()
             .ok_or(Error::Download(downloads::Error::NoSuchDownload))
     }
 
@@ -101,10 +118,36 @@ impl Browser {
     }
 
     pub(super) fn apply_download_update(&mut self, id: DownloadId, update: downloads::Update) {
-        let Some(download) = self.downloads.iter_mut().find(|download| download.id == id) else {
-            self.downloads.push(update.into_download(id));
+        let mut downloads = self.downloads.lock().expect("download list poisoned");
+        let Some(download) = downloads.iter_mut().find(|download| download.id == id) else {
+            downloads.push(update.into_download(id));
             return;
         };
         *download = update.into_download(id);
+    }
+
+    pub(super) fn fail_download_start(&mut self, id: DownloadId, error: String) {
+        if let Some(download) = self
+            .downloads
+            .lock()
+            .expect("download list poisoned")
+            .iter_mut()
+            .find(|item| item.id == id)
+        {
+            download.status = DownloadStatus::Failed;
+            download.error = Some(error);
+        }
+    }
+
+    pub(super) fn set_download_error(&mut self, id: DownloadId, error: String) {
+        if let Some(download) = self
+            .downloads
+            .lock()
+            .expect("download list poisoned")
+            .iter_mut()
+            .find(|item| item.id == id)
+        {
+            download.error = Some(error);
+        }
     }
 }

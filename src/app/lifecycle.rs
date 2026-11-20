@@ -13,20 +13,21 @@ pub(crate) use poll::poll;
 
 /// Connect worker notifications once Rune can schedule a poll.
 pub(crate) fn start_workers(state: &mut AppState, waker: rune::Waker) {
+    crate::engine::register_window_waker(state.window_id, waker.clone());
     // Rune's real-time replays call both the headless setup and the native ready hook.
     if std::mem::replace(&mut state.workers_started, true) {
         return;
     }
     if let Some(storage) = &state.storage {
-        storage.set_notify(waker.clone());
+        storage.set_notify(std::sync::Arc::new(crate::engine::wake_all_windows));
     }
     #[cfg(feature = "ladybird-bridge")]
-    start_engine(state, waker);
+    start_engine(state);
 }
 
 /// Ladybird starts on its own thread after Rune's first frame.
 #[cfg(feature = "ladybird-bridge")]
-fn start_engine(state: &mut AppState, waker: rune::Waker) {
+fn start_engine(state: &mut AppState) {
     let Some(profile_dir) = state.profile_dir.clone() else {
         state.browser.fail(
             state
@@ -36,8 +37,8 @@ fn start_engine(state: &mut AppState, waker: rune::Waker) {
         );
         return;
     };
-    match Engine::start(
-        waker,
+    match Engine::start_shared(
+        std::sync::Arc::new(crate::engine::wake_all_windows),
         profile_dir,
         state.engine_download_directory(),
         state.display_refresh_rate,
@@ -145,6 +146,13 @@ pub(crate) fn omnibox_input_key(state: &mut AppState, event: &KeyEvent, tx: &mut
 }
 
 pub(crate) fn on_window_focus(state: &mut AppState, focused: bool, tx: &mut Tx) {
+    if focused {
+        super::activate_window(state.window_id);
+        #[cfg(target_os = "macos")]
+        crate::site_popover_macos::activate_window(state.window_id);
+    }
+    #[cfg(target_os = "macos")]
+    crate::menu_macos::set_active_window(state.window_id, focused);
     state.browser.set_window_focus(focused);
     if !focused {
         crate::ui::dismiss_tab_preview(state);
@@ -157,6 +165,13 @@ pub(crate) fn on_window_focus(state: &mut AppState, focused: bool, tx: &mut Tx) 
 }
 
 pub(crate) fn shut_down(state: &mut AppState, _: &mut Tx) {
+    super::unregister_window(state.window_id);
+    crate::engine::unregister_window_waker(state.window_id);
+    if let Some(storage) = &state.storage {
+        storage.history().forget_window(state.window_id);
+    }
+    #[cfg(target_os = "macos")]
+    crate::menu_macos::unregister_window(state.window_id);
     state.persist_session();
     state.browser.shut_down();
     if let Some(storage) = &state.storage
@@ -166,15 +181,41 @@ pub(crate) fn shut_down(state: &mut AppState, _: &mut Tx) {
     }
 }
 
+/// Reopen an existing queued window, or create a fresh one after the final window was closed.
+pub(crate) fn on_reopen(_: &mut AppState, has_visible_windows: bool, _: &mut Tx) -> bool {
+    if has_visible_windows {
+        return false;
+    }
+    // A deliberately closed final macOS window was removed from Elaris's registries. Create a
+    // fresh Rune window on Dock activation; Rune then skips reopening its retained closed host.
+    super::reopen_or_create_window();
+    true
+}
+
 /// Saves the browser before Rune hides the last window but keeps the app available to reopen.
 pub(crate) fn window_closed(state: &mut AppState, _: &mut Tx) {
     if rune::quitting() {
         return;
     }
+    let others_remain = super::open_window_count() > 1;
+    super::unregister_window(state.window_id);
     #[cfg(target_os = "macos")]
-    crate::site_popover_macos::detach_window();
-    state.browser.suspend_window();
+    crate::site_popover_macos::detach_window(state.window_id);
+    crate::engine::unregister_window_waker(state.window_id);
+    if let Some(storage) = &state.storage {
+        storage.history().forget_window(state.window_id);
+    }
+    #[cfg(target_os = "macos")]
+    crate::menu_macos::unregister_window(state.window_id);
     state.persist_session();
+    state.browser.close_window_views();
+    if let Some(storage) = &state.storage {
+        if others_remain {
+            super::remove_window_session(state.window_id, storage);
+        } else {
+            super::save_closed_final_session(storage);
+        }
+    }
     if let Some(storage) = &state.storage
         && let Err(error) = storage.flush_on_close()
     {

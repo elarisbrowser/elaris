@@ -11,7 +11,12 @@ use history::HistoryPage;
 #[cfg(test)]
 use rune::{Key, KeyEvent, Tx};
 use rune::{PointerPress, TextEdit};
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
+#[cfg(not(test))]
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock, RwLock};
 
 use crate::browser::Browser;
 use crate::omnibox;
@@ -144,7 +149,9 @@ impl RecentlyClosedTab {
     }
 }
 
+/// State for one Rune window. Its Browser owns its tabs; process services are shared separately.
 pub(crate) struct AppState {
+    pub(crate) window_id: u64,
     /// Maximum page frame rate reported by the window's current display.
     #[cfg(any(target_os = "macos", feature = "ladybird-bridge"))]
     display_refresh_rate: f64,
@@ -191,7 +198,7 @@ pub(crate) struct AppState {
     pub(crate) startup_picker_open: bool,
     #[cfg(target_os = "linux")]
     pub(crate) titlebar: LinuxTitlebar,
-    storage: Option<Storage>,
+    storage: Option<std::sync::Arc<Storage>>,
     workers_started: bool,
     #[cfg(feature = "ladybird-bridge")]
     profile_dir: Option<PathBuf>,
@@ -202,6 +209,7 @@ pub(crate) struct AppState {
     #[cfg(feature = "ladybird-bridge")]
     storage_error: Option<String>,
     last_saved_session: Option<Session>,
+    restored_windows: Vec<Session>,
     history_revision: u64,
     pub(crate) history_page: HistoryPage,
     /// The page title the window shows.
@@ -227,51 +235,68 @@ impl AppState {
 
     /// Opens the supplied page, or shows the omnibox in an empty window.
     pub(crate) fn new(start: Option<&str>) -> Self {
+        Self::build(start, true)
+    }
+
+    fn build(start: Option<&str>, restore: bool) -> Self {
         #[cfg(test)]
-        let (storage, _profile_dir, config_file, config_load, session, _storage_error) = (
+        let (storage, _profile_dir, config_file, config_load, sessions, _storage_error) = (
             None,
             None::<PathBuf>,
             None,
             None::<Result<ConfigLoad, String>>,
-            None,
+            Vec::new(),
             None::<String>,
         );
         #[cfg(not(test))]
-        let (storage, _profile_dir, config_file, config_load, session, _storage_error) =
+        let (storage, _profile_dir, config_file, config_load, sessions, _storage_error) =
             match storage::Paths::resolve() {
                 Ok(paths) => {
                     let profile_dir = Some(paths.profile_dir.clone());
                     let config_file = Some(paths.config_file.clone());
-                    match Storage::open(paths) {
-                        Ok(mut storage) => {
-                            let session = storage.take_session();
+                    match Storage::open_shared(paths) {
+                        Ok(storage) => {
+                            let sessions = if restore {
+                                storage.take_sessions().unwrap_or_default()
+                            } else {
+                                Vec::new()
+                            };
                             let config_load = storage.take_config_load();
                             (
                                 Some(storage),
                                 profile_dir,
                                 config_file,
                                 config_load,
-                                session,
+                                sessions,
                                 None,
                             )
                         }
                         Err(error) => {
                             let message = format!("Cannot open browser storage: {error}");
                             eprintln!("Elaris: {message}");
-                            (None, profile_dir, config_file, None, None, Some(message))
+                            (
+                                None,
+                                profile_dir,
+                                config_file,
+                                None,
+                                Vec::new(),
+                                Some(message),
+                            )
                         }
                     }
                 }
                 Err(error) => {
                     let message = format!("Cannot locate browser storage: {error}");
                     eprintln!("Elaris: {message}");
-                    (None, None, None, None, None, Some(message))
+                    (None, None, None, None, Vec::new(), Some(message))
                 }
             };
         let permission_store = config_load
             .as_ref()
             .and_then(|load| load.as_ref().ok())
             .map_or_else(PermissionStore::default, |load| load.permissions.clone());
+        #[cfg(not(test))]
+        let permission_store = shared_permission_store(permission_store);
         #[cfg_attr(test, allow(unused_mut))]
         let (settings, mut configuration_issue) = match config_load.as_ref() {
             Some(Ok(load)) => (
@@ -281,6 +306,15 @@ impl AppState {
             Some(Err(error)) => (Settings::default(), Some(error.clone())),
             None => (Settings::default(), None),
         };
+        #[cfg(not(test))]
+        let settings = shared_settings(settings);
+        let initial_session = sessions.first().cloned();
+        let restored_windows =
+            if restore && start.is_none() && settings.startup != StartupMode::BlankWindow {
+                sessions.into_iter().skip(1).collect()
+            } else {
+                Vec::new()
+            };
         let default_download_directory = storage::default_download_directory();
         #[cfg_attr(test, allow(unused_mut))]
         let mut download_directory_override = None;
@@ -293,6 +327,7 @@ impl AppState {
             }
         }
         let mut state = Self {
+            window_id: NEXT_WINDOW_ID.fetch_add(1, Ordering::Relaxed),
             #[cfg(any(target_os = "macos", feature = "ladybird-bridge"))]
             display_refresh_rate: 60.0,
             omnibox: omnibox::State::default(),
@@ -335,15 +370,77 @@ impl AppState {
             configuration_issue,
             #[cfg(feature = "ladybird-bridge")]
             storage_error: _storage_error,
-            last_saved_session: session.clone(),
+            last_saved_session: initial_session.clone(),
+            restored_windows,
             history_revision: 0,
             history_page: HistoryPage::default(),
             window_title: None,
             context_menu: None,
             recently_closed: Vec::new(),
         };
-        state.open_start_page(start, session.as_ref());
+        #[cfg(not(test))]
+        state.browser.share_downloads(shared_downloads());
+        state.open_start_page(start, initial_session.as_ref());
+        if start.is_none()
+            && let Some(session) = initial_session
+        {
+            seed_window_session(state.window_id, session);
+        }
         state
+    }
+
+    pub(crate) fn new_window() -> Self {
+        let mut state = Self::build(None, false);
+        state.open_omnibox(omnibox::Mode::New);
+        state
+    }
+
+    pub(crate) fn new_window_from_session(session: Session) -> Self {
+        let mut state = Self::build(None, false);
+        state.omnibox.close();
+        state.restore_session(&session);
+        state.last_saved_session = Some(session.clone());
+        seed_window_session(state.window_id, session);
+        state
+    }
+
+    pub(crate) fn take_restored_windows(&mut self) -> Vec<Session> {
+        std::mem::take(&mut self.restored_windows)
+    }
+
+    pub(crate) fn sync_shared_settings(&mut self) -> bool {
+        #[cfg(not(test))]
+        {
+            let settings = shared_settings_snapshot();
+            if self.settings == settings {
+                false
+            } else {
+                let previous = self.engine_download_directory();
+                self.settings = settings;
+                let current = self.engine_download_directory();
+                if previous != current {
+                    self.browser.set_download_directory(current);
+                }
+                true
+            }
+        }
+        #[cfg(test)]
+        false
+    }
+
+    pub(crate) fn sync_shared_permissions(&mut self) -> bool {
+        #[cfg(not(test))]
+        {
+            let permissions = shared_permission_snapshot();
+            if self.permission_store == permissions {
+                false
+            } else {
+                self.permission_store = permissions;
+                true
+            }
+        }
+        #[cfg(test)]
+        false
     }
 
     fn open_start_page(&mut self, start: Option<&str>, session: Option<&Session>) {
@@ -369,6 +466,163 @@ impl AppState {
     }
 }
 
+static NEXT_WINDOW_ID: AtomicU64 = AtomicU64::new(1);
+
+static WINDOW_REGISTRY: OnceLock<Mutex<HashMap<u64, rune::WindowHandle>>> = OnceLock::new();
+static SESSION_REGISTRY: OnceLock<Mutex<BTreeMap<u64, Session>>> = OnceLock::new();
+static SHARED_SETTINGS: OnceLock<RwLock<Settings>> = OnceLock::new();
+static SHARED_PERMISSIONS: OnceLock<RwLock<PermissionStore>> = OnceLock::new();
+#[cfg(not(test))]
+static SHARED_DOWNLOADS: OnceLock<Arc<Mutex<Vec<elaris::downloads::Download>>>> = OnceLock::new();
+static ACTIVE_WINDOW: AtomicU64 = AtomicU64::new(0);
+
+#[cfg(not(test))]
+fn shared_settings(settings: Settings) -> Settings {
+    SHARED_SETTINGS
+        .get_or_init(|| RwLock::new(settings))
+        .read()
+        .expect("shared settings poisoned")
+        .clone()
+}
+
+#[cfg(not(test))]
+fn shared_settings_snapshot() -> Settings {
+    SHARED_SETTINGS
+        .get()
+        .expect("shared settings initialized before windows")
+        .read()
+        .expect("shared settings poisoned")
+        .clone()
+}
+
+pub(crate) fn publish_settings(settings: &Settings) {
+    *SHARED_SETTINGS
+        .get_or_init(|| RwLock::new(settings.clone()))
+        .write()
+        .expect("shared settings poisoned") = settings.clone();
+    crate::engine::wake_all_windows();
+}
+
+#[cfg(not(test))]
+fn shared_downloads() -> Arc<Mutex<Vec<elaris::downloads::Download>>> {
+    Arc::clone(SHARED_DOWNLOADS.get_or_init(|| Arc::new(Mutex::new(Vec::new()))))
+}
+
+#[cfg(not(test))]
+fn shared_permission_store(permissions: PermissionStore) -> PermissionStore {
+    SHARED_PERMISSIONS
+        .get_or_init(|| RwLock::new(permissions))
+        .read()
+        .expect("shared permissions poisoned")
+        .clone()
+}
+
+#[cfg(not(test))]
+fn shared_permission_snapshot() -> PermissionStore {
+    SHARED_PERMISSIONS
+        .get()
+        .expect("shared permissions initialized before windows")
+        .read()
+        .expect("shared permissions poisoned")
+        .clone()
+}
+
+pub(crate) fn publish_permissions(permissions: &PermissionStore) {
+    *SHARED_PERMISSIONS
+        .get_or_init(|| RwLock::new(permissions.clone()))
+        .write()
+        .expect("shared permissions poisoned") = permissions.clone();
+    crate::engine::wake_all_windows();
+}
+
+pub(crate) fn register_window(id: u64, handle: rune::WindowHandle) {
+    WINDOW_REGISTRY
+        .get_or_init(|| Mutex::new(HashMap::new()))
+        .lock()
+        .expect("window registry poisoned")
+        .insert(id, handle);
+}
+
+pub(crate) fn unregister_window(id: u64) {
+    if let Some(registry) = WINDOW_REGISTRY.get() {
+        registry
+            .lock()
+            .expect("window registry poisoned")
+            .remove(&id);
+    }
+    let _ = ACTIVE_WINDOW.compare_exchange(id, 0, Ordering::Relaxed, Ordering::Relaxed);
+}
+
+pub(crate) fn activate_window(id: u64) {
+    ACTIVE_WINDOW.store(id, Ordering::Relaxed);
+}
+
+pub(crate) fn open_window_count() -> usize {
+    WINDOW_REGISTRY.get().map_or(0, |registry| {
+        registry.lock().expect("window registry poisoned").len()
+    })
+}
+
+pub(crate) fn reopen_or_create_window() {
+    let existing = WINDOW_REGISTRY.get().and_then(|registry| {
+        registry
+            .lock()
+            .expect("window registry poisoned")
+            .values()
+            .next()
+            .cloned()
+    });
+    if let Some(handle) = existing {
+        handle.open();
+    } else {
+        crate::open_browser_window();
+    }
+}
+
+fn save_registered_sessions(storage: &Storage, restore_on_launch: bool) {
+    let sessions = SESSION_REGISTRY
+        .get_or_init(|| Mutex::new(BTreeMap::new()))
+        .lock()
+        .expect("session registry poisoned")
+        .values()
+        .cloned()
+        .collect();
+    if let Err(error) = storage.save_sessions_for_launch(sessions, restore_on_launch) {
+        eprintln!("Elaris: {error}");
+    }
+}
+
+pub(crate) fn store_window_session(id: u64, session: Session, storage: &Storage) {
+    SESSION_REGISTRY
+        .get_or_init(|| Mutex::new(BTreeMap::new()))
+        .lock()
+        .expect("session registry poisoned")
+        .insert(id, session);
+    save_registered_sessions(storage, true);
+}
+
+fn seed_window_session(id: u64, session: Session) {
+    SESSION_REGISTRY
+        .get_or_init(|| Mutex::new(BTreeMap::new()))
+        .lock()
+        .expect("session registry poisoned")
+        .insert(id, session);
+}
+
+pub(crate) fn remove_window_session(id: u64, storage: &Storage) {
+    if let Some(sessions) = SESSION_REGISTRY.get() {
+        sessions
+            .lock()
+            .expect("session registry poisoned")
+            .remove(&id);
+    }
+    save_registered_sessions(storage, true);
+}
+
+pub(crate) fn save_closed_final_session(storage: &Storage) {
+    save_registered_sessions(storage, false);
+}
+
 mod find;
 mod lifecycle;
 mod omnibox_actions;
@@ -380,6 +634,6 @@ mod tabs;
 mod tests;
 
 pub(crate) use lifecycle::{
-    new_tab, omnibox_input_key, on_window_focus, open_from_launcher, open_history, open_settings,
-    poll, setup_headless, shut_down, start_workers, submit_omnibox, window_closed,
+    new_tab, omnibox_input_key, on_reopen, on_window_focus, open_from_launcher, open_history,
+    open_settings, poll, setup_headless, shut_down, start_workers, submit_omnibox, window_closed,
 };
