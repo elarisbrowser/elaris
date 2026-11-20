@@ -83,8 +83,10 @@ pub(super) fn popover(
         };
         main = main.child(
             text(message)
+                .w_full()
                 .font(type_::BODY)
                 .color(theme.text_muted)
+                .wrap()
                 .py(6.0)
                 .mt(4.0),
         );
