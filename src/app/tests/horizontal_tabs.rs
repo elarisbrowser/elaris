@@ -76,6 +76,9 @@ fn layout_switch_preserves_split_tabs_and_window_state() {
     );
     let anchor = rect(&window, "site-controls");
     let nav = rect(&window, "horizontal-navigation");
+    let tab = rect(&window, &horizontal_tabs::key(first));
+    let bar = rect(&window, "horizontal-address-bar");
+    assert!((0.0..=4.0).contains(&(bar[1] - (tab[1] + tab[3]))));
     assert!(anchor[1] > nav[1] && anchor[1] + anchor[3] < page[1]);
     assert!(rect(&other, "page-layout")[0] > 0.0);
     other.update(|state, _| {

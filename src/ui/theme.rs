@@ -212,9 +212,9 @@ pub(crate) const SIDEBAR_PADDING: f32 = space::S2 + space::S1 / 2.0;
 pub(crate) const SIDEBAR_GAP: f32 = space::S2;
 /// The row level with the window controls, holding the navigation buttons: the height of the
 /// titlebar band macOS drags, since the controls sit centred in it.
-pub(crate) const HORIZONTAL_STRIP_HEIGHT: f32 = HEADER_HEIGHT - 2.0;
+pub(crate) const HORIZONTAL_STRIP_HEIGHT: f32 = HEADER_HEIGHT - 4.0;
 pub(crate) const HORIZONTAL_FIELD_HEIGHT: f32 = FIELD_HEIGHT - 8.0;
-pub(crate) const HORIZONTAL_NAV_HEIGHT: f32 = HORIZONTAL_FIELD_HEIGHT + 2.0 * NAV_GAP;
+pub(crate) const HORIZONTAL_NAV_HEIGHT: f32 = HORIZONTAL_FIELD_HEIGHT;
 pub(crate) const HORIZONTAL_CHROME_HEIGHT: f32 = HORIZONTAL_STRIP_HEIGHT + HORIZONTAL_NAV_HEIGHT;
 pub(crate) const HORIZONTAL_TAB_HEIGHT: f32 = ROW_HEIGHT - 8.0;
 pub(crate) const HORIZONTAL_COMPACT_TAB: f32 = HORIZONTAL_TAB_HEIGHT;
