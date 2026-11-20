@@ -123,7 +123,7 @@ pub(super) fn view(
         .count();
     let favourites = state.browser.tabs().len() - regular;
     let compact_width = section_width(favourites, theme::HORIZONTAL_COMPACT_TAB);
-    let min_regular = section_width(regular, theme::HORIZONTAL_TAB_MIN);
+    let min_regular = regular_section_width(regular, theme::HORIZONTAL_TAB_MIN);
     let overflow = compact_width + min_regular > viewport_width + 0.5;
     let reserve = if overflow {
         theme::ICON_BUTTON + theme::NAV_GAP
@@ -135,21 +135,26 @@ pub(super) fn view(
         viewport_width - reserve - compact_width - min_regular,
     );
     let width_of = |section, items: &[PreviewItem]| {
-        items
+        let tabs = items
             .iter()
-            .map(|item| item_width(section, *item, &widths) + theme::TAB_GAP)
-            .sum::<f32>()
-            .max(theme::HORIZONTAL_EMPTY_SECTION)
+            .map(|item| item_width(section, *item, &widths))
+            .sum::<f32>();
+        let gaps = match section {
+            TabSection::Favourite => items.len(),
+            TabSection::Regular => items.len().saturating_sub(1),
+        } as f32
+            * theme::TAB_GAP;
+        (tabs + gaps).max(theme::HORIZONTAL_EMPTY_SECTION)
     };
-    let committed_width = compact_width
-        + (state
-            .browser
-            .tabs()
-            .iter()
-            .filter(|tab| tab.section() == TabSection::Regular)
-            .map(|tab| widths[&tab.id()] + theme::TAB_GAP)
-            .sum::<f32>())
-        .max(theme::HORIZONTAL_EMPTY_SECTION);
+    let regular_width = state
+        .browser
+        .tabs()
+        .iter()
+        .filter(|tab| tab.section() == TabSection::Regular)
+        .map(|tab| widths[&tab.id()])
+        .sum::<f32>()
+        + regular.saturating_sub(1) as f32 * theme::TAB_GAP;
+    let committed_width = compact_width + regular_width.max(theme::HORIZONTAL_EMPTY_SECTION);
     let preview_width =
         width_of(TabSection::Favourite, &sections[0]) + width_of(TabSection::Regular, &sections[1]);
     // Keep the viewport from contracting beneath the pointer when a drag removes a tab.
@@ -298,6 +303,11 @@ fn section_width(count: usize, tab_width: f32) -> f32 {
     (count as f32 * (tab_width + theme::TAB_GAP)).max(theme::HORIZONTAL_EMPTY_SECTION)
 }
 
+fn regular_section_width(count: usize, tab_width: f32) -> f32 {
+    (count as f32 * tab_width + count.saturating_sub(1) as f32 * theme::TAB_GAP)
+        .max(theme::HORIZONTAL_EMPTY_SECTION)
+}
+
 fn regular_widths(state: &AppState, spare: f32) -> HashMap<TabId, f32> {
     let tabs = state.browser.tabs();
     let mut preferred = state.sidebar.preferred_tab_widths.borrow_mut();
@@ -378,7 +388,11 @@ fn section_view(
         })
         .h(theme::HORIZONTAL_TAB_HEIGHT)
         .min_w(theme::HORIZONTAL_EMPTY_SECTION)
-        .pr(theme::TAB_GAP)
+        .pr(if section == TabSection::Favourite {
+            theme::TAB_GAP
+        } else {
+            0.0
+        })
         .gap(theme::TAB_GAP)
         .on_layout_tx(move |state: &mut AppState, rect, tx| {
             state
