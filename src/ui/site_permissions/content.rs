@@ -177,6 +177,7 @@ fn security_page(theme: &Theme, presentation: &SiteControlPresentation) -> El {
                 .child(
                     rune::col()
                         .grow(1.0)
+                        .min_w(0.0)
                         .gap(4.0)
                         .child(
                             text(status)
@@ -185,8 +186,9 @@ fn security_page(theme: &Theme, presentation: &SiteControlPresentation) -> El {
                         )
                         .child(
                             text(description)
-                                .font(rune::TextStyle::new(11.5, 400.0))
-                                .color(theme.text_muted),
+                                .font(rune::TextStyle::new(11.5, 400.0).lh(16.0))
+                                .color(theme.text_muted)
+                                .wrap(),
                         ),
                 ),
         )
