@@ -33,6 +33,7 @@ use crate::settings::SettingsChange;
 
 const HISTORY_CACHE_LIMIT: usize = 100;
 const HISTORY_SEARCH_CACHE_LIMIT: usize = 32;
+const STORAGE_FLUSH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 static WORKERS: Mutex<Vec<Worker>> = Mutex::new(Vec::new());
 static REGISTER_EXIT: Once = Once::new();
 static PROCESS_STORAGE: OnceLock<Result<Arc<Storage>, String>> = OnceLock::new();
@@ -461,7 +462,7 @@ impl Storage {
             .enqueue(&self.commands, Command::Flush(finished))
             .map_err(|_| "storage worker has stopped".to_owned())?;
         pending
-            .recv_timeout(std::time::Duration::from_secs(2))
+            .recv_timeout(STORAGE_FLUSH_TIMEOUT)
             .map_err(|error| format!("waiting for pending storage writes: {error}"))
     }
 
