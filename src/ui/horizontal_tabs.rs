@@ -3,6 +3,7 @@
 //! Two-row browser chrome using the shared browser, tab actions and drag gesture.
 
 use rune::{Cx, El, Spring, Transition, Tx, col, el, row};
+use rune_kit::{Menu, MenuItem, Placement};
 
 use super::controls::{icon_button, row_button};
 use super::sidebar::drag::PreviewItem;
@@ -23,6 +24,7 @@ pub(crate) fn reveal_active(state: &mut AppState, tx: &mut Tx) {
     if !state.horizontal_tabs() {
         state.sidebar.revealed_tab = None;
         state.sidebar.horizontal_strip_width = None;
+        state.sidebar.overflow_menu_open = false;
     } else if !state.tab_drag.has_preview() {
         let active = state.browser.active_tab().and_then(|tab| {
             state
@@ -98,12 +100,17 @@ pub(super) fn view(
     let leading = inset.max(theme::SIDEBAR_PADDING);
     #[cfg(target_os = "linux")]
     let leading = inset + theme::SIDEBAR_PADDING;
+    let gaps = if cfg!(target_os = "linux") || inset == 0.0 {
+        2.0
+    } else {
+        3.0
+    };
     let viewport_width = strip_width
         - leading
         - theme::SIDEBAR_PADDING
         - theme::ICON_BUTTON
         - theme::ROW_PADDING
-        - 3.0 * theme::NAV_GAP;
+        - gaps * theme::NAV_GAP;
     let sections = TabSection::ORDER
         .map(|section| state.tab_drag.preview_items(state.browser.tabs(), section));
     let regular = state
@@ -113,7 +120,16 @@ pub(super) fn view(
         .filter(|tab| tab.section() == TabSection::Regular)
         .count();
     let favourites = state.browser.tabs().len() - regular;
-    let regular_width = regular_width(viewport_width, [favourites, regular]);
+    let counts = [favourites, regular];
+    let width = regular_width(viewport_width, counts);
+    let overflow = section_width(favourites, theme::HORIZONTAL_COMPACT_TAB)
+        + section_width(regular, width)
+        > viewport_width + 0.5;
+    let regular_width = if overflow {
+        regular_width(viewport_width - theme::ICON_BUTTON - theme::NAV_GAP, counts)
+    } else {
+        width
+    };
     let [favourite_items, regular_items] = sections.each_ref().map(Vec::len);
     let committed_width = section_width(favourites, theme::HORIZONTAL_COMPACT_TAB)
         + section_width(regular, regular_width);
@@ -150,10 +166,14 @@ pub(super) fn view(
                 .no_window_drag()
                 .scroll_x()
                 .scroll_edge_fade(theme::SIDEBAR_PADDING)
-                .on_layout_tx(|state: &mut AppState, rect, tx| {
+                .on_layout_tx(move |state: &mut AppState, rect, tx| {
                     state.tab_drag.set_horizontal_viewport(rect);
                     reveal_active(state, tx);
-                    tx.live_only();
+                    if !overflow && state.sidebar.overflow_menu_open {
+                        state.sidebar.overflow_menu_open = false;
+                    } else {
+                        tx.live_only();
+                    }
                 })
                 .on_scroll_offset(move |position| {
                     live.set([position.offset[0], position.max[0]]);
@@ -173,17 +193,20 @@ pub(super) fn view(
             )
             .shortcut_hint("cmd+t")
             .on_press_tx(app::new_tab),
-        )
-        .child(
-            el().key("horizontal-window-drag")
-                .grow(1.0)
-                .min_w(theme::ROW_PADDING)
-                .h_full()
-                .window_drag()
-                .on_secondary_press(|state: &mut AppState, press, _| {
-                    state.open_context_menu(None, press);
-                }),
         );
+    if overflow {
+        strip = strip.child(overflow_menu(state, cx, theme, overlays));
+    }
+    strip = strip.child(
+        el().key("horizontal-window-drag")
+            .grow(1.0)
+            .min_w(theme::ROW_PADDING)
+            .h_full()
+            .window_drag()
+            .on_secondary_press(|state: &mut AppState, press, _| {
+                state.open_context_menu(None, press);
+            }),
+    );
     #[cfg(target_os = "linux")]
     {
         strip = strip.children(window_controls);
@@ -213,6 +236,52 @@ pub(super) fn view(
         })
         .child(strip)
         .child(navigation)
+}
+
+fn overflow_menu(state: &AppState, cx: &Cx<AppState>, theme: &Theme, overlays: &mut Vec<El>) -> El {
+    let trigger = icon_button(
+        "tab-overflow",
+        "Hidden tabs",
+        &icons::CHEVRON_DOWN,
+        theme::ICON_BUTTON,
+        theme,
+    )
+    .on_press(|state: &mut AppState| {
+        state.sidebar.overflow_menu_open = !state.sidebar.overflow_menu_open;
+        hover::dismiss(state);
+    });
+    let open = state.sidebar.overflow_menu_open;
+    let mut menu = Menu::new("tab-overflow")
+        .trigger(trigger)
+        .placement(Placement::BottomEnd)
+        .min_width(theme::HORIZONTAL_TAB_MAX)
+        .open(open)
+        .on_close(|state: &mut AppState| state.sidebar.overflow_menu_open = false);
+    if open && let Some([left, _, width, _]) = cx.window_layout(SCROLL) {
+        let right = left + width;
+        let active = state.browser.active_tab().map(Tab::id);
+        for tab in state.browser.tabs() {
+            let id = tab.id();
+            if cx
+                .window_layout(&key(id))
+                .is_some_and(|rect| rect[0] >= left - 0.5 && rect[0] + rect[2] <= right + 0.5)
+            {
+                continue;
+            }
+            menu = menu.item(
+                MenuItem::new(tab.label())
+                    .lead(tab_icon(tab, active == Some(id), theme::ICON, theme))
+                    .checked(active == Some(id))
+                    .on_select_tx(move |state: &mut AppState, tx| {
+                        state.sidebar.overflow_menu_open = false;
+                        state.activate(id);
+                        tx.scroll_into_view_in(SCROLL, key(id));
+                        tx.focus(super::viewport::focus_key(&state.browser), false);
+                    }),
+            );
+        }
+    }
+    menu.build(&theme.kit(theme.overlay_panel), overlays)
 }
 
 fn section_width(count: usize, tab_width: f32) -> f32 {

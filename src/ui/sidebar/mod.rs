@@ -38,6 +38,7 @@ pub(crate) struct SidebarState {
     pub(crate) collapsed: bool,
     pub(in crate::ui) revealed_tab: Option<(crate::tab::TabId, crate::tab::TabSection, usize)>,
     pub(in crate::ui) horizontal_strip_width: Option<f32>,
+    pub(in crate::ui) overflow_menu_open: bool,
     pub(in crate::ui) hover: hover::Hover,
 }
 
@@ -49,6 +50,7 @@ impl Default for SidebarState {
             collapsed: false,
             revealed_tab: None,
             horizontal_strip_width: None,
+            overflow_menu_open: false,
             hover: hover::Hover::default(),
         }
     }

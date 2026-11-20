@@ -236,6 +236,57 @@ fn overflow_reveals_keyboard_selected_tab_and_keeps_new_tab_available() {
 }
 
 #[test]
+fn overflow_menu_lists_clipped_tabs_and_reveals_the_selection() {
+    let mut state = AppState::new(Some("one.example"));
+    state.set_tab_layout(TabLayout::Horizontal);
+    let mut window = runtime(state, 640.0);
+    assert!(window.presented("tab-overflow").is_none());
+
+    window.update(|state, _| {
+        for index in 0..8 {
+            state
+                .browser
+                .open_tab(&format!("overflow-{index}.example"))
+                .unwrap();
+        }
+    });
+    settle(&mut window);
+    let strip = rect(&window, horizontal_tabs::SCROLL);
+    let first_clipped = window
+        .state
+        .browser
+        .tabs()
+        .iter()
+        .find(|tab| {
+            let bounds = rect(&window, &horizontal_tabs::key(tab.id()));
+            bounds[0] + bounds[2] > strip[0] + strip[2] + 0.5
+        })
+        .unwrap()
+        .id();
+
+    let [x, y] = center(rect(&window, "tab-overflow"));
+    window.pointer_down(x, y);
+    window.pointer_up(x, y);
+    settle(&mut window);
+    let [x, y] = center(rect(&window, "tab-overflow-item0"));
+    window.pointer_down(x, y);
+    window.pointer_up(x, y);
+    settle(&mut window);
+
+    assert_eq!(
+        window.state.browser.active_tab().map(Tab::id),
+        Some(first_clipped)
+    );
+    assert!(window.presented("tab-overflow-menu").is_none());
+    let selected = rect(&window, &horizontal_tabs::key(first_clipped));
+    assert!(selected[0] >= strip[0] && selected[0] + selected[2] <= strip[0] + strip[2] + 0.5);
+
+    window.set_viewport((1800.0, 640.0), 1.0);
+    settle(&mut window);
+    assert!(window.presented("tab-overflow").is_none());
+}
+
+#[test]
 fn drag_near_strip_edge_scrolls_and_updates_the_insertion_target() {
     let mut state = AppState::new(Some("one.example"));
     let first = state.browser.active_tab().unwrap().id();
