@@ -149,11 +149,7 @@ impl super::AppState {
             .unwrap_or_default();
         let mut session = Session::new_with_sections(tabs, active_tab, favourites);
         if let Some(split) = self.browser.split
-            && let panes = &split.panes[..self
-                .browser
-                .split_view_limit
-                .min(split.pane_count)
-                .min(crate::browser::split::MAX_PANES)]
+            && let panes = split.panes(self.browser.split_view_limit)
             && panes.len() >= 2
             && let (Some(left), Some(right)) = (panes[0], panes[1])
             && panes.iter().all(Option::is_some)

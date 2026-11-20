@@ -96,7 +96,7 @@ pub(super) fn view(state: &AppState, theme: &Theme, side: usize) -> El {
         .on_key(move |state: &mut AppState, event, tx| {
             match event.key {
                 Key::Escape => {
-                    state.browser.exit_split(None);
+                    state.browser.cancel_split_picker(side);
                     tx.focus(focus_key(&state.browser), false);
                     tx.animated();
                 }
@@ -151,8 +151,8 @@ pub(super) fn view(state: &AppState, theme: &Theme, side: usize) -> El {
                     .py(space::S2)
                     .radius(radius::MD)
                     .hover(theme.hover)
-                    .on_press_tx(|state: &mut AppState, tx| {
-                        state.browser.exit_split(None);
+                    .on_press_tx(move |state: &mut AppState, tx| {
+                        state.browser.cancel_split_picker(side);
                         tx.focus(focus_key(&state.browser), false);
                         tx.animated();
                     }),

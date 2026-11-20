@@ -27,9 +27,8 @@ Shift-wheel and reveals the newly selected tab when switching with the keyboard.
 
 Split View opens with two panes. Settings → Split View sets the maximum between two and four;
 `[split_view].max_panes` in `config.toml` accepts values through 64. With three or more panes,
-panes share the width of their row. Drag another tab to the bottom edge of a filled split to preview
-and add a tile, or click Add Pane to open a tab picker. The two-pane layout keeps its
-resizable divider.
+panes share the width of their row. Drag another tab into the area where the next tile will appear, or click Add Pane to open a tab
+picker. Drag the vertical divider to adjust the width of the first column.
 
 ## Repeatable graphical check
 

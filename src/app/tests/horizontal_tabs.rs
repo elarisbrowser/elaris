@@ -659,7 +659,7 @@ fn context_menu_highlight_slides_between_items() {
 }
 
 #[test]
-fn dropping_tabs_at_the_bottom_edge_adds_panes_until_the_limit() {
+fn dropping_tabs_into_the_next_tile_adds_panes_until_the_limit() {
     let mut state = AppState::new(Some("one.example"));
     state.set_tab_layout(TabLayout::Horizontal);
     state.set_split_view_limit(4);
@@ -678,7 +678,7 @@ fn dropping_tabs_at_the_bottom_edge_adds_panes_until_the_limit() {
     for (index, tab) in tabs[1..3].iter().copied().enumerate() {
         start_drag(&mut window, tab);
         let [x, y, width, height] = rect(&window, "page-layout");
-        let end = [x + width * 0.4, y + height - 20.0];
+        let end = [x + width * 0.75, y + height * 0.72];
         window.pointer_move(end[0], end[1]);
         window.frame(1.0 / 60.0);
         assert_eq!(window.state.split_preview, Some(index + 2));
@@ -705,4 +705,13 @@ fn dropping_tabs_at_the_bottom_edge_adds_panes_until_the_limit() {
         [x + width * 0.4, y + height - 20.0],
     );
     assert!(target.is_some_and(|side| side < 4));
+    let divider = center(rect(&window, "split-grid-divider-0"));
+    let first_key = format!("web-pane-{}", first.raw());
+    let before = rect(&window, &first_key)[2];
+    window.pointer_down(divider[0], divider[1]);
+    window.pointer_move(divider[0] + 80.0, divider[1]);
+    window.frame(1.0 / 60.0);
+    release(&mut window, [divider[0] + 80.0, divider[1]]);
+    let after = rect(&window, &first_key)[2];
+    assert!((after - before - 80.0).abs() <= 1.0);
 }

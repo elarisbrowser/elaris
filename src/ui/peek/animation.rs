@@ -92,11 +92,18 @@ impl PeekAnimation {
                     Destination::Tab => viewport,
                     Destination::Split => {
                         if state.browser.visible_tabs().len() == 2 {
-                            let ratio = state.browser.split.map_or(0.5, |split| split.ratio);
-                            let [left, right] = split::widths(width, ratio);
+                            let [left, right] = split::widths(
+                                width,
+                                state.browser.split.map_or(0.5, |split| split.ratio),
+                            );
                             [left + split::DIVIDER, viewport[1], right, height]
                         } else {
-                            split::grid_cell_rect(viewport, state.browser.visible_tabs().len(), 1)
+                            split::grid_cell_rect(
+                                viewport,
+                                state.browser.visible_tabs().len(),
+                                1,
+                                state.browser.split.map_or(0.5, |split| split.ratio),
+                            )
                         }
                     }
                 };

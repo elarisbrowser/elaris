@@ -154,10 +154,8 @@ impl Browser {
             let layout = geometry(self.window.viewport);
             [layout.x, layout.y]
         } else if let Some(split) = self.split
-            && let Some(index) = split.panes[..split
-                .pane_count
-                .min(self.split_view_limit)
-                .min(split::MAX_PANES)]
+            && let Some(index) = split
+                .panes(self.split_view_limit)
                 .iter()
                 .position(|pane| *pane == Some(id))
         {
@@ -176,6 +174,7 @@ impl Browser {
                     [0.0, 0.0, self.window.viewport[0], self.window.viewport[1]],
                     count,
                     index,
+                    split.ratio,
                 );
                 [rect[0], rect[1]]
             }

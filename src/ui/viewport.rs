@@ -136,8 +136,12 @@ pub(crate) fn view(
     }
     let append_preview = (preview == Some(panes.len())).then(|| {
         let [_, _, width, height] = state.split_rect;
-        let [x, y, w, h] =
-            split::grid_cell_rect([0.0, 0.0, width, height], panes.len() + 1, panes.len());
+        let [x, y, w, h] = split::grid_cell_rect(
+            [0.0, 0.0, width, height],
+            panes.len() + 1,
+            panes.len(),
+            ratio.unwrap_or(0.5),
+        );
         indicator(theme, radius)
             .key("split-add-preview")
             .absolute(x, y)
@@ -182,8 +186,7 @@ pub(crate) fn view(
             .w_full()
             .h(0.0)
             .min_h(0.0)
-            .grow(1.0)
-            .gap(split::DIVIDER);
+            .grow(1.0);
         for (column, id) in row_panes.iter().copied().enumerate() {
             let side = row_index * columns + column;
             let child = if id.is_some() {
@@ -201,7 +204,19 @@ pub(crate) fn view(
             } else {
                 child
             };
-            grid_row = grid_row.child(wrap(id, side, 1.0, child));
+            let count = row_panes.len();
+            let first = split::grid_first_share(count, ratio.unwrap_or(0.5));
+            let weight = match (count, column) {
+                (1, _) => 1.0,
+                (_, 0) => first,
+                _ => (1.0 - first) / (count - 1) as f32,
+            };
+            if column == 1 {
+                grid_row = grid_row.child(grid_divider(row_index, count, theme));
+            } else if column > 1 {
+                grid_row = grid_row.child(el().w(split::DIVIDER).inert());
+            }
+            grid_row = grid_row.child(wrap(id, side, weight, child));
         }
         grid = grid.child(grid_row);
     }
@@ -214,29 +229,27 @@ pub(crate) fn view(
 
 fn add_split_pane_button(state: &AppState, theme: &Theme) -> Option<El> {
     let split = state.browser.displayed_split()?;
-    let current = split
-        .pane_count
-        .min(state.browser.split_view_limit)
-        .min(split::MAX_PANES);
-    (current < state.browser.split_view_limit).then(|| {
-        el().key("add-split-pane")
-            .role("button")
-            .label("Add pane to Split View")
-            .size(34.0, 34.0)
-            .pin(None, Some(8.0), Some(8.0), None)
-            .center()
-            .radius(theme::FIELD_RADIUS)
-            .fill(theme.settings_surface)
-            .border(1.0, theme.control_border)
-            .hover(theme.hover)
-            .press(theme.press)
-            .focusable(true)
-            .on_press_tx(|state: &mut AppState, tx| {
-                if state.browser.add_split_pane() {
-                    tx.animated();
-                }
-            })
-            .child(rune::text("+").color(theme.text))
+    (split.pane_count < state.browser.split_view_limit.min(split::MAX_PANES)).then(|| {
+        super::controls::floating_icon_button(
+            "add-split-pane",
+            "Add Pane",
+            &super::icons::PLUS,
+            theme::ICON_BUTTON,
+            theme,
+        )
+        .pin(
+            None,
+            Some(theme::VIEWPORT_INSET),
+            Some(theme::VIEWPORT_INSET),
+            None,
+        )
+        .on_press_tx(|state: &mut AppState, tx| {
+            if state.browser.add_split_pane() {
+                state.split_selection = 0;
+                tx.focus(PICKER, false);
+                tx.animated();
+            }
+        })
     })
 }
 
@@ -335,21 +348,14 @@ const PANE_KEYS: [&str; 64] = [
 
 pub(crate) fn drop_side(state: &AppState, id: TabId, point: [f32; 2]) -> Option<usize> {
     let panes = state.browser.visible_tabs();
-    if state.browser.displayed_split().is_some()
+    if let Some(current) = state.browser.displayed_split()
         && panes.len() < state.browser.split_view_limit.min(split::MAX_PANES)
         && !panes.contains(&Some(id))
         && !panes.contains(&None)
+        && split::target(state.split_rect, point, panes.len() + 1, current.ratio)
+            == Some(panes.len())
     {
-        let [x, y, width, height] = state.split_rect;
-        let edge = (height * 0.2).min(96.0);
-        if point[0] >= x
-            && point[0] < x + width
-            && point[1] >= y
-            && point[1] < y + height
-            && point[1] >= y + height - edge
-        {
-            return Some(panes.len());
-        }
+        return Some(panes.len());
     }
     if panes.len() == 2 {
         let ratio = state
@@ -364,7 +370,12 @@ pub(crate) fn drop_side(state: &AppState, id: TabId, point: [f32; 2]) -> Option<
             usize::from(point[0] >= x + split::widths(width, ratio)[0] + split::DIVIDER / 2.0);
         return (panes[side] != Some(id)).then_some(side);
     }
-    let side = split::target(state.split_rect, point, panes.len())?;
+    let side = split::target(
+        state.split_rect,
+        point,
+        panes.len(),
+        state.browser.displayed_split()?.ratio,
+    )?;
     if side >= panes.len() {
         return None;
     }
@@ -407,6 +418,27 @@ fn divider(live: bool, theme: &Theme) -> El {
         })
 }
 
+fn grid_divider(row: usize, columns: usize, theme: &Theme) -> El {
+    divider(false, theme)
+        .key(format!("split-grid-divider-{row}"))
+        .cursor(rune::Cursor::ResizeColumn)
+        .label("Resize split panes")
+        .on_drag(move |state: &mut AppState, drag, tx| {
+            let available =
+                (state.browser.content_width() - split::DIVIDER * (columns - 1) as f32).max(1.0);
+            if let Some(split) = &mut state.browser.split {
+                if drag.phase == Phase::Down {
+                    drag.data = split::grid_first_share(columns, split.ratio);
+                } else if !drag.cancelled() {
+                    let share = drag.data + drag.dx / available;
+                    let equal = 1.0 / columns as f32;
+                    split.ratio = (share - equal + 0.5).clamp(0.0, 1.0);
+                    tx.instant();
+                }
+            }
+        })
+}
+
 fn indicator(theme: &Theme, radius: f32) -> El {
     el().w_full()
         .h_full()
@@ -437,7 +469,11 @@ pub(crate) fn page_origin(state: &AppState) -> [f32; 2] {
         .map_or([0.0, 0.0], |split_state| {
             if state.browser.visible_tabs().len() == 2 {
                 return [
-                    split::widths(state.split_rect[2], split_state.ratio)[0] + split::DIVIDER,
+                    if state.browser.focused_side() == 0 {
+                        0.0
+                    } else {
+                        split::widths(state.split_rect[2], split_state.ratio)[0] + split::DIVIDER
+                    },
                     0.0,
                 ];
             }
@@ -445,6 +481,7 @@ pub(crate) fn page_origin(state: &AppState) -> [f32; 2] {
                 [0.0, 0.0, state.split_rect[2], state.split_rect[3]],
                 state.browser.visible_tabs().len(),
                 state.browser.focused_side(),
+                split_state.ratio,
             );
             [rect[0], rect[1]]
         });

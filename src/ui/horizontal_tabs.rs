@@ -505,11 +505,8 @@ fn tab_view(state: &AppState, tab: &Tab, theme: &Theme) -> El {
         tile = tile.fill(theme.address_field);
     }
     if state.browser.displayed_split().is_some_and(|split| {
-        split.panes[..state
-            .browser
-            .split_view_limit
-            .min(split.pane_count)
-            .min(crate::browser::split::MAX_PANES)]
+        split
+            .panes(state.browser.split_view_limit)
             .iter()
             .all(Option::is_some)
             && split.panes.contains(&Some(id))

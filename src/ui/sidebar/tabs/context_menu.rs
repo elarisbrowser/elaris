@@ -48,11 +48,8 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
                     state.dismiss_context_menu();
                     state.dismiss_find();
                     if state.browser.split.is_some_and(|split| {
-                        split.panes[..state
-                            .browser
-                            .split_view_limit
-                            .min(split.pane_count)
-                            .min(crate::browser::split::MAX_PANES)]
+                        split
+                            .panes(state.browser.split_view_limit)
                             .iter()
                             .all(Option::is_some)
                     }) {
@@ -77,11 +74,8 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
                 },
             ));
             if split.panes.contains(&Some(tab))
-                && let Some(other) = split.panes[..state
-                    .browser
-                    .split_view_limit
-                    .min(split.pane_count)
-                    .min(crate::browser::split::MAX_PANES)]
+                && let Some(other) = split
+                    .panes(state.browser.split_view_limit)
                     .iter()
                     .flatten()
                     .copied()

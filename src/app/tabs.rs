@@ -118,14 +118,9 @@ impl super::AppState {
     }
 
     pub(crate) fn has_split_picker(&self) -> bool {
-        self.browser.split.is_some_and(|split| {
-            split.panes[..self
-                .browser
-                .split_view_limit
-                .min(split.pane_count)
-                .min(crate::browser::split::MAX_PANES)]
-                .contains(&None)
-        })
+        self.browser
+            .split
+            .is_some_and(|split| split.panes(self.browser.split_view_limit).contains(&None))
     }
 
     pub(crate) fn cancel_tab_drag(&mut self) -> bool {

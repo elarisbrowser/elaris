@@ -249,12 +249,17 @@ impl Browser {
                     window.viewport[1],
                 ]
             } else {
-                side.zip(split_ratio).map_or(window.viewport, |(side, _)| {
-                    let [width, height] = window.viewport;
-                    let [_, _, width, height] =
-                        split::grid_cell_rect([0.0, 0.0, width, height], panes.len(), side);
-                    [width, height]
-                })
+                side.zip(split_ratio)
+                    .map_or(window.viewport, |(side, ratio)| {
+                        let [width, height] = window.viewport;
+                        let [_, _, width, height] = split::grid_cell_rect(
+                            [0.0, 0.0, width, height],
+                            panes.len(),
+                            side,
+                            ratio,
+                        );
+                        [width, height]
+                    })
             };
             let [width, height] = size.map(|points| input::device(points, scale));
             let viewport = (width > 0 && height > 0).then_some((width, height, f64::from(scale)));

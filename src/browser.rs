@@ -432,24 +432,12 @@ impl Browser {
             return;
         }
         if let Some(split) = &mut self.split
-            && !split.panes[..split
-                .pane_count
-                .min(self.split_view_limit)
-                .min(split::MAX_PANES)]
-                .contains(&Some(id))
-            && split.panes[..split
-                .pane_count
-                .min(self.split_view_limit)
-                .min(split::MAX_PANES)]
-                .contains(&None)
-        {
-            let destination = split.panes[..split
-                .pane_count
-                .min(self.split_view_limit)
-                .min(split::MAX_PANES)]
+            && !split.panes(self.split_view_limit).contains(&Some(id))
+            && let Some(destination) = split
+                .panes(self.split_view_limit)
                 .iter()
                 .position(Option::is_none)
-                .expect("an empty configured pane exists");
+        {
             split.panes[destination] = Some(id);
         }
         if self.active != Some(id) {
@@ -731,17 +719,11 @@ impl Browser {
         let tab = self.tabs.remove(index);
         self.recent.retain(|&tab| tab != id);
         if let Some(split) = self.split
-            && split.panes[..split
-                .pane_count
-                .min(self.split_view_limit)
-                .min(split::MAX_PANES)]
-                .contains(&Some(id))
+            && split.panes(self.split_view_limit).contains(&Some(id))
         {
             self.exit_split(
-                split.panes[..split
-                    .pane_count
-                    .min(self.split_view_limit)
-                    .min(split::MAX_PANES)]
+                split
+                    .panes(self.split_view_limit)
                     .iter()
                     .flatten()
                     .copied()
@@ -829,6 +811,7 @@ impl Browser {
                     [0.0, 0.0, self.content_width(), self.window.viewport[1]],
                     count,
                     self.focused_side(),
+                    split.ratio,
                 )[2]
             })
     }

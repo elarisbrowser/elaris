@@ -13,6 +13,12 @@ pub(crate) struct Split {
     pub(crate) ratio: f32,
 }
 
+impl Split {
+    pub(crate) fn panes(&self, limit: usize) -> &[Option<TabId>] {
+        &self.panes[..self.pane_count.min(limit).min(MAX_PANES)]
+    }
+}
+
 pub(crate) fn widths(width: f32, ratio: f32) -> [f32; 2] {
     let available = (width - DIVIDER).max(0.0);
     let min = MIN_PANE.min(available / 2.0);
@@ -20,26 +26,46 @@ pub(crate) fn widths(width: f32, ratio: f32) -> [f32; 2] {
     [left, available - left]
 }
 
-pub(crate) fn grid_cell_rect(rect: [f32; 4], count: usize, index: usize) -> [f32; 4] {
+pub(crate) fn grid_cell_rect(rect: [f32; 4], count: usize, index: usize, ratio: f32) -> [f32; 4] {
     let columns = (count as f32).sqrt().ceil().max(1.0) as usize;
     let rows = count.div_ceil(columns).max(1);
     let [x, y, width, height] = rect;
     let row = index / columns;
     let row_columns = (count - row * columns).min(columns);
-    let cell_width = (width - DIVIDER * (row_columns - 1) as f32).max(0.0) / row_columns as f32;
     let column = index % columns;
+    let available = (width - DIVIDER * (row_columns - 1) as f32).max(0.0);
+    let first = if row_columns == 1 {
+        available
+    } else {
+        available * grid_first_share(row_columns, ratio)
+    };
+    let rest = (available - first) / row_columns.saturating_sub(1).max(1) as f32;
+    let (offset, cell_width) = if column == 0 {
+        (0.0, first)
+    } else {
+        (
+            first + DIVIDER + (column - 1) as f32 * (rest + DIVIDER),
+            rest,
+        )
+    };
     let cell_height = (height - DIVIDER * (rows.saturating_sub(1) as f32)) / rows as f32;
     [
-        x + column as f32 * (cell_width + DIVIDER),
+        x + offset,
         y + row as f32 * (cell_height + DIVIDER),
         cell_width,
         cell_height,
     ]
 }
 
-pub(crate) fn target(rect: [f32; 4], point: [f32; 2], count: usize) -> Option<usize> {
+// Keep the default ratio at equal widths for any number of columns.
+pub(crate) fn grid_first_share(columns: usize, ratio: f32) -> f32 {
+    let equal = 1.0 / columns as f32;
+    (equal + ratio - 0.5).clamp(equal * 0.5, 1.0 - equal * 0.5)
+}
+
+pub(crate) fn target(rect: [f32; 4], point: [f32; 2], count: usize, ratio: f32) -> Option<usize> {
     (0..count).find(|index| {
-        let [x, y, width, height] = grid_cell_rect(rect, count, *index);
+        let [x, y, width, height] = grid_cell_rect(rect, count, *index, ratio);
         point[0] >= x && point[0] < x + width && point[1] >= y && point[1] < y + height
     })
 }
@@ -48,7 +74,8 @@ impl Browser {
     pub(crate) fn focused_side(&self) -> usize {
         self.split
             .and_then(|split| {
-                split.panes[..split.pane_count.min(self.split_view_limit).min(MAX_PANES)]
+                split
+                    .panes(self.split_view_limit)
                     .iter()
                     .position(|pane| *pane == self.active)
             })
@@ -59,8 +86,7 @@ impl Browser {
         self.split.map_or_else(
             || vec![self.active, None],
             |split| {
-                let visible =
-                    &split.panes[..split.pane_count.min(self.split_view_limit).min(MAX_PANES)];
+                let visible = split.panes(self.split_view_limit);
                 if visible.contains(&None) || visible.contains(&self.active) {
                     visible.to_vec()
                 } else {
@@ -72,7 +98,7 @@ impl Browser {
 
     pub(crate) fn displayed_split(&self) -> Option<Split> {
         self.split.filter(|split| {
-            let panes = &split.panes[..split.pane_count.min(self.split_view_limit).min(MAX_PANES)];
+            let panes = split.panes(self.split_view_limit);
             panes.contains(&None) || panes.contains(&self.active)
         })
     }
@@ -129,6 +155,21 @@ impl Browser {
         true
     }
 
+    pub(crate) fn cancel_split_picker(&mut self, side: usize) {
+        let Some(split) = &mut self.split else { return };
+        let count = split.panes(self.split_view_limit).len();
+        if split.panes(self.split_view_limit).get(side) != Some(&None) {
+            return;
+        }
+        if count == 2 {
+            self.exit_split(None);
+        } else {
+            split.panes.copy_within(side + 1..split.pane_count, side);
+            split.pane_count -= 1;
+            split.panes[split.pane_count] = None;
+        }
+    }
+
     pub(crate) fn swap_split(&mut self) {
         if let Some(split) = &mut self.split {
             split.panes.swap(0, 1);
@@ -158,10 +199,10 @@ mod tests {
     #[test]
     fn hit_testing_checks_bounds_and_the_actual_divider() {
         let rect = [100.0, 10.0, 800.0, 400.0];
-        assert_eq!(target(rect, [99.0, 10.0], 2), None);
-        assert_eq!(target(rect, [200.0, 200.0], 2), Some(0));
-        assert_eq!(target(rect, [700.0, 200.0], 2), Some(1));
-        assert_eq!(target(rect, [899.0, 410.0], 2), None);
+        assert_eq!(target(rect, [99.0, 10.0], 2, 0.5), None);
+        assert_eq!(target(rect, [200.0, 200.0], 2, 0.5), Some(0));
+        assert_eq!(target(rect, [700.0, 200.0], 2, 0.5), Some(1));
+        assert_eq!(target(rect, [899.0, 410.0], 2, 0.5), None);
     }
 
     #[test]
@@ -263,10 +304,10 @@ mod tests {
     #[test]
     fn grid_hit_testing_finds_each_cell_and_ignores_gaps() {
         let rect = [0.0, 0.0, 408.0, 408.0];
-        assert_eq!(target(rect, [100.0, 100.0], 4), Some(0));
-        assert_eq!(target(rect, [300.0, 100.0], 4), Some(1));
-        assert_eq!(target(rect, [100.0, 300.0], 4), Some(2));
-        assert_eq!(target(rect, [300.0, 300.0], 4), Some(3));
-        assert_eq!(target(rect, [204.0, 100.0], 4), None);
+        assert_eq!(target(rect, [100.0, 100.0], 4, 0.5), Some(0));
+        assert_eq!(target(rect, [300.0, 100.0], 4, 0.5), Some(1));
+        assert_eq!(target(rect, [100.0, 300.0], 4, 0.5), Some(2));
+        assert_eq!(target(rect, [300.0, 300.0], 4, 0.5), Some(3));
+        assert_eq!(target(rect, [204.0, 100.0], 4, 0.5), None);
     }
 }
