@@ -269,6 +269,8 @@ fn url_bar_edits_in_place_and_anchors_results_below_the_toolbar() {
     let mut window = runtime(state, 960.0);
     let bar = rect(&window, "horizontal-address-bar");
     let launcher = rect(&window, "omnibox-launcher");
+    let site = rect(&window, "site-controls");
+    assert!(site[0] + site[2] <= launcher[0]);
     let [x, y] = center(launcher);
     window.pointer_move(x, y);
     window.pointer_down(x, y);
@@ -295,10 +297,10 @@ fn url_bar_edits_in_place_and_anchors_results_below_the_toolbar() {
     assert_eq!(first_result[0] - results[0], first_result[1] - results[1]);
     assert!(window.presented("omnibox-panel").is_none());
 
-    let site = rect(&window, "site-controls");
+    assert!(window.presented("site-controls").is_none());
     let engine = rect(&window, "search-engine-button");
     let editor = rect(&window, "omnibox-input");
-    assert!(site[0] + site[2] <= engine[0] && engine[0] + engine[2] <= editor[0]);
+    assert!(engine[0] + engine[2] <= editor[0]);
 
     let [x, y] = center(engine);
     window.pointer_move(x, y);
@@ -328,10 +330,11 @@ fn url_bar_edits_in_place_and_anchors_results_below_the_toolbar() {
     assert!(!window.state.omnibox.open);
     assert_eq!(window.state.browser.active_tab().unwrap().id(), id);
     assert_eq!(active_url(&window.state), "https://example.org");
+    assert!(window.presented("site-controls").is_some());
 }
 
 #[test]
-fn horizontal_chrome_only_drags_the_window_outside_the_tab_strip() {
+fn horizontal_drag_area_keeps_primary_drag_and_secondary_tab_menu() {
     let mut state = AppState::new(Some("one.example"));
     state.set_tab_layout(TabLayout::Horizontal);
     let mut window = runtime(state, 960.0);
@@ -349,4 +352,12 @@ fn horizontal_chrome_only_drags_the_window_outside_the_tab_strip() {
     let [x, y] = center(drag_area);
     window.pointer_down(x, y);
     assert!(window.take_titlebar_action().is_some());
+    window.pointer_up(x, y);
+    window.frame(0.0);
+
+    window.secondary_down(x, y);
+    window.secondary_up(x, y);
+    window.frame(0.0);
+    assert!(matches!(window.state.context_menu(), Some((None, _))));
+    assert_eq!(window.take_titlebar_action(), None);
 }

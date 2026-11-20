@@ -209,7 +209,7 @@ pub(super) fn address_bar(
         } else {
             theme::OMNIBOX_MOTION
         });
-    if state.browser.active_tab().is_some() {
+    if !editing && state.browser.active_tab().is_some() {
         bar = bar.child(super::sidebar::site_controls(theme).press_scale(1.0));
     }
     if editing {

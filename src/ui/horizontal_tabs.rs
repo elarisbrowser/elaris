@@ -115,8 +115,12 @@ pub(super) fn view(
     let favourites = state.browser.tabs().len() - regular;
     let regular_width = regular_width(viewport_width, [favourites, regular]);
     let [favourite_items, regular_items] = sections.each_ref().map(Vec::len);
-    let content_width = section_width(favourite_items, theme::HORIZONTAL_COMPACT_TAB)
+    let committed_width = section_width(favourites, theme::HORIZONTAL_COMPACT_TAB)
+        + section_width(regular, regular_width);
+    let preview_width = section_width(favourite_items, theme::HORIZONTAL_COMPACT_TAB)
         + section_width(regular_items, regular_width);
+    // Keep the viewport from contracting beneath the pointer when a drag removes a tab.
+    let content_width = committed_width.max(preview_width);
     let mut content = row()
         .key("horizontal-tab-sections")
         .role("tablist")
@@ -175,7 +179,10 @@ pub(super) fn view(
                 .grow(1.0)
                 .min_w(theme::ROW_PADDING)
                 .h_full()
-                .window_drag(),
+                .window_drag()
+                .on_secondary_press(|state: &mut AppState, press, _| {
+                    state.open_context_menu(None, press);
+                }),
         );
     #[cfg(target_os = "linux")]
     {
