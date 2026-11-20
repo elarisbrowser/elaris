@@ -132,3 +132,135 @@ fn without_an_engine_tabs_keep_their_page_and_take_no_keys() {
     assert!(!browser.key(&key, true, false, None));
     assert!(!browser.poll().changed);
 }
+
+#[test]
+fn transferring_a_tab_retains_its_view_and_routes_pending_updates_to_its_new_owner() {
+    let (engine, fake) = Engine::fake();
+    let mut source = Browser::default();
+    let mut destination = Browser::default();
+    source.connect(engine.clone());
+    destination.connect(engine);
+    let tab = source.open_tab("first.example").unwrap();
+    let existing = destination.open_tab("second.example").unwrap();
+    let pixels = surface(&source, tab);
+    sent(&fake);
+
+    fake.updates
+        .send(Update::Tab(tab, TabUpdate::Title("Still loading".into())))
+        .unwrap();
+    source
+        .transfer_tab(&mut destination, tab, crate::tab::TabSection::Regular, 1)
+        .unwrap();
+    assert!(source.tabs().is_empty());
+    assert!(source.active_tab().is_none());
+    assert!(tab.is_live());
+    assert_eq!(destination.tabs()[0].id(), existing);
+    assert_eq!(destination.active_tab().unwrap().id(), tab);
+    assert_eq!(surface(&destination, tab), pixels);
+    source.close_window_views();
+    source.poll();
+    destination.poll();
+    assert_eq!(destination.tab(tab).unwrap().title, "Still loading");
+
+    destination
+        .transfer_tab(&mut source, tab, crate::tab::TabSection::Favourite, 0)
+        .unwrap();
+    assert_eq!(source.active_tab().unwrap().id(), tab);
+    assert_eq!(
+        source.tabs()[0].section(),
+        crate::tab::TabSection::Favourite
+    );
+    assert_eq!(surface(&source, tab), pixels);
+    assert_eq!(destination.active_tab().unwrap().id(), existing);
+    assert!(
+        sent(&fake)
+            .iter()
+            .all(|command| !matches!(command, Command::Open(..) | Command::Close(_)))
+    );
+}
+
+#[test]
+fn invalid_transfer_leaves_both_browsers_unchanged() {
+    use crate::tab::TabSection;
+
+    let (mut source, _) = connected();
+    let (mut other_engine, _) = connected();
+    let tab = source.open_tab("first.example").unwrap();
+    let pixels = surface(&source, tab);
+    assert!(
+        source
+            .transfer_tab(&mut other_engine, tab, TabSection::Regular, 1)
+            .is_err()
+    );
+    assert!(
+        source
+            .transfer_tab(&mut other_engine, tab, TabSection::Regular, 0)
+            .is_err()
+    );
+    assert_eq!(source.active_tab().unwrap().id(), tab);
+    assert_eq!(surface(&source, tab), pixels);
+    assert!(other_engine.tabs().is_empty());
+}
+
+#[cfg(feature = "ladybird-bridge")]
+#[test]
+#[ignore = "requires a built Ladybird bridge, helpers and resources"]
+fn live_document_survives_a_browser_transfer() {
+    use crate::tab::TabSection;
+    use std::time::{Duration, Instant};
+
+    let fixture = std::env::temp_dir().join(format!("elaris-transfer-{}", std::process::id()));
+    std::fs::create_dir_all(&fixture).unwrap();
+    let page = fixture.join("transfer.html");
+    std::fs::write(
+        &page,
+        r#"<!doctype html><script>
+        let ticks = 0;
+        setInterval(() => document.title = performance.timeOrigin + ":" + ++ticks, 30);
+        </script>"#,
+    )
+    .unwrap();
+    let engine = Engine::start(
+        std::sync::Arc::new(|| {}),
+        fixture.join("profile"),
+        None,
+        60.0,
+    )
+    .unwrap();
+    let mut source = Browser::default();
+    let mut destination = Browser::default();
+    source.connect(engine.clone());
+    destination.connect(engine);
+    lay_out(&mut source, [640.0, 480.0], 1.0, false);
+    lay_out(&mut destination, [720.0, 480.0], 2.0, false);
+    let id = source.open_tab(page.to_str().unwrap()).unwrap();
+    let wait = |browser: &mut Browser, after: u64| {
+        let deadline = Instant::now() + Duration::from_secs(15);
+        loop {
+            browser.poll();
+            let tab = browser.tab(id).unwrap();
+            if let Some((document, ticks)) = tab.title.split_once(':')
+                && let Ok(ticks) = ticks.parse::<u64>()
+                && ticks > after
+                && tab.surface.frames() > 0
+            {
+                break (document.to_owned(), ticks);
+            }
+            assert!(
+                Instant::now() < deadline,
+                "No live document update: {:?}, {:?}",
+                tab.title,
+                tab.error
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    };
+    let (document, ticks) = wait(&mut source, 0);
+    source
+        .transfer_tab(&mut destination, id, TabSection::Regular, 0)
+        .unwrap();
+    source.close_window_views();
+    let (after, _) = wait(&mut destination, ticks);
+    assert_eq!(document, after);
+    destination.shut_down();
+}

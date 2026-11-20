@@ -624,16 +624,73 @@ impl Browser {
         let Some(index) = self.tabs.iter().position(|tab| tab.id() == id) else {
             return;
         };
+        let tab = self.remove_tab_at(index);
+        id.release();
+        if !tab.is_internal()
+            && let Some(engine) = &self.engine
+        {
+            engine.send(Command::Close(id));
+        }
+    }
+
+    /// Moves the existing tab and its pixel stream between browsers on the UI thread.
+    /// Both browsers must be connected to the same runtime if the tab has a live view.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn transfer_tab(
+        &mut self,
+        destination: &mut Self,
+        id: TabId,
+        section: TabSection,
+        index: usize,
+    ) -> Result<(), Error> {
+        let source_index = self
+            .tabs
+            .iter()
+            .position(|tab| tab.id() == id)
+            .ok_or(Error::NoSuchTab(id))?;
+        if index > destination.section_tabs(section).count() {
+            return Err(Error::InvalidSectionIndex(index));
+        }
+        if destination.tab(id).is_some() {
+            return Err(Error::Address("The destination already owns this tab"));
+        }
+        if !self.tabs[source_index].is_internal()
+            && !match (&self.engine, &destination.engine) {
+                (Some(source), Some(target)) => source.same_runtime(target),
+                (None, None) => true,
+                _ => false,
+            }
+        {
+            return Err(Error::Address(
+                "The destination uses a different web engine",
+            ));
+        }
+        let insertion = destination
+            .tabs
+            .partition_point(|tab| section_rank(tab.section()) < section_rank(section))
+            + index;
+        destination.tabs.reserve(1);
+
+        let mut tab = self.remove_tab_at(source_index);
+        if tab.engine.focused {
+            if let Some(engine) = &self.engine {
+                engine.send(Command::View(id, ViewCommand::Focus(false)));
+            }
+            tab.engine.focused = false;
+        }
+        tab.section = section;
+        destination.tabs.insert(insertion, tab);
+        destination.activate_tab(id);
+        Ok(())
+    }
+
+    fn remove_tab_at(&mut self, index: usize) -> Tab {
+        let id = self.tabs[index].id();
         if self.active == Some(id) {
             self.reset_input();
         }
-        let is_internal = self.tabs[index].is_internal();
-        self.tabs.remove(index);
-        id.release();
+        let tab = self.tabs.remove(index);
         self.recent.retain(|&tab| tab != id);
-        if !is_internal && let Some(engine) = &self.engine {
-            engine.send(Command::Close(id));
-        }
         if let Some(split) = self.split
             && split.panes.contains(&Some(id))
         {
@@ -650,6 +707,7 @@ impl Browser {
                 self.activate_tab(next);
             }
         }
+        tab
     }
 
     /// Closes every tab except `id` and leaves it active.

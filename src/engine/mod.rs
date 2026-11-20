@@ -334,6 +334,10 @@ impl Engine {
             .clone()
     }
 
+    pub(crate) fn same_runtime(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.updates, &other.updates)
+    }
+
     /// Queues `command` and wakes the engine for it.
     pub(crate) fn send(&self, command: Command) {
         if self.commands.send(command).is_ok()
