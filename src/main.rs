@@ -72,10 +72,11 @@ fn configure_app(app: App<app::AppState>) -> App<app::AppState> {
             borderless: true,
             ..WindowOptions::default()
         })
-        // macOS drags the titlebar band natively; the window controls sit centred in it, level
-        // with the header's buttons.
+        // The tab strip shares the native titlebar band. Rune owns window dragging so
+        // AppKit does not steal a drag that started on a tab.
         .chrome(Chrome {
             traffic_lights: Some(ui::TRAFFIC_LIGHTS),
+            drag_regions: true,
             ..Chrome::DEFAULT
         });
     #[cfg(target_os = "linux")]

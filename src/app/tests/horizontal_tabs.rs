@@ -33,6 +33,7 @@ fn start_drag(runtime: &mut Runtime<AppState>, id: TabId) -> [f32; 2] {
     let y = center(rect)[1];
     runtime.pointer_move(x, y);
     runtime.pointer_down(x, y);
+    assert_eq!(runtime.take_titlebar_action(), None);
     runtime.frame(0.0);
     [x, y]
 }
@@ -151,7 +152,10 @@ fn pointer_reorders_tabs_and_moves_them_between_sections_and_split() {
     window.pointer_move(end[0], end[1]);
     window.frame(1.0 / 60.0);
     assert!(window.state.split_preview.is_some());
-    release(&mut window, end);
+    window.pointer_up(end[0], end[1]);
+    window.frame(1.0 / 60.0);
+    assert!(window.state.tab_drag.visual().is_none());
+    settle(&mut window);
     assert!(window.state.browser.split.is_some());
     let panes = window.state.browser.visible_tabs();
     assert_eq!(panes[1], Some(third));
@@ -324,4 +328,22 @@ fn url_bar_edits_in_place_and_anchors_results_below_the_toolbar() {
     assert!(!window.state.omnibox.open);
     assert_eq!(window.state.browser.active_tab().unwrap().id(), id);
     assert_eq!(active_url(&window.state), "https://example.org");
+}
+
+#[test]
+fn horizontal_chrome_only_drags_the_window_outside_the_tab_strip() {
+    let mut state = AppState::new(Some("one.example"));
+    state.set_tab_layout(TabLayout::Horizontal);
+    let mut window = runtime(state, 960.0);
+    let strip = rect(&window, horizontal_tabs::SCROLL);
+    let empty_inside = [strip[0] + strip[2] - 8.0, center(strip)[1]];
+    window.pointer_down(empty_inside[0], empty_inside[1]);
+    assert_eq!(window.take_titlebar_action(), None);
+    window.pointer_up(empty_inside[0], empty_inside[1]);
+    window.frame(0.0);
+
+    let chrome = rect(&window, "horizontal-tab-strip");
+    let gutter = [chrome[0] + chrome[2] - 8.0, center(chrome)[1]];
+    window.pointer_down(gutter[0], gutter[1]);
+    assert!(window.take_titlebar_action().is_some());
 }

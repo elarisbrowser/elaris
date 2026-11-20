@@ -110,7 +110,7 @@ fn header_content(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>, in_fl
     if in_flow {
         header = header.w_full().window_drag().raise();
     } else {
-        header = header.absolute(0.0, 0.0);
+        header = header.absolute(0.0, 0.0).window_drag();
     }
     #[cfg(not(target_os = "linux"))]
     {

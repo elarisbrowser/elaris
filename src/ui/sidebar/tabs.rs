@@ -702,6 +702,11 @@ pub(in crate::ui) fn tab_drag_handler(row: El, id: TabId, members: Vec<TabId>) -
                 drag.cancelled() || external || detached || side.is_some(),
             );
             if let Some(side) = side {
+                if state.horizontal_tabs() {
+                    // The page owns the drop. Reveal the strip tab immediately instead of
+                    // animating the floating card back over the newly opened pane.
+                    state.tab_drag.cancel();
+                }
                 if dragging_single_page(state, id) {
                     state.begin_split_picker(id, side);
                     tx.focus(crate::ui::viewport::PICKER, false);

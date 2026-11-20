@@ -58,7 +58,7 @@ pub(super) fn view(
         .key("horizontal-tab-strip")
         .w_full()
         .h(theme::HORIZONTAL_STRIP_HEIGHT)
-        .pr(theme::SIDEBAR_PADDING)
+        .pr(theme::ICON_BUTTON)
         .gap(theme::NAV_GAP)
         .center_y()
         .window_drag();
@@ -86,8 +86,8 @@ pub(super) fn view(
         cx.layout_size("window")
             .map_or(theme::WINDOW_MIN_SIZE.0, |size| size[0])
             - inset
-            - 2.0 * (theme::SIDEBAR_PADDING + theme::NAV_GAP)
-            - theme::ICON_BUTTON
+            - theme::SIDEBAR_PADDING
+            - 2.0 * (theme::NAV_GAP + theme::ICON_BUTTON)
     });
     let sections = TabSection::ORDER
         .map(|section| state.tab_drag.preview_items(state.browser.tabs(), section));
@@ -125,6 +125,7 @@ pub(super) fn view(
                 .grow(1.0)
                 .h_full()
                 .center_y()
+                .no_window_drag()
                 .scroll_x()
                 .scroll_edge_fade(theme::SIDEBAR_PADDING)
                 .on_layout_tx(|state: &mut AppState, rect, tx| {
@@ -299,6 +300,7 @@ fn tab_view(state: &AppState, tab: &Tab, theme: &Theme) -> El {
             theme,
         )
         .hover_group()
+        .press_scale(1.0)
         .child(if active {
             close
         } else {
@@ -311,7 +313,6 @@ fn tab_view(state: &AppState, tab: &Tab, theme: &Theme) -> El {
             .continuous_corners()
             .hover(theme.hover)
             .press(theme.press)
-            .press_scale(theme::PRESS_SCALE)
             .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
             .child(icon)
     };
