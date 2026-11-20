@@ -66,7 +66,6 @@ pub(crate) fn toggle(state: &mut AppState, tx: &mut Tx) {
     }
     state.site_permissions_open = false;
     #[cfg(target_os = "macos")]
-    crate::site_popover_macos::close();
     if state.cancel_tab_drag() {
         tx.animated();
         tx.motion(theme::TAB_REORDER_MOTION);
@@ -179,8 +178,6 @@ fn search_launcher(state: &AppState, theme: &Theme) -> El {
 }
 
 pub(super) fn site_controls(theme: &Theme) -> El {
-    #[cfg(target_os = "macos")]
-    let palette = super::site_control_style::Palette::from_theme(theme);
     super::controls::icon_button(
         "site-controls",
         "Site permissions and page information",
@@ -190,8 +187,6 @@ pub(super) fn site_controls(theme: &Theme) -> El {
     )
     .on_layout_tx(|state: &mut AppState, rect, tx| {
         state.site_controls_anchor = Some(rect);
-        #[cfg(target_os = "macos")]
-        crate::site_popover_macos::update_anchor(rect);
         tx.live_only();
     })
     .on_press_tx(move |state: &mut AppState, tx| {
@@ -199,11 +194,6 @@ pub(super) fn site_controls(theme: &Theme) -> El {
             state.omnibox.close();
             tx.focus(super::viewport::focus_key(&state.browser), false);
         }
-        #[cfg(target_os = "macos")]
-        let open = state.site_controls_anchor.is_some_and(|anchor| {
-            crate::site_popover_macos::show(state.site_control_presentation(), anchor, palette)
-        });
-        #[cfg(target_os = "linux")]
         let open = !state.site_permissions_open;
         state.site_permissions_open = open;
         state.permission_menu = None;

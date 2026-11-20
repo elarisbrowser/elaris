@@ -31,16 +31,6 @@ impl SiteControlAction {
             Self::Settings => "Open settings",
         }
     }
-
-    #[cfg(target_os = "macos")]
-    pub(crate) fn symbol(self) -> &'static str {
-        match self {
-            Self::CopyUrl => "doc.on.doc",
-            Self::Reload => "arrow.clockwise",
-            Self::DuplicateTab => "plus.square.on.square",
-            Self::Settings => "slider.horizontal.3",
-        }
-    }
 }
 
 /// A page and its current saved settings, ready to render in either platform host.

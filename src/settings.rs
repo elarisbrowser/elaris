@@ -79,6 +79,7 @@ pub(crate) struct Settings {
     pub(crate) startup: StartupMode,
     pub(crate) glass_enabled: bool,
     pub(crate) tint_opacity: u8,
+    pub(crate) reduce_motion: bool,
 }
 
 impl Default for Settings {
@@ -92,6 +93,7 @@ impl Default for Settings {
             startup: StartupMode::RestoreSession,
             glass_enabled: true,
             tint_opacity: 100,
+            reduce_motion: false,
         }
     }
 }
@@ -131,6 +133,10 @@ impl Settings {
     pub(crate) fn set_tint_opacity(&mut self, opacity: u8) {
         self.tint_opacity = opacity.min(100);
     }
+
+    pub(crate) fn set_reduce_motion(&mut self, enabled: bool) {
+        self.reduce_motion = enabled;
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -143,6 +149,7 @@ pub(crate) enum SettingsChange {
     Startup(StartupMode),
     GlassEnabled(bool),
     TintOpacity(u8),
+    ReduceMotion(bool),
 }
 
 #[cfg(test)]

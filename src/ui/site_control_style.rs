@@ -1,12 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Shared dimensions and semantic colours for the Site Control Centre hosts.
+//! Shared dimensions for the Site Control Centre.
 
-#[cfg(any(target_os = "macos", test))]
+#[cfg(test)]
 use rune::Color;
-
-#[cfg(target_os = "macos")]
-use super::theme::Theme;
 
 pub(crate) const WIDTH: f32 = 280.0;
 pub(crate) const OUTER_RADIUS: f32 = 20.0;
@@ -22,53 +19,6 @@ pub(crate) const ROW_RADIUS: f32 = 8.0;
 pub(crate) const ROW_GAP: f32 = 2.0;
 pub(crate) const SECTION_GAP: f32 = 12.0;
 pub(crate) const FOOTER_HEIGHT: f32 = 28.0;
-
-#[cfg(target_os = "macos")]
-pub(crate) const HEADING_HEIGHT: f32 = 15.0;
-#[cfg(target_os = "macos")]
-pub(crate) const HEADING_TOP: f32 = PADDING + ACTION_HEIGHT + SECTION_GAP;
-#[cfg(target_os = "macos")]
-pub(crate) const ROWS_TOP: f32 = HEADING_TOP + HEADING_HEIGHT + 4.0;
-#[cfg(target_os = "macos")]
-pub(crate) const PERMISSION_COUNT: f32 = 4.0;
-#[cfg(target_os = "macos")]
-pub(crate) const SEPARATOR_TOP: f32 =
-    ROWS_TOP + PERMISSION_COUNT * ROW_HEIGHT + (PERMISSION_COUNT - 1.0) * ROW_GAP + 8.0;
-#[cfg(target_os = "macos")]
-pub(crate) const FOOTER_TOP: f32 = SEPARATOR_TOP + 7.0;
-#[cfg(target_os = "macos")]
-pub(crate) const HEIGHT: f32 = FOOTER_TOP + FOOTER_HEIGHT + PADDING;
-#[cfg(target_os = "macos")]
-pub(crate) const INTERNAL_HEIGHT: f32 = HEADING_TOP + HEADING_HEIGHT + 4.0 + 36.0 + PADDING;
-
-#[derive(Clone, Copy)]
-#[cfg(target_os = "macos")]
-pub(crate) struct Palette {
-    pub(crate) panel: Color,
-    pub(crate) tile: Color,
-    pub(crate) text: Color,
-    pub(crate) muted: Color,
-    pub(crate) icon: Color,
-    pub(crate) hover: Color,
-    pub(crate) border: Color,
-    pub(crate) dark: bool,
-}
-
-#[cfg(target_os = "macos")]
-impl Palette {
-    pub(crate) fn from_theme(theme: &Theme) -> Self {
-        Self {
-            panel: theme.overlay_panel,
-            tile: theme.overlay_selected,
-            text: theme.text,
-            muted: theme.text_muted,
-            icon: theme.text,
-            hover: theme.hover,
-            border: theme.overlay_border,
-            dark: theme.dark,
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {

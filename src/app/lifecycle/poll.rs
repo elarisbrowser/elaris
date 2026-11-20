@@ -89,8 +89,6 @@ fn close_site_controls_after_navigation(state: &mut AppState, polled: &crate::br
             .iter()
             .any(|(tab, _, _)| *tab == active_tab)
     {
-        #[cfg(target_os = "macos")]
-        crate::site_popover_macos::close();
         state.site_permissions_open = false;
     }
 }

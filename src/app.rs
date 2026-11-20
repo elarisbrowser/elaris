@@ -176,14 +176,12 @@ pub(crate) struct AppState {
     /// Rune-space bounds of the URL-bar control, used as AppKit's popover anchor.
     pub(crate) site_controls_anchor: Option<[f32; 4]>,
     /// Layout bounds for each Rune permission row, in `PermissionKind::index()` order.
-    #[cfg(target_os = "linux")]
     pub(crate) permission_row_anchors: [Option<[f32; 4]>; 4],
     /// The open permission choice menu, if any.
     pub(crate) permission_menu: Option<PermissionKind>,
     /// Whether the compact site overflow menu is open.
     pub(crate) site_overflow_open: bool,
     /// The site footer's overflow-button position for the Rune menu host.
-    #[cfg(target_os = "linux")]
     pub(crate) site_overflow_anchor: Option<PointerPress>,
     /// Per-origin permission choices loaded from config.toml.
     pub(crate) permission_store: PermissionStore,
@@ -346,11 +344,9 @@ impl AppState {
             downloads_open: false,
             site_permissions_open: false,
             site_controls_anchor: None,
-            #[cfg(target_os = "linux")]
             permission_row_anchors: [None; 4],
             permission_menu: None,
             site_overflow_open: false,
-            #[cfg(target_os = "linux")]
             site_overflow_anchor: None,
             permission_store,
             page_menu: Default::default(),

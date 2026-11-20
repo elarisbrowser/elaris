@@ -14,7 +14,7 @@ use crate::appearance::{AccentColor, Appearance};
 use crate::permissions::{PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{DownloadDirectory, Settings, SettingsChange, StartupMode, TabLayout};
 
-const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\naccent = \"blue\"\nglass = true\ntint_opacity = 100\ntab_layout = \"vertical\"\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n";
+const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\naccent = \"blue\"\nglass = true\ntint_opacity = 100\ntab_layout = \"vertical\"\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n\n[performance]\nreduce_motion = false\n";
 static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -92,6 +92,9 @@ pub(crate) fn parse(contents: &str) -> Result<ConfigLoad, String> {
                 "Invalid value for [appearance].tint_opacity: {value}; expected 0 through 100"
             ));
         }
+    }
+    if let Some(value) = bool_value(&document, "performance", "reduce_motion", &mut issues) {
+        settings.reduce_motion = value;
     }
     if let Some(value) = string_value(&document, "search", "engine", &mut issues) {
         settings.search_engine = SearchEngine::from_config_key(&value).unwrap_or_else(|| {
@@ -336,6 +339,7 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
         ),
         SettingsChange::GlassEnabled(value) => ("appearance", "glass", value.to_string()),
         SettingsChange::TintOpacity(value) => ("appearance", "tint_opacity", value.to_string()),
+        SettingsChange::ReduceMotion(value) => ("performance", "reduce_motion", value.to_string()),
     };
     let item = document
         .as_table_mut()
@@ -344,7 +348,7 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
     let table = item
         .as_table_mut()
         .ok_or_else(|| format!("[{section}] must be a TOML table"))?;
-    let mut new_value = if key == "glass" {
+    let mut new_value = if key == "glass" || key == "reduce_motion" {
         Value::from(value == "true")
     } else if key == "tint_opacity" {
         Value::from(value.parse::<i64>().expect("opacity is an integer"))

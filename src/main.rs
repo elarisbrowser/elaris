@@ -20,8 +20,6 @@ mod permissions;
 mod settings;
 mod shortcuts;
 mod site_controls;
-#[cfg(target_os = "macos")]
-mod site_popover_macos;
 mod storage;
 mod tab;
 #[cfg(target_os = "macos")]
@@ -111,7 +109,6 @@ fn configure_app(app: App<app::AppState>) -> App<app::AppState> {
             });
             window_macos::install(window);
             titlebar_controls::install(window);
-            site_popover_macos::install(window, app_handle.clone());
             if let Some(refresh_rate) = titlebar_controls::refresh_rate(window) {
                 app_handle.update(move |state, _| state.set_display_refresh_rate(refresh_rate));
             }

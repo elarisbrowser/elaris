@@ -126,8 +126,6 @@ impl super::AppState {
     }
 
     fn navigate_destination(&mut self, url: &str) -> Result<(), crate::browser::Error> {
-        #[cfg(target_os = "macos")]
-        crate::site_popover_macos::close();
         self.site_permissions_open = false;
         let route = InternalRoute::parse(url);
         match (

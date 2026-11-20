@@ -148,8 +148,6 @@ pub(crate) fn omnibox_input_key(state: &mut AppState, event: &KeyEvent, tx: &mut
 pub(crate) fn on_window_focus(state: &mut AppState, focused: bool, tx: &mut Tx) {
     if focused {
         super::activate_window(state.window_id);
-        #[cfg(target_os = "macos")]
-        crate::site_popover_macos::activate_window(state.window_id);
     }
     #[cfg(target_os = "macos")]
     crate::menu_macos::set_active_window(state.window_id, focused);
@@ -225,8 +223,6 @@ pub(crate) fn window_closed(state: &mut AppState, _: &mut Tx) {
     super::cross_window_drag::clear(state.window_id);
     state.closing_tab_transfer();
     super::unregister_window(state.window_id);
-    #[cfg(target_os = "macos")]
-    crate::site_popover_macos::detach_window(state.window_id);
     crate::engine::unregister_window_waker(state.window_id);
     if let Some(storage) = &state.storage {
         storage.history().forget_window(state.window_id);

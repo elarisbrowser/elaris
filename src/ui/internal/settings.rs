@@ -44,6 +44,7 @@ pub(super) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> E
         .child(appearance_section(state, theme, &kit, compact))
         .child(search_section(state, theme, &kit, overlays, compact))
         .child(downloads_section(state, theme, &kit, compact))
+        .child(performance_section(state, theme, &kit, compact))
         .child(startup_section(state, theme, &kit, overlays, compact))
         .child(configuration_section(state, theme, &kit, compact));
 
@@ -409,6 +410,30 @@ fn startup_section(
                 select
                     .build(kit, overlays)
                     .border(1.0, theme.control_border),
+                compact,
+            ),
+            theme,
+        ),
+    )
+}
+
+fn performance_section(state: &AppState, theme: &Theme, kit: &Kit, compact: bool) -> El {
+    let mut switch_kit = kit.clone();
+    switch_kit.c.std_icon_strong = kit.c.bg_accent;
+    let reduce_motion = rune_kit::Switch::new(state.settings.reduce_motion)
+        .standard()
+        .label("Reduce motion")
+        .on_toggle(|state: &mut AppState| state.set_reduce_motion(!state.settings.reduce_motion))
+        .build(&switch_kit);
+    section(
+        "Performance",
+        theme,
+        settings_group(
+            setting_row(
+                "Reduce motion",
+                "Minimise animations and transitions throughout Elaris.",
+                theme,
+                reduce_motion,
                 compact,
             ),
             theme,

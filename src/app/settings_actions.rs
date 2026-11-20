@@ -8,8 +8,6 @@ use crate::config::ConfigLoad;
 use crate::internal::InternalPage;
 use crate::permissions::{PermissionDecision, PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{DownloadDirectory, SettingsChange, StartupMode, TabLayout};
-#[cfg(target_os = "macos")]
-use crate::site_controls::SiteControlPresentation;
 use crate::tab::TabId;
 
 impl super::AppState {
@@ -34,10 +32,6 @@ impl super::AppState {
             self.page_menu = Default::default();
             crate::ui::dismiss_tab_preview(self);
             self.site_controls_anchor = None;
-            #[cfg(target_os = "macos")]
-            if self.site_permissions_open {
-                crate::site_popover_macos::close();
-            }
             self.site_permissions_open = false;
         }
     }
@@ -124,6 +118,14 @@ impl super::AppState {
         self.save_setting(SettingsChange::TintOpacity(opacity));
     }
 
+    pub(crate) fn set_reduce_motion(&mut self, enabled: bool) {
+        if self.settings.reduce_motion == enabled {
+            return;
+        }
+        self.settings.set_reduce_motion(enabled);
+        self.save_setting(SettingsChange::ReduceMotion(enabled));
+    }
+
     fn save_setting(&mut self, change: SettingsChange) {
         super::publish_settings(&self.settings);
         if let Some(storage) = &self.storage
@@ -181,11 +183,6 @@ impl super::AppState {
         self.browser
             .active_tab()
             .and_then(|tab| PermissionStore::origin(&tab.url))
-    }
-
-    #[cfg(target_os = "macos")]
-    pub(crate) fn site_control_presentation(&self) -> SiteControlPresentation {
-        SiteControlPresentation::from_state(self)
     }
 
     /// Returns the saved decision for a request; `Prompt` means the engine must ask the user.

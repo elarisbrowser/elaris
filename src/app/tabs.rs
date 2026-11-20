@@ -49,8 +49,6 @@ impl super::AppState {
     }
 
     fn refresh_active_page(&mut self) {
-        #[cfg(target_os = "macos")]
-        crate::site_popover_macos::close();
         self.site_permissions_open = false;
         self.page_menu = Default::default();
         self.sync_find_tab();
@@ -60,8 +58,6 @@ impl super::AppState {
     /// Closes the tab and opens the omnibox when the window becomes empty.
     pub(crate) fn close(&mut self, tab: TabId) {
         self.cancel_tab_drag();
-        #[cfg(target_os = "macos")]
-        crate::site_popover_macos::close();
         self.site_permissions_open = false;
         self.page_menu = Default::default();
         if let Some(tab) = self.browser.tab(tab) {
