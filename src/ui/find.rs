@@ -60,11 +60,7 @@ pub(crate) fn view(
         .preserve_focus_on_press(true)
         .role("group")
         .label("Find in page")
-        .transition(if reduced_motion {
-            Transition::none()
-        } else {
-            Transition::offset(0.0, -4.0).combined(Transition::opacity())
-        })
+        .transition(theme::overlay_reveal(reduced_motion))
         .token_motion(if reduced_motion {
             Spring::NONE
         } else {

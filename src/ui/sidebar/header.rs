@@ -38,7 +38,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
             });
         if visible {
             let transition = if reduced_motion {
-                Transition::opacity()
+                Transition::none()
             } else {
                 Transition::offset(0.0, -6.0)
                     .combined(Transition::opacity())

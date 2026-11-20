@@ -4,8 +4,8 @@
 //! a token of [`Theme`], named for what it is for, with a light and a dark value here; sizes
 //! build on Rune's spacing and radius scales.
 
-use rune::Spring;
 use rune::tok::{motion, radius, space};
+use rune::{Anim, Curve, Easing, Spring, SpringPair, Transition};
 use rune::{Color, oklch, oklcha};
 use rune_kit::{Kit, PaletteFocus, PaletteSeed};
 
@@ -238,6 +238,25 @@ pub(crate) const HEADER_GROUP_GAP: f32 = space::S3;
 
 /// How far buttons and rows shrink while pressed, springing back on release.
 pub(crate) const PRESS_SCALE: f32 = 0.97;
+
+pub(super) const HOVER_ENTER: Anim = Anim::new(Curve::tween(0.08, Easing::EASE_OUT));
+pub(super) const HOVER_EXIT: Anim = Anim::new(Curve::tween(0.15, Easing::EASE_OUT));
+
+/// Compact overlays settle into place on entry and fade in place on dismissal.
+pub(super) fn overlay_reveal(reduced_motion: bool) -> Transition {
+    const ENTER_OFFSET: f32 = -4.0;
+    const PRESENCE: SpringPair = SpringPair::new(Spring::new(0.25, 0.0), Spring::new(0.15, 0.0));
+
+    if reduced_motion {
+        return Transition::none();
+    }
+
+    Transition::asymmetric(
+        Transition::offset(0.0, ENTER_OFFSET).combined(Transition::opacity()),
+        Transition::opacity(),
+    )
+    .springs(PRESENCE)
+}
 
 /// Headings for native pages. Compact labels and body copy use Rune’s type scale.
 pub(crate) const PAGE_TITLE: rune::TextStyle = rune::TextStyle::new(26.0, 600.0).lh(32.0);

@@ -143,5 +143,13 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         .layout_size("window")
         .map_or(WINDOW_MIN_SIZE.1, |size| size[1]);
     overlays.extend(tab_switcher::view(state, &theme, height, reduced_motion));
-    rune_kit::root(window, overlays)
+    let (hover_enter, hover_exit) = if reduced_motion {
+        (rune::Anim::INSTANT, rune::Anim::INSTANT)
+    } else {
+        (theme::HOVER_ENTER, theme::HOVER_EXIT)
+    };
+    rune_kit::root(
+        window.hover_motion_within(hover_enter, hover_exit),
+        overlays,
+    )
 }

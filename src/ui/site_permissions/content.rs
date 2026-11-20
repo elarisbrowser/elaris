@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use rune::tok::type_;
-use rune::{El, PointerPress, Spring, Transition, Tx, el, icon, row, text};
+use rune::{El, PointerPress, Spring, Tx, el, icon, row, text};
 
 use crate::app::{self, AppState};
 use crate::permissions::{PermissionKind, PermissionState};
@@ -30,11 +30,7 @@ pub(super) fn popover(
         .fill(theme.overlay_panel)
         .border(1.0, theme.overlay_border)
         .shadow(9.0, 22.0, theme.overlay_shadow)
-        .transition(if reduced_motion {
-            Transition::none()
-        } else {
-            Transition::offset(0.0, -4.0).combined(Transition::opacity())
-        })
+        .transition(theme::overlay_reveal(reduced_motion))
         .token_motion(if reduced_motion {
             Spring::NONE
         } else {

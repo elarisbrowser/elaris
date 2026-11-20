@@ -3,7 +3,7 @@
 use super::*;
 
 #[test]
-fn find_bar_tracks_a_narrow_page_and_uses_reversible_motion() {
+fn find_bar_tracks_a_narrow_page_and_fades_in_place_on_close() {
     use rune::{Env, Runtime};
 
     let mut state = AppState::new(Some("example.com"));
@@ -30,6 +30,8 @@ fn find_bar_tracks_a_narrow_page_and_uses_reversible_motion() {
         element.focused && element.key.as_deref() == Some(crate::ui::FIND_INPUT)
     }));
 
+    let resting_rect = bar.target;
+    runtime.frame(1.0);
     runtime.update(|state, tx| state.close_find(tx));
     runtime.frame(1.0 / 60.0);
     let closing = runtime
@@ -38,6 +40,7 @@ fn find_bar_tracks_a_narrow_page_and_uses_reversible_motion() {
         .find(|element| element.key.as_deref() == Some("find-bar"))
         .expect("closing bar remains for its exit transition");
     assert!(closing.exiting);
+    assert_eq!(closing.rect, resting_rect);
     assert!(closing.opacity < 1.0, "closing should fade out");
     runtime.frame(1.0);
     assert!(
