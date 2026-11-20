@@ -10,6 +10,24 @@ use rune::raw_window_handle::RawWindowHandle;
 
 const FRAME_NAME: &str = "ElarisMainWindow";
 
+pub(crate) fn with_window<T>(
+    window: &RuneWindowHandle,
+    operation: impl FnOnce(&objc2_app_kit_02::NSWindow) -> T,
+) -> Option<T> {
+    window
+        .with_raw_handle(|handle| {
+            let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
+                return None;
+            };
+            // SAFETY: Rune retains the AppKit view for this main-thread callback.
+            let view = unsafe { &*handle.ns_view.as_ptr().cast::<NSView>() };
+            let window = view.window()?;
+            Some(operation(&window))
+        })
+        .ok()
+        .flatten()
+}
+
 /// Restores and autosaves the native window frame using AppKit's display-aware mechanism.
 pub(crate) fn install(window: &RuneWindowHandle) {
     let _ = window.with_raw_handle(|handle| {

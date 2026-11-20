@@ -51,6 +51,10 @@ impl Transfer {
     }
 }
 
+pub(super) fn in_progress() -> bool {
+    TRANSFER.with_borrow(Option::is_some)
+}
+
 impl AppState {
     /// Requests a transfer while the source still owns the tab. Only one handoff is in flight.
     pub(crate) fn request_tab_transfer(
@@ -191,6 +195,7 @@ impl AppState {
                         transfer.index,
                     ) {
                         Ok(()) => {
+                            super::detach::committed(self, transfer.tab);
                             super::cross_window_drag::finish(self, transfer.tab, true, tx);
                             if let Some(window) = WINDOW_REGISTRY.get().and_then(|registry| {
                                 registry

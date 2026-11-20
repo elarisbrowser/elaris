@@ -134,23 +134,33 @@ fn start_window_workers(handle: rune::AppHandle<app::AppState>) {
 
 /// Queues a full browser window in Rune's current event loop turn.
 pub(crate) fn open_browser_window() {
-    queue_browser_window(app::AppState::new_window());
+    queue_browser_window(app::AppState::new_window(), None);
 }
 
 fn open_browser_window_with_session(session: storage::Session) {
-    queue_browser_window(app::AppState::new_window_from_session(session));
+    queue_browser_window(app::AppState::new_window_from_session(session), None);
 }
 
-fn queue_browser_window(state: app::AppState) {
+fn queue_browser_window(
+    state: app::AppState,
+    placement: Option<app::detach::Placement>,
+) -> (rune::WindowHandle, rune::AppHandle<app::AppState>) {
     let key = format!("elaris-window-{}", state.window_id);
     let window_id = state.window_id;
     let app = configure_app(App::new(app_spec(app::AppState::new_window)).init(move || state));
     #[cfg(target_os = "macos")]
     let app = app.keep_running().release_gpu_when_closed();
     let handle = app.handle();
-    let app = app.on_ready(move |_| start_window_workers(handle.clone()));
-    let spec = WindowSpec::from_app(key, app);
-    let handle = rune::open_window(spec);
-    app::register_window(window_id, handle.clone());
-    handle.open();
+    let workers = handle.clone();
+    let mut placement = placement;
+    let app = app.on_ready(move |window| {
+        if let Some(placement) = placement.take() {
+            placement.apply(window);
+        }
+        start_window_workers(workers.clone());
+    });
+    let native = rune::open_window(WindowSpec::from_app(key, app));
+    app::register_window(window_id, native.clone());
+    native.open();
+    (native, handle)
 }

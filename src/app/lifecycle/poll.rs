@@ -10,6 +10,7 @@ use crate::tab::{Tab, TabId};
 pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     let incoming_drag = super::super::cross_window_drag::poll(state, tx);
     let transferred = state.advance_tab_transfer(tx);
+    super::super::detach::poll(state, tx);
     let focused = tx.focused() == Some(crate::ui::viewport::page_focus_key(&state.browser));
     let focus_changed = state.browser.set_viewport_focus(focused);
     let settling = crate::ui::settle_sidebar(state, tx);

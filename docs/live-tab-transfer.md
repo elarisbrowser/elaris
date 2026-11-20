@@ -53,3 +53,21 @@ handoff restores the source layout and return animation.
 
 The floating tab is drawn inside eligible Elaris windows. A desktop overlay
 for the space between native windows and detachment remain separate work.
+
+## Detaching onto the desktop
+
+On macOS, releasing a single tab over a usable desktop area at least 28 points
+outside the source frame queues one new browser window. AppKit positions its
+frame near the pointer and clamps it to the visible bounds of the pointer's
+display. The source keeps the tab until the new window is ready and the ordinary
+live transfer can commit. The tab keeps its original section.
+
+A pending window is excluded from session saves. Escape, close, native creation
+failure, or a readiness timeout cancels the handoff and discards the tentative
+window. A successful transfer saves both window records together. Closing a
+source emptied by a transfer is still a separate stage.
+
+Desktop detachment is currently macOS-only. The X11 drag path can locate other
+Elaris windows but cannot distinguish an empty desktop drop from an occluding
+application. Wayland still lacks desktop coordinates in the pinned Rune
+backend. The in-window floating preview can be occluded where windows overlap.

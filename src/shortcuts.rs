@@ -36,7 +36,9 @@ pub(crate) enum Shortcut {
 
 /// Rune's hook for keys nothing focused took: runs the shortcut the key is, if any.
 pub(crate) fn on_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> bool {
-    if event.key == Key::Escape && state.cancel_tab_transfer() {
+    if event.key == Key::Escape
+        && (crate::app::detach::cancel(state) || state.cancel_tab_transfer())
+    {
         return true;
     }
     if event.key == Key::Escape && ui::peek::dismiss(state, tx) {

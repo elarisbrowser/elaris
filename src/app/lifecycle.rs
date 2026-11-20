@@ -165,6 +165,7 @@ pub(crate) fn on_window_focus(state: &mut AppState, focused: bool, tx: &mut Tx) 
 }
 
 pub(crate) fn shut_down(state: &mut AppState, _: &mut Tx) {
+    super::detach::closing(state);
     super::cross_window_drag::clear(state.window_id);
     state.cancel_tab_transfer();
     super::unregister_window(state.window_id);
@@ -199,6 +200,7 @@ pub(crate) fn window_closed(state: &mut AppState, _: &mut Tx) {
     if rune::quitting() {
         return;
     }
+    super::detach::closing(state);
     let others_remain = super::open_window_count() > 1;
     super::cross_window_drag::clear(state.window_id);
     state.cancel_tab_transfer();
@@ -213,7 +215,9 @@ pub(crate) fn window_closed(state: &mut AppState, _: &mut Tx) {
     crate::menu_macos::unregister_window(state.window_id);
     state.persist_session();
     state.browser.close_window_views();
-    if let Some(storage) = &state.storage {
+    if !state.pending_detach
+        && let Some(storage) = &state.storage
+    {
         if others_remain {
             super::remove_window_session(state.window_id, storage);
         } else {

@@ -1,0 +1,286 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
+use std::cell::RefCell;
+use std::time::{Duration, Instant};
+
+use rune::{AppHandle, Tx, WindowHandle};
+
+use super::{AppState, unregister_window};
+use crate::tab::TabId;
+
+const OPEN_TIMEOUT: Duration = Duration::from_secs(5);
+const READY_POLL_INTERVAL: Duration = Duration::from_millis(32);
+
+thread_local! {
+    static PENDING: RefCell<Option<Detach>> = const { RefCell::new(None) };
+}
+
+struct Detach {
+    source: u64,
+    destination: u64,
+    tab: TabId,
+    window: WindowHandle,
+    app: AppHandle<AppState>,
+    deadline: Instant,
+    submitted: bool,
+}
+
+pub(crate) fn release(source: &AppState, tab: TabId) -> bool {
+    if rune::is_headless()
+        || source.browser.tab(tab).is_none()
+        || super::transfer::in_progress()
+        || PENDING.with_borrow(Option::is_some)
+    {
+        return false;
+    }
+    let Some(placement) = placement(source.window_id) else {
+        return false;
+    };
+    let mut destination = AppState::new_window();
+    destination.omnibox.close();
+    destination.pending_detach = true;
+    let id = destination.window_id;
+    let (window, app) = crate::queue_browser_window(destination, Some(placement));
+    PENDING.replace(Some(Detach {
+        source: source.window_id,
+        destination: id,
+        tab,
+        window,
+        app,
+        deadline: Instant::now() + OPEN_TIMEOUT,
+        submitted: false,
+    }));
+    true
+}
+
+pub(super) fn poll(state: &mut AppState, tx: &mut Tx) {
+    PENDING.with_borrow_mut(|pending| {
+        let Some(detach) = pending
+            .as_mut()
+            .filter(|detach| detach.source == state.window_id)
+        else {
+            return;
+        };
+        if detach.submitted {
+            if !super::transfer::in_progress() {
+                discard(pending.take().unwrap());
+            }
+            return;
+        }
+        if Instant::now() >= detach.deadline
+            || detach.app.window_error().is_some()
+            || state.browser.tab(detach.tab).is_none()
+        {
+            discard(pending.take().unwrap());
+            return;
+        }
+        if detach.window.is_ready() {
+            let section = state.browser.tab(detach.tab).unwrap().section();
+            if state.request_tab_transfer(detach.tab, detach.destination, section, 0) {
+                detach.submitted = true;
+                return;
+            }
+        }
+        tx.wake_after(READY_POLL_INTERVAL);
+    });
+}
+
+pub(super) fn committed(state: &mut AppState, tab: TabId) {
+    if PENDING.with_borrow(|pending| {
+        pending
+            .as_ref()
+            .is_some_and(|detach| detach.destination == state.window_id && detach.tab == tab)
+    }) {
+        PENDING.replace(None);
+        state.pending_detach = false;
+    }
+}
+
+pub(crate) fn cancel(state: &mut AppState) -> bool {
+    cancel_pending(state, false)
+}
+
+pub(super) fn closing(state: &mut AppState) {
+    cancel_pending(state, true);
+}
+
+fn cancel_pending(state: &mut AppState, closing: bool) -> bool {
+    let detach = PENDING.with_borrow_mut(|pending| {
+        if pending.as_ref().is_some_and(|detach| {
+            detach.source == state.window_id || detach.destination == state.window_id
+        }) {
+            pending.take()
+        } else {
+            None
+        }
+    });
+    if let Some(detach) = detach {
+        if !closing || detach.destination != state.window_id {
+            discard(detach);
+        }
+        state.cancel_tab_transfer();
+        return true;
+    }
+    false
+}
+
+fn discard(detach: Detach) {
+    // A cancelled destination no longer counts as a browser window during source teardown.
+    unregister_window(detach.destination);
+    detach.window.close();
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct Placement {
+    #[cfg(target_os = "macos")]
+    pointer: objc2_foundation_02::NSPoint,
+    #[cfg(target_os = "macos")]
+    usable: objc2_foundation_02::NSRect,
+}
+
+#[cfg(target_os = "macos")]
+fn placement(source: u64) -> Option<Placement> {
+    use objc2_app_kit_02::{NSEvent, NSScreen, NSWindow};
+    use objc2_foundation_02::MainThreadMarker;
+
+    const EDGE_DISTANCE: f64 = 28.0;
+    let window = super::WINDOW_REGISTRY
+        .get()?
+        .lock()
+        .ok()?
+        .get(&source)?
+        .clone();
+    let frame = crate::window_macos::with_window(&window, |native| native.frame())?;
+    let main = MainThreadMarker::new()?;
+    // SAFETY: the drag handler is on AppKit's main thread.
+    let pointer = unsafe { NSEvent::mouseLocation() };
+    if contains(frame, pointer, EDGE_DISTANCE)
+        || unsafe { NSWindow::windowNumberAtPoint_belowWindowWithWindowNumber(pointer, 0, main) }
+            > 0
+    {
+        return None;
+    }
+    let usable = NSScreen::screens(main)
+        .iter()
+        .map(|screen| screen.visibleFrame())
+        .find(|frame| contains(*frame, pointer, 0.0))?;
+    Some(Placement { pointer, usable })
+}
+
+#[cfg(target_os = "macos")]
+fn contains(
+    rect: objc2_foundation_02::NSRect,
+    point: objc2_foundation_02::NSPoint,
+    margin: f64,
+) -> bool {
+    point.x >= rect.origin.x - margin
+        && point.y >= rect.origin.y - margin
+        && point.x < rect.origin.x + rect.size.width + margin
+        && point.y < rect.origin.y + rect.size.height + margin
+}
+
+#[cfg(not(target_os = "macos"))]
+fn placement(_: u64) -> Option<Placement> {
+    None
+}
+
+impl Placement {
+    pub(crate) fn apply(self, window: &WindowHandle) {
+        #[cfg(target_os = "macos")]
+        crate::window_macos::with_window(window, |native| {
+            native.setFrame_display(self.frame_near_pointer(native.frame().size), true);
+        });
+        #[cfg(not(target_os = "macos"))]
+        let _ = window;
+    }
+
+    #[cfg(target_os = "macos")]
+    fn frame_near_pointer(self, size: objc2_foundation_02::NSSize) -> objc2_foundation_02::NSRect {
+        use objc2_foundation_02::{NSPoint, NSRect, NSSize};
+
+        let width = size.width.min(self.usable.size.width);
+        let height = size.height.min(self.usable.size.height);
+        let x = (self.pointer.x - width / 4.0).clamp(
+            self.usable.origin.x,
+            self.usable.origin.x + self.usable.size.width - width,
+        );
+        let y = (self.pointer.y - height + 48.0).clamp(
+            self.usable.origin.y,
+            self.usable.origin.y + self.usable.size.height - height,
+        );
+        NSRect::new(NSPoint::new(x, y), NSSize::new(width, height))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pending(source: &AppState, destination: AppState, deadline: Instant) -> u64 {
+        let id = destination.window_id;
+        let app = rune::App::new(crate::app_spec(AppState::new_window)).init(move || destination);
+        let handle = app.handle();
+        let window =
+            rune::open_window(rune::WindowSpec::from_app(format!("detach-test-{id}"), app));
+        super::super::register_window(id, window.clone());
+        PENDING.replace(Some(Detach {
+            source: source.window_id,
+            destination: id,
+            tab: source.browser.active_tab().unwrap().id(),
+            window,
+            app: handle,
+            deadline,
+            submitted: false,
+        }));
+        id
+    }
+
+    #[test]
+    fn native_creation_timeout_preserves_source_and_removes_destination() {
+        let mut source = AppState::new(Some("one.example"));
+        let before = source.session_snapshot();
+        let id = pending(&source, AppState::new_window(), Instant::now());
+        poll(&mut source, &mut Tx::default());
+        assert!(PENDING.with_borrow(Option::is_none));
+        assert_eq!(source.session_snapshot(), before);
+        assert!(
+            !super::super::WINDOW_REGISTRY
+                .get()
+                .unwrap()
+                .lock()
+                .unwrap()
+                .contains_key(&id)
+        );
+    }
+
+    #[test]
+    fn cancellation_before_readiness_keeps_the_original_tab() {
+        let mut source = AppState::new(Some("one.example"));
+        let id = source.browser.active_tab().unwrap().id();
+        pending(
+            &source,
+            AppState::new_window(),
+            Instant::now() + OPEN_TIMEOUT,
+        );
+        poll(&mut source, &mut Tx::default());
+        assert!(PENDING.with_borrow(Option::is_some));
+        assert!(cancel(&mut source));
+        assert!(!cancel(&mut source));
+        assert_eq!(source.browser.active_tab().unwrap().id(), id);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn placement_clamps_to_the_pointer_display_in_negative_coordinates() {
+        use objc2_foundation_02::{NSPoint, NSRect, NSSize};
+
+        let usable = NSRect::new(NSPoint::new(-1200.0, 40.0), NSSize::new(1200.0, 800.0));
+        let placement = Placement {
+            pointer: NSPoint::new(-20.0, 55.0),
+            usable,
+        };
+        let frame = placement.frame_near_pointer(NSSize::new(960.0, 640.0));
+        assert_eq!(frame.origin, NSPoint::new(-960.0, 40.0));
+        assert_eq!(frame.size, NSSize::new(960.0, 640.0));
+    }
+}

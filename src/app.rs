@@ -200,6 +200,7 @@ pub(crate) struct AppState {
     pub(crate) titlebar: LinuxTitlebar,
     storage: Option<std::sync::Arc<Storage>>,
     workers_started: bool,
+    pending_detach: bool,
     #[cfg(feature = "ladybird-bridge")]
     profile_dir: Option<PathBuf>,
     config_file: Option<PathBuf>,
@@ -362,6 +363,7 @@ impl AppState {
             titlebar: LinuxTitlebar::default(),
             storage,
             workers_started: false,
+            pending_detach: false,
             #[cfg(feature = "ladybird-bridge")]
             profile_dir: _profile_dir,
             config_file,
@@ -624,6 +626,7 @@ pub(crate) fn save_closed_final_session(storage: &Storage) {
 }
 
 pub(crate) mod cross_window_drag;
+pub(crate) mod detach;
 mod find;
 mod lifecycle;
 mod omnibox_actions;

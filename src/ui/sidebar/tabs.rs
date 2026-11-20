@@ -691,14 +691,16 @@ fn tab_drag_handler(row: El, id: TabId, members: Vec<TabId>) -> El {
             if !external {
                 crate::app::cross_window_drag::clear(state.window_id);
             }
+            let detached =
+                !external && active && members.len() == 1 && crate::app::detach::release(state, id);
             state.tab_drag.set_outside(external);
-            let side = (active && !external)
+            let side = (active && !external && !detached)
                 .then(|| crate::ui::viewport::drop_side(state, id, drag.window_point()))
                 .flatten();
             state.split_preview = None;
             let (was_dragging, drop) = state.tab_drag.end(
                 state.browser.tabs(),
-                drag.cancelled() || external || side.is_some(),
+                drag.cancelled() || external || detached || side.is_some(),
             );
             if let Some(side) = side {
                 if dragging_single_page(state, id) {
