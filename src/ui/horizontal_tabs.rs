@@ -7,7 +7,7 @@ use rune::{Cx, El, Spring, Transition, Tx, col, el, row};
 use super::controls::{icon_button, row_button};
 use super::sidebar::drag::PreviewItem;
 use super::sidebar::tabs::{drag_overlay, tab_drag_handler, tab_icon};
-use super::sidebar::{self, header, hover};
+use super::sidebar::{header, hover};
 use super::theme::{self, Theme};
 use super::{downloads, icons};
 use crate::app::{self, AppState};
@@ -200,8 +200,7 @@ pub(super) fn view(
         .child(super::omnibox::address_bar(
             state, cx, theme, reduced, overlays,
         ))
-        .child(downloads::trigger(state, theme, overlays))
-        .child(sidebar::appearance(state.settings.appearance, theme));
+        .child(downloads::trigger(state, theme, overlays));
     drag_overlay(state, theme, overlays, reduced);
 
     col()

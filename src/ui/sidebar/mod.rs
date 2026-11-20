@@ -207,7 +207,7 @@ pub(super) fn site_controls(theme: &Theme) -> El {
 }
 
 /// A quiet button at the foot of the sidebar that steps through System, Light and Dark.
-pub(super) fn appearance(current: Appearance, theme: &Theme) -> El {
+fn appearance(current: Appearance, theme: &Theme) -> El {
     let glyph = match current {
         Appearance::System => &icons::SYSTEM,
         Appearance::Light => &icons::LIGHT,
