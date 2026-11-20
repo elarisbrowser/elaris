@@ -478,6 +478,9 @@ fn tab_view(state: &AppState, tab: &Tab, theme: &Theme) -> El {
             .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
             .child(icon)
     };
+    tile = tile
+        .radius(theme::HORIZONTAL_TAB_RADIUS)
+        .continuous_corners();
     if active {
         tile = tile.fill(theme.tab_active).shadow(
             theme::ACTIVE_SHADOW_Y,

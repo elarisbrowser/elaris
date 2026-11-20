@@ -225,7 +225,7 @@ pub(super) fn address_bar(
         .px(theme::ROW_PADDING)
         .gap(theme::ROW_GAP)
         .center_y()
-        .radius(theme::FIELD_RADIUS)
+        .radius(theme::HORIZONTAL_FIELD_RADIUS)
         .continuous_corners()
         .fill(theme.address_field)
         .token_motion(if reduced {
