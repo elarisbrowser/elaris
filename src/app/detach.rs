@@ -67,10 +67,16 @@ pub(super) fn poll(state: &mut AppState, tx: &mut Tx) {
             }
             return;
         }
-        if Instant::now() >= detach.deadline
-            || detach.app.window_error().is_some()
-            || state.browser.tab(detach.tab).is_none()
-        {
+        let error = detach.app.window_error().or_else(|| {
+            (Instant::now() >= detach.deadline)
+                .then(|| "the new window did not become ready".to_owned())
+        });
+        if let Some(error) = error {
+            eprintln!("Elaris: could not detach tab: {error}");
+            discard(pending.take().unwrap());
+            return;
+        }
+        if state.browser.tab(detach.tab).is_none() {
             discard(pending.take().unwrap());
             return;
         }
@@ -143,21 +149,20 @@ fn placement(source: u64) -> Option<Placement> {
     use objc2_app_kit_02::{NSEvent, NSScreen, NSWindow};
     use objc2_foundation_02::MainThreadMarker;
 
-    const EDGE_DISTANCE: f64 = 28.0;
-    let window = super::WINDOW_REGISTRY
-        .get()?
-        .lock()
-        .ok()?
-        .get(&source)?
-        .clone();
-    let frame = crate::window_macos::with_window(&window, |native| native.frame())?;
+    let windows = super::WINDOW_REGISTRY.get()?.lock().ok()?;
+    let frame = crate::window_macos::with_window(windows.get(&source)?, |native| native.frame())?;
     let main = MainThreadMarker::new()?;
     // SAFETY: the drag handler is on AppKit's main thread.
     let pointer = unsafe { NSEvent::mouseLocation() };
-    if contains(frame, pointer, EDGE_DISTANCE)
-        || unsafe { NSWindow::windowNumberAtPoint_belowWindowWithWindowNumber(pointer, 0, main) }
-            > 0
-    {
+    let hit =
+        unsafe { NSWindow::windowNumberAtPoint_belowWindowWithWindowNumber(pointer, 0, main) };
+    // Finder and the wallpaper can have window numbers. Only an Elaris hit consumes this drop.
+    let browser_hit = u32::try_from(hit).ok().is_some_and(|hit| {
+        windows
+            .values()
+            .any(|window| window.window_number() == Some(hit))
+    });
+    if !can_detach_at(frame, pointer, browser_hit) {
         return None;
     }
     let usable = NSScreen::screens(main)
@@ -165,6 +170,16 @@ fn placement(source: u64) -> Option<Placement> {
         .map(|screen| screen.visibleFrame())
         .find(|frame| contains(*frame, pointer, 0.0))?;
     Some(Placement { pointer, usable })
+}
+
+#[cfg(target_os = "macos")]
+fn can_detach_at(
+    source: objc2_foundation_02::NSRect,
+    pointer: objc2_foundation_02::NSPoint,
+    browser_hit: bool,
+) -> bool {
+    const EDGE_DISTANCE: f64 = 28.0;
+    !browser_hit && !contains(source, pointer, EDGE_DISTANCE)
 }
 
 #[cfg(target_os = "macos")]
@@ -282,5 +297,15 @@ mod tests {
         let frame = placement.frame_near_pointer(NSSize::new(960.0, 640.0));
         assert_eq!(frame.origin, NSPoint::new(-960.0, 40.0));
         assert_eq!(frame.size, NSSize::new(960.0, 640.0));
+    }
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn detachment_requires_clearance_and_yields_to_browser_windows() {
+        use objc2_foundation_02::{NSPoint, NSRect, NSSize};
+
+        let source = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(800.0, 600.0));
+        assert!(!can_detach_at(source, NSPoint::new(810.0, 300.0), false));
+        assert!(!can_detach_at(source, NSPoint::new(900.0, 300.0), true));
+        assert!(can_detach_at(source, NSPoint::new(900.0, 300.0), false));
     }
 }

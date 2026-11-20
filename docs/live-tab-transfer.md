@@ -57,7 +57,9 @@ for the space between native windows and detachment remain separate work.
 ## Detaching onto the desktop
 
 On macOS, releasing a single tab over a usable desktop area at least 28 points
-outside the source frame queues one new browser window. AppKit positions its
+outside the source frame queues one new browser window. A drop over another
+Elaris window uses the transfer path for existing windows. AppKit desktop and
+Finder windows do not consume the detach gesture. AppKit positions the new
 frame near the pointer and clamps it to the visible bounds of the pointer's
 display. The source keeps the tab until the new window is ready and the ordinary
 live transfer can commit. The tab keeps its original section.
