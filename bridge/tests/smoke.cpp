@@ -1,4 +1,4 @@
-#include <elaris_ladybird.h>
+#include "private_session.h"
 
 #include <chrono>
 #include <filesystem>
@@ -225,6 +225,18 @@ static bool page_input(ElarisLadybird* bridge, ElarisLadybirdView* view, uint64_
         return false;
     constexpr uint64_t peek_id = 100;
     ElarisLadybirdView* preview = nullptr;
+    ElarisLadybirdView* private_target = nullptr;
+    if (!check(elaris_ladybird_test_create_private_view(bridge, 101, &private_target), "create private target"))
+        return false;
+    auto cross_session_result = elaris_ladybird_load_prepared(private_target, view_id, events.peek_request);
+    std::string cross_session_error = elaris_ladybird_last_error();
+    elaris_ladybird_destroy_view(private_target);
+    if (cross_session_result == 0 || cross_session_error != "prepared navigation cannot cross browsing sessions") {
+        std::cerr << "Prepared navigation was not rejected at the session boundary\n";
+        return false;
+    }
+    if (!check(elaris_ladybird_test_reset_private_session(bridge), "reset after closing private target"))
+        return false;
     auto& preview_events = all_events[peek_id];
     auto preview_loaded =
         check(elaris_ladybird_create_view(bridge, peek_id, &preview), "create Peek view") &&

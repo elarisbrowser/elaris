@@ -307,7 +307,8 @@ static bool has_temporary_download(std::filesystem::path const& directory) {
     return false;
 }
 
-static bool test_private_session(ElarisLadybird* bridge, HttpFixture const& fixture, Events& events) {
+static bool test_private_session(ElarisLadybird* bridge, HttpFixture const& fixture, Events& events,
+                                 std::filesystem::path const& downloads_dir) {
     using View = std::unique_ptr<ElarisLadybirdView, decltype(&elaris_ladybird_destroy_view)>;
     auto create = [&](uint64_t id, bool private_view) {
         ElarisLadybirdView* raw = nullptr;
@@ -346,13 +347,36 @@ static bool test_private_session(ElarisLadybird* bridge, HttpFixture const& fixt
     first.reset();
     if (!load(second, 203, "/privacy/read-again", "private:private:empty"))
         return false;
+    auto private_download = downloads_dir / "private-probe.bin";
+    auto download_url = fixture.url("/small");
+    if (!check(elaris_ladybird_test_start_private_download(second.get(), download_url.c_str()),
+               "start private download") ||
+        !pump_until(bridge, [&] { return std::filesystem::exists(private_download); }) || !events.downloads.empty()) {
+        std::cerr << "Private download failed or escaped into the ordinary download observer\n";
+        return false;
+    }
+    auto private_servers = elaris_ladybird_test_private_browser_request_servers(bridge);
     second.reset();
     if (!check(elaris_ladybird_test_reset_private_session(bridge), "reset private browsing session"))
         return false;
 
-    auto fresh = create(204, true);
-    return load(fresh, 204, "/privacy/read", "empty:empty:empty") &&
-           load(normal, 201, "/privacy/read", "normal:normal:normal");
+    // Report the upstream retirement gap without treating it as desired behavior.
+    if (private_servers && elaris_ladybird_test_private_browser_request_servers(bridge))
+        std::cout << "Ladybird retained a browser-level private RequestServer after reset\n";
+    if (!std::filesystem::exists(private_download)) {
+        std::cerr << "Private reset removed a completed download\n";
+        return false;
+    }
+    for (uint64_t id = 204; id < 207; ++id) {
+        auto fresh = create(id, true);
+        if (!load(fresh, id, "/privacy/read", "empty:empty:empty") ||
+            !load(fresh, id, "/privacy/private", "empty:private:private"))
+            return false;
+        fresh.reset();
+        if (!check(elaris_ladybird_test_reset_private_session(bridge), "reset after reopening private session"))
+            return false;
+    }
+    return load(normal, 201, "/privacy/read", "normal:normal:normal") && events.downloads.empty();
 }
 
 int main(int argc, char** argv) {
@@ -405,7 +429,7 @@ int main(int argc, char** argv) {
         !check(elaris_ladybird_set_download_directory(bridge, downloads_dir.c_str()), "isolate Downloads"))
         return 1;
 
-    bool passed = test_private_session(bridge, fixture, events);
+    bool passed = test_private_session(bridge, fixture, events, downloads_dir);
     uint64_t unsafe_id{};
     passed = passed && start(bridge, fixture.url("/small"), "../../unsafe.txt", unsafe_id) &&
              pump_until(bridge, [&] { return finished(events, unsafe_id, ELARIS_LADYBIRD_DOWNLOAD_COMPLETED); });

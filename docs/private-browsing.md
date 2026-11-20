@@ -1,6 +1,6 @@
 # Private browsing engine investigation
 
-Elaris pins upstream Ladybird at `76bef6eee7bffd40c1895a2ee7332405fa1ef83d`. The checked-out submodule uses the upstream remote and Elaris carries its Peek patch separately. The candidate `elarisbrowser/ladybird` URL returned “Repository not found”. The findings below refer to the pinned source.
+Elaris pins upstream Ladybird at `76bef6eee7bffd40c1895a2ee7332405fa1ef83d`. The checked-out submodule uses the upstream remote and Elaris carries its Peek patch separately. The maintained Ladybird-derived repository is `elarisbrowser/photon-engine`. Its master tip `0692c24b` contains Photon embedder and core engine changes, while Elaris still builds its pinned upstream submodule. Both revisions implement the same private reset path. The runtime findings below refer to the revision Elaris builds.
 
 | Area | Pinned implementation |
 | --- | --- |
@@ -19,6 +19,12 @@ Closing a private view releases its session reference. Request servers and conte
 
 The download smoke executable also runs a privacy probe against a loopback origin and an isolated profile. The server reports the HTTP request cookie and the page reports local and session storage. The probe verifies two-way isolation, private cookie and local storage sharing across views, per-view session storage, survival after closing one view, and fresh storage after closing all private views and explicitly resetting the session. It also checks that the test bridge rejects reset while a private view remains open.
 
+## RequestServer retention after reset
+
+The bridge test completes a private download through Ladybird and observes at least one private browser-level RequestServer after both private views close and Ladybird resets the session. The next private context still starts with fresh cookies and storage. The old server, however, owns a strong reference to the old `BrowsingSession`. `Application::reset_private_browsing_session()` clears its weak session reference and removes unowned workers, while `RequestServerManager` only schedules idle retirement for site-specific servers. The browser-level server remains in the manager until application shutdown. Repeated resets therefore cannot establish destruction of private website data and network resources. Fixing this requires explicit retirement of the ending session’s servers and checking that stale content and worker events cannot target a later session.
+
+The host bridge also rejects prepared navigations between distinct Ladybird session IDs before consuming the source descriptor. Its ordinary download event stream filters out private records. The live tests verify that a rejected prepared link can still be loaded in its own context, private download records never reach that stream, and the completed file remains after reset. Three successive close/reset/reopen cycles verify that the next session sees fresh cookies, local storage, and session storage.
+
 ## Release status
 
-Elaris has no production private-window command. Releasing the feature requires session-scoped website storage where the web platform requires it, verification that old worker and content clients cannot exchange messages with a new private session, and context-aware history, sessions, permissions, downloads, and tab transfer in the host. The smoke test exercises Ladybird reset through the bridge. Native window closure, crashes, permission prompts, private downloads, disk cache behavior, and TLS cleanup remain unverified.
+Elaris has no production private-window command. Releasing the feature requires session-scoped website storage where the web platform requires it, verification that old worker and content clients cannot exchange messages with a new private session, and context-aware history, sessions, permissions, downloads, and tab transfer in the host. The smoke test exercises Ladybird reset through the bridge. Native window closure, crashes, permission prompts, cancellation of active private downloads, disk cache behavior, and TLS cleanup remain unverified.

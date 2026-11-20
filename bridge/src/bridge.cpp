@@ -1,5 +1,6 @@
 #ifdef ELARIS_BUILD_SMOKE_TESTS
 #include "../tests/private_session.h"
+#include <LibWebView/RequestServerManager.h>
 #endif
 
 #include <elaris_ladybird.h>
@@ -206,7 +207,8 @@ class ElarisDownloadObserver final : public WebView::FileDownloaderObserver {
 
   private:
     void emit_download(WebView::FileDownloader::Download const& download) {
-        if (!m_bridge.callback)
+        // This event stream feeds the ordinary download store.
+        if (download.is_private == WebView::IsPrivate::Yes || !m_bridge.callback)
             return;
         auto url = to_utf8(download.url);
         auto path = download.destination.string();
@@ -616,6 +618,31 @@ extern "C" int32_t elaris_ladybird_test_reset_private_session(ElarisLadybird* br
     s_application->reset_private_browsing_session();
     return succeed();
 }
+extern "C" int32_t elaris_ladybird_test_start_private_download(ElarisLadybirdView* view, char const* url) {
+    if (!view || !url || !on_owner_thread(view->bridge) || view->view->is_private() != WebView::IsPrivate::Yes)
+        return fail("private download probe requires a private view");
+    auto parsed = URL::Parser::basic_parse(AK::StringView(url, std::char_traits<char>::length(url)));
+    if (!parsed.has_value())
+        return fail("invalid test URL");
+    auto destination = s_application->default_path_for_downloaded_file("private-probe.bin");
+    if (destination.is_error())
+        return fail("could not create private download destination");
+    s_application->file_downloader().download_file(WebView::IsPrivate::Yes, *parsed, destination.release_value(),
+                                                   WebView::FileDownloader::MayReplaceDestination::No);
+    return succeed();
+}
+
+extern "C" uint64_t elaris_ladybird_test_private_browser_request_servers(ElarisLadybird* bridge) {
+    if (!bridge || !s_application || !on_owner_thread(bridge))
+        return 0;
+    uint64_t count = 0;
+    WebView::Application::request_server_manager().for_each_instance([&](auto& instance) {
+        if (!instance.site().has_value() && instance.session().is_private() == WebView::IsPrivate::Yes)
+            ++count;
+        return IterationDecision::Continue;
+    });
+    return count;
+}
 #endif
 
 extern "C" int32_t elaris_ladybird_set_display_refresh_rate(ElarisLadybirdView* view, double refresh_rate) {
@@ -652,6 +679,8 @@ extern "C" int32_t elaris_ladybird_load_prepared(ElarisLadybirdView* target, uin
     for (auto* handle : target->bridge->views) {
         if (handle->id != source)
             continue;
+        if (handle->view->session().id() != target->view->session().id())
+            return fail("prepared navigation cannot cross browsing sessions");
         auto item = handle->pending_tabs.extract(request);
         if (!item.empty()) {
             target->view->load(AK::move(item.mapped()));
