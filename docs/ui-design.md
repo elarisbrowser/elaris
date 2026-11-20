@@ -23,6 +23,13 @@ as `[appearance].tab_layout` in `config.toml` and defaults to `"vertical"`. Both
 same open tabs and Split View state. The horizontal strip scrolls sideways with a trackpad or
 Shift-wheel and reveals the newly selected tab when switching with the keyboard.
 
+## Split view grid
+
+Split View opens with two panes. Settings → Split View sets the maximum between two and four;
+`[split_view].max_panes` in `config.toml` accepts values through 64. With three or more panes,
+pages tile into equal grid cells and empty cells offer a tab picker. The two-pane layout keeps its
+resizable divider.
+
 ## Repeatable graphical check
 
 Set `ELARIS_DATA_DIR` to a new absolute temporary directory before launching a bridge-enabled

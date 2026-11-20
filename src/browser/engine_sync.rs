@@ -210,9 +210,17 @@ impl Browser {
         let window = &self.window;
         let scale = window.scale.get();
         let panes = self.visible_tabs();
-        let widths = self
-            .displayed_split()
-            .map(|split| split::widths(window.viewport[0], split.ratio));
+        let split_ratio = self.displayed_split().map(|split| split.ratio);
+        let grid_size = split_ratio.filter(|_| panes.len() > 2).map(|_| {
+            let columns = (self.split_view_limit as f32).sqrt().ceil() as usize;
+            let rows = self.split_view_limit.div_ceil(columns);
+            [
+                (window.viewport[0] - split::DIVIDER * (columns.saturating_sub(1) as f32))
+                    / columns as f32,
+                (window.viewport[1] - split::DIVIDER * (rows.saturating_sub(1) as f32))
+                    / rows as f32,
+            ]
+        });
         let input_page = self.input_page();
         let peek_id = self.peek.as_ref().map(|peek| peek.page.id());
         // Release the old focus before granting it to a different view.
@@ -241,13 +249,18 @@ impl Browser {
             let side = panes.iter().position(|pane| *pane == Some(id));
             let is_peek = peek_id == Some(id);
             let visible = is_peek || side.is_some();
-            let width = side
-                .zip(widths)
-                .map_or(window.viewport[0], |(side, widths)| widths[side]);
             let size = if is_peek {
                 peek::geometry(window.viewport).page_size()
+            } else if let (Some(side), Some(ratio)) = (side, split_ratio)
+                && panes.len() == 2
+            {
+                [
+                    split::widths(window.viewport[0], ratio)[side],
+                    window.viewport[1],
+                ]
             } else {
-                [width, window.viewport[1]]
+                side.zip(grid_size)
+                    .map_or(window.viewport, |(_, size)| size)
             };
             let [width, height] = size.map(|points| input::device(points, scale));
             let viewport = (width > 0 && height > 0).then_some((width, height, f64::from(scale)));

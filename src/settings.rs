@@ -72,6 +72,7 @@ impl DownloadDirectory {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Settings {
     pub(crate) tab_layout: TabLayout,
+    pub(crate) split_view_limit: usize,
     pub(crate) appearance: Appearance,
     pub(crate) accent_color: AccentColor,
     pub(crate) search_engine: SearchEngine,
@@ -86,6 +87,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             tab_layout: TabLayout::default(),
+            split_view_limit: 2,
             appearance: Appearance::System,
             accent_color: AccentColor::Blue,
             search_engine: SearchEngine::DuckDuckGo,
@@ -150,6 +152,7 @@ pub(crate) enum SettingsChange {
     GlassEnabled(bool),
     TintOpacity(u8),
     ReduceMotion(bool),
+    SplitViewLimit(usize),
 }
 
 #[cfg(test)]

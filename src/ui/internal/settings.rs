@@ -44,6 +44,7 @@ pub(super) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> E
         .child(appearance_section(state, theme, &kit, compact))
         .child(search_section(state, theme, &kit, overlays, compact))
         .child(downloads_section(state, theme, &kit, compact))
+        .child(split_view_section(state, theme, &kit, compact))
         .child(performance_section(state, theme, &kit, compact))
         .child(startup_section(state, theme, &kit, overlays, compact))
         .child(configuration_section(state, theme, &kit, compact));
@@ -63,6 +64,34 @@ pub(super) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> E
                 .justify_center()
                 .child(content),
         )
+}
+
+fn split_view_section(state: &AppState, theme: &Theme, kit: &Kit, compact: bool) -> El {
+    let options = [2usize, 3, 4];
+    let selected = options
+        .iter()
+        .position(|limit| *limit == state.settings.split_view_limit.min(4));
+    let control = SegmentedControl::new(&["2", "3", "4"], selected)
+        .width(Some(CONTROL_WIDTH))
+        .label("Maximum split panes")
+        .on_pick(|state: &mut AppState, index, _| {
+            state.set_split_view_limit([2, 3, 4][index]);
+        })
+        .build(kit);
+    section(
+        "Split View",
+        theme,
+        settings_group(
+            setting_row(
+                "Maximum panes",
+                "Choose how many pages can appear in the split view grid. Higher limits are available in config.toml.",
+                theme,
+                control,
+                compact,
+            ),
+            theme,
+        ),
+    )
 }
 
 fn appearance_section(state: &AppState, theme: &Theme, kit: &Kit, compact: bool) -> El {

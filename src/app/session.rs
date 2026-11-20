@@ -54,8 +54,17 @@ impl super::AppState {
                 )
                 && left != right
             {
+                let mut panes = [None; crate::browser::split::MAX_PANES];
+                panes[0] = Some(left);
+                panes[1] = Some(right);
+                for (index, tab_index) in split.additional.iter().enumerate() {
+                    if index + 2 >= panes.len() {
+                        break;
+                    }
+                    panes[index + 2] = restored.get(*tab_index).copied().flatten();
+                }
                 self.browser.split = Some(crate::browser::split::Split {
-                    panes: [Some(left), Some(right)],
+                    panes,
                     ratio: f32::from(split.ratio) / 10_000.0,
                 });
             }
@@ -139,13 +148,25 @@ impl super::AppState {
             .unwrap_or_default();
         let mut session = Session::new_with_sections(tabs, active_tab, favourites);
         if let Some(split) = self.browser.split
-            && let [Some(left), Some(right)] = split.panes
+            && let panes = &split.panes[..self
+                .browser
+                .split_view_limit
+                .min(crate::browser::split::MAX_PANES)]
+            && panes.len() >= 2
+            && let (Some(left), Some(right)) = (panes[0], panes[1])
+            && panes.iter().all(Option::is_some)
         {
             let index = |id| self.browser.tabs().iter().position(|tab| tab.id() == id);
-            if let (Some(left), Some(right)) = (index(left), index(right)) {
+            if let (Some(left_index), Some(right_index)) = (index(left), index(right)) {
+                let additional = panes[2..]
+                    .iter()
+                    .flatten()
+                    .filter_map(|id| index(*id))
+                    .collect();
                 session.split = Some(storage::SessionSplit {
-                    left,
-                    right,
+                    left: left_index,
+                    right: right_index,
+                    additional,
                     ratio: (split.ratio * 10_000.0).round() as u16,
                 });
             }

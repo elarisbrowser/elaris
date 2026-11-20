@@ -126,6 +126,16 @@ impl super::AppState {
         self.save_setting(SettingsChange::ReduceMotion(enabled));
     }
 
+    pub(crate) fn set_split_view_limit(&mut self, limit: usize) {
+        let limit = limit.clamp(2, 4);
+        if self.settings.split_view_limit == limit {
+            return;
+        }
+        self.settings.split_view_limit = limit;
+        self.browser.split_view_limit = limit;
+        self.save_setting(SettingsChange::SplitViewLimit(limit));
+    }
+
     fn save_setting(&mut self, change: SettingsChange) {
         super::publish_settings(&self.settings);
         if let Some(storage) = &self.storage
@@ -169,6 +179,7 @@ impl super::AppState {
         let previous_download_directory = self.engine_download_directory();
         self.prepare_tab_layout(load.settings.tab_layout);
         self.settings = load.settings;
+        self.browser.split_view_limit = self.settings.split_view_limit;
         super::publish_settings(&self.settings);
         self.permission_store = load.permissions;
         super::publish_permissions(&self.permission_store);

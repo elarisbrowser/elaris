@@ -97,6 +97,7 @@ pub(crate) struct Browser {
     peek_origin: Option<(TabId, [f32; 2])>,
     promoted_visit: Option<(TabId, String, String)>,
     pub(crate) split: Option<split::Split>,
+    pub(crate) split_view_limit: usize,
     recent: Vec<TabId>,
     input: input_routing::Held,
     /// None until the app connects one, and in a build without an engine.
@@ -135,6 +136,7 @@ impl Default for Browser {
             peek_origin: None,
             promoted_visit: None,
             split: None,
+            split_view_limit: 2,
             recent: Vec::new(),
             input: Default::default(),
             engine: None,
@@ -430,10 +432,13 @@ impl Browser {
             return;
         }
         if let Some(split) = &mut self.split
-            && !split.panes.contains(&Some(id))
-            && split.panes.contains(&None)
+            && !split.panes[..self.split_view_limit.min(split::MAX_PANES)].contains(&Some(id))
+            && split.panes[..self.split_view_limit.min(split::MAX_PANES)].contains(&None)
         {
-            let destination = split.panes.iter().position(Option::is_none).unwrap();
+            let destination = split.panes[..self.split_view_limit.min(split::MAX_PANES)]
+                .iter()
+                .position(Option::is_none)
+                .expect("an empty configured pane exists");
             split.panes[destination] = Some(id);
         }
         if self.active != Some(id) {
@@ -715,9 +720,15 @@ impl Browser {
         let tab = self.tabs.remove(index);
         self.recent.retain(|&tab| tab != id);
         if let Some(split) = self.split
-            && split.panes.contains(&Some(id))
+            && split.panes[..self.split_view_limit.min(split::MAX_PANES)].contains(&Some(id))
         {
-            self.exit_split(split.panes.into_iter().flatten().find(|pane| *pane != id));
+            self.exit_split(
+                split.panes[..self.split_view_limit.min(split::MAX_PANES)]
+                    .iter()
+                    .flatten()
+                    .copied()
+                    .find(|pane| *pane != id),
+            );
         }
         if self.active == Some(id) {
             self.active = None;
@@ -792,7 +803,12 @@ impl Browser {
     pub(crate) fn viewport_width(&self) -> f32 {
         self.displayed_split()
             .map_or(self.content_width(), |split| {
-                split::widths(self.content_width(), split.ratio)[self.focused_side()]
+                if self.split_view_limit <= 2 {
+                    return split::widths(self.content_width(), split.ratio)[self.focused_side()];
+                }
+                let columns = (self.split_view_limit as f32).sqrt().ceil() as usize;
+                (self.content_width() - split::DIVIDER * (columns.saturating_sub(1) as f32))
+                    / columns as f32
             })
     }
 

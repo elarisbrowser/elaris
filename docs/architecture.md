@@ -68,12 +68,12 @@ Elaris stores:
   recorded.
 - `session.json`: a versioned list of open tab URLs and titles plus the active tab index and the
   indices classified as Favourite. Legacy pinned tabs restore as regular tabs. A completed split
-  saves both pane indices and the divider ratio. The active tab index also identifies the focused
+  saves its pane indices and divider ratio. The active tab index also identifies the focused
   pane. Older sessions restore without a split. The file is written to a temporary file and
   atomically renamed into place.
 - `profile/`: Ladybird's engine-owned profile data, separate from Elaris history and session
   metadata.
-- `config.toml`: appearance, search provider, download directory, startup mode and per-origin
+- `config.toml`: appearance, split view limit, search provider, download directory, startup mode and per-origin
   website permission overrides. The storage worker edits one value at a time, preserves unrelated
   TOML comments and keys, and replaces the file atomically. Website permission defaults are Ask;
   internal Elaris pages are excluded. A malformed file is reported and never replaced by defaults.

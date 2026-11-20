@@ -65,8 +65,6 @@ pub(crate) fn view(
     let panes = state.browser.visible_tabs();
     let preview = state.split_preview;
     let ratio = state.browser.displayed_split().map(|split| split.ratio);
-    let width = state.browser.content_width();
-    let widths = split::widths(width, ratio.unwrap_or(0.5));
     let layout = rune::row()
         .key("page-layout")
         .w_full()
@@ -79,9 +77,9 @@ pub(crate) fn view(
             state.split_rect = rect;
             state.browser.set_viewport([rect[2], rect[3]]);
         });
-    let wrap = |id: Option<TabId>, weight: f32, child: El| {
+    let wrap = |id: Option<TabId>, side: usize, weight: f32, child: El| {
         let mut pane = el()
-            .key(wrapper_key(id))
+            .key(wrapper_key(id, side))
             .w(0.0)
             .grow(weight)
             .min_w(0.0)
@@ -114,10 +112,11 @@ pub(crate) fn view(
         }
         pane
     };
-    let preview_pane = || wrap(None, 1.0, indicator(theme, radius));
+    let preview_pane = || wrap(None, 1, 1.0, indicator(theme, radius));
     if ratio.is_none() {
         let page = wrap(
             panes[0],
+            0,
             1.0,
             page(state, theme, overlays, reduced_motion, 0),
         );
@@ -134,38 +133,77 @@ pub(crate) fn view(
         };
         return viewport.child(layout);
     }
-    let available = widths.iter().sum::<f32>();
-    let mut layout = layout;
-    for (side, id) in panes.into_iter().enumerate() {
-        let mut child = if id.is_some() {
-            page(state, theme, overlays, reduced_motion, side)
-        } else {
-            picker::view(state, theme, side)
-        };
-        if preview == Some(side) {
-            child = child.child(indicator(theme, radius).pin(
-                Some(0.0),
-                Some(0.0),
-                Some(0.0),
-                Some(0.0),
-            ));
+    if panes.len() == 2 {
+        let pane_widths = split::widths(state.browser.content_width(), ratio.unwrap_or(0.5));
+        let available = pane_widths.iter().sum::<f32>();
+        let mut layout = layout;
+        for (side, id) in panes.into_iter().enumerate() {
+            let child = if id.is_some() {
+                page(state, theme, overlays, reduced_motion, side)
+            } else {
+                picker::view(state, theme, side)
+            };
+            let weight = if available > 0.0 {
+                pane_widths[side] / available
+            } else {
+                0.5
+            };
+            if side == 1 {
+                layout = layout.child(divider(true, theme));
+            }
+            layout = layout.child(wrap(id, side, weight, child));
         }
-        let weight = if available > 0.0 {
-            widths[side] / available
-        } else {
-            0.5
-        };
-        if side == 1 {
-            layout = layout.child(divider(true, theme));
-        }
-        layout = layout.child(wrap(id, weight, child));
+        return viewport.child(layout);
     }
-    viewport.child(layout)
+    let columns = (panes.len() as f32).sqrt().ceil() as usize;
+    let mut grid = rune::col()
+        .key("split-grid")
+        .w_full()
+        .h_full()
+        .gap(split::DIVIDER);
+    for (row_index, row_panes) in panes.chunks(columns.max(1)).enumerate() {
+        let mut grid_row = rune::row()
+            .key(format!("split-grid-row-{row_index}"))
+            .w_full()
+            .h(0.0)
+            .grow(1.0)
+            .gap(split::DIVIDER);
+        for (column, id) in row_panes.iter().copied().enumerate() {
+            let side = row_index * columns + column;
+            let child = if id.is_some() {
+                page(state, theme, overlays, reduced_motion, side)
+            } else {
+                picker::view(state, theme, side)
+            };
+            let child = if preview == Some(side) {
+                child.child(indicator(theme, radius).pin(
+                    Some(0.0),
+                    Some(0.0),
+                    Some(0.0),
+                    Some(0.0),
+                ))
+            } else {
+                child
+            };
+            grid_row = grid_row.child(wrap(id, side, 1.0, child).h(0.0).grow(1.0));
+        }
+        for column in row_panes.len()..columns {
+            grid_row = grid_row.child(
+                el().key(format!("split-grid-empty-{row_index}-{column}"))
+                    .w(0.0)
+                    .h(0.0)
+                    .grow(1.0)
+                    .inert(),
+            );
+        }
+        grid = grid.child(grid_row);
+    }
+    viewport.child(grid)
 }
 
-fn wrapper_key(id: Option<TabId>) -> String {
+fn wrapper_key(id: Option<TabId>, side: usize) -> String {
     id.map_or_else(
-        || "empty-web-pane".into(),
+        || format!("empty-web-pane-{side}"),
         |id| format!("web-pane-{}", id.raw()),
     )
 }
@@ -183,20 +221,98 @@ pub(crate) fn page_focus_key(browser: &Browser) -> &'static str {
 }
 
 fn pane_key(side: usize) -> &'static str {
-    if side == 0 {
-        VIEWPORT
-    } else {
-        "right-page-viewport"
-    }
+    PANE_KEYS
+        .get(side)
+        .copied()
+        .unwrap_or("right-page-viewport")
 }
 
+const PANE_KEYS: [&str; 64] = [
+    VIEWPORT,
+    "right-page-viewport",
+    "split-page-2",
+    "split-page-3",
+    "split-page-4",
+    "split-page-5",
+    "split-page-6",
+    "split-page-7",
+    "split-page-8",
+    "split-page-9",
+    "split-page-10",
+    "split-page-11",
+    "split-page-12",
+    "split-page-13",
+    "split-page-14",
+    "split-page-15",
+    "split-page-16",
+    "split-page-17",
+    "split-page-18",
+    "split-page-19",
+    "split-page-20",
+    "split-page-21",
+    "split-page-22",
+    "split-page-23",
+    "split-page-24",
+    "split-page-25",
+    "split-page-26",
+    "split-page-27",
+    "split-page-28",
+    "split-page-29",
+    "split-page-30",
+    "split-page-31",
+    "split-page-32",
+    "split-page-33",
+    "split-page-34",
+    "split-page-35",
+    "split-page-36",
+    "split-page-37",
+    "split-page-38",
+    "split-page-39",
+    "split-page-40",
+    "split-page-41",
+    "split-page-42",
+    "split-page-43",
+    "split-page-44",
+    "split-page-45",
+    "split-page-46",
+    "split-page-47",
+    "split-page-48",
+    "split-page-49",
+    "split-page-50",
+    "split-page-51",
+    "split-page-52",
+    "split-page-53",
+    "split-page-54",
+    "split-page-55",
+    "split-page-56",
+    "split-page-57",
+    "split-page-58",
+    "split-page-59",
+    "split-page-60",
+    "split-page-61",
+    "split-page-62",
+    "split-page-63",
+];
+
 pub(crate) fn drop_side(state: &AppState, id: TabId, point: [f32; 2]) -> Option<usize> {
-    let [_, _, w, _] = state.split_rect;
-    let boundary = state.browser.displayed_split().map_or(w / 2.0, |split| {
-        split::widths(w, split.ratio)[0] + split::DIVIDER / 2.0
-    });
-    let side = split::target(state.split_rect, point, boundary)?;
     let panes = state.browser.visible_tabs();
+    if panes.len() == 2 {
+        let ratio = state
+            .browser
+            .displayed_split()
+            .map_or(0.5, |split| split.ratio);
+        let [x, y, width, height] = state.split_rect;
+        if point[0] < x || point[0] >= x + width || point[1] < y || point[1] >= y + height {
+            return None;
+        }
+        let side =
+            usize::from(point[0] >= x + split::widths(width, ratio)[0] + split::DIVIDER / 2.0);
+        return (panes[side] != Some(id)).then_some(side);
+    }
+    let side = split::target(state.split_rect, point, panes.len())?;
+    if side >= panes.len() {
+        return None;
+    }
     if state.browser.displayed_split().is_some() {
         (panes[side] != Some(id)).then_some(side)
     } else {
@@ -262,18 +378,28 @@ pub(crate) fn page_origin(state: &AppState) -> [f32; 2] {
     };
     let offset = state
         .browser
-        .split
-        .filter(|_| state.browser.focused_side() == 1)
-        .map_or(0.0, |split| {
-            split::widths(state.browser.content_width(), split.ratio)[0] + split::DIVIDER
+        .displayed_split()
+        .map_or([0.0, 0.0], |split_state| {
+            if state.browser.visible_tabs().len() == 2 {
+                return [
+                    split::widths(state.split_rect[2], split_state.ratio)[0] + split::DIVIDER,
+                    0.0,
+                ];
+            }
+            let rect = split::grid_cell_rect(
+                [0.0, 0.0, state.split_rect[2], state.split_rect[3]],
+                state.browser.visible_tabs().len(),
+                state.browser.focused_side(),
+            );
+            [rect[0], rect[1]]
         });
     if state.horizontal_tabs() {
         [
-            theme::VIEWPORT_INSET + offset,
-            theme::HORIZONTAL_CHROME_HEIGHT + theme::VIEWPORT_INSET,
+            theme::VIEWPORT_INSET + offset[0],
+            theme::HORIZONTAL_CHROME_HEIGHT + theme::VIEWPORT_INSET + offset[1],
         ]
     } else {
-        [left + offset, top]
+        [left + offset[0], top + offset[1]]
     }
 }
 

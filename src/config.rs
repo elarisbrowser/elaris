@@ -14,7 +14,7 @@ use crate::appearance::{AccentColor, Appearance};
 use crate::permissions::{PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{DownloadDirectory, Settings, SettingsChange, StartupMode, TabLayout};
 
-const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\naccent = \"blue\"\nglass = true\ntint_opacity = 100\ntab_layout = \"vertical\"\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n\n[performance]\nreduce_motion = false\n";
+const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\naccent = \"blue\"\nglass = true\ntint_opacity = 100\ntab_layout = \"vertical\"\n\n[split_view]\nmax_panes = 2\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n\n[performance]\nreduce_motion = false\n";
 static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -58,6 +58,15 @@ pub(crate) fn parse(contents: &str) -> Result<ConfigLoad, String> {
             settings.tab_layout = layout;
         } else {
             issues.push(format!("Invalid value for [appearance].tab_layout: {value:?}; expected vertical or horizontal"));
+        }
+    }
+    if let Some(value) = integer_value(&document, "split_view", "max_panes", &mut issues) {
+        if (2..=64).contains(&value) {
+            settings.split_view_limit = value as usize;
+        } else {
+            issues.push(format!(
+                "Invalid value for [split_view].max_panes: {value}; expected 2 through 64"
+            ));
         }
     }
     if let Some(value) = string_value(&document, "appearance", "theme", &mut issues) {
@@ -305,6 +314,9 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
         SettingsChange::TabLayout(value) => {
             ("appearance", "tab_layout", value.config_key().to_owned())
         }
+        SettingsChange::SplitViewLimit(value) => {
+            ("split_view", "max_panes", (*value).clamp(2, 64).to_string())
+        }
         SettingsChange::Appearance(value) => (
             "appearance",
             "theme",
@@ -352,6 +364,8 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
         Value::from(value == "true")
     } else if key == "tint_opacity" {
         Value::from(value.parse::<i64>().expect("opacity is an integer"))
+    } else if key == "max_panes" {
+        Value::from(value.parse::<i64>().expect("pane limit is an integer"))
     } else {
         Value::from(value)
     };
@@ -433,6 +447,18 @@ mod tests {
         assert_eq!(invalid.settings.tab_layout, TabLayout::Vertical);
         assert_eq!(invalid.issues.len(), 1);
         fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn split_view_limit_defaults_to_two_and_config_allows_higher_values() {
+        assert_eq!(parse("").unwrap().settings.split_view_limit, 2);
+        let loaded = parse("[split_view]\nmax_panes = 8").unwrap();
+        assert_eq!(loaded.settings.split_view_limit, 8);
+        assert!(loaded.issues.is_empty());
+
+        let invalid = parse("[split_view]\nmax_panes = 1").unwrap();
+        assert_eq!(invalid.settings.split_view_limit, 2);
+        assert_eq!(invalid.issues.len(), 1);
     }
 
     #[test]

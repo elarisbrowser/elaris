@@ -17,7 +17,7 @@ pub(super) enum TabRowStyle {
 }
 
 pub(super) fn members(state: &AppState, section: TabSection) -> Option<[TabId; 2]> {
-    let [Some(left), Some(right)] = state.browser.split?.panes else {
+    let [Some(left), Some(right), ..] = state.browser.split?.panes else {
         return None;
     };
     let members = [left, right];

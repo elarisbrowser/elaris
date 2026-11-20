@@ -47,11 +47,14 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
                 MenuItem::new(label).on_select_tx(move |state: &mut AppState, tx| {
                     state.dismiss_context_menu();
                     state.dismiss_find();
-                    if state
-                        .browser
-                        .split
-                        .is_some_and(|split| split.panes.iter().all(Option::is_some))
-                    {
+                    if state.browser.split.is_some_and(|split| {
+                        split.panes[..state
+                            .browser
+                            .split_view_limit
+                            .min(crate::browser::split::MAX_PANES)]
+                            .iter()
+                            .all(Option::is_some)
+                    }) {
                         state.place_split_tab(tab, side);
                         tx.focus(crate::ui::viewport::focus_key(&state.browser), false);
                     } else {
@@ -73,7 +76,14 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
                 },
             ));
             if split.panes.contains(&Some(tab))
-                && let Some(other) = split.panes.into_iter().flatten().find(|id| *id != tab)
+                && let Some(other) = split.panes[..state
+                    .browser
+                    .split_view_limit
+                    .min(crate::browser::split::MAX_PANES)]
+                    .iter()
+                    .flatten()
+                    .copied()
+                    .find(|id| *id != tab)
             {
                 menu = menu.item(MenuItem::new("Remove Pane").on_select_tx(
                     move |state: &mut AppState, tx| {

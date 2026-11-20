@@ -159,9 +159,8 @@ fn split_session_restores_placement_ratio_and_focused_tab() {
     let mut restored = AppState::new(None);
     restored.restore_session(&session);
     let split = restored.browser.split.unwrap();
-    let [left, right] = split
-        .panes
-        .map(|tab| restored.browser.tab(tab.unwrap()).unwrap());
+    let left = restored.browser.tab(split.panes[0].unwrap()).unwrap();
+    let right = restored.browser.tab(split.panes[1].unwrap()).unwrap();
     assert_eq!(left.url, "https://two.example");
     assert_eq!(right.url, "https://one.example");
     assert_eq!(split.ratio, 0.625);

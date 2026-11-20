@@ -91,11 +91,13 @@ impl PeekAnimation {
                 let bounds = match destination {
                     Destination::Tab => viewport,
                     Destination::Split => {
-                        let ratio = state
-                            .browser
-                            .displayed_split()
-                            .map_or(0.5, |split| split.ratio);
-                        split::pane_rects(viewport, ratio)[1]
+                        if state.browser.visible_tabs().len() == 2 {
+                            let ratio = state.browser.split.map_or(0.5, |split| split.ratio);
+                            let [left, right] = split::widths(width, ratio);
+                            [left + split::DIVIDER, viewport[1], right, height]
+                        } else {
+                            split::grid_cell_rect(viewport, state.browser.visible_tabs().len(), 1)
+                        }
                     }
                 };
                 (bounds, 1.0 - (1.0 - self.progress).powi(3))

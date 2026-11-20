@@ -4,10 +4,11 @@ use super::{Browser, TabId};
 
 pub(crate) const DIVIDER: f32 = 8.0;
 const MIN_PANE: f32 = 240.0;
+pub(crate) const MAX_PANES: usize = 64;
 
 #[derive(Clone, Copy)]
 pub(crate) struct Split {
-    pub(crate) panes: [Option<TabId>; 2],
+    pub(crate) panes: [Option<TabId>; MAX_PANES],
     pub(crate) ratio: f32,
 }
 
@@ -18,46 +19,68 @@ pub(crate) fn widths(width: f32, ratio: f32) -> [f32; 2] {
     [left, available - left]
 }
 
-/// Page bounds on each side of the divider, in the same coordinates as the content rect.
-pub(crate) fn pane_rects([x, y, width, height]: [f32; 4], ratio: f32) -> [[f32; 4]; 2] {
-    let [left, right] = widths(width, ratio);
-    [[x, y, left, height], [x + left + DIVIDER, y, right, height]]
+pub(crate) fn grid_cell_rect(rect: [f32; 4], count: usize, index: usize) -> [f32; 4] {
+    let columns = (count as f32).sqrt().ceil().max(1.0) as usize;
+    let rows = count.div_ceil(columns).max(1);
+    let [x, y, width, height] = rect;
+    let cell_width = (width - DIVIDER * (columns.saturating_sub(1) as f32)) / columns as f32;
+    let row = index / columns;
+    let column = index % columns;
+    let cell_height = (height - DIVIDER * (rows.saturating_sub(1) as f32)) / rows as f32;
+    [
+        x + column as f32 * (cell_width + DIVIDER),
+        y + row as f32 * (cell_height + DIVIDER),
+        cell_width,
+        cell_height,
+    ]
 }
 
-pub(crate) fn target(rect: [f32; 4], point: [f32; 2], boundary: f32) -> Option<usize> {
-    let [x, y, w, h] = rect;
-    let [px, py] = point;
-    (px >= x && px < x + w && py >= y && py < y + h).then_some(usize::from(px >= x + boundary))
+pub(crate) fn target(rect: [f32; 4], point: [f32; 2], count: usize) -> Option<usize> {
+    (0..count).find(|index| {
+        let [x, y, width, height] = grid_cell_rect(rect, count, *index);
+        point[0] >= x && point[0] < x + width && point[1] >= y && point[1] < y + height
+    })
 }
 
 impl Browser {
     pub(crate) fn focused_side(&self) -> usize {
-        usize::from(self.split.is_some_and(|split| {
-            split.panes.contains(&self.active) && split.panes[1] == self.active
-        }))
+        self.split
+            .and_then(|split| {
+                split.panes[..self.split_view_limit.min(MAX_PANES)]
+                    .iter()
+                    .position(|pane| *pane == self.active)
+            })
+            .unwrap_or(0)
     }
 
-    pub(crate) fn visible_tabs(&self) -> [Option<TabId>; 2] {
-        self.split.map_or([self.active, None], |split| {
-            if split.panes.contains(&None) || split.panes.contains(&self.active) {
-                split.panes
-            } else {
-                [self.active, None]
-            }
-        })
+    pub(crate) fn visible_tabs(&self) -> Vec<Option<TabId>> {
+        self.split.map_or_else(
+            || vec![self.active, None],
+            |split| {
+                let visible = &split.panes[..self.split_view_limit.min(MAX_PANES)];
+                if visible.contains(&None) || visible.contains(&self.active) {
+                    visible.to_vec()
+                } else {
+                    vec![self.active, None]
+                }
+            },
+        )
     }
 
     pub(crate) fn displayed_split(&self) -> Option<Split> {
-        self.split
-            .filter(|split| split.panes.contains(&None) || split.panes.contains(&self.active))
+        self.split.filter(|split| {
+            let panes = &split.panes[..self.split_view_limit.min(MAX_PANES)];
+            panes.contains(&None) || panes.contains(&self.active)
+        })
     }
 
     pub(crate) fn begin_split(&mut self, id: TabId, side: usize) {
         if self.tab(id).is_none() {
             return;
         }
-        let mut panes = [None; 2];
-        panes[side] = Some(id);
+        let count = self.split_view_limit.max(2);
+        let mut panes = [None; MAX_PANES];
+        panes[side.min(count - 1)] = Some(id);
         self.split = Some(Split { panes, ratio: 0.5 });
         self.activate_tab(id);
     }
@@ -75,8 +98,9 @@ impl Browser {
             }
         }
         if let Some(split) = &mut self.split {
-            if split.panes[1 - side] == Some(id) {
-                split.panes.swap(0, 1);
+            let side = side.min(self.split_view_limit.min(MAX_PANES).saturating_sub(1));
+            if let Some(existing) = split.panes.iter().position(|pane| *pane == Some(id)) {
+                split.panes.swap(existing, side);
             } else {
                 split.panes[side] = Some(id);
             }
@@ -113,10 +137,10 @@ mod tests {
     #[test]
     fn hit_testing_checks_bounds_and_the_actual_divider() {
         let rect = [100.0, 10.0, 800.0, 400.0];
-        assert_eq!(target(rect, [99.0, 10.0], 300.0), None);
-        assert_eq!(target(rect, [399.0, 10.0], 300.0), Some(0));
-        assert_eq!(target(rect, [400.0, 10.0], 300.0), Some(1));
-        assert_eq!(target(rect, [899.0, 410.0], 300.0), None);
+        assert_eq!(target(rect, [99.0, 10.0], 2), None);
+        assert_eq!(target(rect, [200.0, 200.0], 2), Some(0));
+        assert_eq!(target(rect, [700.0, 200.0], 2), Some(1));
+        assert_eq!(target(rect, [899.0, 410.0], 2), None);
     }
 
     #[test]
@@ -155,8 +179,8 @@ mod tests {
         browser.activate_tab(other);
         assert_eq!(browser.visible_tabs(), [Some(other), None]);
         assert_eq!(
-            browser.split.map(|split| split.panes),
-            Some([Some(left), Some(right)])
+            browser.split.map(|split| split.panes[..2].to_vec()),
+            Some(vec![Some(left), Some(right)])
         );
 
         browser.activate_tab(right);
@@ -181,9 +205,41 @@ mod tests {
         assert!(browser.tab(first).is_some());
         browser.close_tab(third);
         assert_eq!(
-            browser.split.map(|split| split.panes),
-            Some([Some(first), Some(second)])
+            browser.split.map(|split| split.panes[..2].to_vec()),
+            Some(vec![Some(first), Some(second)])
         );
         assert_eq!(browser.visible_tabs(), [Some(first), Some(second)]);
+    }
+
+    #[test]
+    fn configured_split_limit_exposes_additional_grid_cells() {
+        let mut browser = Browser::default();
+        browser.split_view_limit = 4;
+        let tabs: Vec<_> = [
+            "one.example",
+            "two.example",
+            "three.example",
+            "four.example",
+        ]
+        .into_iter()
+        .map(|url| browser.open_tab(url).unwrap())
+        .collect();
+        for (side, tab) in tabs.iter().copied().enumerate() {
+            browser.place_split(tab, side);
+        }
+        assert_eq!(
+            browser.visible_tabs(),
+            tabs.into_iter().map(Some).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn grid_hit_testing_finds_each_cell_and_ignores_gaps() {
+        let rect = [0.0, 0.0, 408.0, 408.0];
+        assert_eq!(target(rect, [100.0, 100.0], 4), Some(0));
+        assert_eq!(target(rect, [300.0, 100.0], 4), Some(1));
+        assert_eq!(target(rect, [100.0, 300.0], 4), Some(2));
+        assert_eq!(target(rect, [300.0, 300.0], 4), Some(3));
+        assert_eq!(target(rect, [204.0, 100.0], 4), None);
     }
 }

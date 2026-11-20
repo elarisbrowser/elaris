@@ -77,7 +77,18 @@ pub(super) fn view(state: &AppState, theme: &Theme, side: usize) -> El {
             tx.focus(focus_key(&state.browser), false);
         }));
     }
-    let mut panel = tab_panel(PICKER, theme)
+    let key = if state
+        .browser
+        .visible_tabs()
+        .iter()
+        .position(Option::is_none)
+        == Some(side)
+    {
+        PICKER.to_owned()
+    } else {
+        format!("{PICKER}-{side}")
+    };
+    let mut panel = tab_panel(&key, theme)
         .gap(space::S2)
         .focusable(true)
         .no_focus_ring()

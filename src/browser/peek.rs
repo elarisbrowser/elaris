@@ -150,12 +150,31 @@ impl Browser {
     }
 
     pub(super) fn note_peek_origin(&mut self, id: TabId, point: [f32; 2]) {
-        let [width, _] = self.window.viewport;
         let [x, y] = if self.peek.as_ref().is_some_and(|peek| peek.page.id() == id) {
             let layout = geometry(self.window.viewport);
             [layout.x, layout.y]
-        } else if let Some(split) = self.split.filter(|split| split.panes[1] == Some(id)) {
-            [split::widths(width, split.ratio)[0] + split::DIVIDER, 0.0]
+        } else if let Some(split) = self.split
+            && let Some(index) = split.panes[..self.split_view_limit.min(split::MAX_PANES)]
+                .iter()
+                .position(|pane| *pane == Some(id))
+        {
+            if self.split_view_limit <= 2 {
+                [
+                    if index == 1 {
+                        split::widths(self.window.viewport[0], split.ratio)[0] + split::DIVIDER
+                    } else {
+                        0.0
+                    },
+                    0.0,
+                ]
+            } else {
+                let rect = split::grid_cell_rect(
+                    [0.0, 0.0, self.window.viewport[0], self.window.viewport[1]],
+                    self.split_view_limit.min(split::MAX_PANES),
+                    index,
+                );
+                [rect[0], rect[1]]
+            }
         } else {
             [0.0; 2]
         };

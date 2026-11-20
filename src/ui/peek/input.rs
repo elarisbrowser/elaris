@@ -107,13 +107,26 @@ pub(in crate::ui) fn backdrop() -> El {
         })
 }
 
-fn pane_rects(state: &AppState) -> [[f32; 4]; 2] {
-    state
-        .browser
-        .split
-        .map_or([state.split_rect, [0.0; 4]], |split| {
-            split::pane_rects(state.split_rect, split.ratio)
-        })
+fn pane_rects(state: &AppState) -> Vec<[f32; 4]> {
+    let panes = state.browser.visible_tabs();
+    if state.browser.displayed_split().is_some() {
+        if panes.len() == 2 {
+            let ratio = state.browser.split.map_or(0.5, |split| split.ratio);
+            return split::widths(state.split_rect[2], ratio)
+                .into_iter()
+                .scan(state.split_rect[0], |x, width| {
+                    let rect = [*x, state.split_rect[1], width, state.split_rect[3]];
+                    *x += width + split::DIVIDER;
+                    Some(rect)
+                })
+                .collect();
+        }
+        (0..panes.len())
+            .map(|index| split::grid_cell_rect(state.split_rect, panes.len(), index))
+            .collect()
+    } else {
+        vec![state.split_rect]
+    }
 }
 
 fn pane_at(state: &AppState, [x, y]: [f32; 2]) -> Option<usize> {

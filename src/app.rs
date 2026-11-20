@@ -385,6 +385,7 @@ impl AppState {
             context_menu: None,
             recently_closed: Vec::new(),
         };
+        state.browser.split_view_limit = state.settings.split_view_limit;
         #[cfg(not(test))]
         state.browser.share_downloads(shared_downloads());
         state.open_start_page(start, initial_session.as_ref());

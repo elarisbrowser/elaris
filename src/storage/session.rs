@@ -36,6 +36,8 @@ pub(crate) struct Session {
 pub(crate) struct SessionSplit {
     pub(crate) left: usize,
     pub(crate) right: usize,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) additional: Vec<usize>,
     /// Left pane share in ten-thousandths. The active tab may be outside this group.
     pub(crate) ratio: u16,
 }
@@ -98,6 +100,12 @@ impl Session {
                     && split.right < self.tabs.len()
                     && split.left != split.right
                     && split.ratio <= 10_000
+                    && split
+                        .additional
+                        .iter()
+                        .all(|index| *index < self.tabs.len())
+                    && !split.additional.contains(&split.left)
+                    && !split.additional.contains(&split.right)
             })
             && self.favourites.iter().all(|index| *index < self.tabs.len())
             && self.tabs.iter().all(|tab| {
