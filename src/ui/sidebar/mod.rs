@@ -17,6 +17,8 @@ mod tabs;
 use rune::tok::type_;
 use rune::{El, Tx, col, icon, text};
 pub(crate) use tabs::context_menu;
+#[cfg(target_os = "macos")]
+pub(crate) use tabs::floating_drag_preview;
 
 use super::controls::row_button;
 use super::icons;

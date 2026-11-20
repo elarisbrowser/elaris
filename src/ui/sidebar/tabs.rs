@@ -107,29 +107,24 @@ pub(super) fn view(
     }
     sidebar_tabs = sidebar_tabs.child(scroll);
 
-    let incoming =
-        crate::app::cross_window_drag::incoming_visual(state.window_id, |appearance, visual| {
-            let size = if visual.section == TabSection::Favourite {
-                theme::FAVOURITE_ICON
-            } else {
-                theme::ICON
-            };
-            let icon = appearance.favicon.as_ref().map_or_else(
-                || icon(&icons::PAGE, size).color(theme.text),
-                |favicon| el().size(size, size).center().pixels(favicon),
-            );
-            single_drag_visual(
-                &appearance.label,
-                icon,
-                false,
-                visual,
-                theme,
-                reduced_motion,
-            )
-        });
+    let show_inline = {
+        #[cfg(target_os = "macos")]
+        let show = !crate::drag_overlay_macos::shown();
+        #[cfg(not(target_os = "macos"))]
+        let show = true;
+        show
+    };
+    let incoming = show_inline
+        .then(|| {
+            crate::app::cross_window_drag::incoming_visual(state.window_id, |appearance, visual| {
+                floating_drag_preview(appearance, visual, theme, reduced_motion)
+            })
+        })
+        .flatten();
     if let Some(incoming) = incoming {
         overlays.push(incoming);
-    } else if !crate::app::cross_window_drag::shows_elsewhere(state.window_id)
+    } else if show_inline
+        && !crate::app::cross_window_drag::shows_elsewhere(state.window_id)
         && let Some(visual) = state.tab_drag.visual()
         && let Some(tab) = state.browser.tab(visual.tab)
     {
@@ -679,6 +674,9 @@ fn tab_drag_handler(row: El, id: TabId, members: Vec<TabId>) -> El {
             }
         }
         rune::Phase::Up => {
+            #[cfg(target_os = "macos")]
+            crate::drag_overlay_macos::hide(state.window_id);
+
             if !state.tab_drag.is_dragging()
                 && crate::app::cross_window_drag::release_pending(state.window_id)
             {
@@ -806,6 +804,31 @@ fn tab_drag_visual(
         tab.label(),
         tab_icon(tab, active, icon_size, theme),
         active,
+        visual,
+        theme,
+        reduced_motion,
+    )
+}
+
+pub(crate) fn floating_drag_preview(
+    appearance: &crate::app::cross_window_drag::DragAppearance,
+    visual: super::drag::DragVisual,
+    theme: &Theme,
+    reduced_motion: bool,
+) -> El {
+    let size = if visual.section == TabSection::Favourite {
+        theme::FAVOURITE_ICON
+    } else {
+        theme::ICON
+    };
+    let icon = appearance.favicon.as_ref().map_or_else(
+        || icon(&icons::PAGE, size).color(theme.text),
+        |favicon| el().size(size, size).center().pixels(favicon),
+    );
+    single_drag_visual(
+        &appearance.label,
+        icon,
+        false,
         visual,
         theme,
         reduced_motion,

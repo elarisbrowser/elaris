@@ -539,6 +539,11 @@ pub(crate) fn publish_permissions(permissions: &PermissionStore) {
     crate::engine::wake_all_windows();
 }
 
+#[cfg(target_os = "macos")]
+pub(crate) fn native_window(id: u64) -> Option<rune::WindowHandle> {
+    WINDOW_REGISTRY.get()?.lock().ok()?.get(&id).cloned()
+}
+
 pub(crate) fn register_window(id: u64, handle: rune::WindowHandle) {
     WINDOW_REGISTRY
         .get_or_init(|| Mutex::new(HashMap::new()))

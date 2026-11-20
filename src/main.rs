@@ -5,6 +5,8 @@ mod app;
 mod appearance;
 mod browser;
 mod config;
+#[cfg(target_os = "macos")]
+mod drag_overlay_macos;
 mod engine;
 mod input;
 mod internal;
@@ -37,7 +39,11 @@ use rune::{App, AppSpec, Chrome, WindowOptions, WindowSpec};
 fn main() {
     let app = configure_app(App::new(app_spec(app::AppState::default)));
     #[cfg(target_os = "macos")]
-    let app = app.keep_running().release_gpu_when_closed();
+    let app = {
+        let mut app = app.keep_running().release_gpu_when_closed();
+        drag_overlay_macos::install(&mut app);
+        app
+    };
     let app_handle = app.handle();
     let app = app.on_ready(move |_| {
         #[cfg(target_os = "macos")]

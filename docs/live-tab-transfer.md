@@ -55,8 +55,11 @@ through commit. The preview then settles into the laid-out row or Favourites
 tile using the existing Rune spring and reduced-motion behavior. A cancelled
 handoff restores the source layout and return animation.
 
-The floating tab is drawn inside eligible Elaris windows. A desktop overlay
-for the space between native windows and detachment remain separate work.
+On macOS, a process-wide Rune overlay carries the floating tab outside the
+source window, including over desktop space. It passes pointer events through,
+requests no keyboard focus, and is skipped by native window hit testing.
+Placement uses AppKit points and retains the original grab offset across
+displays. The existing inline preview is available if the overlay fails.
 
 ## Detaching onto the desktop
 
@@ -76,4 +79,4 @@ record in one snapshot.
 Desktop detachment is currently macOS-only. The X11 drag path can locate other
 Elaris windows but cannot distinguish an empty desktop drop from an occluding
 application. Wayland still lacks desktop coordinates in the pinned Rune
-backend. The in-window floating preview can be occluded where windows overlap.
+backend. Native ordering and mixed-scale display behavior still need graphical verification.

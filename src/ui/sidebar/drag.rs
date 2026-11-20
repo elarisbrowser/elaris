@@ -588,6 +588,14 @@ impl TabDragState {
         items
     }
 
+    #[cfg(target_os = "macos")]
+    pub(crate) fn single_drag(&self) -> Option<(DragVisual, [f32; 2])> {
+        let Some(Gesture::Dragging(drag)) = &self.gesture else {
+            return None;
+        };
+        (drag.pressed.members.len() == 1).then(|| (self.visual().unwrap(), drag.pressed.grab))
+    }
+
     pub(crate) fn visual(&self) -> Option<DragVisual> {
         match &self.gesture {
             Some(Gesture::Dragging(dragging)) => Some(DragVisual {

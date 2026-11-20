@@ -291,14 +291,13 @@ impl DesktopPointer {
     }
 
     fn current() -> Option<Self> {
-        use objc2_app_kit_02::{NSEvent, NSWindow};
+        use objc2_app_kit_02::NSEvent;
         use objc2_foundation_02::MainThreadMarker;
 
         let main = MainThreadMarker::new()?;
         // SAFETY: drag handlers run on AppKit's main thread.
         let point = unsafe { NSEvent::mouseLocation() };
-        let topmost =
-            unsafe { NSWindow::windowNumberAtPoint_belowWindowWithWindowNumber(point, 0, main) };
+        let topmost = crate::drag_overlay_macos::window_below_preview(point, main);
         Some(Self {
             point,
             topmost: u32::try_from(topmost).ok()?,

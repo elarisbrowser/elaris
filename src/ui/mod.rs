@@ -19,7 +19,7 @@ pub(crate) mod site_control_style;
 #[cfg(target_os = "linux")]
 pub(crate) mod site_permissions;
 pub(crate) mod tab_switcher;
-mod theme;
+pub(crate) mod theme;
 pub(crate) mod viewport;
 pub(crate) use viewport::menu::PageMenuState;
 
@@ -42,7 +42,10 @@ pub(crate) const VIEWPORT: &str = "viewport";
 pub(crate) const HISTORY_SEARCH: &str = "history-search";
 pub(crate) const HISTORY_SCROLL: &str = "history-scroll";
 pub(crate) const FIND_INPUT: &str = "find-input";
+#[cfg(target_os = "macos")]
+pub(crate) use sidebar::floating_drag_preview;
 pub(crate) use theme::FIND_MOTION;
+
 pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     #[cfg(target_os = "macos")]
     crate::menu_macos::refresh(state);

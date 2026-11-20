@@ -146,7 +146,7 @@ pub(crate) struct Placement {
 
 #[cfg(target_os = "macos")]
 fn placement(source: u64) -> Option<Placement> {
-    use objc2_app_kit_02::{NSEvent, NSScreen, NSWindow};
+    use objc2_app_kit_02::{NSEvent, NSScreen};
     use objc2_foundation_02::MainThreadMarker;
 
     let windows = super::WINDOW_REGISTRY.get()?.lock().ok()?;
@@ -154,8 +154,7 @@ fn placement(source: u64) -> Option<Placement> {
     let main = MainThreadMarker::new()?;
     // SAFETY: the drag handler is on AppKit's main thread.
     let pointer = unsafe { NSEvent::mouseLocation() };
-    let hit =
-        unsafe { NSWindow::windowNumberAtPoint_belowWindowWithWindowNumber(pointer, 0, main) };
+    let hit = crate::drag_overlay_macos::window_below_preview(pointer, main);
     // Finder and the wallpaper can have window numbers. Only an Elaris hit consumes this drop.
     let browser_hit = u32::try_from(hit).ok().is_some_and(|hit| {
         windows
