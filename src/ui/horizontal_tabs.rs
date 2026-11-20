@@ -2,6 +2,8 @@
 
 //! Two-row browser chrome using the shared browser, tab actions and drag gesture.
 
+use std::collections::HashMap;
+
 use rune::{Cx, El, Spring, Transition, Tx, col, el, row};
 use rune_kit::{Menu, MenuItem, Placement};
 
@@ -120,21 +122,36 @@ pub(super) fn view(
         .filter(|tab| tab.section() == TabSection::Regular)
         .count();
     let favourites = state.browser.tabs().len() - regular;
-    let counts = [favourites, regular];
-    let width = regular_width(viewport_width, counts);
-    let overflow = section_width(favourites, theme::HORIZONTAL_COMPACT_TAB)
-        + section_width(regular, width)
-        > viewport_width + 0.5;
-    let regular_width = if overflow {
-        regular_width(viewport_width - theme::ICON_BUTTON - theme::NAV_GAP, counts)
+    let compact_width = section_width(favourites, theme::HORIZONTAL_COMPACT_TAB);
+    let min_regular = section_width(regular, theme::HORIZONTAL_TAB_MIN);
+    let overflow = compact_width + min_regular > viewport_width + 0.5;
+    let reserve = if overflow {
+        theme::ICON_BUTTON + theme::NAV_GAP
     } else {
-        width
+        0.0
     };
-    let [favourite_items, regular_items] = sections.each_ref().map(Vec::len);
-    let committed_width = section_width(favourites, theme::HORIZONTAL_COMPACT_TAB)
-        + section_width(regular, regular_width);
-    let preview_width = section_width(favourite_items, theme::HORIZONTAL_COMPACT_TAB)
-        + section_width(regular_items, regular_width);
+    let widths = regular_widths(
+        state,
+        viewport_width - reserve - compact_width - min_regular,
+    );
+    let width_of = |section, items: &[PreviewItem]| {
+        items
+            .iter()
+            .map(|item| item_width(section, *item, &widths) + theme::TAB_GAP)
+            .sum::<f32>()
+            .max(theme::HORIZONTAL_EMPTY_SECTION)
+    };
+    let committed_width = compact_width
+        + (state
+            .browser
+            .tabs()
+            .iter()
+            .filter(|tab| tab.section() == TabSection::Regular)
+            .map(|tab| widths[&tab.id()] + theme::TAB_GAP)
+            .sum::<f32>())
+        .max(theme::HORIZONTAL_EMPTY_SECTION);
+    let preview_width =
+        width_of(TabSection::Favourite, &sections[0]) + width_of(TabSection::Regular, &sections[1]);
     // Keep the viewport from contracting beneath the pointer when a drag removes a tab.
     let content_width = committed_width.max(preview_width);
     let mut content = row()
@@ -144,14 +161,7 @@ pub(super) fn view(
         .h(theme::HORIZONTAL_TAB_HEIGHT)
         .center_y();
     for (section, items) in TabSection::ORDER.into_iter().zip(sections) {
-        content = content.child(section_view(
-            state,
-            section,
-            &items,
-            regular_width,
-            motion,
-            theme,
-        ));
+        content = content.child(section_view(state, section, &items, &widths, motion, theme));
     }
     let live = state.tab_drag.scroll_live();
     strip = strip
@@ -288,25 +298,79 @@ fn section_width(count: usize, tab_width: f32) -> f32 {
     (count as f32 * (tab_width + theme::TAB_GAP)).max(theme::HORIZONTAL_EMPTY_SECTION)
 }
 
-fn regular_width(available: f32, [favourites, regular]: [usize; 2]) -> f32 {
-    let compact_width = section_width(favourites, theme::HORIZONTAL_COMPACT_TAB);
-    ((available - compact_width) / regular.max(1) as f32 - theme::TAB_GAP)
-        .clamp(theme::HORIZONTAL_TAB_MIN, theme::HORIZONTAL_TAB_MAX)
+fn regular_widths(state: &AppState, spare: f32) -> HashMap<TabId, f32> {
+    let tabs = state.browser.tabs();
+    let mut preferred = state.sidebar.preferred_tab_widths.borrow_mut();
+    let freeze = state.tab_drag.has_preview();
+    let mut widths = HashMap::with_capacity(tabs.len());
+    let mut extra = 0.0;
+    for tab in tabs {
+        let id = tab.id();
+        let width = if freeze || tab.loading {
+            preferred
+                .get(&id)
+                .copied()
+                .unwrap_or_else(|| preferred_width(tab.label()))
+        } else {
+            preferred_width(tab.label())
+        };
+        preferred.insert(id, width);
+        widths.insert(id, width);
+        if tab.section() == TabSection::Regular {
+            extra += width - theme::HORIZONTAL_TAB_MIN;
+        }
+    }
+    preferred.retain(|id, _| widths.contains_key(id));
+    let fraction = if extra > 0.0 {
+        (spare / extra).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    for width in widths.values_mut() {
+        *width = theme::HORIZONTAL_TAB_MIN + (*width - theme::HORIZONTAL_TAB_MIN) * fraction;
+    }
+    widths
+}
+
+fn preferred_width(title: &str) -> f32 {
+    use rune::tok::space;
+    // Approximate the single-line label in points. Rune truncates the actual shaped text.
+    let label = title
+        .chars()
+        .take(32)
+        .map(|ch| match ch {
+            'i' | 'l' | 'I' | ' ' | '.' | ':' | '!' => space::S1,
+            'm' | 'w' | 'M' | 'W' => space::S3,
+            ch if ch.is_ascii() => space::S2,
+            _ => theme::ICON,
+        })
+        .sum::<f32>();
+    let chrome =
+        theme::ICON + theme::CLOSE_BUTTON + 1.5 * theme::ROW_PADDING + 2.0 * theme::ROW_GAP;
+    (label + chrome).clamp(theme::HORIZONTAL_TAB_MIN, theme::HORIZONTAL_TAB_MAX)
+}
+
+fn item_width(section: TabSection, item: PreviewItem, widths: &HashMap<TabId, f32>) -> f32 {
+    if section == TabSection::Favourite {
+        return theme::HORIZONTAL_COMPACT_TAB;
+    }
+    let id = match item {
+        PreviewItem::Tab(id) | PreviewItem::SourceSlot(id) | PreviewItem::DropSlot(id, _) => id,
+    };
+    widths
+        .get(&id)
+        .copied()
+        .unwrap_or(theme::HORIZONTAL_TAB_MIN)
 }
 
 fn section_view(
     state: &AppState,
     section: TabSection,
     items: &[PreviewItem],
-    regular_width: f32,
+    widths: &HashMap<TabId, f32>,
     motion: Spring,
     theme: &Theme,
 ) -> El {
-    let width = if section == TabSection::Regular {
-        regular_width
-    } else {
-        theme::HORIZONTAL_COMPACT_TAB
-    };
     let mut group = row()
         .key(match section {
             TabSection::Favourite => "horizontal-favourites",
@@ -363,7 +427,10 @@ fn section_view(
         };
         group = group.child(
             element
-                .size(width, theme::HORIZONTAL_TAB_HEIGHT)
+                .size(
+                    item_width(section, item, widths),
+                    theme::HORIZONTAL_TAB_HEIGHT,
+                )
                 .position_in_set(index + 1, items.len())
                 .motion(motion)
                 .animate_layout(),
@@ -419,6 +486,32 @@ fn tab_view(state: &AppState, tab: &Tab, theme: &Theme) -> El {
         );
     } else if section == TabSection::Favourite {
         tile = tile.fill(theme.address_field);
+    }
+    if state.browser.displayed_split().is_some_and(|split| {
+        split.panes.iter().all(Option::is_some) && split.panes.contains(&Some(id))
+    }) {
+        tile = tile.child(
+            row()
+                .pin(
+                    Some(0.0),
+                    None,
+                    Some(0.0),
+                    Some(theme::HORIZONTAL_SPLIT_MARKER_HEIGHT),
+                )
+                .justify_center()
+                .inert()
+                .a11y_hidden()
+                .child(
+                    el().key(format!("split-tab-marker-{}", id.raw()))
+                        .size(theme::ICON, theme::HORIZONTAL_SPLIT_MARKER_HEIGHT)
+                        .radius(theme::HORIZONTAL_SPLIT_MARKER_HEIGHT / 2.0)
+                        .fill(if active {
+                            theme.accent
+                        } else {
+                            theme.text_muted
+                        }),
+                ),
+        );
     }
     if state.tab_drag.is_hidden(id) {
         tile = tile.opacity(0.0).opacity_motion(rune::Anim::INSTANT);

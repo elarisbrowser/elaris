@@ -422,3 +422,58 @@ fn horizontal_drag_area_keeps_primary_drag_and_secondary_tab_menu() {
     assert!(matches!(window.state.context_menu(), Some((None, _))));
     assert_eq!(window.take_titlebar_action(), None);
 }
+
+#[test]
+fn title_aware_widths_wait_for_loading_and_dragging_to_finish() {
+    let mut state = AppState::new(Some("one.example"));
+    let short = state.browser.active_tab().unwrap().id();
+    let long = state.browser.open_tab("two.example").unwrap();
+    for (id, title) in [(short, "Mail"), (long, "A considerably longer title")] {
+        let tab = state.browser.tab_mut(id).unwrap();
+        tab.title = title.into();
+        tab.loading = false;
+    }
+    state.set_tab_layout(TabLayout::Horizontal);
+    let mut window = runtime(state, 960.0);
+    let width = |runtime: &Runtime<AppState>, id| rect(runtime, &horizontal_tabs::key(id))[2];
+    let initial = width(&window, short);
+    assert!(initial < width(&window, long));
+
+    window.update(|state, _| {
+        let tab = state.browser.tab_mut(short).unwrap();
+        tab.loading = true;
+        tab.title = "A longer title during navigation".into();
+    });
+    settle(&mut window);
+    assert_eq!(width(&window, short), initial);
+
+    let [x, y] = start_drag(&mut window, long);
+    window.pointer_move(x + 10.0, y);
+    window.frame(1.0 / 60.0);
+    assert!(window.state.tab_drag.is_dragging());
+    window.update(|state, _| state.browser.tab_mut(short).unwrap().loading = false);
+    settle(&mut window);
+    assert_eq!(width(&window, short), initial);
+    release(&mut window, [x + 10.0, y]);
+    assert!(width(&window, short) > initial);
+}
+
+#[test]
+fn split_markers_follow_the_displayed_pair() {
+    let mut state = AppState::new(Some("one.example"));
+    let first = state.browser.active_tab().unwrap().id();
+    let second = state.browser.open_tab("two.example").unwrap();
+    let third = state.browser.open_tab("three.example").unwrap();
+    state.place_split_tab(second, 1);
+    state.set_tab_layout(TabLayout::Horizontal);
+    let mut window = runtime(state, 960.0);
+    let marker = |id: TabId| format!("split-tab-marker-{}", id.raw());
+    assert!(window.presented(&marker(first)).is_some());
+    assert!(window.presented(&marker(second)).is_some());
+    assert!(window.presented(&marker(third)).is_none());
+
+    window.update(|state, _| state.activate(third));
+    settle(&mut window);
+    assert!(window.presented(&marker(first)).is_none());
+    assert!(window.presented(&marker(second)).is_none());
+}

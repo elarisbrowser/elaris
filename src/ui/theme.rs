@@ -220,6 +220,7 @@ pub(crate) const HORIZONTAL_TAB_HEIGHT: f32 = ROW_HEIGHT - 8.0;
 pub(crate) const HORIZONTAL_COMPACT_TAB: f32 = HORIZONTAL_TAB_HEIGHT;
 pub(crate) const HORIZONTAL_TAB_MIN: f32 = 104.0;
 pub(crate) const HORIZONTAL_TAB_MAX: f32 = 176.0;
+pub(crate) const HORIZONTAL_SPLIT_MARKER_HEIGHT: f32 = 2.0;
 pub(crate) const HORIZONTAL_EMPTY_SECTION: f32 = space::S2;
 pub(crate) const HEADER_HEIGHT: f32 = 38.0;
 /// The top-edge target that reveals the Linux toolbar while it is hidden.
