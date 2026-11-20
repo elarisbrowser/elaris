@@ -24,8 +24,10 @@ snapshot to the existing atomic session writer. The source acknowledges that
 snapshot in its next poll before routine saving resumes. A crash before the
 snapshot is written can restore the previous layout.
 
-The coordinator currently processes one handoff at a time. Detachment and
-closing an emptied source are separate stages.
+The coordinator currently processes one handoff at a time. A final-tab
+transfer removes the source record in the same atomic snapshot as the
+destination update. The source closes through Rune after the storage worker
+acknowledges the write. A write failure returns the live tab to the source.
 
 ## Dragging between existing windows
 
@@ -68,8 +70,8 @@ live transfer can commit. The tab keeps its original section.
 
 A pending window is excluded from session saves. Escape, close, native creation
 failure, or a readiness timeout cancels the handoff and discards the tentative
-window. A successful transfer saves both window records together. Closing a
-source emptied by a transfer is still a separate stage.
+window. A successful transfer saves the destination and updates or removes the source
+record in one snapshot.
 
 Desktop detachment is currently macOS-only. The X11 drag path can locate other
 Elaris windows but cannot distinguish an empty desktop drop from an occluding

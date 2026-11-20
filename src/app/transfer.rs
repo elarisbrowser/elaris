@@ -222,6 +222,19 @@ impl AppState {
                 Phase::Committed(session) if id == transfer.source => {
                     self.last_saved_session = Some(session);
                     self.tab_drag.cancel();
+                    if self.browser.tabs().is_empty()
+                        && WINDOW_REGISTRY.get().is_some_and(|registry| {
+                            registry
+                                .lock()
+                                .expect("window registry poisoned")
+                                .get(&transfer.destination)
+                                .is_some_and(rune::WindowHandle::is_ready)
+                        })
+                    {
+                        self.merged_away = true;
+                        tx.close_window();
+                    }
+
                     return true;
                 }
                 Phase::InTransit(mut moved) if id == transfer.source => {
@@ -259,9 +272,18 @@ impl AppState {
             .lock()
             .expect("session registry poisoned");
         let mut updated = registry.clone();
-        updated.insert(source, source_session.clone());
+        if source_session.tabs.is_empty() {
+            updated.remove(&source);
+        } else {
+            updated.insert(source, source_session.clone());
+        }
         updated.insert(self.window_id, destination_session.clone());
-        storage.save_sessions_for_launch(updated.values().cloned().collect(), true)?;
+        let snapshot = updated.values().cloned().collect();
+        if source_session.tabs.is_empty() {
+            storage.commit_merged_session(snapshot)?;
+        } else {
+            storage.save_sessions_for_launch(snapshot, true)?;
+        }
         *registry = updated;
         self.last_saved_session = Some(destination_session);
         Ok(())
@@ -423,10 +445,7 @@ mod tests {
         let json = std::fs::read_to_string(data.join("session.json")).unwrap();
         assert_eq!(json.matches("one.example").count(), 1);
         let sessions = SESSION_REGISTRY.get().unwrap().lock().unwrap();
-        assert_eq!(
-            sessions.get(&source.window_id),
-            Some(&source.session_snapshot())
-        );
+        assert!(!sessions.contains_key(&source.window_id));
         assert_eq!(
             sessions.get(&destination.window_id),
             Some(&destination.session_snapshot())
@@ -438,6 +457,38 @@ mod tests {
         drop(source);
         drop(destination);
         drop(storage);
+        std::fs::remove_dir_all(data).unwrap();
+    }
+
+    #[test]
+    fn failed_merge_save_restores_tab_and_leaves_source_open() {
+        let mut source = AppState::new(Some("one.example"));
+        let mut destination = AppState::new(Some("two.example"));
+        destination.workers_started = true;
+        let data = std::env::temp_dir().join(format!("elaris-failed-merge-{}", std::process::id()));
+        let session_file = data.join("session.json");
+        let storage = crate::storage::Storage::open(crate::storage::Paths {
+            application_dir: data.clone(),
+            profile_dir: data.join("profile"),
+            history_file: data.join("history.sqlite"),
+            session_file: session_file.clone(),
+            config_file: data.join("config.toml"),
+        })
+        .unwrap();
+        // An existing directory prevents the worker from atomically replacing the session file.
+        std::fs::create_dir(&session_file).unwrap();
+        destination.storage = Some(std::sync::Arc::new(storage));
+        let tab = source.browser.active_tab().unwrap().id();
+        request(&source, &destination, tab, 1);
+        let tx = &mut Tx::default();
+        assert!(destination.advance_tab_transfer(tx));
+        assert!(source.advance_tab_transfer(tx));
+        assert!(destination.advance_tab_transfer(tx));
+        assert!(source.advance_tab_transfer(tx));
+        assert_eq!(source.browser.active_tab().unwrap().id(), tab);
+        assert!(destination.browser.tab(tab).is_none());
+        assert!(!source.merged_away);
+        drop(destination);
         std::fs::remove_dir_all(data).unwrap();
     }
 

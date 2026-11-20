@@ -201,6 +201,7 @@ pub(crate) struct AppState {
     storage: Option<std::sync::Arc<Storage>>,
     workers_started: bool,
     pending_detach: bool,
+    merged_away: bool,
     #[cfg(feature = "ladybird-bridge")]
     profile_dir: Option<PathBuf>,
     config_file: Option<PathBuf>,
@@ -364,6 +365,7 @@ impl AppState {
             storage,
             workers_started: false,
             pending_detach: false,
+            merged_away: false,
             #[cfg(feature = "ladybird-bridge")]
             profile_dir: _profile_dir,
             config_file,

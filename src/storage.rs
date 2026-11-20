@@ -353,8 +353,19 @@ impl Storage {
         restore_on_launch: bool,
     ) -> Result<(), String> {
         self.commands
-            .send(Command::SaveSessions(sessions, restore_on_launch))
+            .send(Command::SaveSessions(sessions, restore_on_launch, None))
             .map_err(|_| "session storage worker has stopped".to_owned())
+    }
+
+    /// Waits for the atomic replacement before an emptied window can close.
+    pub(crate) fn commit_merged_session(&self, sessions: Vec<Session>) -> Result<(), String> {
+        let (finished, pending) = mpsc::channel();
+        self.commands
+            .send(Command::SaveSessions(sessions, true, Some(finished)))
+            .map_err(|_| "session storage worker has stopped".to_owned())?;
+        pending
+            .recv()
+            .map_err(|_| "session storage worker has stopped".to_owned())?
     }
 
     #[cfg(test)]
@@ -390,7 +401,7 @@ enum Command {
     Search(String),
     HistoryPage(u64, u64, String, Option<Cursor>),
     HistoryMutation(u64, HistoryMutation),
-    SaveSessions(Vec<Session>, bool),
+    SaveSessions(Vec<Session>, bool, Option<Sender<Result<(), String>>>),
     SaveSetting(SettingsChange),
     SavePermission(String, PermissionKind, PermissionState),
     ReloadConfig,
@@ -536,11 +547,13 @@ fn run_worker(
                     );
                 }
             }
-            Command::SaveSessions(sessions, restore_on_launch) => {
-                if let Err(error) =
-                    write_sessions_atomic(&session_file, &sessions, restore_on_launch)
-                {
-                    eprintln!("Elaris: cannot save session: {error}");
+            Command::SaveSessions(sessions, restore_on_launch, finished) => {
+                let result = write_sessions_atomic(&session_file, &sessions, restore_on_launch)
+                    .map_err(|error| format!("cannot save session: {error}"));
+                if let Some(finished) = finished {
+                    let _ = finished.send(result);
+                } else if let Err(error) = result {
+                    eprintln!("Elaris: {error}");
                 }
             }
             Command::SaveSetting(change) => {

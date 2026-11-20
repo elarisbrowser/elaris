@@ -216,6 +216,7 @@ pub(crate) fn window_closed(state: &mut AppState, _: &mut Tx) {
     state.persist_session();
     state.browser.close_window_views();
     if !state.pending_detach
+        && !state.merged_away
         && let Some(storage) = &state.storage
     {
         if others_remain {
