@@ -1,8 +1,7 @@
-#include <elaris_ladybird.h>
-
 #include <algorithm>
 #include <arpa/inet.h>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
@@ -10,6 +9,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <netinet/in.h>
 #include <string>
@@ -18,6 +18,8 @@
 #include <unistd.h>
 #include <utility>
 #include <vector>
+
+#include "private_session.h"
 
 using namespace std::chrono_literals;
 
@@ -172,6 +174,43 @@ class HttpFixture {
                         ? std::string{}
                         : request.substr(first_space + 1, second_space - first_space - 1);
 
+        if (path.starts_with("/privacy/")) {
+            auto headers = request.substr(0, request.find("\r\n\r\n"));
+            std::transform(headers.begin(), headers.end(), headers.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            auto cookie = headers.find("\r\ncookie:");
+            auto cookie_line = cookie == std::string::npos
+                                   ? std::string{}
+                                   : headers.substr(cookie, headers.find("\r\n", cookie + 2) - cookie);
+            auto received = cookie_line.find("session=") == std::string::npos ? "empty" : "unexpected";
+            auto value = cookie_line.find("session=");
+            if (value != std::string::npos && cookie_line.find("session=", value + 1) == std::string::npos) {
+                auto token = cookie_line.substr(value, cookie_line.find(';', value) - value);
+                if (token == "session=normal")
+                    received = "normal";
+                if (token == "session=private")
+                    received = "private";
+            }
+            std::string response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n"
+                                   "Cache-Control: no-store\r\nConnection: close\r\n";
+            std::string body = "<!doctype html><script>";
+            if (path == "/privacy/normal" || path == "/privacy/private") {
+                auto const value = path.substr(std::string("/privacy/").size());
+                response += "Set-Cookie: session=" + value + "; Path=/; HttpOnly\r\n";
+                body += "localStorage.setItem('session','" + value +
+                        "');"
+                        "sessionStorage.setItem('session','" +
+                        value + "');";
+            }
+            body += std::string("document.title = '") + received +
+                    ":' + (localStorage.getItem('session') || 'empty') + "
+                    "':' + (sessionStorage.getItem('session') || 'empty');</script>";
+            response += "Content-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body;
+            (void)send_all(socket, response.data(), response.size());
+            close(socket);
+            return;
+        }
+
         if (path == "/missing") {
             auto response = "HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\nConnection: close\r\n\r\nnot found";
             (void)send_all(socket, response, strlen(response));
@@ -268,6 +307,54 @@ static bool has_temporary_download(std::filesystem::path const& directory) {
     return false;
 }
 
+static bool test_private_session(ElarisLadybird* bridge, HttpFixture const& fixture, Events& events) {
+    using View = std::unique_ptr<ElarisLadybirdView, decltype(&elaris_ladybird_destroy_view)>;
+    auto create = [&](uint64_t id, bool private_view) {
+        ElarisLadybirdView* raw = nullptr;
+        auto factory = private_view ? elaris_ladybird_test_create_private_view : elaris_ladybird_create_view;
+        check(factory(bridge, id, &raw), "create privacy test view");
+        return View(raw, elaris_ladybird_destroy_view);
+    };
+    auto load = [&](View const& view, uint64_t id, char const* route, char const* expected) {
+        if (!view)
+            return false;
+        events.titles.erase(id);
+        if (!check(elaris_ladybird_load(view.get(), fixture.url(route).c_str()), "load privacy probe"))
+            return false;
+        if (pump_until(bridge, [&] { return events.titles[id] == expected; }))
+            return true;
+        std::cerr << "Privacy probe " << route << " for view " << id << " expected " << expected << ", observed "
+                  << events.titles[id] << '\n';
+        return false;
+    };
+
+    auto normal = create(201, false);
+    if (!load(normal, 201, "/privacy/normal", "empty:normal:normal") ||
+        !load(normal, 201, "/privacy/read", "normal:normal:normal"))
+        return false;
+    auto first = create(202, true);
+    auto second = create(203, true);
+    if (!load(first, 202, "/privacy/read", "empty:empty:empty") ||
+        !load(first, 202, "/privacy/private", "empty:private:private") ||
+        !load(second, 203, "/privacy/read", "private:private:empty") ||
+        !load(normal, 201, "/privacy/read", "normal:normal:normal"))
+        return false;
+    if (elaris_ladybird_test_reset_private_session(bridge) == 0) {
+        std::cerr << "Private session reset succeeded while views remained open\n";
+        return false;
+    }
+    first.reset();
+    if (!load(second, 203, "/privacy/read-again", "private:private:empty"))
+        return false;
+    second.reset();
+    if (!check(elaris_ladybird_test_reset_private_session(bridge), "reset private browsing session"))
+        return false;
+
+    auto fresh = create(204, true);
+    return load(fresh, 204, "/privacy/read", "empty:empty:empty") &&
+           load(normal, 201, "/privacy/read", "normal:normal:normal");
+}
+
 int main(int argc, char** argv) {
     if (argc != 3) {
         std::cerr << "usage: elaris_ladybird_download_smoke RESOURCE_DIR ISOLATED_TEST_ROOT\n";
@@ -318,9 +405,9 @@ int main(int argc, char** argv) {
         !check(elaris_ladybird_set_download_directory(bridge, downloads_dir.c_str()), "isolate Downloads"))
         return 1;
 
-    bool passed = true;
+    bool passed = test_private_session(bridge, fixture, events);
     uint64_t unsafe_id{};
-    passed = start(bridge, fixture.url("/small"), "../../unsafe.txt", unsafe_id) &&
+    passed = passed && start(bridge, fixture.url("/small"), "../../unsafe.txt", unsafe_id) &&
              pump_until(bridge, [&] { return finished(events, unsafe_id, ELARIS_LADYBIRD_DOWNLOAD_COMPLETED); });
     auto unsafe = events.downloads[unsafe_id];
     if (passed &&

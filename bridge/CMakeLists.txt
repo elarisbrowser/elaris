@@ -51,6 +51,7 @@ function(elaris_add_ladybird_bridge)
     endif()
 
     if(ELARIS_BUILD_SMOKE_TESTS)
+        target_compile_definitions(elaris_ladybird PRIVATE ELARIS_BUILD_SMOKE_TESTS)
         add_executable(elaris_ladybird_smoke "${ELARIS_BRIDGE_DIR}/tests/smoke.cpp")
         target_compile_features(elaris_ladybird_smoke PRIVATE cxx_std_20)
         target_link_libraries(elaris_ladybird_smoke PRIVATE elaris_ladybird)

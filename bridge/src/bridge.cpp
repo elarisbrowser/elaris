@@ -1,3 +1,7 @@
+#ifdef ELARIS_BUILD_SMOKE_TESTS
+#include "../tests/private_session.h"
+#endif
+
 #include <elaris_ladybird.h>
 
 #include <AK/ByteString.h>
@@ -83,8 +87,9 @@ class ElarisApplication final : public WebView::Application {
 // A headless view whose frames the host reads from CPU memory, as Ladybird's TerminalWebView does.
 class ElarisWebView final : public WebView::HeadlessWebView {
   public:
-    static AK::NonnullOwnPtr<ElarisWebView> create(Core::AnonymousBuffer theme, Web::DevicePixelSize size) {
-        auto view = AK::adopt_own(*new ElarisWebView(AK::move(theme), size));
+    static AK::NonnullOwnPtr<ElarisWebView> create(Core::AnonymousBuffer theme, Web::DevicePixelSize size,
+                                                   WebView::IsPrivate mode) {
+        auto view = AK::adopt_own(*new ElarisWebView(AK::move(theme), size, mode));
         view->initialize_tab(Web::HTML::VisibilityState::Visible);
         view->set_presents_from_cpu_memory(true);
         return view;
@@ -125,7 +130,8 @@ class ElarisWebView final : public WebView::HeadlessWebView {
             on_navigation_state_change();
     }
 
-    ElarisWebView(Core::AnonymousBuffer theme, Web::DevicePixelSize size) : HeadlessWebView(AK::move(theme), size) {}
+    ElarisWebView(Core::AnonymousBuffer theme, Web::DevicePixelSize size, WebView::IsPrivate mode)
+        : HeadlessWebView(AK::move(theme), size, mode) {}
 
     void did_accept_presented_backing_store(i32, Gfx::IntRect damage_rect) override {
         m_damage = m_damage.is_empty() ? damage_rect : m_damage.united(damage_rect);
@@ -477,8 +483,8 @@ extern "C" int32_t elaris_ladybird_cancel_active_downloads(ElarisLadybird* bridg
     return succeed();
 }
 
-extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t view_id,
-                                               ElarisLadybirdView** out_view) {
+static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::IsPrivate mode,
+                           ElarisLadybirdView** out_view) {
     if (out_view)
         *out_view = nullptr;
     if (!bridge || !out_view || !s_application)
@@ -493,7 +499,7 @@ extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t 
     auto theme_buffer = theme.release_value();
     apply_selection_colors(*theme_buffer.data<Gfx::SystemTheme>());
 
-    auto view = ElarisWebView::create(AK::move(theme_buffer), {1024, 768});
+    auto view = ElarisWebView::create(AK::move(theme_buffer), {1024, 768}, mode);
     auto* handle = new ElarisLadybirdView{bridge, view_id, AK::move(view), {}, 0, 0, {}, {}, {}};
     bridge->views.push_back(handle);
     // The callbacks live in the view, which the handle owns, so they never outlive it.
@@ -588,6 +594,29 @@ extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t 
     *out_view = handle;
     return succeed();
 }
+
+extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t view_id,
+                                               ElarisLadybirdView** out_view) {
+    return create_view(bridge, view_id, WebView::IsPrivate::No, out_view);
+}
+
+#ifdef ELARIS_BUILD_SMOKE_TESTS
+extern "C" int32_t elaris_ladybird_test_create_private_view(ElarisLadybird* bridge, uint64_t view_id,
+                                                            ElarisLadybirdView** out_view) {
+    return create_view(bridge, view_id, WebView::IsPrivate::Yes, out_view);
+}
+
+extern "C" int32_t elaris_ladybird_test_reset_private_session(ElarisLadybird* bridge) {
+    if (!bridge || !s_application || !on_owner_thread(bridge))
+        return fail("private session reset requires the bridge owner thread");
+    for (auto const* handle : bridge->views) {
+        if (handle->view->is_private() == WebView::IsPrivate::Yes)
+            return fail("close all private views before resetting the session");
+    }
+    s_application->reset_private_browsing_session();
+    return succeed();
+}
+#endif
 
 extern "C" int32_t elaris_ladybird_set_display_refresh_rate(ElarisLadybirdView* view, double refresh_rate) {
     if (!view || !(refresh_rate > 0.0) || !std::isfinite(refresh_rate))
