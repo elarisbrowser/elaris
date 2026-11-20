@@ -1,5 +1,3 @@
-#include "private_session.h"
-
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -8,6 +6,8 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+#include "private_session.h"
 
 struct FindResult {
     uint64_t request_id{};

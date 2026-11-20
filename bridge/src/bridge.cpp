@@ -1,6 +1,7 @@
 #ifdef ELARIS_BUILD_SMOKE_TESTS
-#include "../tests/private_session.h"
 #include <LibWebView/RequestServerManager.h>
+
+#include "../tests/private_session.h"
 #endif
 
 #include <elaris_ladybird.h>
