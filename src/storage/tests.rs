@@ -334,11 +334,11 @@ fn session_round_trips_order_and_active_tab() {
             SessionTab {
                 url: "https://two.example/".into(),
                 title: "Two".into(),
-                favicon: Some(SessionFavicon {
+                favicon: Some(std::sync::Arc::new(SessionFavicon {
                     width: 1,
                     height: 1,
                     rgba: vec![1, 2, 3, 4],
-                }),
+                })),
             },
             SessionTab {
                 url: "https://three.example/".into(),

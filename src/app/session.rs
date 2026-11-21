@@ -136,14 +136,7 @@ impl super::AppState {
                 SessionTab {
                     url: tab.url.clone(),
                     title: tab.title.clone(),
-                    favicon: tab
-                        .favicon_data
-                        .as_ref()
-                        .map(|favicon| storage::SessionFavicon {
-                            width: favicon.width,
-                            height: favicon.height,
-                            rgba: favicon.rgba.clone(),
-                        }),
+                    favicon: tab.favicon_data.clone(),
                 }
             })
             .collect();

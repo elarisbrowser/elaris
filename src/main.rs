@@ -68,10 +68,14 @@ fn app_spec(init: fn() -> app::AppState, mini: bool) -> AppSpec<app::AppState> {
     AppSpec {
         // Headless tooling has no native `on_ready`; connect workers there.
         setup: Some(app::setup_headless),
-        poll: Some(app::poll),
+        poll: Some(|state, clock, tx| {
+            perf::time(perf::Stage::PollWork, || app::poll(state, clock, tx))
+        }),
         on_key: Some(shortcuts::on_key),
         min_size: Some(min_size),
-        ..AppSpec::new(app::APP_NAME, size, init, ui::view)
+        ..AppSpec::new(app::APP_NAME, size, init, |state, cx| {
+            perf::time(perf::Stage::BuildView, || ui::view(state, cx))
+        })
     }
 }
 

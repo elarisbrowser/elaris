@@ -54,10 +54,10 @@ impl Browser {
                             if let crate::engine::TabUpdate::LoadError(error) = update {
                                 peek.page.error = Some(error);
                                 peek.page.loading = false;
+                                polled.changed = true;
                             } else {
-                                peek.page.update(update);
+                                polled.changed |= peek.page.update(update);
                             }
-                            polled.changed = true;
                         }
                         continue;
                     }
@@ -110,7 +110,7 @@ impl Browser {
                             _ => None,
                         };
                         let title_changed = matches!(&update, crate::engine::TabUpdate::Title(_));
-                        tab.update(update);
+                        polled.changed |= tab.update(update);
                         if let Some(url) = committed {
                             polled.committed.push((id, url, tab.title.clone()));
                         }
@@ -122,7 +122,6 @@ impl Browser {
                                 .titles
                                 .push((tab.committed_url.clone(), tab.title.clone()));
                         }
-                        polled.changed = true;
                     }
                 }
                 Update::PermissionSaved(origin, kind, state) => {

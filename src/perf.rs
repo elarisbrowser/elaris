@@ -22,6 +22,10 @@ pub(crate) enum Stage {
     Drawn,
     /// Between two polls of the page: Rune's frame cadence while it keeps waking us.
     Poll,
+    /// Work done inside Elaris' per-frame poll.
+    PollWork,
+    /// Building Elaris' view tree.
+    BuildView,
     /// Between two frames Ladybird presented.
     FrameInterval,
     /// Copying and converting one frame out of Ladybird.

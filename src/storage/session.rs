@@ -48,7 +48,7 @@ pub(crate) struct SessionTab {
     pub(crate) url: String,
     pub(crate) title: String,
     #[serde(default)]
-    pub(crate) favicon: Option<SessionFavicon>,
+    pub(crate) favicon: Option<std::sync::Arc<SessionFavicon>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

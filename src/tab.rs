@@ -94,7 +94,7 @@ pub(crate) struct Tab {
     pub(crate) permissions_in_use: [bool; PermissionKind::ALL.len()],
     pub(crate) awaiting_close: bool,
     pub(crate) favicon: Option<Pixels>,
-    pub(crate) favicon_data: Option<elaris::ladybird::Favicon>,
+    pub(crate) favicon_data: Option<std::sync::Arc<crate::storage::SessionFavicon>>,
     pub(crate) error: Option<String>,
     pub(crate) internal: Option<InternalRoute>,
     pub(crate) zoom_override: Option<u16>,
@@ -236,13 +236,15 @@ impl Tab {
         self.page_cursor = rune::Cursor::Default;
     }
 
-    /// Takes in what the engine reported about the tab.
-    pub(crate) fn update(&mut self, update: TabUpdate) {
+    /// Takes in an engine update and reports whether the window should rebuild.
+    pub(crate) fn update(&mut self, update: TabUpdate) -> bool {
         match update {
             TabUpdate::FindResult { request_id, result } => {
                 self.find.apply_result(request_id, result);
             }
-            TabUpdate::ImeCaret(rect) => self.ime_caret = rect,
+            TabUpdate::ImeCaret(rect) => {
+                return std::mem::replace(&mut self.ime_caret, rect) != rect;
+            }
             TabUpdate::WebFullscreen(active) => self.web_fullscreen = active,
             // The browser's swipe tracking takes these before they reach a tab.
             TabUpdate::WheelResult(_) => {}
@@ -259,7 +261,12 @@ impl Tab {
                     PageDialog { request, response }
                 });
             }
-            TabUpdate::HoveredLink(url) => self.hovered_link = url,
+            TabUpdate::HoveredLink(url) => {
+                if self.hovered_link == url {
+                    return false;
+                }
+                self.hovered_link = url;
+            }
             TabUpdate::Tooltip(text) => {
                 self.tooltip = text
                     .chars()
@@ -268,7 +275,7 @@ impl Tab {
             }
             TabUpdate::Cursor(name) => {
                 use rune::Cursor;
-                self.page_cursor = match name.as_str() {
+                let cursor = match name.as_str() {
                     "Hidden" => Cursor::Hidden,
                     "Crosshair" | "Eyedropper" => Cursor::Crosshair,
                     "IBeam" => Cursor::Text,
@@ -282,6 +289,7 @@ impl Tab {
                     "Zoom" => Cursor::ZoomIn,
                     _ => Cursor::Default,
                 };
+                return std::mem::replace(&mut self.page_cursor, cursor) != cursor;
             }
             TabUpdate::Navigation(url) => {
                 self.thumbnail = None;
@@ -299,7 +307,13 @@ impl Tab {
             TabUpdate::Title(title) => self.title = title,
             TabUpdate::Loading(loading) => self.loading = loading,
             TabUpdate::Favicon(favicon) => {
-                self.favicon_data = favicon.clone();
+                self.favicon_data = favicon.as_ref().map(|favicon| {
+                    std::sync::Arc::new(crate::storage::SessionFavicon {
+                        width: favicon.width,
+                        height: favicon.height,
+                        rgba: favicon.rgba.clone(),
+                    })
+                });
                 self.favicon = favicon.map(|favicon| {
                     let pixels = Pixels::new();
                     pixels.set(favicon.width, favicon.height, favicon.rgba);
@@ -314,6 +328,7 @@ impl Tab {
             TabUpdate::LoadError(_) => {}
             TabUpdate::Error(error) => self.error = Some(error),
         }
+        true
     }
 }
 
@@ -417,6 +432,23 @@ mod tests {
         assert_eq!(tab.url, "https://example.com/a");
         assert_eq!(tab.error, None);
         assert!(tab.can_go_back && !tab.can_go_forward);
+    }
+
+    #[test]
+    fn repeated_pointer_and_caret_updates_do_not_rebuild_the_window() {
+        let mut tab = tab("https://example.com/");
+        let updates: [fn() -> TabUpdate; 3] = [
+            || TabUpdate::Cursor("Hand".into()),
+            || TabUpdate::HoveredLink("https://example.com/link".into()),
+            || TabUpdate::ImeCaret(Some([10, 20, 1, 16])),
+        ];
+        for update in updates {
+            assert!(tab.update(update()));
+            assert!(!tab.update(update()));
+        }
+        assert!(tab.update(TabUpdate::Cursor("IBeam".into())));
+        assert!(tab.update(TabUpdate::HoveredLink(String::new())));
+        assert!(tab.update(TabUpdate::ImeCaret(None)));
     }
 
     #[test]

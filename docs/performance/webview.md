@@ -69,6 +69,7 @@ laptop can fail to import and show nothing), and there are no tab thumbnails fro
 `ELARIS_PERF=1 ./elaris run <url>` prints, every 5 s and per thread:
 
 - **main** (UI): `Drawn`, the interval between frames Rune drew, and `Poll`, between polls.
+  `PollWork` measures the poll callback itself and `BuildView` measures view tree construction.
 - **elaris-engine**: frames shown per second; duplicate, skipped (presented but replaced before
   the engine took them) and stale frames; and n/mean/p50/p95/max for handling one batch of
   Ladybird work (`Pump`), frame interval, copy, `Pixels::set`, input to the next new frame, and
