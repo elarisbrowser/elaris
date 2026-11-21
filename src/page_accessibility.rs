@@ -3,7 +3,7 @@
 //! A page's accessibility tree, kept from Ladybird's whole trees and numbered changes, and turned
 //! into the AccessKit updates Rune grafts under the page's element.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use elaris::ladybird::{AccessibilityEvent, AccessibilityNode};
 use rune::accesskit::{
@@ -74,6 +74,10 @@ impl PageAccessibility {
                     self.nodes.insert(node.id, node);
                 }
                 self.seq = Some(seq);
+                let reachable = self.reachable();
+                if changed.iter().any(|id| !reachable.contains(id)) {
+                    return Applied::NeedsWholeTree;
+                }
                 if scale != self.scale {
                     self.scale = scale;
                     self.push_whole(tree);
@@ -82,7 +86,7 @@ impl PageAccessibility {
                 }
             }
             AccessibilityEvent::Focus(id) => {
-                self.focus = self.nodes.contains_key(&id).then_some(id);
+                self.focus = self.reachable().contains(&id).then_some(id);
                 self.push(tree, &[], false);
             }
         }
@@ -101,8 +105,23 @@ impl PageAccessibility {
         std::mem::take(&mut self.pending)
     }
 
+    /// Ids of the nodes reached from the root. AccessKit rejects a node no parent in the update
+    /// holds, so detached nodes the page still reports are left out.
+    fn reachable(&self) -> HashSet<i64> {
+        let mut seen = HashSet::new();
+        let mut stack: Vec<i64> = self.root.into_iter().collect();
+        while let Some(id) = stack.pop() {
+            if let Some(node) = self.nodes.get(&id)
+                && seen.insert(id)
+            {
+                stack.extend(node.children.iter().copied());
+            }
+        }
+        seen
+    }
+
     fn push_whole(&mut self, tree: TreeId) {
-        let ids: Vec<i64> = self.nodes.keys().copied().collect();
+        let ids: Vec<i64> = self.reachable().into_iter().collect();
         self.push(tree, &ids, true);
     }
 
@@ -131,6 +150,7 @@ impl PageAccessibility {
         node.set_children(
             page.children
                 .iter()
+                .filter(|id| self.nodes.contains_key(id))
                 .copied()
                 .map(node_id)
                 .collect::<Vec<_>>(),
@@ -322,6 +342,35 @@ mod tests {
             bounds: [10, 20, 100, 40],
             ..AccessibilityNode::default()
         }
+    }
+
+    #[test]
+    fn detached_nodes_stay_out_of_the_graft() {
+        let tree = tree_id(7);
+        let mut page = PageAccessibility::default();
+        let whole = AccessibilityEvent::Tree {
+            seq: 1,
+            nodes: vec![
+                node(1, "document", &[2]),
+                node(2, "button", &[]),
+                node(9, "link", &[]),
+            ],
+        };
+        assert_eq!(page.apply(tree, whole, 1.0), Applied::Done);
+        let ids: Vec<NodeId> = page.take_updates()[0]
+            .nodes
+            .iter()
+            .map(|(id, _)| *id)
+            .collect();
+        assert!(!ids.contains(&NodeId(9)));
+
+        let orphan = AccessibilityEvent::Change {
+            base: 1,
+            seq: 2,
+            nodes: vec![node(10, "link", &[])],
+            removed: vec![],
+        };
+        assert_eq!(page.apply(tree, orphan, 1.0), Applied::NeedsWholeTree);
     }
 
     #[test]
