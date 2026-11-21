@@ -167,13 +167,13 @@ impl Browser {
     }
 
     /// Ladybird finished a wheel event; returns whether that began a history swipe.
-    pub(super) fn wheel_result(&mut self, id: TabId, used: bool) -> bool {
+    pub(super) fn wheel_result(&mut self, id: TabId, cancelled: bool) -> bool {
         let (back, forward) = self
             .tab(id)
             .map_or((false, false), |tab| (tab.can_go_back, tab.can_go_forward));
         self.input
             .swipes
-            .page_result(id, used, |direction| match direction {
+            .page_result(id, cancelled, |direction| match direction {
                 Direction::Back => back,
                 Direction::Forward => forward,
             })

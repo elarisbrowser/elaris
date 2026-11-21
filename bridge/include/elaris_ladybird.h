@@ -50,8 +50,8 @@ typedef enum {
     /* JSON in text while accessibility is on. Value 1 is a whole tree {"seq","nodes"}, 2 a change
      * {"base","seq","nodes","removed"}, and 3 a focus change {"focus"}. */
     ELARIS_LADYBIRD_ACCESSIBILITY = 32,
-    /* A wheel event finished. Value 0 when nothing used it: no scroller moved and the page did not
-     * cancel it, so the host may use it, as for a history swipe. Value 1 otherwise. */
+    /* A wheel event finished. Value 1 when the page cancelled it with preventDefault, otherwise 0. Scrolls
+     * do not count, so the host may still use a sideways wheel for a history swipe. */
     ELARIS_LADYBIRD_WHEEL_RESULT = 33,
 } ElarisLadybirdEventKind;
 

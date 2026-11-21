@@ -158,9 +158,9 @@ pub enum Event {
     },
     Accessibility(AccessibilityEvent),
     WebFullscreen(bool),
-    /// A wheel event finished; `used` when a scroller moved or the page cancelled it.
+    /// A wheel event finished; `cancelled` when the page called preventDefault on it.
     WheelResult {
-        used: bool,
+        cancelled: bool,
     },
     Popup {
         request: u64,

@@ -353,7 +353,7 @@ pub(crate) enum TabUpdate {
     ExternalUrl(Option<elaris::ladybird::ExternalUrl>),
     Accessibility(elaris::ladybird::AccessibilityEvent),
     WebFullscreen(bool),
-    /// Whether the page used a wheel event, which decides history swipes.
+    /// Whether the page cancelled a wheel event; a cancelled wheel keeps its gesture from becoming a swipe.
     WheelResult(bool),
     PermissionUse(crate::permissions::PermissionKind, bool),
     Error(String),

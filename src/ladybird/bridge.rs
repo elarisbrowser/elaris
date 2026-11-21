@@ -371,7 +371,7 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
             },
             27 => Event::WebFullscreen(raw.value != 0),
             33 => Event::WheelResult {
-                used: raw.value != 0,
+                cancelled: raw.value != 0,
             },
             28 => Event::Popup {
                 request: raw.request_id,
