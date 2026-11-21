@@ -235,6 +235,10 @@ pub(crate) fn window_closed(state: &mut AppState, _: &mut Tx) {
     state.closing_tab_transfer();
     super::unregister_window(state.window_id);
     crate::engine::unregister_window_waker(state.window_id);
+    if state.browser.private && super::private_window_count() == 0 {
+        // The engine resets the private session with its last view, discarding its downloads.
+        state.browser.forget_private_downloads();
+    }
     if let Some(storage) = &state.storage {
         storage.history().forget_window(state.window_id);
     }

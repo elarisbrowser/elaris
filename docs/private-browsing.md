@@ -33,7 +33,7 @@ history and save no session, tabs cannot be dragged or detached between private 
 and the engine resets the private session when the last private view closes, so the next private
 window starts empty.
 
-Still open: private downloads run without download UI, because the bridge keeps private records out
-of the ordinary download stream, and the session reset discards them. Worker and content-client
+Private downloads appear only in private windows' download lists and are forgotten with the
+session, whose reset cancels any still running. Worker and content-client
 isolation across successive private generations, permission prompts in private windows, disk cache
 behavior and TLS cleanup remain unverified.

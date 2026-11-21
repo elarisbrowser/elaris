@@ -8,12 +8,24 @@ use elaris::downloads::{
 };
 
 impl Browser {
-    /// The browser's downloads, including work initiated by a webpage.
+    /// This window's downloads, including work initiated by a webpage. Private and ordinary
+    /// windows each see only their own session's.
     pub(crate) fn downloads(&self) -> Vec<Download> {
         self.downloads
             .lock()
             .expect("download list poisoned")
-            .clone()
+            .iter()
+            .filter(|download| download.private == self.private)
+            .cloned()
+            .collect()
+    }
+
+    /// Forgets private downloads once the private session they belonged to has ended.
+    pub(crate) fn forget_private_downloads(&self) {
+        self.downloads
+            .lock()
+            .expect("download list poisoned")
+            .retain(|download| !download.private);
     }
 
     #[cfg(not(test))]
@@ -120,7 +132,15 @@ impl Browser {
     pub(super) fn apply_download_update(&mut self, id: DownloadId, update: downloads::Update) {
         let mut downloads = self.downloads.lock().expect("download list poisoned");
         let Some(download) = downloads.iter_mut().find(|download| download.id == id) else {
-            downloads.push(update.into_download(id));
+            // A private session's reset reports its downloads cancelled after they were forgotten.
+            let finished_private = update.private
+                && !matches!(
+                    update.status,
+                    DownloadStatus::Pending | DownloadStatus::Downloading
+                );
+            if !finished_private {
+                downloads.push(update.into_download(id));
+            }
             return;
         };
         let started_at = download.started_at;

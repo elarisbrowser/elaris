@@ -71,3 +71,28 @@ fn downloads_reject_non_http_addresses_and_unavailable_engines() {
         Err(Error::Download(downloads::Error::InvalidAddress))
     );
 }
+
+#[test]
+fn private_and_ordinary_windows_each_list_only_their_own_downloads() {
+    let mut browser = Browser::default();
+    let download = |private| downloads::Download {
+        private,
+        ..downloads::Download::pending(
+            downloads::DownloadId::next().unwrap(),
+            &DownloadRequest::new("https://example.com/file.zip"),
+            "https://example.com/file.zip".into(),
+        )
+    };
+    browser
+        .downloads
+        .lock()
+        .unwrap()
+        .extend([download(false), download(true)]);
+    assert!(browser.downloads().iter().all(|d| !d.private) && browser.downloads().len() == 1);
+    browser.private = true;
+    assert!(browser.downloads().iter().all(|d| d.private) && browser.downloads().len() == 1);
+    browser.forget_private_downloads();
+    assert!(browser.downloads().is_empty());
+    browser.private = false;
+    assert_eq!(browser.downloads().len(), 1, "ordinary downloads stay");
+}

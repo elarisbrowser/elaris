@@ -101,6 +101,8 @@ pub struct Download {
     pub error: Option<String>,
     /// When this browser first learned of the download, for time-ranged clearing.
     pub started_at: std::time::SystemTime,
+    /// Started from a private window, so only private windows list it.
+    pub private: bool,
 }
 
 impl Download {
@@ -122,6 +124,7 @@ impl Download {
             total_bytes: None,
             error: None,
             started_at: std::time::SystemTime::now(),
+            private: false,
         }
     }
 }
@@ -143,6 +146,8 @@ pub struct Update {
     pub total_bytes: Option<u64>,
     /// The transfer error, when Ladybird reports one.
     pub error: Option<String>,
+    /// Started from a private window.
+    pub private: bool,
     pub(crate) native_id: u64,
 }
 
@@ -164,6 +169,7 @@ impl Update {
             total_bytes: self.total_bytes,
             error: self.error,
             started_at: std::time::SystemTime::now(),
+            private: self.private,
         }
     }
 }

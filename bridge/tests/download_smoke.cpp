@@ -37,6 +37,8 @@ struct DownloadState {
 
 struct Events {
     std::map<uint64_t, DownloadState> downloads;
+    /* Downloads the bridge marked private, which only private windows list. */
+    std::map<uint64_t, DownloadState> private_downloads;
     std::map<uint64_t, std::string> titles;
     std::map<uint64_t, uint64_t> frames;
     std::map<uint64_t, uint64_t> callbacks;
@@ -68,7 +70,8 @@ static void on_event(void* context, ElarisLadybirdEvent const* event) {
         .error = event->error ? event->error : "",
     };
     events.saw_unknown_length |= state.status == ELARIS_LADYBIRD_DOWNLOAD_IN_PROGRESS && !state.has_total;
-    events.downloads[state.id] = std::move(state);
+    auto& store = event->value ? events.private_downloads : events.downloads;
+    store[state.id] = std::move(state);
 }
 
 class HttpFixture {
@@ -359,8 +362,9 @@ static bool test_private_session(ElarisLadybird* bridge, HttpFixture const& fixt
     auto download_url = fixture.url("/small");
     if (!check(elaris_ladybird_test_start_private_download(second.get(), download_url.c_str(), "private-probe.bin"),
                "start private download") ||
-        !pump_until(bridge, [&] { return std::filesystem::exists(private_download); }) || !events.downloads.empty()) {
-        std::cerr << "Private download failed or escaped into the ordinary download observer\n";
+        !pump_until(bridge, [&] { return std::filesystem::exists(private_download); }) || !events.downloads.empty() ||
+        events.private_downloads.empty()) {
+        std::cerr << "Private download failed, went unmarked, or reached the ordinary download list\n";
         return false;
     }
     if (!elaris_ladybird_test_private_request_servers(bridge)) {
@@ -368,7 +372,8 @@ static bool test_private_session(ElarisLadybird* bridge, HttpFixture const& fixt
         return false;
     }
     auto active_path = downloads_dir / "private-active.bin";
-    if (!check(elaris_ladybird_test_start_private_download(second.get(), fixture.url("/slow").c_str(), "private-active.bin"),
+    if (!check(elaris_ladybird_test_start_private_download(second.get(), fixture.url("/slow").c_str(),
+                                                           "private-active.bin"),
                "start active private download") ||
         !pump_until(bridge, [&] { return has_temporary_download(downloads_dir, 1); }) ||
         std::filesystem::exists(active_path)) {

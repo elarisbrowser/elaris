@@ -612,6 +612,16 @@ fn mark_private_window(id: u64) {
         .insert(id);
 }
 
+/// How many private windows are open.
+pub(crate) fn private_window_count() -> usize {
+    PRIVATE_WINDOWS.get().map_or(0, |windows| {
+        windows
+            .lock()
+            .expect("private window registry poisoned")
+            .len()
+    })
+}
+
 /// Tabs only move between windows of the same kind, since a page cannot change session.
 pub(crate) fn is_private_window(id: u64) -> bool {
     PRIVATE_WINDOWS.get().is_some_and(|windows| {
