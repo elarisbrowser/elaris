@@ -6,10 +6,11 @@
 #[cfg(not(target_os = "linux"))]
 use rune::Chrome;
 #[cfg(target_os = "linux")]
+use rune::Spring;
+use rune::Transition;
+#[cfg(target_os = "linux")]
 use rune::tok::motion;
 use rune::{Cx, El, Icon, el, row, spacer, text};
-#[cfg(target_os = "linux")]
-use rune::{Spring, Transition};
 use rune_kit::{Menu, MenuItem, context_menu};
 
 use crate::app::AppState;
@@ -238,6 +239,7 @@ pub(in crate::ui) fn zoom_indicator(
         .key("zoom-indicator")
         .min_w(theme::ICON_BUTTON)
         .h(theme::ICON_BUTTON)
+        .transition(Transition::scale(0.9).combined(Transition::opacity()))
         .center()
         .radius(theme::ICON_BUTTON_RADIUS)
         .press(theme.press)

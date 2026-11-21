@@ -36,6 +36,10 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         }
         None => false,
     };
+    // A poll commit mounts and unmounts at once unless asked: the chip's enter and exit need this.
+    if zoom_chip_settled || zoom_chip_shown {
+        tx.animated();
+    }
     let previous_peek = state.browser.peek.as_ref().map(|peek| peek.page.id());
     let mut polled = state.browser.poll();
     state.poll_tab_close(&polled, tx);

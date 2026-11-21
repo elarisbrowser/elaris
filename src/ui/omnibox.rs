@@ -304,6 +304,7 @@ pub(super) fn address_bar(
         let label = address
             .map(crate::address::compact_address)
             .unwrap_or("Search or type a URL");
+        let zoom = super::sidebar::header::zoom_indicator(state, theme, overlays);
         bar = bar.child(
             row()
                 .key("omnibox-launcher")
@@ -327,12 +328,11 @@ pub(super) fn address_bar(
                             theme.text_muted
                         })
                         .single_line()
-                        .truncate(),
-                ),
+                        .truncate()
+                        .grow(1.0),
+                )
+                .children(zoom),
         );
-    }
-    if let Some(zoom) = super::sidebar::header::zoom_indicator(state, theme, overlays) {
-        bar = bar.child(zoom);
     }
     bar
 }

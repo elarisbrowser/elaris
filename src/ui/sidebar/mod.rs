@@ -148,20 +148,11 @@ fn body(state: &AppState, theme: &Theme, overlays: &mut Vec<El>, reduced_motion:
 }
 
 fn search_launcher(state: &AppState, theme: &Theme, reduced: bool, overlays: &mut Vec<El>) -> El {
-    let launcher = search_field(state, theme, reduced);
-    match header::zoom_indicator(state, theme, overlays) {
-        Some(zoom) => row()
-            .key("omnibox-row")
-            .w_full()
-            .center_y()
-            .gap(theme::ROW_GAP)
-            .child(launcher.w(0.0).min_w(0.0).grow(1.0))
-            .child(zoom),
-        None => launcher,
-    }
+    let zoom = header::zoom_indicator(state, theme, overlays);
+    search_field(state, theme, reduced, zoom)
 }
 
-fn search_field(state: &AppState, theme: &Theme, reduced: bool) -> El {
+fn search_field(state: &AppState, theme: &Theme, reduced: bool, zoom: Option<El>) -> El {
     let address = state
         .browser
         .active_tab()
@@ -195,7 +186,8 @@ fn search_field(state: &AppState, theme: &Theme, reduced: bool) -> El {
     .help(address.unwrap_or("Open search and address suggestions"))
     .shortcut_hint("cmd+l")
     .focusable(true)
-    .on_press_tx(app::open_from_launcher);
+    .on_press_tx(app::open_from_launcher)
+    .children(zoom);
     // Keep the buttons while site controls are open, since the popover is anchored to them.
     let revealed = state.sidebar.pointer_inside || state.site_permissions_open;
     if state.browser.active_tab().is_none() || !revealed {
