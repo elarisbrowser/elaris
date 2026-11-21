@@ -12,7 +12,7 @@ use crate::address::SearchEngine;
 use crate::app::{AppState, ClearRange};
 use crate::appearance::{AccentColor, Appearance};
 use crate::permissions::AutoplayPolicy;
-use crate::settings::{DownloadDirectory, StartupMode, TabLayout};
+use crate::settings::{ContentBlockList, DownloadDirectory, StartupMode, TabLayout};
 use crate::ui::theme::{self, Theme};
 
 const CONTENT_WIDTH: f32 = 720.0;
@@ -46,6 +46,7 @@ pub(super) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> E
         .child(search_section(state, theme, &kit, overlays, compact))
         .child(downloads_section(state, theme, &kit, compact))
         .child(privacy_section(state, theme, &kit, overlays, compact))
+        .child(content_blocking_section(state, theme, &kit, compact))
         .child(split_view_section(state, theme, &kit, compact))
         .child(performance_section(state, theme, &kit, compact))
         .child(startup_section(state, theme, &kit, overlays, compact))
@@ -521,6 +522,46 @@ fn privacy_section(
             theme,
         ),
     )
+}
+
+fn content_blocking_section(state: &AppState, theme: &Theme, kit: &Kit, compact: bool) -> El {
+    let mut switch_kit = kit.clone();
+    switch_kit.c.std_icon_strong = kit.c.bg_accent;
+    let blocking = &state.settings.content_blocking;
+    let master = rune_kit::Switch::new(blocking.enabled)
+        .standard()
+        .label("Block ads and trackers")
+        .hide_label()
+        .on_toggle(|state: &mut AppState| {
+            state.set_content_blocking(!state.settings.content_blocking.enabled)
+        })
+        .build(&switch_kit);
+    let mut rows = col().gap(12.0).child(setting_row(
+        "Block ads and trackers",
+        "Lists download when blocking turns on, then refresh daily.",
+        theme,
+        master,
+        compact,
+    ));
+    for list in ContentBlockList::ALL {
+        let control = rune_kit::Switch::new(blocking.lists.contains(&list))
+            .standard()
+            .label(list.label())
+            .hide_label()
+            .on_toggle(move |state: &mut AppState| {
+                let enabled = state.settings.content_blocking.lists.contains(&list);
+                state.set_content_blocking_list(list, !enabled)
+            })
+            .build(&switch_kit);
+        rows = rows.child(setting_row(
+            list.label(),
+            list.description(),
+            theme,
+            control,
+            compact,
+        ));
+    }
+    section("Content blocking", theme, settings_group(rows, theme))
 }
 
 fn clear_data_dialog(dialog: crate::app::ClearDataDialog, theme: &Theme, overlays: &mut Vec<El>) {

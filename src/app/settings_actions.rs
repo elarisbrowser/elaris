@@ -9,7 +9,9 @@ use crate::internal::InternalPage;
 use crate::permissions::{
     AutoplayPolicy, PermissionDecision, PermissionKind, PermissionState, PermissionStore,
 };
-use crate::settings::{DownloadDirectory, SettingsChange, StartupMode, TabLayout};
+use crate::settings::{
+    ContentBlockList, DownloadDirectory, SettingsChange, StartupMode, TabLayout,
+};
 use crate::tab::TabId;
 
 impl super::AppState {
@@ -159,6 +161,46 @@ impl super::AppState {
         }
     }
 
+    /// Turns content blocking on or off, and sends the engine its state.
+    pub(crate) fn set_content_blocking(&mut self, enabled: bool) {
+        if self.settings.content_blocking.enabled == enabled {
+            return;
+        }
+        self.settings.content_blocking.enabled = enabled;
+        self.sync_engine_content_blocking();
+        self.save_setting(SettingsChange::ContentBlocking(enabled));
+    }
+
+    /// Enables or disables one built-in filter list, and sends the engine the change.
+    pub(crate) fn set_content_blocking_list(&mut self, list: ContentBlockList, enabled: bool) {
+        let lists = &mut self.settings.content_blocking.lists;
+        if lists.contains(&list) == enabled {
+            return;
+        }
+        if enabled {
+            lists.insert(list);
+        } else {
+            lists.remove(&list);
+        }
+        self.sync_engine_content_blocking();
+        self.save_setting(SettingsChange::ContentBlockingList(list, enabled));
+    }
+
+    /// Sends the engine the content blocker's state and its enabled filter lists.
+    pub(crate) fn sync_engine_content_blocking(&self) {
+        let blocking = &self.settings.content_blocking;
+        let lists = blocking
+            .lists
+            .iter()
+            .map(|list| list.identifier())
+            .collect();
+        self.browser
+            .send_engine(crate::engine::Command::SetContentBlocking(
+                blocking.enabled,
+                lists,
+            ));
+    }
+
     /// Sends the engine the autoplay default and every site exception.
     pub(crate) fn sync_engine_autoplay(&self) {
         let sites = self
@@ -233,6 +275,7 @@ impl super::AppState {
         self.permission_store = load.permissions;
         super::publish_permissions(&self.permission_store);
         self.sync_engine_autoplay();
+        self.sync_engine_content_blocking();
         let download_directory = self.engine_download_directory();
         if previous_download_directory != download_directory {
             self.browser.set_download_directory(download_directory);

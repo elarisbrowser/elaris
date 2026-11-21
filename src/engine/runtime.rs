@@ -135,6 +135,11 @@ impl Runtime {
                     .err()
                     .map(Update::Failed)
             }
+            Command::SetContentBlocking(enabled, lists) => self
+                .ladybird
+                .set_content_blocking(enabled, &lists)
+                .err()
+                .map(Update::Failed),
             Command::ClearBrowsingData(since, data) => self
                 .ladybird
                 .clear_browsing_data(since, data, 0)
@@ -296,6 +301,7 @@ impl Runtime {
             | Command::SetDownloadDirectory(_)
             | Command::ClearBrowsingData(..)
             | Command::SetAutoplay(..)
+            | Command::SetContentBlocking(..)
             | Command::SetPermissionDefault(..)
             | Command::SetPermissions(_)
             | Command::SetPermission(..) => {

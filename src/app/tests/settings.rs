@@ -4,8 +4,9 @@ use super::*;
 use crate::address::SearchEngine;
 use crate::appearance::Appearance;
 use crate::omnibox;
-use crate::settings::DownloadDirectory;
+use crate::settings::{ContentBlockList, DownloadDirectory};
 use rune::Mods;
+use std::collections::BTreeSet;
 
 #[test]
 fn the_settings_shortcut_reuses_its_existing_native_tab() {
@@ -52,5 +53,21 @@ fn settings_updates_drive_search_download_and_startup_preferences() {
     assert_eq!(
         active_url(&state),
         "https://search.brave.com/search?q=browser%20settings"
+    );
+}
+
+#[test]
+fn content_blocking_settings_keep_the_enabled_lists() {
+    let mut state = AppState::new(Some("example.com"));
+    assert!(!state.settings.content_blocking.enabled);
+
+    state.set_content_blocking(true);
+    state.set_content_blocking_list(ContentBlockList::CookieNotices, true);
+    state.set_content_blocking_list(ContentBlockList::EasyPrivacy, false);
+
+    assert!(state.settings.content_blocking.enabled);
+    assert_eq!(
+        state.settings.content_blocking.lists,
+        BTreeSet::from([ContentBlockList::EasyList, ContentBlockList::CookieNotices])
     );
 }

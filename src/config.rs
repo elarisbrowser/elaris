@@ -12,7 +12,9 @@ use toml_edit::{DocumentMut, Item, Table, Value};
 use crate::address::SearchEngine;
 use crate::appearance::{AccentColor, Appearance};
 use crate::permissions::{AutoplayPolicy, PermissionKind, PermissionState, PermissionStore};
-use crate::settings::{DownloadDirectory, Settings, SettingsChange, StartupMode, TabLayout};
+use crate::settings::{
+    ContentBlockList, DownloadDirectory, Settings, SettingsChange, StartupMode, TabLayout,
+};
 
 const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\naccent = \"blue\"\nglass = true\ntint_opacity = 100\ntab_layout = \"vertical\"\n\n[split_view]\nmax_panes = 2\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n\n[pages]\nzoom = 100\n\n[performance]\nreduce_motion = false\n";
 static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(1);
@@ -121,6 +123,23 @@ pub(crate) fn parse(contents: &str) -> Result<ConfigLoad, String> {
     }
     if let Some(value) = bool_value(&document, "performance", "reduce_motion", &mut issues) {
         settings.reduce_motion = value;
+    }
+    if let Some(value) = bool_value(&document, "content_blocking", "enabled", &mut issues) {
+        settings.content_blocking.enabled = value;
+    }
+    for list in ContentBlockList::ALL {
+        if let Some(value) = bool_value(
+            &document,
+            "content_blocking",
+            list.config_key(),
+            &mut issues,
+        ) {
+            if value {
+                settings.content_blocking.lists.insert(list);
+            } else {
+                settings.content_blocking.lists.remove(&list);
+            }
+        }
     }
     if let Some(value) = string_value(&document, "search", "engine", &mut issues) {
         settings.search_engine = SearchEngine::from_config_key(&value).unwrap_or_else(|| {
@@ -416,6 +435,12 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
         SettingsChange::GlassEnabled(value) => ("appearance", "glass", value.to_string()),
         SettingsChange::TintOpacity(value) => ("appearance", "tint_opacity", value.to_string()),
         SettingsChange::ReduceMotion(value) => ("performance", "reduce_motion", value.to_string()),
+        SettingsChange::ContentBlocking(value) => {
+            ("content_blocking", "enabled", value.to_string())
+        }
+        SettingsChange::ContentBlockingList(list, value) => {
+            ("content_blocking", list.config_key(), value.to_string())
+        }
     };
     let item = document
         .as_table_mut()
@@ -424,7 +449,8 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
     let table = item
         .as_table_mut()
         .ok_or_else(|| format!("[{section}] must be a TOML table"))?;
-    let mut new_value = if key == "glass" || key == "reduce_motion" {
+    let mut new_value = if section == "content_blocking" || key == "glass" || key == "reduce_motion"
+    {
         Value::from(value == "true")
     } else if matches!(key, "tint_opacity" | "max_panes" | "zoom") {
         Value::from(value.parse::<i64>().expect("numeric setting is an integer"))
@@ -591,6 +617,44 @@ mod tests {
         let loaded = load_or_create(&path).expect("load cleared autoplay exception");
         assert_eq!(loaded.permissions, PermissionStore::default());
         fs::remove_file(path).expect("remove autoplay test config");
+    }
+
+    #[test]
+    fn content_blocking_defaults_to_off_and_round_trips_its_lists() {
+        let path = std::env::temp_dir().join(format!(
+            "elaris-content-blocking-{}-{}.toml",
+            std::process::id(),
+            NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed)
+        ));
+        let loaded = load_or_create(&path).expect("create the default configuration");
+        assert_eq!(
+            loaded.settings.content_blocking,
+            crate::settings::ContentBlocking::default()
+        );
+        assert!(!loaded.settings.content_blocking.enabled);
+
+        write_change(&path, &SettingsChange::ContentBlocking(true)).expect("turn blocking on");
+        write_change(
+            &path,
+            &SettingsChange::ContentBlockingList(ContentBlockList::EasyPrivacy, false),
+        )
+        .expect("turn EasyPrivacy off");
+        write_change(
+            &path,
+            &SettingsChange::ContentBlockingList(ContentBlockList::Annoyances, true),
+        )
+        .expect("turn Annoyances on");
+        let loaded = load_or_create(&path).expect("load content blocking settings");
+        assert!(loaded.settings.content_blocking.enabled);
+        assert_eq!(
+            loaded.settings.content_blocking.lists,
+            std::collections::BTreeSet::from([
+                ContentBlockList::EasyList,
+                ContentBlockList::Annoyances
+            ])
+        );
+        assert!(loaded.issues.is_empty());
+        fs::remove_file(path).expect("remove content blocking test config");
     }
 
     #[test]

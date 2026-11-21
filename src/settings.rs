@@ -2,6 +2,7 @@
 
 //! The browser's single typed set of user preferences.
 
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use crate::address::SearchEngine;
@@ -69,6 +70,76 @@ impl DownloadDirectory {
     }
 }
 
+/// A built-in filter list that the content blocker can use. The identifiers are the engine's.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum ContentBlockList {
+    EasyList,
+    EasyPrivacy,
+    CookieNotices,
+    Annoyances,
+}
+
+impl ContentBlockList {
+    pub(crate) const ALL: [Self; 4] = [
+        Self::EasyList,
+        Self::EasyPrivacy,
+        Self::CookieNotices,
+        Self::Annoyances,
+    ];
+
+    pub(crate) fn identifier(self) -> &'static str {
+        match self {
+            Self::EasyList => "easyList",
+            Self::EasyPrivacy => "easyPrivacy",
+            Self::CookieNotices => "easyListCookie",
+            Self::Annoyances => "fanboyAnnoyances",
+        }
+    }
+
+    pub(crate) fn config_key(self) -> &'static str {
+        match self {
+            Self::EasyList => "easylist",
+            Self::EasyPrivacy => "easyprivacy",
+            Self::CookieNotices => "cookie_notices",
+            Self::Annoyances => "annoyances",
+        }
+    }
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::EasyList => "EasyList",
+            Self::EasyPrivacy => "EasyPrivacy",
+            Self::CookieNotices => "Cookie notices",
+            Self::Annoyances => "Annoyances",
+        }
+    }
+
+    pub(crate) fn description(self) -> &'static str {
+        match self {
+            Self::EasyList => "Blocks advertising.",
+            Self::EasyPrivacy => "Blocks tracking scripts, pixels and other tracking requests.",
+            Self::CookieNotices => "Hides cookie banners and other cookie notices.",
+            Self::Annoyances => "Hides pop-ups, social widgets, newsletters and other annoyances.",
+        }
+    }
+}
+
+/// Whether the content blocker is on, and which built-in filter lists it uses while it is.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ContentBlocking {
+    pub(crate) enabled: bool,
+    pub(crate) lists: BTreeSet<ContentBlockList>,
+}
+
+impl Default for ContentBlocking {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            lists: BTreeSet::from([ContentBlockList::EasyList, ContentBlockList::EasyPrivacy]),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Settings {
     pub(crate) page_zoom: u16,
@@ -83,6 +154,7 @@ pub(crate) struct Settings {
     pub(crate) glass_enabled: bool,
     pub(crate) tint_opacity: u8,
     pub(crate) reduce_motion: bool,
+    pub(crate) content_blocking: ContentBlocking,
 }
 
 impl Default for Settings {
@@ -100,6 +172,7 @@ impl Default for Settings {
             glass_enabled: true,
             tint_opacity: 100,
             reduce_motion: false,
+            content_blocking: ContentBlocking::default(),
         }
     }
 }
@@ -159,6 +232,8 @@ pub(crate) enum SettingsChange {
     TintOpacity(u8),
     ReduceMotion(bool),
     SplitViewLimit(usize),
+    ContentBlocking(bool),
+    ContentBlockingList(ContentBlockList, bool),
 }
 
 #[cfg(test)]
