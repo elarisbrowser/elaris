@@ -16,7 +16,7 @@ const THUMBNAIL_INTERVAL: Duration = Duration::from_secs(1);
 
 pub(super) fn evict_frame(view: &mut View) -> bool {
     // A GPU frame costs no CPU memory to keep, and has no pixels to shrink.
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     if view.surface.gpu.is_some() {
         return false;
     }
@@ -59,7 +59,7 @@ pub(super) fn show_frame(
     if view.showing_fallback && !view.visible {
         return Ok(None);
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     if view.surface.gpu.is_some() {
         return show_gpu_frame(view, timing, sample);
     }
@@ -102,7 +102,7 @@ pub(super) fn show_frame(
 
 /// Shows the view's newest frame by handing Rune a GPU copy of it; no pixel reaches the CPU. Only
 /// the thumbnail sample, at most once a second, reads them back.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn show_gpu_frame(
     view: &mut View,
     timing: &mut Timing,
@@ -141,16 +141,20 @@ fn show_gpu_frame(
             .is_none_or(|last| last.elapsed() >= THUMBNAIL_INTERVAL)
     {
         view.last_thumbnail = Some(Instant::now());
-        let rgba = view.view.copy_frame(&cpu)?;
-        thumbnails::sample(cpu.width, cpu.height, &rgba)
+        // A frame in GPU memory may have no pixels the CPU can read; then it has no thumbnail.
+        view.view
+            .copy_frame(&cpu)
+            .ok()
+            .and_then(|rgba| thumbnails::sample(cpu.width, cpu.height, &rgba))
     } else {
         None
     };
     let gpu = view.surface.gpu.as_ref().expect("checked by the caller");
-    perf::time(Stage::Set, || gpu.show(&frame))?;
+    let (width, height, serial) = (frame.width, frame.height, frame.serial);
+    perf::time(Stage::Set, || gpu.show(frame))?;
     view.surface.count_frame();
-    timing.shown(frame.width, frame.height, skipped);
-    view.gate.shown(frame.serial);
+    timing.shown(width, height, skipped);
+    view.gate.shown(serial);
     view.showing_fallback = false;
     Ok(thumbnail)
 }

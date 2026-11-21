@@ -876,7 +876,7 @@ pub(crate) fn ime(state: &mut AppState, event: &Ime, tx: &mut Tx) -> bool {
 /// Shows the page's frames in `pane`: Rune's GPU samples Ladybird's own surface where it can,
 /// and otherwise the engine copies each frame into pixels.
 fn page_surface(pane: El, surface: &crate::engine::Surface) -> El {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     if let Some(gpu) = &surface.gpu {
         // Frames are laid out at the pane's device size. One texel per device pixel, pinned to the
         // corner, keeps the last frame still, not stretched, while a resize waits for the next.

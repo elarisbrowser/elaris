@@ -62,6 +62,7 @@
 #include <cstring>
 #include <deque>
 #include <map>
+#include <unistd.h>
 #include <memory>
 #include <set>
 #include <string>
@@ -128,6 +129,14 @@ class TestLocationProvider final : public Core::GeolocationProvider {
     RequestId m_next_id{};
     std::map<RequestId, NonnullRefPtr<Core::Timer>> m_pending;
 };
+
+#if defined(AK_OS_LINUX)
+// Whether the host asked for frames in GPU memory (`ELARIS_GPU_FRAMES`, which the engine reads as well).
+static bool gpu_frames_requested() {
+    auto const* value = getenv("ELARIS_GPU_FRAMES");
+    return value && std::string_view(value) != "0";
+}
+#endif
 
 class ElarisApplication final : public WebView::Application {
     WEB_VIEW_APPLICATION(ElarisApplication)
@@ -196,6 +205,16 @@ class ElarisApplication final : public WebView::Application {
         return false;
 #endif
     }
+
+#if defined(AK_OS_LINUX)
+    // Rune imports only linear dmabufs, so that is the only layout the Compositor may give a frame when frames are
+    // shared with the host's GPU.
+    Vector<u64> platform_presentation_drm_format_modifiers() const override {
+        if (!gpu_frames_requested())
+            return {};
+        return {0 /* DRM_FORMAT_MOD_LINEAR */};
+    }
+#endif
 };
 
 #if defined(AK_OS_MACOS)
@@ -247,6 +266,36 @@ class ElarisWebView final : public WebView::HeadlessWebView {
         return m_serial;
     }
 
+#if defined(AK_OS_LINUX)
+    // Presents frames in dmabufs for the host's GPU to read in place. The Compositor may paint into a backing store
+    // again only once the host has read the frame in it, which the host reports.
+    bool set_gpu_frames(bool enabled) {
+        m_gpu_frames = enabled;
+        set_presents_from_cpu_memory(!enabled);
+        if (!enabled)
+            release_read(UINT64_MAX);
+        return true;
+    }
+    bool gpu_frames() const {
+        return m_gpu_frames;
+    }
+
+    // Lets the Compositor paint into the backing stores of frames up to `read_serial` again.
+    void release_read(uint64_t read_serial) {
+        m_read_serial = std::max(m_read_serial, read_serial);
+        auto const done = [&](auto const& held) { return held.frame_serial <= m_read_serial; };
+        for (auto const& held : m_held_stores) {
+            if (done(held))
+                ViewImplementation::release_backing_store(held.bitmap_id);
+        }
+        std::erase_if(m_held_stores, done);
+    }
+
+    uint64_t frame_serial_of_store(i32 bitmap_id) const {
+        auto it = m_store_serials.find(bitmap_id);
+        return it == m_store_serials.end() ? 0 : it->second;
+    }
+#endif
 #if defined(AK_OS_MACOS)
     // Shows frames to the host as GPU surfaces: each is copied on the GPU into a surface of the blitter's, which the
     // host samples in place. The backing stores themselves are released as they would be for CPU reads.
@@ -261,6 +310,9 @@ class ElarisWebView final : public WebView::HeadlessWebView {
     }
     Elaris::FrameBlitter* blitter() const {
         return m_blitter.get();
+    }
+    bool gpu_frames() const {
+        return m_blitter != nullptr;
     }
 #endif
 
@@ -293,9 +345,26 @@ class ElarisWebView final : public WebView::HeadlessWebView {
     ElarisWebView(Core::AnonymousBuffer theme, Web::DevicePixelSize size, WebView::IsPrivate mode)
         : HeadlessWebView(AK::move(theme), size, mode) {}
 
-    void did_accept_presented_backing_store(i32, Gfx::IntRect damage_rect) override {
+#if defined(AK_OS_LINUX)
+    void release_backing_store(i32 bitmap_id) override {
+        // A replaced backing store is free once the host read the frame it held. A frame the host never drew is
+        // covered by the next one it read.
+        auto frame_serial = frame_serial_of_store(bitmap_id);
+        if (m_gpu_frames && bitmap_id >= 0 && frame_serial > m_read_serial)
+            m_held_stores.push_back({bitmap_id, frame_serial});
+        else
+            ViewImplementation::release_backing_store(bitmap_id);
+    }
+#endif
+
+    void did_accept_presented_backing_store(i32 bitmap_id, Gfx::IntRect damage_rect) override {
         m_damage = m_damage.is_empty() ? damage_rect : m_damage.united(damage_rect);
         ++m_serial;
+#if defined(AK_OS_LINUX)
+        m_store_serials[bitmap_id] = m_serial;
+#else
+        (void)bitmap_id;
+#endif
         if (on_presented)
             on_presented();
     }
@@ -304,6 +373,17 @@ class ElarisWebView final : public WebView::HeadlessWebView {
     uint64_t m_serial{};
 #if defined(AK_OS_MACOS)
     std::unique_ptr<Elaris::FrameBlitter> m_blitter;
+#endif
+#if defined(AK_OS_LINUX)
+    struct HeldStore {
+        i32 bitmap_id;
+        uint64_t frame_serial;
+    };
+    bool m_gpu_frames{};
+    uint64_t m_read_serial{};
+    // The newest frame each backing store showed, and the stores waiting for the host to read theirs.
+    std::map<i32, uint64_t> m_store_serials;
+    std::vector<HeldStore> m_held_stores;
 #endif
 };
 
@@ -2243,6 +2323,16 @@ extern "C" int32_t elaris_ladybird_frame(ElarisLadybirdView* handle, ElarisLadyb
     Gfx::IntSize size;
     double device_pixel_ratio = 1;
     if (!displayed_bitmap(*handle, size, device_pixel_ratio)) {
+#if defined(AK_OS_MACOS) || defined(AK_OS_LINUX)
+        // A frame shared with the host's GPU may have no CPU bitmap at all.
+        auto displayed = handle->view->backing_stores().displayed_frame();
+        if (handle->view->gpu_frames() && displayed.has_value() && !displayed->size.is_empty()) {
+            *out_frame = {displayed->size.width(),       displayed->size.height(), displayed->size.width() * 4,
+                          ELARIS_LADYBIRD_PIXEL_FORMAT_RGBA8, displayed->device_pixel_ratio, 0, 0,
+                          displayed->size.width(),       displayed->size.height(), handle->view->serial()};
+            return succeed();
+        }
+#endif
         s_last_error.clear();
         return ELARIS_LADYBIRD_NO_FRAME;
     }
@@ -2288,14 +2378,22 @@ extern "C" int32_t elaris_ladybird_copy_frame(ElarisLadybirdView* handle, uint8_
     return succeed();
 }
 
+extern "C" int32_t elaris_ladybird_gpu_frames_supported() {
+#if defined(AK_OS_MACOS) || (defined(AK_OS_LINUX) && defined(USE_VULKAN_DMABUF_IMAGES))
+    return 1;
+#else
+    return 0;
+#endif
+}
+
 extern "C" int32_t elaris_ladybird_set_gpu_frames(ElarisLadybirdView* handle, int32_t enabled) {
     if (!handle)
         return fail("view is required");
     if (!on_owner_thread(handle->bridge))
         return fail("frame presentation must change on the initialization thread");
-#if defined(AK_OS_MACOS)
+#if defined(AK_OS_MACOS) || (defined(AK_OS_LINUX) && defined(USE_VULKAN_DMABUF_IMAGES))
     if (!handle->view->set_gpu_frames(enabled != 0))
-        return fail("no GPU is available to copy frames on");
+        return fail("no GPU is available to share frames with");
     return succeed();
 #else
     (void)enabled;
@@ -2331,7 +2429,42 @@ extern "C" int32_t elaris_ladybird_gpu_frame(ElarisLadybirdView* handle, ElarisL
     case Elaris::FrameBlitter::Result::Failed:
         return fail("could not copy the frame on the GPU");
     }
-    *out_frame = {copy, width, height, frame->device_pixel_ratio, handle->view->serial()};
+    *out_frame = {};
+    out_frame->io_surface = copy;
+    out_frame->width = width;
+    out_frame->height = height;
+    out_frame->device_pixel_ratio = frame->device_pixel_ratio;
+    out_frame->serial = handle->view->serial();
+    return succeed();
+#elif defined(AK_OS_LINUX) && defined(USE_VULKAN_DMABUF_IMAGES)
+    if (!handle->view->gpu_frames())
+        return fail("the view does not present GPU frames");
+    auto frame = handle->view->backing_stores().displayed_frame();
+    if (!frame.has_value() || !frame->shared_image_buffer || !frame->bitmap_id.has_value() || frame->size.is_empty()) {
+        s_last_error.clear();
+        return ELARIS_LADYBIRD_NO_FRAME;
+    }
+    auto const* dmabuf = frame->shared_image_buffer->linux_dmabuf_handle();
+    if (!dmabuf || dmabuf->planes.size() != 1)
+        return fail("the frame is not a single-plane dmabuf");
+    auto const& plane = dmabuf->planes[0];
+    if (plane.object_index >= dmabuf->objects.size())
+        return fail("the frame's dmabuf plane has no object");
+    // The host owns the descriptor it is given, so it keeps the buffer past this view's own use of it.
+    auto fd = dup(dmabuf->objects[plane.object_index].fd());
+    if (fd < 0)
+        return fail("could not duplicate the frame's dmabuf descriptor");
+    *out_frame = {};
+    out_frame->dmabuf_fd = fd;
+    out_frame->dmabuf_offset = plane.offset;
+    out_frame->dmabuf_stride = plane.pitch;
+    out_frame->dmabuf_modifier = dmabuf->modifier;
+    out_frame->dmabuf_format = dmabuf->drm_format;
+    out_frame->bitmap_id = *frame->bitmap_id;
+    out_frame->width = frame->size.width();
+    out_frame->height = frame->size.height();
+    out_frame->device_pixel_ratio = frame->device_pixel_ratio;
+    out_frame->serial = handle->view->serial();
     return succeed();
 #else
     return fail("GPU frames are not available on this platform");
@@ -2346,6 +2479,8 @@ extern "C" int32_t elaris_ladybird_release_frames(ElarisLadybirdView* handle, ui
 #if defined(AK_OS_MACOS)
     if (auto* blitter = handle->view->blitter())
         blitter->release_completed(completed_serial);
+#elif defined(AK_OS_LINUX)
+    handle->view->release_read(completed_serial);
 #else
     (void)completed_serial;
 #endif

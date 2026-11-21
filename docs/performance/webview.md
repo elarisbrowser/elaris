@@ -46,7 +46,23 @@ three are busy the frame waits, and the engine shows it when one is released.
 
 Frames keep their alpha as the Compositor wrote it; the CPU path forced it opaque.
 
-`ELARIS_CPU_FRAMES=1` selects the copying path described below, which Linux always uses.
+`ELARIS_CPU_FRAMES=1` selects the copying path described below.
+
+### Linux (opt-in, untested on a GPU)
+
+`ELARIS_GPU_FRAMES=1` shares each frame as the dmabuf of Ladybird's own backing store. The
+bridge asks the Compositor for linear buffers only (what Rune imports), presents without CPU
+memory, and returns a duplicate of the store's descriptor with its stride, offset, format and
+modifier. The engine caches one Rune `DmabufBuffer` per store and pushes a `Dmabuf` per frame.
+Rune copies it into a texture of its own and calls back when it has read it; until then the
+bridge holds the store, since the Compositor would otherwise paint into it
+(`ElarisWebView::release_backing_store`). A frame Rune replaced before drawing it is covered by
+the next one it read.
+
+It needs a Ladybird built with Vulkan dmabuf images (`USE_VULKAN_DMABUF_IMAGES`, which wants
+`glslangValidator`); the devcontainer image lacks it, so there the bridge reports no support and
+frames are copied as before. Known gaps: the Compositor's GPU is not matched to Rune's (a hybrid
+laptop can fail to import and show nothing), and there are no tab thumbnails from GPU frames.
 
 ## Measuring
 
@@ -158,7 +174,9 @@ processes left, five runs out of five.
 
 ## Not verified
 
-- The GPU frame path is measured at 60 frames/s on `css-animation.html` and `scroll.html`, but
+- The Linux GPU path is compiled (`./elaris linux-build`, and its dmabuf C++ against Ladybird's
+  headers) but has never run: Docker on this Mac has no GPU or dmabuf support.
+- The macOS GPU frame path is measured at 60 frames/s on `css-animation.html` and `scroll.html`, but
   colours, tearing, resizing and real trackpad feel have not been checked by eye, and it has not
   been compared against the CPU path on a heavy page.
 

@@ -1,6 +1,8 @@
 //! Safe owner-thread wrappers for the optional Ladybird C ABI.
 
 use std::ffi::{CStr, CString, c_char, c_void};
+#[cfg(target_os = "linux")]
+use std::os::fd::FromRawFd;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
 use std::path::PathBuf;
@@ -54,6 +56,12 @@ struct RawEvent {
 #[repr(C)]
 struct RawGpuFrame {
     io_surface: *mut c_void,
+    dmabuf_fd: i32,
+    dmabuf_offset: u32,
+    dmabuf_stride: u32,
+    dmabuf_format: u32,
+    dmabuf_modifier: u64,
+    bitmap_id: i32,
     width: i32,
     height: i32,
     device_pixel_ratio: f64,
@@ -64,6 +72,12 @@ impl Default for RawGpuFrame {
     fn default() -> Self {
         Self {
             io_surface: std::ptr::null_mut(),
+            dmabuf_fd: -1,
+            dmabuf_offset: 0,
+            dmabuf_stride: 0,
+            dmabuf_format: 0,
+            dmabuf_modifier: 0,
+            bitmap_id: -1,
             width: 0,
             height: 0,
             device_pixel_ratio: 1.0,
@@ -160,6 +174,7 @@ unsafe extern "C" {
     fn elaris_ladybird_resize(view: *mut RawView, width: i32, height: i32, scale: f64) -> i32;
     fn elaris_ladybird_frame(view: *mut RawView, out_frame: *mut RawFrame) -> i32;
     fn elaris_ladybird_copy_frame(view: *mut RawView, rgba: *mut u8, length: usize) -> i32;
+    fn elaris_ladybird_gpu_frames_supported() -> i32;
     fn elaris_ladybird_set_gpu_frames(view: *mut RawView, enabled: i32) -> i32;
     fn elaris_ladybird_gpu_frame(view: *mut RawView, out_frame: *mut RawGpuFrame) -> i32;
     fn elaris_ladybird_release_frames(view: *mut RawView, completed_serial: u64) -> i32;
@@ -552,6 +567,12 @@ impl Drop for Owner {
 /// operations and callbacks must stay on the initializing thread.
 pub struct Ladybird {
     owner: Rc<Owner>,
+}
+
+/// Whether this build of the bridge can share frames with the host's GPU.
+pub fn gpu_frames_supported() -> bool {
+    // SAFETY: A pure query with no arguments.
+    unsafe { elaris_ladybird_gpu_frames_supported() != 0 }
 }
 
 impl Ladybird {
@@ -1102,7 +1123,7 @@ impl WebView {
         }))
     }
 
-    /// Makes [`Self::gpu_frame`] available. macOS only. Once on, call [`Self::release_frames`] as
+    /// Makes [`Self::gpu_frame`] available (macOS and Linux). Once on, call [`Self::release_frames`] as
     /// the host's GPU finishes frames.
     pub fn set_gpu_frames(&mut self, enabled: bool) -> Result<(), String> {
         // SAFETY: The view is live on its owner's thread.
@@ -1119,11 +1140,31 @@ impl WebView {
             BUSY => return Ok(GpuPoll::Busy),
             _ => return Err(last_error()),
         }
-        if raw.io_surface.is_null() || raw.width <= 0 || raw.height <= 0 {
+        #[cfg(target_os = "linux")]
+        let owned_fd = (raw.dmabuf_fd >= 0).then(|| {
+            // SAFETY: The bridge duplicated this descriptor for the host, which owns it now.
+            unsafe { std::os::fd::OwnedFd::from_raw_fd(raw.dmabuf_fd) }
+        });
+        #[cfg(target_os = "macos")]
+        let shared = !raw.io_surface.is_null();
+        #[cfg(target_os = "linux")]
+        let shared = owned_fd.is_some();
+        if !shared || raw.width <= 0 || raw.height <= 0 {
             return Err("Ladybird described an unsupported GPU frame".to_owned());
         }
         Ok(GpuPoll::Frame(GpuFrame {
+            #[cfg(target_os = "macos")]
             io_surface: raw.io_surface,
+            #[cfg(target_os = "linux")]
+            dmabuf: super::DmabufPlane {
+                fd: owned_fd.expect("checked above"),
+                offset: raw.dmabuf_offset,
+                stride: raw.dmabuf_stride,
+                format: raw.dmabuf_format,
+                modifier: raw.dmabuf_modifier,
+            },
+            #[cfg(target_os = "linux")]
+            bitmap_id: raw.bitmap_id,
             width: raw.width as u32,
             height: raw.height as u32,
             scale: raw.device_pixel_ratio,

@@ -150,11 +150,23 @@ typedef struct {
     uint64_t serial; /* Increases with every frame the view presents. */
 } ElarisLadybirdFrame;
 
-/* The frame on display as a GPU surface of the bridge's own, which the host can sample for as long as it has not
- * reported the frame replaced and drawn (elaris_ladybird_release_frames). io_surface is a borrowed IOSurfaceRef
- * (macOS) of exactly width x height pixels. */
+/* The frame on display, shared with the host's GPU instead of copied.
+ *
+ * macOS: io_surface is a borrowed IOSurfaceRef of exactly width x height pixels, the bridge's own copy of the frame,
+ * which stays unchanged until elaris_ladybird_release_frames() reports a newer frame drawn.
+ *
+ * Linux: dmabuf_fd is a descriptor the host owns for the frame's single-plane dmabuf (DRM format dmabuf_format, at
+ * dmabuf_offset with rows of dmabuf_stride bytes, laid out by dmabuf_modifier). bitmap_id names the backing store, whose
+ * dmabuf the same descriptor refers to every time it shows a frame. Ladybird does not paint into the store again until
+ * elaris_ladybird_release_frames() reports this frame, or a newer one, read. */
 typedef struct {
     void* io_surface;
+    int32_t dmabuf_fd;
+    uint32_t dmabuf_offset;
+    uint32_t dmabuf_stride;
+    uint32_t dmabuf_format;
+    uint64_t dmabuf_modifier;
+    int32_t bitmap_id;
     int32_t width;
     int32_t height;
     double device_pixel_ratio;
@@ -306,12 +318,16 @@ int32_t elaris_ladybird_frame(ElarisLadybirdView* view, ElarisLadybirdFrame* out
  * elaris_ladybird_frame() last described, and clears its damage. The copy is the caller's; no Ladybird memory
  * outlives this call. */
 int32_t elaris_ladybird_copy_frame(ElarisLadybirdView* view, uint8_t* rgba, size_t length);
-/* Makes elaris_ladybird_gpu_frame() available for the view (macOS only): frames are copied on the GPU into surfaces
- * the host samples in place, with no CPU copy. */
+/* Whether this build can share frames with the host's GPU: macOS always, Linux when Ladybird was built with Vulkan
+ * dmabuf images. Elaris shows frames through the CPU otherwise. */
+int32_t elaris_ladybird_gpu_frames_supported(void);
+/* Makes elaris_ladybird_gpu_frame() available for the view (macOS and Linux): frames are shared with the host's GPU
+ * and sampled in place, with no CPU copy. */
 int32_t elaris_ladybird_set_gpu_frames(ElarisLadybirdView* view, int32_t enabled);
 /* Copies the frame on display into a GPU surface, or returns ELARIS_LADYBIRD_NO_FRAME or ELARIS_LADYBIRD_BUSY. */
 int32_t elaris_ladybird_gpu_frame(ElarisLadybirdView* view, ElarisLadybirdGpuFrame* out_frame);
-/* Reports the newest frame serial the host's GPU has finished drawing; the surfaces of older frames are free. */
+/* Reports the newest frame serial the host's GPU has finished with (macOS: drawn; Linux: read), freeing the surfaces
+ * of older frames. */
 int32_t elaris_ladybird_release_frames(ElarisLadybirdView* view, uint64_t completed_serial);
 int32_t elaris_ladybird_mouse_event(ElarisLadybirdView* view, const ElarisLadybirdMouseEvent* event);
 typedef enum {

@@ -41,10 +41,10 @@ struct View {
     /// Whether the view belongs to the shared private session.
     private: bool,
     /// The newest GPU frame serial the bridge was told Rune finished drawing.
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     released_serial: u64,
     /// A new frame is waiting for Rune's GPU to finish with a surface.
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     gpu_waiting: bool,
 }
 
@@ -66,7 +66,7 @@ pub(super) struct Runtime {
     hidden_order: Option<Vec<TabId>>,
     hidden_frames_dirty: bool,
     /// Wakes the engine thread when Rune's GPU finishes a frame.
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     gpu_waker: Option<std::sync::Arc<Waker>>,
 }
 
@@ -102,7 +102,7 @@ impl Runtime {
                 )
                 .then(Vec::new),
                 hidden_frames_dirty: false,
-                #[cfg(target_os = "macos")]
+                #[cfg(any(target_os = "macos", target_os = "linux"))]
                 gpu_waker: None,
             },
             download_directory_error,
@@ -337,11 +337,11 @@ impl Runtime {
     fn insert_view(
         &mut self,
         tab: TabId,
-        #[cfg_attr(not(target_os = "macos"), allow(unused_mut))] mut view: WebView,
+        #[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(unused_mut))] mut view: WebView,
         surface: Surface,
         private: bool,
     ) -> Result<(), String> {
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         if let Some(gpu) = &surface.gpu {
             view.set_gpu_frames(true)?;
             let waker = match &self.gpu_waker {
@@ -366,9 +366,9 @@ impl Runtime {
                 preview_committed: false,
                 last_thumbnail: None,
                 private,
-                #[cfg(target_os = "macos")]
+                #[cfg(any(target_os = "macos", target_os = "linux"))]
                 released_serial: 0,
-                #[cfg(target_os = "macos")]
+                #[cfg(any(target_os = "macos", target_os = "linux"))]
                 gpu_waiting: false,
             },
         );
@@ -376,7 +376,7 @@ impl Runtime {
     }
 
     /// Frees the surfaces Rune's GPU has finished with, and shows the frames that waited for one.
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn release_gpu_frames(&mut self) -> Vec<Update> {
         let mut updates = Vec::new();
         for (&tab, view) in &mut self.views {
@@ -429,9 +429,9 @@ impl Runtime {
     /// Turns the events Ladybird raised into updates, showing each tab's new frame if it has
     /// one. Events from views that have closed since are dropped.
     pub(super) fn handle_events(&mut self) -> Vec<Update> {
-        #[cfg(target_os = "macos")]
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         let mut updates = self.release_gpu_frames();
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         let mut updates = Vec::new();
         let events = std::mem::take(&mut *self.events.borrow_mut());
         let mut painted: Vec<(TabId, bool)> = Vec::new();

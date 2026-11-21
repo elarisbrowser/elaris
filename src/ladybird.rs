@@ -7,7 +7,7 @@ mod accessibility;
 mod bridge;
 pub use accessibility::{AccessibilityEvent, AccessibilityNode};
 #[cfg(feature = "ladybird-bridge")]
-pub use bridge::{Ladybird, Waker, WebView};
+pub use bridge::{Ladybird, Waker, WebView, gpu_frames_supported};
 
 /// Ladybird's hit-tested target. Opening it uses the retained navigation descriptor.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -232,12 +232,20 @@ pub struct Frame {
     pub serial: u64,
 }
 
-/// The frame a view displays as a GPU surface ([`WebView::gpu_frame`]).
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// The frame a view displays, shared with the GPU instead of copied ([`WebView::gpu_frame`]).
+#[derive(Debug)]
 pub struct GpuFrame {
     /// A borrowed `IOSurfaceRef` of exactly `width` x `height` pixels, the bridge's own copy of the
     /// frame. It stays unchanged until [`WebView::release_frames`] reports a newer frame drawn.
+    #[cfg(target_os = "macos")]
     pub io_surface: *mut std::ffi::c_void,
+    /// The frame's single-plane dmabuf, a descriptor this frame owns. The same backing store
+    /// shows the same buffer every time, named by `bitmap_id`.
+    #[cfg(target_os = "linux")]
+    pub dmabuf: DmabufPlane,
+    /// The backing store the frame is in, which the bridge reuses for later frames.
+    #[cfg(target_os = "linux")]
+    pub bitmap_id: i32,
     /// The frame's size in device pixels.
     pub width: u32,
     pub height: u32,
@@ -245,8 +253,19 @@ pub struct GpuFrame {
     pub serial: u64,
 }
 
+/// Where a dmabuf's one plane lies, as the DRM format and modifier describe it.
+#[cfg(target_os = "linux")]
+#[derive(Debug)]
+pub struct DmabufPlane {
+    pub fd: std::os::fd::OwnedFd,
+    pub offset: u32,
+    pub stride: u32,
+    pub format: u32,
+    pub modifier: u64,
+}
+
 /// What asking for the frame as a GPU surface found.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug)]
 pub enum GpuPoll {
     /// The view has not presented a frame yet.
     NoFrame,
