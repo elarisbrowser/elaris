@@ -237,7 +237,7 @@ pub(in crate::ui) fn zoom_indicator(
     let caption = format!("{}%", state.browser.page_zoom(tab));
     let trigger = el()
         .key("zoom-indicator")
-        .min_w(theme::ICON_BUTTON)
+        .w(theme::ZOOM_CHIP_WIDTH)
         .h(theme::ICON_BUTTON)
         .transition(Transition::scale(0.9).combined(Transition::opacity()))
         .center()

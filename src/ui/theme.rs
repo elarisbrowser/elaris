@@ -333,6 +333,8 @@ pub(crate) const FIND_INSET: f32 = 16.0;
 pub(crate) const PERMISSION_PROMPT_ARM_SECONDS: f64 = 0.6;
 /// How long the page-zoom chip stays up after a zoom change, in seconds.
 pub(crate) const ZOOM_CHIP_SECONDS: f64 = 2.0;
+/// The page-zoom chip's fixed width, so a change in its number does not resize it.
+pub(crate) const ZOOM_CHIP_WIDTH: f32 = 48.0;
 /// How long the exit hint stays up after a page enters fullscreen.
 pub(crate) const FULLSCREEN_NOTICE_SECONDS: f64 = 4.0;
 pub(crate) const FIND_RADIUS: f32 = radius::LG;
