@@ -11,7 +11,7 @@
 </div>
 
 <p align="center">
-  <img src="assets/elaris-pre-alpha-demo.png" alt="Elaris browser window" width="900" />
+  <img src="assets/elaris_demo.png" alt="Elaris browser window" width="900" />
 </p>
 
 > **Pre-alpha.** Elaris is under active development. Expect rough edges and breaking changes.
