@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::omnibox;
+use crate::storage::SessionTab;
 use rune::Mods;
 
 #[test]
@@ -31,6 +32,31 @@ fn blank_window_startup_does_not_create_a_web_tab() {
     assert!(state.browser.tabs().is_empty());
     assert!(!state.omnibox.open);
 }
+
+#[test]
+fn horizontal_session_startup_opens_a_new_tab_without_discarding_restored_tabs() {
+    let mut state = AppState::new(None);
+    state.settings.tab_layout = crate::settings::TabLayout::Horizontal;
+    let session = Session::new(
+        vec![SessionTab {
+            url: "https://restored.example/".into(),
+            title: "Restored".into(),
+            favicon: None,
+        }],
+        0,
+    );
+
+    state.open_start_page(None, Some(&session));
+
+    assert_eq!(state.browser.tabs().len(), 1);
+    assert_eq!(
+        state.browser.active_tab().unwrap().url,
+        "https://restored.example/"
+    );
+    assert!(state.omnibox.open);
+    assert_eq!(state.omnibox.mode, omnibox::Mode::New);
+}
+
 #[test]
 fn reduced_motion_centers_the_resized_omnibox_immediately() {
     let mut state = AppState::new(None);

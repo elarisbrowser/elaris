@@ -482,6 +482,12 @@ impl AppState {
         } else if let Some(session) = session {
             self.restore_session(session);
         }
+        if start.is_none()
+            && self.settings.startup == StartupMode::RestoreSession
+            && self.horizontal_tabs()
+        {
+            self.open_omnibox(omnibox::Mode::New);
+        }
     }
 }
 
