@@ -8,6 +8,7 @@ mod config;
 #[cfg(target_os = "macos")]
 mod drag_overlay_macos;
 mod engine;
+mod haptics;
 mod input;
 mod internal;
 #[cfg(target_os = "macos")]

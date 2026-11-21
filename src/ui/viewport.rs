@@ -6,10 +6,12 @@ pub(crate) mod menu;
 mod picker;
 pub(crate) use picker::PICKER;
 
+use super::icons;
+use crate::browser::swipe::{Direction, SwipeView};
 use crate::browser::{Browser, split};
 use crate::{engine::ViewCommand, tab::TabId};
 use elaris::ladybird::{Edit, MouseKind};
-use rune::{El, Phase, el};
+use rune::{El, Phase, el, icon};
 use rune::{Ime, Key, KeyEvent, Tx};
 
 use super::VIEWPORT;
@@ -509,6 +511,47 @@ pub(crate) fn page_origin(state: &AppState) -> [f32; 2] {
     }
 }
 
+/// The round arrow that slides in from the edge a history swipe pulls from, filling with the
+/// accent once releasing will navigate.
+fn swipe_indicator(swipe: SwipeView, theme: &Theme) -> El {
+    let size = theme::SWIPE_INDICATOR;
+    // From fully hidden past the edge to resting just inside it.
+    let offset = -size + (size + theme::SWIPE_INDICATOR_INSET) * swipe.progress;
+    let (left, right, glyph) = match swipe.direction {
+        Direction::Back => (Some(offset), None, &icons::BACK),
+        Direction::Forward => (None, Some(offset), &icons::FORWARD),
+    };
+    let (fill, color) = if swipe.armed {
+        (theme.accent, theme.page)
+    } else {
+        (theme.overlay_panel, theme.icon)
+    };
+    let min = theme::SWIPE_INDICATOR_MIN_OPACITY;
+    // A full-height track keeps the circle centred vertically on the page.
+    el().key("swipe-indicator")
+        .pin(left, Some(0.0), right, Some(0.0))
+        .w(size)
+        .center()
+        .inert()
+        .a11y_hidden()
+        .child(
+            el().size(size, size)
+                .radius(size / 2.0)
+                .fill(fill)
+                .scale(if swipe.armed {
+                    1.0
+                } else {
+                    theme::SWIPE_INDICATOR_REST_SCALE
+                })
+                .scale_motion(theme::SWIPE_INDICATOR_SETTLE)
+                .border(1.0, theme.overlay_border)
+                .shadow(4.0, 16.0, theme.overlay_shadow)
+                .opacity(min + (1.0 - min) * swipe.progress)
+                .center()
+                .child(icon(glyph, theme::SWIPE_INDICATOR_ICON).color(color)),
+        )
+}
+
 pub(super) fn page_hover(page: El, tab: &crate::tab::Tab, theme: &Theme) -> El {
     use rune::tok::{radius, space, type_};
 
@@ -579,6 +622,9 @@ fn page(
         if !internal {
             page = page_hover(page, tab, theme);
         }
+        if let Some(swipe) = state.browser.swipe().filter(|swipe| swipe.tab == tab.id()) {
+            page = page.child(swipe_indicator(swipe, theme));
+        }
     }
     let mut page = page.w_full().h_full();
     if !internal && let Some(tree) = id.and_then(|id| state.browser.accessibility_tree(id)) {
@@ -643,7 +689,9 @@ fn page(
         })
         .on_wheel(move |state: &mut AppState, wheel, _| {
             if let Some(id) = id.filter(|_| !internal) {
-                state.browser.wheel_page(id, wheel);
+                if state.browser.wheel_page(id, wheel) {
+                    crate::haptics::threshold();
+                }
                 true
             } else {
                 false

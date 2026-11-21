@@ -28,6 +28,7 @@ mod engine_sync;
 mod input_routing;
 pub(crate) mod peek;
 pub(crate) mod split;
+pub(crate) mod swipe;
 
 use crate::address::url_for_address;
 use crate::engine::{Command, Engine, Surface, ViewCommand};

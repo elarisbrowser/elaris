@@ -3,6 +3,7 @@
 use elaris::ladybird::{Key, MouseKind};
 use rune::{KeyEvent, Mods, PointerButton, WheelEvent};
 
+use super::swipe::{Direction, Step, SwipeView, Swipes};
 use super::{Browser, TabId, ViewCommand};
 use crate::input;
 
@@ -10,6 +11,7 @@ use crate::input;
 pub(super) struct Held {
     drag: Option<(TabId, i32)>,
     keys: Vec<(TabId, Option<rune::PhysicalKeyCode>, Key)>,
+    swipes: Swipes,
 }
 
 impl Browser {
@@ -124,9 +126,33 @@ impl Browser {
         }
     }
 
-    pub(crate) fn wheel_page(&self, id: TabId, wheel: WheelEvent) {
+    /// Sends the scroll to the page unless it is a history swipe. Returns whether the swipe just
+    /// armed, for the view's haptic.
+    pub(crate) fn wheel_page(&mut self, id: TabId, wheel: WheelEvent) -> bool {
         if !self.accepts_pointer(id) {
-            return;
+            return false;
+        }
+        let history = self
+            .tab(id)
+            .map_or((false, false), |tab| (tab.can_go_back, tab.can_go_forward));
+        let step = self
+            .input
+            .swipes
+            .wheel(id, &wheel, |direction| match direction {
+                Direction::Back => history.0,
+                Direction::Forward => history.1,
+            });
+        match step {
+            Step::Page => {}
+            Step::Swallowed { armed_now } => return armed_now,
+            Step::Navigate(id, Direction::Back) => {
+                self.go_back(id);
+                return false;
+            }
+            Step::Navigate(id, Direction::Forward) => {
+                self.go_forward(id);
+                return false;
+            }
         }
         let phase = input::wheel_phase(wheel.precise, wheel.phase, wheel.momentum);
         let mut event = input::wheel(
@@ -143,6 +169,12 @@ impl Browser {
             .filter(|(owner, _)| *owner == id)
             .map_or(0, |(_, bits)| bits);
         self.send(id, ViewCommand::Mouse(event));
+        false
+    }
+
+    /// The history swipe in progress, if any.
+    pub(crate) fn swipe(&self) -> Option<SwipeView> {
+        self.input.swipes.view()
     }
 
     pub(crate) fn key(
@@ -198,5 +230,6 @@ impl Browser {
             self.cancel_pointer(id);
         }
         self.input.keys.clear();
+        self.input.swipes.cancel();
     }
 }

@@ -251,6 +251,17 @@ pub(crate) const HEADER_GROUP_GAP: f32 = space::S3;
 /// How far buttons and rows shrink while pressed, springing back on release.
 pub(crate) const PRESS_SCALE: f32 = 0.97;
 
+/// The round back/forward indicator a history swipe slides in from the page's edge.
+pub(crate) const SWIPE_INDICATOR: f32 = 56.0;
+pub(crate) const SWIPE_INDICATOR_ICON: f32 = 24.0;
+/// How far in from the edge it rests once the swipe is armed.
+pub(crate) const SWIPE_INDICATOR_INSET: f32 = space::S6;
+/// How visible it is as the swipe starts, before it grows to full opacity.
+pub(crate) const SWIPE_INDICATOR_MIN_OPACITY: f32 = 0.35;
+/// Its scale before arming; it pops to full size when releasing will navigate.
+pub(crate) const SWIPE_INDICATOR_REST_SCALE: f32 = 0.86;
+pub(crate) const SWIPE_INDICATOR_SETTLE: Anim = Anim::new(Curve::tween(0.14, Easing::EASE_OUT));
+
 pub(super) const HIGHLIGHT_MOTION: Spring = Spring::new(0.10, 0.0);
 pub(super) const HOVER_ENTER: Anim = Anim::new(Curve::tween(0.08, Easing::EASE_OUT));
 pub(super) const HOVER_EXIT: Anim = Anim::new(Curve::tween(0.15, Easing::EASE_OUT));
