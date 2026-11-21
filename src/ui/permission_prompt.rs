@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use rune::tok::{space, type_};
-use rune::{El, col, row, text};
+use rune::{El, Icon, col, row, text};
 use rune_kit::{Button, ButtonVariant};
 
 use crate::app::AppState;
 use crate::engine::ViewCommand;
 use crate::permissions::PermissionKind;
 use crate::tab::{Tab, TabId};
+use crate::ui::icons;
 use crate::ui::theme::{self, Theme};
 
 /// Keeps page timing from steering browser UI: prompts ignore clicks until armed, and
@@ -128,6 +129,7 @@ pub(super) fn view(state: &AppState, theme: &Theme, origin: [f32; 2]) -> Option<
     Some(panel(
         "website-permission",
         "Website permission",
+        Some(permission_glyph(kind)),
         title,
         site,
         actions,
@@ -183,6 +185,7 @@ fn external_url(state: &AppState, tab: &Tab, theme: &Theme, origin: [f32; 2]) ->
     Some(panel(
         "external-link",
         "Open in another application",
+        None,
         title,
         detail,
         actions,
@@ -191,15 +194,35 @@ fn external_url(state: &AppState, tab: &Tab, theme: &Theme, origin: [f32; 2]) ->
     ))
 }
 
+fn permission_glyph(kind: PermissionKind) -> &'static Icon {
+    match kind {
+        PermissionKind::Microphone => &icons::MICROPHONE,
+        PermissionKind::Camera => &icons::CAMERA,
+        PermissionKind::Location => &icons::LOCATION,
+        PermissionKind::Notifications => &icons::NOTIFICATIONS,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn panel(
     key: &'static str,
     label: &'static str,
+    glyph: Option<&'static Icon>,
     title: String,
     detail: String,
     actions: El,
     theme: &Theme,
     origin: [f32; 2],
 ) -> El {
+    let heading = text(title).font(type_::BODY).color(theme.text).wrap();
+    let heading = match glyph {
+        Some(glyph) => row()
+            .center_y()
+            .gap(space::S2)
+            .child(rune::icon(glyph, theme::ICON).color(theme.text_muted))
+            .child(heading),
+        None => row().child(heading),
+    };
     col()
         .key(key)
         .absolute(origin[0] + theme::FIND_INSET, origin[1] + theme::FIND_INSET)
@@ -212,7 +235,7 @@ fn panel(
         .border(theme::OMNIBOX_BORDER_WIDTH, theme.overlay_border)
         .role("group")
         .label(label)
-        .child(text(title).font(type_::BODY).color(theme.text).wrap())
+        .child(heading)
         .child(
             text(detail)
                 .font(type_::LABEL)
