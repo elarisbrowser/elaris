@@ -13,6 +13,7 @@ function(elaris_add_ladybird_bridge)
     elaris_patch_ladybird(color-picker-cancel Libraries/LibWeb/HTML/HTMLInputElement.cpp)
     elaris_patch_ladybird(file-picker-document Libraries/LibWeb/Page/Page.cpp)
     elaris_patch_ladybird(external-url-host Libraries/LibWebView/ViewImplementation.cpp)
+    elaris_patch_ladybird(audio-output Libraries/LibWebView/HelperProcess.cpp)
     target_include_directories(LibWebView PRIVATE "${ELARIS_BRIDGE_DIR}/src")
     elaris_patch_ladybird(private-request-servers
         Libraries/LibWebView/Application.cpp
