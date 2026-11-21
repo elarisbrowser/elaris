@@ -7,6 +7,22 @@ use crate::omnibox;
 use crate::tab::{Tab, TabId, TabSection};
 use crate::ui::{TabDropTarget, viewport::focus_key};
 
+enum CloseAction {
+    Tabs {
+        keep: Option<TabId>,
+    },
+    #[cfg(target_os = "linux")]
+    Window,
+}
+
+/// Targets stay open until the entire close request has been approved.
+pub(super) struct ClosingTabs {
+    targets: Vec<TabId>,
+    action: CloseAction,
+    checking: usize,
+    cancelled: bool,
+}
+
 impl super::AppState {
     #[cfg(target_os = "macos")]
     pub(crate) fn can_reopen_closed_tab(&self) -> bool {
@@ -57,22 +73,124 @@ impl super::AppState {
 
     /// Closes the tab and opens the omnibox when the window becomes empty.
     pub(crate) fn close(&mut self, tab: TabId) {
-        if !self.browser.preflight_close(tab) {
-            self.finish_close(tab);
+        if self.browser.tab(tab).is_some() {
+            self.begin_close(vec![tab], CloseAction::Tabs { keep: None });
         }
     }
 
-    pub(super) fn finish_close(&mut self, tab: TabId) {
+    #[cfg(target_os = "linux")]
+    pub(crate) fn request_window_close(&mut self, tx: &mut Tx) {
+        let targets = self.browser.tabs().iter().map(Tab::id).collect();
+        if self.begin_close(targets, CloseAction::Window) {
+            tx.close_window();
+        }
+    }
+
+    fn begin_close(&mut self, targets: Vec<TabId>, action: CloseAction) -> bool {
+        if self.closing_tabs.is_some() {
+            return false;
+        }
         self.cancel_tab_drag();
+        self.closing_tabs = Some(ClosingTabs {
+            targets,
+            action,
+            checking: 0,
+            cancelled: false,
+        });
+        self.advance_close()
+    }
+
+    /// Returns true when the host should close the window.
+    fn advance_close(&mut self) -> bool {
+        let Some(mut close) = self.closing_tabs.take() else {
+            return false;
+        };
+        while let Some(&tab) = close.targets.get(close.checking) {
+            let Some(target) = self.browser.tab(tab) else {
+                return false;
+            };
+            if target.awaiting_close {
+                return false;
+            }
+            if self.browser.preflight_close(tab) {
+                self.closing_tabs = Some(close);
+                return false;
+            }
+            close.checking += 1;
+        }
+
+        let keep = match close.action {
+            CloseAction::Tabs { keep } => keep,
+            #[cfg(target_os = "linux")]
+            CloseAction::Window => return true,
+        };
         self.site_permissions_open = false;
         self.page_menu = Default::default();
-        if let Some(tab) = self.browser.tab(tab) {
-            self.remember_closed(RecentlyClosedTab::from_tab(tab));
+        for tab in close.targets.into_iter().rev() {
+            if let Some(tab_state) = self.browser.tab(tab) {
+                self.remember_closed(RecentlyClosedTab::from_tab(tab_state));
+                self.browser.close_tab(tab);
+            }
         }
-        self.browser.close_tab(tab);
+        if let Some(keep) = keep {
+            self.browser.exit_split(None);
+            self.activate(keep);
+        }
         self.sync_find_tab();
         if self.browser.tabs().is_empty() {
             self.open_omnibox(omnibox::Mode::New);
+        }
+        false
+    }
+
+    pub(super) fn poll_tab_close(&mut self, polled: &crate::browser::Polled, tx: &mut Tx) {
+        let Some(close) = &mut self.closing_tabs else {
+            return;
+        };
+        let checking = close.targets[close.checking];
+        close.cancelled |= close
+            .targets
+            .iter()
+            .any(|&tab| self.browser.tab(tab).is_none())
+            || matches!(close.action, CloseAction::Tabs { keep: Some(tab) } if self.browser.tab(tab).is_none())
+            || polled
+                .committed
+                .iter()
+                .any(|(tab, _, _)| close.targets.contains(tab));
+        #[cfg(target_os = "linux")]
+        if matches!(close.action, CloseAction::Window) {
+            close.cancelled |= self.browser.tabs().len() != close.targets.len();
+        }
+        let decision = polled
+            .close_decisions
+            .iter()
+            .find_map(|&(tab, approved)| (tab == checking).then_some(approved));
+        match decision {
+            Some(true) if !close.cancelled => {
+                let previous = self.browser.active_tab().map(Tab::id);
+                close.checking += 1;
+                if self.advance_close() {
+                    tx.close_window();
+                } else if self.closing_tabs.is_none()
+                    && self.browser.active_tab().map(Tab::id) != previous
+                {
+                    let key = if self.omnibox.open {
+                        "omnibox-input"
+                    } else {
+                        focus_key(&self.browser)
+                    };
+                    tx.focus(key, false);
+                }
+            }
+            Some(_) => self.closing_tabs = None,
+            None if self
+                .browser
+                .tab(checking)
+                .is_none_or(|tab| !tab.awaiting_close) =>
+            {
+                self.closing_tabs = None;
+            }
+            None => {}
         }
     }
 
@@ -96,21 +214,17 @@ impl super::AppState {
     }
 
     pub(crate) fn close_others(&mut self, tab: TabId) {
-        self.cancel_tab_drag();
         if self.browser.tab(tab).is_none() {
             return;
         }
-        let closed: Vec<RecentlyClosedTab> = self
+        let targets = self
             .browser
             .tabs()
             .iter()
-            .filter(|candidate| candidate.id() != tab)
-            .map(RecentlyClosedTab::from_tab)
+            .map(Tab::id)
+            .filter(|&id| id != tab)
             .collect();
-        for closed_tab in closed.into_iter().rev() {
-            self.remember_closed(closed_tab);
-        }
-        self.browser.close_other_tabs(tab);
+        self.begin_close(targets, CloseAction::Tabs { keep: Some(tab) });
     }
 
     #[cfg(test)]

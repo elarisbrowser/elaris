@@ -766,41 +766,6 @@ impl Browser {
         tab
     }
 
-    /// Closes every tab except `id` and leaves it active.
-    pub(crate) fn close_other_tabs(&mut self, id: TabId) {
-        if self.tab(id).is_none() {
-            return;
-        }
-        let closed: Vec<TabId> = self
-            .tabs
-            .iter()
-            .filter(|tab| tab.id() != id && !tab.is_internal())
-            .map(Tab::id)
-            .collect();
-        let removed: Vec<TabId> = self
-            .tabs
-            .iter()
-            .filter(|tab| tab.id() != id)
-            .map(Tab::id)
-            .collect();
-        if self.active != Some(id) {
-            self.reset_input();
-        }
-        self.split = None;
-        self.tabs.retain(|tab| tab.id() == id);
-        if let Some(engine) = &self.engine {
-            for tab in closed {
-                engine.send(Command::Close(tab));
-                engine.discard_tab_updates(tab);
-            }
-        }
-        for tab in removed {
-            tab.release();
-        }
-        self.recent.retain(|&tab| tab == id);
-        self.activate_tab(id);
-    }
-
     /// Records the display scale. The view calls it as it builds, because only the view knows it.
     pub(crate) fn note_scale(&self, scale: f32) {
         self.window.scale.set(scale);

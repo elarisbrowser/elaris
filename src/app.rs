@@ -221,6 +221,7 @@ pub(crate) struct AppState {
     window_title: Option<String>,
     context_menu: Option<(Option<TabId>, PointerPress)>,
     recently_closed: Vec<RecentlyClosedTab>,
+    closing_tabs: Option<tabs::ClosingTabs>,
 }
 
 impl Default for AppState {
@@ -386,6 +387,7 @@ impl AppState {
             window_title: None,
             context_menu: None,
             recently_closed: Vec::new(),
+            closing_tabs: None,
         };
         state.browser.split_view_limit = state.settings.split_view_limit;
         #[cfg(not(test))]

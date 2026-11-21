@@ -86,3 +86,60 @@ fn closing_the_last_tab_returns_to_the_empty_omnibox() {
     assert!(state.omnibox.open);
     assert!(state.omnibox.input.text.is_empty());
 }
+
+#[test]
+fn bulk_close_waits_for_every_page_and_cancels_without_removing_tabs() {
+    use crate::engine::{Command, Engine, TabUpdate, Update};
+
+    let mut state = AppState::new(Some("first.example"));
+    let first = state.browser.active_tab().unwrap().id();
+    let second = state.browser.open_tab("second.example").unwrap();
+    let kept = state.browser.open_tab("kept.example").unwrap();
+    let (engine, fake) = Engine::fake();
+    state.browser.connect(engine);
+    for id in [first, second] {
+        state.browser.tab_mut(id).unwrap().engine.pending_load = None;
+    }
+
+    let decide = |state: &mut AppState, tab, approved| {
+        assert!(
+            fake.commands
+                .try_iter()
+                .any(|command| matches!(command, Command::PreflightClose(id) if id == tab))
+        );
+        fake.updates
+            .send(Update::CloseDecision(tab, approved))
+            .unwrap();
+        let polled = state.browser.poll();
+        state.poll_tab_close(&polled, &mut Tx::default());
+    };
+
+    state.close_others(kept);
+    decide(&mut state, first, true);
+    assert_eq!(state.browser.tabs().len(), 3);
+    decide(&mut state, second, false);
+    assert_eq!(state.browser.tabs().len(), 3);
+    assert!(state.recently_closed().is_empty());
+
+    state.close_others(kept);
+    decide(&mut state, first, true);
+    fake.updates
+        .send(Update::Tab(
+            first,
+            TabUpdate::NavigationCommitted("https://replacement.example".into()),
+        ))
+        .unwrap();
+    let polled = state.browser.poll();
+    state.poll_tab_close(&polled, &mut Tx::default());
+    decide(&mut state, second, true);
+    assert_eq!(state.browser.tabs().len(), 3);
+    assert!(state.recently_closed().is_empty());
+
+    state.close_others(kept);
+    decide(&mut state, first, true);
+    assert_eq!(state.browser.tabs().len(), 3);
+    decide(&mut state, second, true);
+    assert_eq!(state.browser.tabs().len(), 1);
+    assert_eq!(state.browser.active_tab().unwrap().id(), kept);
+    assert_eq!(state.recently_closed().len(), 2);
+}

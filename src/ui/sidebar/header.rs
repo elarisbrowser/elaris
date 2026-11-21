@@ -194,7 +194,7 @@ pub(in crate::ui) fn linux_window_controls(state: &AppState, theme: &Theme) -> V
             theme::ICON_BUTTON,
             theme,
         )
-        .on_press_tx(|_: &mut AppState, tx| tx.close_window()),
+        .on_press_tx(AppState::request_window_close),
     );
     controls
 }
