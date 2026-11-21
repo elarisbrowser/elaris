@@ -11,6 +11,7 @@ use crate::browser::{
     peek::{self, Destination},
     split,
 };
+use crate::engine::Surface;
 use crate::tab::TabId;
 
 use super::{page_status, theme};
@@ -65,7 +66,7 @@ pub(super) struct PeekAnimation {
 
 pub(super) enum AnimationKind {
     Dismiss {
-        frame: rune::Pixels,
+        frame: Surface,
         status: Option<String>,
         target: [f32; 4],
     },
@@ -262,7 +263,7 @@ pub(crate) fn dismiss(state: &mut AppState, tx: &mut Tx) -> bool {
             peek.page.id(),
             from,
             AnimationKind::Dismiss {
-                frame: peek.page.surface.pixels.clone(),
+                frame: peek.page.surface.clone(),
                 status: page_status(&peek.page).map(str::to_owned),
                 target,
             },

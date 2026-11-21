@@ -12,6 +12,7 @@ use rune::{Anim, El, Spring, SpringPair, Transition, col, el, text};
 
 use crate::app::AppState;
 use crate::browser::peek::{self, Destination};
+use crate::engine::Surface;
 use crate::tab::{Tab, TabId};
 
 use super::{controls, icons, theme};
@@ -31,7 +32,7 @@ fn card(state: &AppState, theme: &theme::Theme, reduced: bool, peek: &peek::Peek
     let id = page.id();
     let mut content = input::webpage(id);
     let status = page_status(page);
-    content = paint_page(content, &page.surface.pixels, status, theme);
+    content = paint_page(content, &page.surface, status, theme);
     if status.is_none() {
         content = super::viewport::page_hover(content, page, theme);
     }
@@ -90,13 +91,13 @@ fn page_status(page: &Tab) -> Option<&str> {
     })
 }
 
-fn paint_page(content: El, frame: &rune::Pixels, status: Option<&str>, theme: &theme::Theme) -> El {
+fn paint_page(content: El, frame: &Surface, status: Option<&str>, theme: &theme::Theme) -> El {
     if let Some(status) = status {
         content
             .center()
             .child(text(status).font(type_::BODY).color(theme.text_muted))
     } else {
-        content.pixels(frame)
+        super::viewport::page_surface(content, frame)
     }
 }
 
@@ -138,7 +139,7 @@ fn transition_card(
                 .as_ref()
                 .filter(|peek| peek.page.id() == animation.id)?;
             (
-                &peek.page.surface.pixels,
+                &peek.page.surface,
                 page_status(&peek.page),
                 1.0,
                 1.0 - animation.progress,
