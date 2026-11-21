@@ -27,6 +27,24 @@ pub enum Edit {
     Commit(String),
 }
 
+/// A page-owned dialog awaiting a response from the browser.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PageDialog {
+    pub request_id: u64,
+    pub kind: PageDialogKind,
+    pub message: String,
+    pub default_text: String,
+}
+
+/// The kind of user response the page expects.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PageDialogKind {
+    Alert,
+    Confirm,
+    Prompt,
+    BeforeUnload,
+}
+
 /// What a view raised, delivered with the id it was created with.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
@@ -51,6 +69,7 @@ pub enum Event {
     Tooltip(String),
     /// Ladybird's standard cursor name.
     Cursor(String),
+    PageDialog(Option<PageDialog>),
     ContextMenu(PageMenu),
     Clipboard(String),
     ImeCaret(Option<[i32; 4]>),

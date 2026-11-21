@@ -184,6 +184,10 @@ pub(crate) enum ViewCommand {
     },
     /// Clears Ladybird's active match and highlights.
     FindEnd,
+    ReplyToDialog {
+        request_id: u64,
+        response: Option<String>,
+    },
     /// Reads the current webpage selection without blocking the UI thread.
     SelectedText {
         request_id: u64,
@@ -274,6 +278,7 @@ pub(crate) enum TabUpdate {
     HoveredLink(String),
     Tooltip(String),
     Cursor(String),
+    PageDialog(Option<elaris::ladybird::PageDialog>),
     Error(String),
 }
 

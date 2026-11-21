@@ -11,6 +11,7 @@ pub(crate) mod hover_highlight;
 mod icons;
 pub(crate) mod internal;
 mod omnibox;
+mod page_dialog;
 pub(crate) mod peek;
 mod sidebar;
 mod tab_preview;
@@ -173,6 +174,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     ));
     overlays.extend(tab_switcher::view(state, &theme, height, reduced_motion));
     site_permissions::view(state, cx, &theme, &mut overlays, reduced_motion);
+    page_dialog::view(state, &theme, &mut overlays);
     let (hover_enter, hover_exit) = if reduced_motion {
         (rune::Anim::INSTANT, rune::Anim::INSTANT)
     } else {

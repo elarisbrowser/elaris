@@ -28,6 +28,10 @@ struct Events {
     std::string hovered_link;
     std::string tooltip;
     std::string cursor;
+    int32_t dialog_kind{};
+    uint64_t dialog_id{};
+    std::string dialog_message;
+    std::string dialog_default;
     std::string clipboard;
     bool editing{};
     unsigned title{};
@@ -63,6 +67,12 @@ static void on_event(void* context, ElarisLadybirdEvent const* event) {
         break;
     case ELARIS_LADYBIRD_LOAD_ERROR:
         ++events.load_errors;
+        break;
+    case ELARIS_LADYBIRD_PAGE_DIALOG:
+        events.dialog_kind = event->value;
+        events.dialog_id = event->request_id;
+        events.dialog_message = event->text;
+        events.dialog_default = event->selection;
         break;
     case ELARIS_LADYBIRD_HOVERED_LINK:
         events.hovered_link = event->text;
@@ -120,6 +130,68 @@ static void on_event(void* context, ElarisLadybirdEvent const* event) {
         events.selected_text = event->text;
         break;
     }
+}
+
+static bool page_dialogs(ElarisLadybird* bridge, ElarisLadybirdView* view, Events& events) {
+    auto match_dialog = [&](ElarisLadybirdDialogKind kind, char const* message, char const* default_text = "") {
+        if (pump_until(bridge, [&] {
+                return events.dialog_id && events.dialog_kind == kind && events.dialog_message == message &&
+                       events.dialog_default == default_text;
+            }))
+            return true;
+        std::cerr << "Expected dialog: " << message << "; observed: " << events.dialog_message << '\n';
+        return false;
+    };
+    auto reply = [&](bool accepted, std::string const& response = {}) {
+        return check(elaris_ladybird_reply_to_dialog(view, events.dialog_id, accepted,
+                         reinterpret_cast<uint8_t const*>(response.data()), response.size()), "reply to page dialog");
+    };
+    // Script continues only when each individual reply has been delivered back to the page.
+    auto url = "data:text/html,<script>alert('Hello');"
+               "let confirmed=confirm('Continue');"
+               "let text=prompt('Name','Default');"
+               "let canceled=prompt('Cancel');"
+               "document.title=[confirmed,text,canceled===null].join('-')</script>";
+    return check(elaris_ladybird_load(view, url), "load dialog page") &&
+           match_dialog(ELARIS_LADYBIRD_DIALOG_ALERT, "Hello") && reply(true) &&
+           match_dialog(ELARIS_LADYBIRD_DIALOG_CONFIRM, "Continue") && reply(false) &&
+           match_dialog(ELARIS_LADYBIRD_DIALOG_PROMPT, "Name", "Default") && reply(true, "Elaris") &&
+           match_dialog(ELARIS_LADYBIRD_DIALOG_PROMPT, "Cancel") && reply(false) &&
+           pump_until(bridge, [&] { return events.last_title == "false-Elaris-true"; });
+}
+
+static bool page_before_unload(ElarisLadybird* bridge, ElarisLadybirdView* view, Events& events) {
+    auto page = R"HTML(data:text/html,<title>Unsaved page</title><button style="width:100px;height:36px" onclick="document.title='Unsaved edits'; onbeforeunload=(event)=>event.preventDefault()">Edit</button>)HTML";
+    auto next = "data:text/html,<title>Next page</title>";
+    if (!check(elaris_ladybird_load(view, page), "load beforeunload page") ||
+        !pump_until(bridge, [&] { return events.last_title == "Unsaved page"; }))
+        return false;
+
+    ElarisLadybirdMouseEvent click{};
+    click.x = 30;
+    click.y = 20;
+    click.button = ELARIS_LADYBIRD_BUTTON_PRIMARY;
+    click.buttons = ELARIS_LADYBIRD_BUTTON_PRIMARY;
+    click.click_count = 1;
+    click.type = ELARIS_LADYBIRD_MOUSE_DOWN;
+    if (!check(elaris_ladybird_mouse_event(view, &click), "activate beforeunload page"))
+        return false;
+    click.type = ELARIS_LADYBIRD_MOUSE_UP;
+    click.buttons = 0;
+    if (!check(elaris_ladybird_mouse_event(view, &click), "release beforeunload activation") ||
+        !pump_until(bridge, [&] { return events.last_title == "Unsaved edits"; }))
+        return false;
+
+    auto navigate = [&] {
+        return check(elaris_ladybird_load(view, next), "navigate from beforeunload page") &&
+               pump_until(bridge, [&] { return events.dialog_kind == ELARIS_LADYBIRD_DIALOG_BEFORE_UNLOAD; });
+    };
+    if (!navigate() || !check(elaris_ladybird_reply_to_dialog(view, events.dialog_id, 0, nullptr, 0), "stay on page") ||
+        !pump_until(bridge, [&] { return events.dialog_kind == ELARIS_LADYBIRD_DIALOG_CLOSED; }) ||
+        events.last_title != "Unsaved edits" || !navigate() ||
+        !check(elaris_ladybird_reply_to_dialog(view, events.dialog_id, 1, nullptr, 0), "leave page"))
+        return false;
+    return pump_until(bridge, [&] { return events.last_title == "Next page"; });
 }
 
 static bool page_find(ElarisLadybird* bridge, ElarisLadybirdView* view, Events& events) {
@@ -460,6 +532,8 @@ int main(int argc, char** argv) {
             passed = page_find(bridge, view, events);
         if (passed && cycle == 0)
             passed = page_input(bridge, view, view_id, events_by_view);
+        if (passed && cycle == 0)
+            passed = page_dialogs(bridge, view, events) && page_before_unload(bridge, view, events);
         elaris_ladybird_destroy_view(view);
         auto close_deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
         while (std::chrono::steady_clock::now() < close_deadline) {

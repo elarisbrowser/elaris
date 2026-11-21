@@ -32,7 +32,16 @@ typedef enum {
     ELARIS_LADYBIRD_HOVERED_LINK = 17,
     ELARIS_LADYBIRD_TOOLTIP = 18,
     ELARIS_LADYBIRD_CURSOR = 19,
+    ELARIS_LADYBIRD_PAGE_DIALOG = 20,
 } ElarisLadybirdEventKind;
+
+typedef enum {
+    ELARIS_LADYBIRD_DIALOG_CLOSED = 0,
+    ELARIS_LADYBIRD_DIALOG_ALERT = 1,
+    ELARIS_LADYBIRD_DIALOG_CONFIRM,
+    ELARIS_LADYBIRD_DIALOG_PROMPT,
+    ELARIS_LADYBIRD_DIALOG_BEFORE_UNLOAD,
+} ElarisLadybirdDialogKind;
 
 typedef enum {
     ELARIS_LADYBIRD_DOWNLOAD_IN_PROGRESS = 1,
@@ -229,6 +238,9 @@ int32_t elaris_ladybird_open_context_target(ElarisLadybirdView*, uint64_t reques
 int32_t elaris_ladybird_find(ElarisLadybirdView*, const char* query, uint64_t request_id);
 int32_t elaris_ladybird_find_next(ElarisLadybirdView*, uint64_t request_id);
 int32_t elaris_ladybird_find_previous(ElarisLadybirdView*, uint64_t request_id);
+/* PAGE_DIALOG events carry the dialog kind in value and prompt default in selection. */
+int32_t elaris_ladybird_reply_to_dialog(ElarisLadybirdView*, uint64_t request_id, int32_t accepted,
+                                      const uint8_t* response, size_t response_size);
 int32_t elaris_ladybird_find_end(ElarisLadybirdView*);
 /* Reads the current webpage selection and returns it asynchronously with the request ID. */
 int32_t elaris_ladybird_selected_text(ElarisLadybirdView*, uint64_t request_id);

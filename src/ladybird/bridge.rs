@@ -139,6 +139,13 @@ unsafe extern "C" {
     fn elaris_ladybird_find(view: *mut RawView, query: *const c_char, request_id: u64) -> i32;
     fn elaris_ladybird_find_next(view: *mut RawView, request_id: u64) -> i32;
     fn elaris_ladybird_find_previous(view: *mut RawView, request_id: u64) -> i32;
+    fn elaris_ladybird_reply_to_dialog(
+        view: *mut RawView,
+        request_id: u64,
+        accepted: i32,
+        response: *const u8,
+        response_size: usize,
+    ) -> i32;
     fn elaris_ladybird_find_end(view: *mut RawView) -> i32;
     fn elaris_ladybird_selected_text(view: *mut RawView, request_id: u64) -> i32;
     fn elaris_ladybird_edit(view: *mut RawView, command: i32, bytes: *const u8, len: usize) -> i32;
@@ -219,6 +226,29 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
             17 => Event::HoveredLink(text),
             18 => Event::Tooltip(text),
             19 => Event::Cursor(text),
+            20 => {
+                use super::{PageDialog, PageDialogKind};
+                let kind = match raw.value {
+                    1 => Some(PageDialogKind::Alert),
+                    2 => Some(PageDialogKind::Confirm),
+                    3 => Some(PageDialogKind::Prompt),
+                    4 => Some(PageDialogKind::BeforeUnload),
+                    _ => None,
+                };
+                Event::PageDialog(kind.map(|kind| PageDialog {
+                    request_id: raw.request_id,
+                    kind,
+                    message: text,
+                    default_text: if raw.selection.is_null() {
+                        String::new()
+                    } else {
+                        // SAFETY: The bridge lends this string for the duration of the callback.
+                        unsafe { CStr::from_ptr(raw.selection) }
+                            .to_string_lossy()
+                            .into_owned()
+                    },
+                }))
+            }
             12 => {
                 let status = match raw.download_status {
                     1 | 2 => DownloadStatus::Downloading,
@@ -548,6 +578,25 @@ impl WebView {
     }
 
     /// Clears the active match and all highlights.
+    /// Replies to the requested page dialog if its document still owns it.
+    pub fn reply_to_dialog(
+        &mut self,
+        request_id: u64,
+        response: Option<&str>,
+    ) -> Result<(), String> {
+        let text = response.unwrap_or_default();
+        // SAFETY: The view is live on its owner thread and the text is borrowed for the call.
+        status_result(unsafe {
+            elaris_ladybird_reply_to_dialog(
+                self.raw.as_ptr(),
+                request_id,
+                i32::from(response.is_some()),
+                text.as_ptr(),
+                text.len(),
+            )
+        })
+    }
+
     pub fn find_end(&mut self) -> Result<(), String> {
         // SAFETY: The view is live on its owner's thread.
         status_result(unsafe { elaris_ladybird_find_end(self.raw.as_ptr()) })

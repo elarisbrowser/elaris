@@ -154,6 +154,14 @@ struct ElarisLadybird {
     std::unique_ptr<ElarisDownloadObserver> download_observer;
 };
 
+struct PendingPageDialog {
+    uint64_t id{};
+    ElarisLadybirdDialogKind kind{};
+    std::string message;
+    Utf16String prompt_text;
+    AK::Function<void(bool)> before_unload;
+};
+
 struct ElarisLadybirdView {
     ElarisLadybird* bridge{};
     uint64_t id{};
@@ -165,6 +173,7 @@ struct ElarisLadybirdView {
     std::map<uint64_t, Web::HTML::PreparedNavigationDescriptor> pending_tabs;
     // ViewImplementation reports find callbacks in the order its page IPC handles requests.
     std::deque<uint64_t> pending_find_requests;
+    PendingPageDialog dialog;
 };
 
 static AK::OwnPtr<ElarisApplication> s_application;
@@ -348,6 +357,53 @@ static std::string to_utf8(AK::Utf16String const& value) {
     return {reinterpret_cast<char const*>(utf8.bytes().data()), utf8.bytes().size()};
 }
 
+static void emit_page_dialog(ElarisLadybirdView const& handle) {
+    if (!handle.bridge->callback)
+        return;
+    auto const& dialog = handle.dialog;
+    auto prompt = to_utf8(dialog.prompt_text);
+    ElarisLadybirdEvent event{};
+    event.kind = ELARIS_LADYBIRD_PAGE_DIALOG;
+    event.view_id = handle.id;
+    event.request_id = dialog.id;
+    event.value = dialog.kind;
+    event.text = dialog.message.c_str();
+    event.selection = prompt.c_str();
+    handle.bridge->callback(handle.bridge->context, &event);
+}
+
+static void finish_page_dialog(ElarisLadybirdView& handle, bool accepted, Utf16String response = {}) {
+    auto dialog = AK::move(handle.dialog);
+    handle.dialog = {};
+    switch (dialog.kind) {
+    case ELARIS_LADYBIRD_DIALOG_CLOSED:
+        return;
+    case ELARIS_LADYBIRD_DIALOG_ALERT:
+        handle.view->alert_closed();
+        break;
+    case ELARIS_LADYBIRD_DIALOG_CONFIRM:
+        handle.view->confirm_closed(accepted);
+        break;
+    case ELARIS_LADYBIRD_DIALOG_PROMPT:
+        handle.view->prompt_closed(accepted ? Optional<Utf16String>{AK::move(response)} : Optional<Utf16String>{});
+        break;
+    case ELARIS_LADYBIRD_DIALOG_BEFORE_UNLOAD:
+        dialog.before_unload(accepted);
+        break;
+    }
+    emit_page_dialog(handle);
+}
+
+static void show_page_dialog(ElarisLadybirdView& handle, ElarisLadybirdDialogKind kind, std::string message,
+                             Utf16String prompt_text = {}, AK::Function<void(bool)> before_unload = {}) {
+    finish_page_dialog(handle, false);
+    handle.dialog = {++handle.next_request, kind, AK::move(message), AK::move(prompt_text), AK::move(before_unload)};
+    if (handle.bridge->callback)
+        emit_page_dialog(handle);
+    else
+        finish_page_dialog(handle, kind == ELARIS_LADYBIRD_DIALOG_BEFORE_UNLOAD);
+}
+
 static std::string to_utf8(URL::URL const& url) {
     auto utf8 = url.to_string().to_byte_string();
     return {utf8.characters(), utf8.length()};
@@ -503,9 +559,34 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
     apply_selection_colors(*theme_buffer.data<Gfx::SystemTheme>());
 
     auto view = ElarisWebView::create(AK::move(theme_buffer), {1024, 768}, mode);
-    auto* handle = new ElarisLadybirdView{bridge, view_id, AK::move(view), {}, 0, 0, {}, {}, {}};
+    auto* handle = new ElarisLadybirdView{bridge, view_id, AK::move(view), {}, 0, 0, {}, {}, {}, {}};
     bridge->views.push_back(handle);
     // The callbacks live in the view, which the handle owns, so they never outlive it.
+    handle->view->on_request_alert = [handle](auto const& message) {
+        show_page_dialog(*handle, ELARIS_LADYBIRD_DIALOG_ALERT, to_utf8(message));
+    };
+    handle->view->on_request_confirm = [handle](auto const& message) {
+        show_page_dialog(*handle, ELARIS_LADYBIRD_DIALOG_CONFIRM, to_utf8(message));
+    };
+    handle->view->on_request_prompt = [handle](auto const& message, auto const& default_text) {
+        show_page_dialog(*handle, ELARIS_LADYBIRD_DIALOG_PROMPT, to_utf8(message), default_text);
+    };
+    handle->view->on_request_before_unload = [handle](auto const& source, auto complete) {
+        show_page_dialog(*handle, ELARIS_LADYBIRD_DIALOG_BEFORE_UNLOAD,
+                         {reinterpret_cast<char const*>(source.bytes().data()), source.bytes().size()},
+                         {}, AK::move(complete));
+    };
+    handle->view->on_request_set_prompt_text = [handle](auto const& text) {
+        if (handle->dialog.kind == ELARIS_LADYBIRD_DIALOG_PROMPT) {
+            handle->dialog.prompt_text = text;
+            emit_page_dialog(*handle);
+        }
+    };
+    handle->view->on_request_accept_dialog = [handle] {
+        finish_page_dialog(*handle, true, handle->dialog.prompt_text);
+    };
+    handle->view->on_request_dismiss_dialog = [handle] { finish_page_dialog(*handle, false); };
+    handle->view->on_before_browser_initiated_navigation = [handle] { finish_page_dialog(*handle, false); };
     handle->view->on_link_hover = [handle](auto const& url) {
         emit(handle, ELARIS_LADYBIRD_HOVERED_LINK, to_utf8(url));
     };
@@ -540,6 +621,8 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
             emit(handle, ELARIS_LADYBIRD_LOAD_ERROR, "This page could not be loaded.");
     };
     handle->view->on_web_content_crashed = [handle](auto) {
+        handle->dialog = {};
+        emit_page_dialog(*handle);
         emit(handle, ELARIS_LADYBIRD_LOAD_ERROR, "This page stopped responding.");
     };
     handle->view->on_browser_history_traversal_complete = [handle] {
@@ -746,6 +829,20 @@ extern "C" int32_t elaris_ladybird_find_previous(ElarisLadybirdView* handle, uin
         return fail("find navigation must run on the initialization thread");
     handle->pending_find_requests.push_back(request_id);
     handle->view->find_in_page_previous_match();
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_reply_to_dialog(ElarisLadybirdView* handle, uint64_t request_id, int32_t accepted,
+                                                       uint8_t const* response, size_t response_size) {
+    if (!handle || !on_owner_thread(handle->bridge) || (response_size && !response))
+        return fail("invalid page dialog response");
+    if (!request_id || handle->dialog.id != request_id)
+        return succeed();
+    auto bytes = response_size ? AK::StringView{response, response_size} : AK::StringView{};
+    if (!Utf8View(bytes).validate())
+        return fail("invalid UTF-8 page dialog response");
+    auto text = Utf16String::from_utf8(bytes);
+    finish_page_dialog(*handle, accepted != 0, AK::move(text));
     return succeed();
 }
 
@@ -1216,10 +1313,13 @@ extern "C" void elaris_ladybird_destroy_view(ElarisLadybirdView* handle) {
         fail("view destruction must run on the initialization thread");
         return;
     }
-    handle->view->request_close();
+    // The host has already committed to removing this view. Keep its page alive just long
+    // enough to run Ladybird's close path without raising a dialog for a removed tab.
+    auto close = handle->view->prepare_for_close_without_prompting();
     auto& views = handle->bridge->views;
     views.erase(std::remove(views.begin(), views.end(), handle), views.end());
     delete handle;
+    close();
 }
 
 extern "C" void elaris_ladybird_destroy(ElarisLadybird* bridge) {
@@ -1231,11 +1331,8 @@ extern "C" void elaris_ladybird_destroy(ElarisLadybird* bridge) {
     }
     (void)elaris_ladybird_cancel_active_downloads(bridge);
     bridge->download_observer.reset();
-    for (auto* view : bridge->views) {
-        view->view->request_close();
-        delete view;
-    }
-    bridge->views.clear();
+    while (!bridge->views.empty())
+        elaris_ladybird_destroy_view(bridge->views.back());
     delete bridge;
     s_application = nullptr;
     s_download_directory_override.clear();

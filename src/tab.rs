@@ -83,6 +83,7 @@ pub(crate) struct Tab {
     pub(crate) hovered_link: String,
     pub(crate) tooltip: String,
     pub(crate) page_cursor: rune::Cursor,
+    pub(crate) page_dialog: Option<PageDialog>,
     pub(crate) favicon: Option<Pixels>,
     pub(crate) favicon_data: Option<elaris::ladybird::Favicon>,
     pub(crate) error: Option<String>,
@@ -114,6 +115,11 @@ pub(crate) struct Applied {
     pub(crate) frames: u64,
 }
 
+pub(crate) struct PageDialog {
+    pub(crate) request: elaris::ladybird::PageDialog,
+    pub(crate) response: rune::TextEdit,
+}
+
 impl Tab {
     pub(crate) fn new(id: TabId, url: String) -> Self {
         Self {
@@ -127,6 +133,7 @@ impl Tab {
             hovered_link: String::new(),
             tooltip: String::new(),
             page_cursor: rune::Cursor::Default,
+            page_dialog: None,
             favicon: None,
             favicon_data: None,
             error: None,
@@ -159,6 +166,7 @@ impl Tab {
             hovered_link: String::new(),
             tooltip: String::new(),
             page_cursor: rune::Cursor::Default,
+            page_dialog: None,
             favicon: None,
             favicon_data: None,
             error: None,
@@ -206,6 +214,13 @@ impl Tab {
                 self.find.apply_result(request_id, result);
             }
             TabUpdate::ImeCaret(rect) => self.ime_caret = rect,
+            TabUpdate::PageDialog(dialog) => {
+                self.page_dialog = dialog.map(|request| {
+                    let mut response = rune::TextEdit::default();
+                    response.replace_text(request.default_text.clone());
+                    PageDialog { request, response }
+                });
+            }
             TabUpdate::HoveredLink(url) => self.hovered_link = url,
             TabUpdate::Tooltip(text) => {
                 self.tooltip = text

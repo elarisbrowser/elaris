@@ -314,6 +314,7 @@ impl Runtime {
                 Event::HoveredLink(url) => TabUpdate::HoveredLink(url),
                 Event::Tooltip(text) => TabUpdate::Tooltip(text),
                 Event::Cursor(name) => TabUpdate::Cursor(name),
+                Event::PageDialog(dialog) => TabUpdate::PageDialog(dialog),
                 Event::ContextMenu(menu) => {
                     updates.push(Update::ContextMenu(tab, menu));
                     continue;
@@ -442,6 +443,10 @@ fn apply_to_view(view: &mut View, command: ViewCommand, timing: &mut Timing) -> 
         ViewCommand::FindNext { request_id } => web.find_next(request_id),
         ViewCommand::FindPrevious { request_id } => web.find_previous(request_id),
         ViewCommand::FindEnd => web.find_end(),
+        ViewCommand::ReplyToDialog {
+            request_id,
+            response,
+        } => web.reply_to_dialog(request_id, response.as_deref()),
         ViewCommand::SelectedText { request_id } => web.selected_text(request_id),
         ViewCommand::Edit(edit) => web.edit(&edit),
         ViewCommand::Load(url) => web.load(&url),
