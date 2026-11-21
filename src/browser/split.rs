@@ -278,8 +278,10 @@ mod tests {
 
     #[test]
     fn configured_split_limit_exposes_additional_grid_cells() {
-        let mut browser = Browser::default();
-        browser.split_view_limit = 4;
+        let mut browser = Browser {
+            split_view_limit: 4,
+            ..Browser::default()
+        };
         let tabs: Vec<_> = [
             "one.example",
             "two.example",
