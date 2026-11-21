@@ -35,6 +35,9 @@ impl Browser {
         for update in updates {
             match update {
                 // A tab closed since the engine reported this has nothing to show it.
+                Update::Tab(id, crate::engine::TabUpdate::WheelResult(used)) => {
+                    polled.changed |= self.wheel_result(id, used);
+                }
                 Update::Tab(id, update) => {
                     if matches!(update, crate::engine::TabUpdate::WebFullscreen(true))
                         && self.active != Some(id)

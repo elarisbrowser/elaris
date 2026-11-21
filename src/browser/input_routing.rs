@@ -132,16 +132,10 @@ impl Browser {
         if !self.accepts_pointer(id) {
             return false;
         }
-        let history = self
-            .tab(id)
-            .map_or((false, false), |tab| (tab.can_go_back, tab.can_go_forward));
         let step = self
             .input
             .swipes
-            .wheel(id, &wheel, |direction| match direction {
-                Direction::Back => history.0,
-                Direction::Forward => history.1,
-            });
+            .wheel(id, &wheel, crate::trackpad::natural_scrolling());
         match step {
             Step::Page => {}
             Step::Swallowed { armed_now } => return armed_now,
@@ -170,6 +164,19 @@ impl Browser {
             .map_or(0, |(_, bits)| bits);
         self.send(id, ViewCommand::Mouse(event));
         false
+    }
+
+    /// Ladybird finished a wheel event; returns whether that began a history swipe.
+    pub(super) fn wheel_result(&mut self, id: TabId, used: bool) -> bool {
+        let (back, forward) = self
+            .tab(id)
+            .map_or((false, false), |tab| (tab.can_go_back, tab.can_go_forward));
+        self.input
+            .swipes
+            .page_result(id, used, |direction| match direction {
+                Direction::Back => back,
+                Direction::Forward => forward,
+            })
     }
 
     /// The history swipe in progress, if any.
