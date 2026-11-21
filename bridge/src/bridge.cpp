@@ -48,6 +48,7 @@
 #include <UI/Qt/MicrophoneAuthorizerMacOS.h>
 
 #include "notification_backend_macos.h"
+#include "spell_checker_macos.h"
 #elif defined(AK_OS_LINUX)
 #include <LibWebView/NotificationBackendFreedesktop.h>
 #endif
@@ -123,7 +124,11 @@ class ElarisApplication final : public WebView::Application {
   public:
     ElarisLadybird* host{};
     explicit ElarisApplication(Optional<AK::ByteString> helper_directory = {})
-        : WebView::Application(AK::move(helper_directory)) {}
+        : WebView::Application(AK::move(helper_directory)) {
+#if defined(AK_OS_MACOS)
+        set_spell_checker(Elaris::make_spell_checker_macos());
+#endif
+    }
     // The host process is Elaris, not a Ladybird browser, so its own crashes are never captured or reported.
     bool captures_browser_crashes() const override { return false; }
     NonnullOwnPtr<WebView::NotificationBackend> create_notification_backend() override {

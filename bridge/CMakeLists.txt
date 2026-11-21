@@ -47,6 +47,7 @@ function(elaris_add_ladybird_bridge)
         set(objc_sources
             "${ELARIS_BRIDGE_DIR}/src/notification_backend_macos.mm"
             "${ELARIS_BRIDGE_DIR}/src/external_url_handler_macos.mm"
+            "${ELARIS_BRIDGE_DIR}/src/spell_checker_macos.mm"
             "${LADYBIRD_SOURCE_DIR}/UI/Qt/MicrophoneAuthorizerMacOS.mm")
         target_sources(elaris_ladybird PRIVATE ${objc_sources})
         set_source_files_properties(${objc_sources} PROPERTIES COMPILE_FLAGS "-fobjc-arc")
