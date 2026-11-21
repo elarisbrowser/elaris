@@ -24,6 +24,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     let focused = tx.focused() == Some(crate::ui::viewport::page_focus_key(&state.browser));
     let focus_changed = state.browser.set_viewport_focus(focused);
     let settling = crate::ui::settle_sidebar(state, tx);
+    let link_copy_settled = crate::ui::settle_copy_link(state, clock);
     let previous_peek = state.browser.peek.as_ref().map(|peek| peek.page.id());
     let mut polled = state.browser.poll();
     state.poll_tab_close(&polled, tx);
@@ -77,6 +78,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         || shared_settings_changed
         || shared_permissions_changed
         || context_menu_changed
+        || link_copy_settled
         || switcher_changed
         || tab_drag_changed
 }

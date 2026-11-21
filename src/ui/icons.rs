@@ -94,6 +94,12 @@ pub(crate) static SITE_CONTROLS: Icon = icon(
     "site-controls",
     r#"<rect x="2.5" y="2.5" width="11" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.35"/><path d="M4.5 6H11M4.5 10H11" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/><circle cx="7" cy="6" r="1.25" fill="currentColor"/><circle cx="9" cy="10" r="1.25" fill="currentColor"/>"#,
 );
+pub(crate) static LINK: Icon = icon(
+    "link",
+    r#"<path d="M7 9A2.75 2.75 0 0 0 11 9.25L12.75 7.5A2.75 2.75 0 0 0 8.85 3.6L8 4.45M9 7A2.75 2.75 0 0 0 5 6.75L3.25 8.5A2.75 2.75 0 0 0 7.15 12.4L8 11.55" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>"#,
+);
+/// The confirmation tick, as points in a 16-point box, so it can draw itself on.
+pub(crate) const TICK: [[f32; 2]; 3] = [[3.75, 8.25], [6.75, 11.25], [12.25, 5.0]];
 pub(crate) static MICROPHONE: Icon = icon(
     "microphone",
     r#"<rect x="6" y="2.25" width="4" height="7.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4 7.5A4 4 0 0 0 12 7.5M8 11.5V14M5.5 14H10.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>"#,

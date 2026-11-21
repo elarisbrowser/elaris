@@ -15,7 +15,7 @@ pub(crate) mod resize;
 pub(super) mod tabs;
 
 use rune::tok::type_;
-use rune::{El, Tx, col, icon, text};
+use rune::{El, Transition, Tx, col, icon, row, text};
 pub(crate) use tabs::context_menu;
 #[cfg(target_os = "macos")]
 pub(crate) use tabs::floating_drag_preview;
@@ -42,6 +42,10 @@ pub(crate) struct SidebarState {
     pub(in crate::ui) preferred_tab_widths:
         std::cell::RefCell<std::collections::HashMap<crate::tab::TabId, f32>>,
     pub(in crate::ui) hover: hover::Hover,
+    /// The pointer is over the sidebar, which reveals the omnibox's buttons.
+    pub(in crate::ui) pointer_inside: bool,
+    /// When the copy-link button stops showing its tick, on the window clock.
+    pub(in crate::ui) link_copied_until: Option<f64>,
 }
 
 impl Default for SidebarState {
@@ -55,6 +59,8 @@ impl Default for SidebarState {
             overflow_menu_open: false,
             preferred_tab_widths: Default::default(),
             hover: hover::Hover::default(),
+            pointer_inside: false,
+            link_copied_until: None,
         }
     }
 }
@@ -94,6 +100,12 @@ pub(crate) fn view(
         .h_full()
         .clip_soft(0.0)
         .pt(header_clearance)
+        .on_hover_change(|state: &mut AppState, inside, tx| {
+            if state.sidebar.pointer_inside != inside {
+                state.sidebar.pointer_inside = inside;
+                tx.animated();
+            }
+        })
         .child(body(state, theme, overlays, reduced_motion));
     if collapsed {
         sidebar.a11y_hidden()
@@ -112,7 +124,7 @@ fn body(state: &AppState, theme: &Theme, overlays: &mut Vec<El>, reduced_motion:
         .px(theme::SIDEBAR_PADDING)
         .pb(theme::VIEWPORT_INSET)
         .gap(theme::SIDEBAR_GAP)
-        .child(search_launcher(state, theme));
+        .child(search_launcher(state, theme, reduced_motion));
     if let Some(status) = state.status() {
         body = body.child(
             text(status)
@@ -135,7 +147,7 @@ fn body(state: &AppState, theme: &Theme, overlays: &mut Vec<El>, reduced_motion:
         )
 }
 
-fn search_launcher(state: &AppState, theme: &Theme) -> El {
+fn search_launcher(state: &AppState, theme: &Theme, reduced: bool) -> El {
     let address = state
         .browser
         .active_tab()
@@ -170,10 +182,79 @@ fn search_launcher(state: &AppState, theme: &Theme) -> El {
     .shortcut_hint("cmd+l")
     .focusable(true)
     .on_press_tx(app::open_from_launcher);
-    if state.browser.active_tab().is_some() {
-        launcher.child(site_controls(theme))
+    // Keep the buttons while site controls are open, since the popover is anchored to them.
+    let revealed = state.sidebar.pointer_inside || state.site_permissions_open;
+    if state.browser.active_tab().is_none() || !revealed {
+        return launcher;
+    }
+    let fade = if reduced {
+        Transition::none()
     } else {
-        launcher
+        Transition::opacity()
+    };
+    let mut buttons = row().key("omnibox-buttons").center_y().transition(fade);
+    if let Some(url) = address {
+        buttons = buttons.child(copy_link(state, url, theme, reduced));
+    }
+    launcher.child(buttons.child(site_controls(theme)))
+}
+
+/// Copies the page's address, then morphs its chain into a tick that draws itself on.
+fn copy_link(state: &AppState, url: &str, theme: &Theme, reduced: bool) -> El {
+    let copied = state.sidebar.link_copied_until.is_some();
+    let size = theme::CLOSE_BUTTON;
+    let inset = (size - theme::ICON) / 2.0;
+    let swap = |enter: Transition| if reduced { Transition::none() } else { enter };
+    let glyph = if copied {
+        rune::canvas(
+            rune::Shape::new()
+                .stroke(icons::TICK.to_vec(), theme::TICK_STROKE, theme.icon)
+                .view_box(theme::ICON, theme::ICON),
+        )
+        .key("copy-link-tick")
+        .transition(swap(Transition::asymmetric(
+            Transition::draw(),
+            Transition::opacity(),
+        )))
+    } else {
+        icon(&icons::LINK, theme::ICON)
+            .key("copy-link-chain")
+            .color(theme.icon)
+            .transition(swap(Transition::scale(0.6).allow_small_scale()))
+    };
+    let url = url.to_owned();
+    super::hover_highlight::attach(
+        rune::el()
+            .key("copy-link")
+            .size(size, size)
+            .radius(theme::ICON_BUTTON_RADIUS)
+            .press(theme.press)
+            .press_scale(theme::PRESS_SCALE)
+            .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
+            .role("button")
+            .focusable(true)
+            .label("Copy link")
+            .help(if copied { "Copied" } else { "Copy link" })
+            .on_press_tx(move |state: &mut AppState, tx| {
+                tx.copy(url.clone());
+                state.sidebar.link_copied_until = Some(tx.clock() + theme::COPY_LINK_CONFIRM);
+                tx.wake_after(std::time::Duration::from_secs_f64(theme::COPY_LINK_CONFIRM));
+                tx.animated();
+            })
+            .child(glyph.size(theme::ICON, theme::ICON).absolute(inset, inset)),
+        "copy-link",
+        super::hover_highlight::Group::Controls,
+    )
+}
+
+/// Returns the copy-link button to its chain once its tick has shown long enough.
+pub(crate) fn settle_copy_link(state: &mut AppState, clock: f64) -> bool {
+    match state.sidebar.link_copied_until {
+        Some(until) if clock >= until => {
+            state.sidebar.link_copied_until = None;
+            true
+        }
+        _ => false,
     }
 }
 

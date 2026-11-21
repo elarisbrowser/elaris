@@ -254,6 +254,9 @@ pub(crate) const HEADER_GROUP_GAP: f32 = space::S3;
 
 /// How far buttons and rows shrink while pressed, springing back on release.
 pub(crate) const PRESS_SCALE: f32 = 0.97;
+/// How long the copy-link button shows its tick, in seconds.
+pub(crate) const COPY_LINK_CONFIRM: f64 = 1.5;
+pub(crate) const TICK_STROKE: f32 = 1.5;
 
 /// The round back/forward indicator a history swipe slides in from the page's edge.
 pub(crate) const SWIPE_INDICATOR: f32 = 56.0;

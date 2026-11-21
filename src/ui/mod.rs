@@ -28,6 +28,7 @@ pub(crate) mod viewport;
 pub(crate) use viewport::menu::PageMenuState;
 
 pub(crate) use sidebar::resize::settle as settle_sidebar;
+pub(crate) use sidebar::settle_copy_link;
 pub(crate) use sidebar::{
     DragVisual, SidebarState, TabDragMoveResult, TabDragState, TabDropTarget,
     toggle as toggle_sidebar,
