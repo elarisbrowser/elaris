@@ -162,6 +162,35 @@ processes left, five runs out of five.
 - *Waking on Ladybird's IPC file descriptors.* `EventLoopImplementationUnix::pump` downcasts the
   installed manager to the `final` `EventLoopManagerUnix`, so a host cannot wrap it to learn the
   notifier descriptors, and the Mach port transport keeps its notify pipe private.
+- *Exact display refresh times for Ladybird's frames.* CVDisplayLink runs its callback up to
+  1 ms either side of its usual point, and Ladybird stamps rendering opportunities with the
+  time it ran (rAF interval sd 0.53 ms). A Compositor patch taking the time from the display's
+  exact refresh grid made rAF intervals regular (sd 0.07 ms). Placing frame times about 9 ms back,
+  at the refresh itself, made scrolling worse: WebContent also moves its rendering time to
+  `now` when input presents, so frames alternated between 26 ms and 7 ms steps. Keeping them
+  at the callback's own point helped slightly when idle and hurt under CPU load. Measured
+  across interleaved runs on elarisbrowser.com.
+- *Running the engine thread at user-interactive QoS.* Under full CPU load, Rune repeated
+  101 frames with it and 99 without, across eight interleaved runs each. The delay comes from
+  Ladybird's processes, not the engine thread's relay.
+
+## Trackpad scrolling on elarisbrowser.com
+
+Measured on a 60 Hz MacBook display with synthetic two-finger reversals, release and debug
+builds, by logging which page frame Rune drew at each refresh and each frame's content shift.
+
+- With the machine otherwise idle, Ladybird delivered a frame every refresh and Rune drew a
+  new one at every refresh, except about one in 400. Frames reach Rune halfway between its
+  refreshes, so delivery has slack either way.
+- The page scrolls with Lenis (`lerp: 0.1`), which cancels every wheel event and moves the
+  page from `requestAnimationFrame`. Content follows the fingers with an exponential lag and
+  keeps moving the old way for about 120 ms after a reversal. That is the page's behaviour.
+- The remaining unevenness at speed, about ±1–2 CSS px a frame, follows Ladybird's rAF
+  timestamp jitter above.
+- Under full CPU load, Ladybird's frames arrive bunched and late, and Rune shows a frame twice
+  and then skips one, 5–20 times in seven seconds of scrolling.
+- An earlier trace with recurring 33 ms gaps inside the Compositor was recorded while
+  `sample` profiled the Compositor and WebContent. Those gaps did not reproduce without it.
 
 ## Remaining limits
 
