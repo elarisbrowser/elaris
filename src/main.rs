@@ -15,6 +15,7 @@ mod menu_macos;
 #[cfg(target_os = "macos")]
 mod menu_state;
 mod omnibox;
+mod page_accessibility;
 mod perf;
 mod permissions;
 mod settings;
@@ -105,7 +106,6 @@ fn configure_app(app: App<app::AppState>) -> App<app::AppState> {
             let retained_window = window.clone();
             let register_handle = app_handle.clone();
             register_handle.update(move |state, _| {
-                menu_macos::install_close_button(&retained_window, state.window_id);
                 app::register_window(state.window_id, retained_window);
             });
             window_macos::install(window);
@@ -119,6 +119,11 @@ fn configure_app(app: App<app::AppState>) -> App<app::AppState> {
         .on_frame_drawn(|_| perf::frame_drawn())
         .on_ime(ui::viewport::ime)
         .on_focus(app::on_window_focus)
+        .on_close_request(app::AppState::close_requested)
+        .on_accessibility_active(|state, active, _| state.browser.set_accessibility(active))
+        .on_accessibility_action(|state, request, _| {
+            state.browser.accessibility_action(&request);
+        })
         .on_close(app::window_closed)
         .on_quit(app::shut_down)
         .on_reopen(app::on_reopen)

@@ -581,6 +581,9 @@ fn page(
         }
     }
     let mut page = page.w_full().h_full();
+    if !internal && let Some(tree) = id.and_then(|id| state.browser.accessibility_tree(id)) {
+        page = page.accessibility_graft(tree);
+    }
     page = page
         .focusable(true)
         .no_focus_ring()

@@ -212,6 +212,19 @@ pub(crate) enum ViewCommand {
     /// Clears Ladybird's active match and highlights.
     FindEnd,
     ExitWebFullscreen,
+    /// Starts or stops reporting the page's accessibility tree; starting asks for it whole.
+    SetAccessibility(bool),
+    /// Asks the page to `"press"`, `"focus"` or `"scroll_into_view"` an accessibility node.
+    AccessibilityAction {
+        node: i64,
+        action: &'static str,
+    },
+    /// Sets the caret or selection in a text node, in character offsets.
+    AccessibilitySelect {
+        node: i64,
+        start: i32,
+        end: i32,
+    },
     ReplyToExternalUrl {
         request_id: u64,
         open: bool,
@@ -333,6 +346,7 @@ pub(crate) enum TabUpdate {
     PageDialog(Option<elaris::ladybird::PageDialog>),
     PermissionPrompt(Option<elaris::ladybird::PermissionPrompt>),
     ExternalUrl(Option<elaris::ladybird::ExternalUrl>),
+    Accessibility(elaris::ladybird::AccessibilityEvent),
     WebFullscreen(bool),
     PermissionUse(crate::permissions::PermissionKind, bool),
     Error(String),

@@ -31,6 +31,7 @@
 #include <LibWebCommon/Page/InputEvent.h>
 #include <LibWebCommon/PixelUnits.h>
 #include <LibWebCommon/UIEvents/KeyCode.h>
+#include <LibWebCommon/WebView/AccessibilityNodeData.h>
 #include <LibWebCommon/WebView/Utilities.h>
 #include <LibWebView/Application.h>
 #include <LibWebView/BrowsingSession.h>
@@ -297,6 +298,7 @@ struct ElarisLadybirdView {
         std::string application;
         AK::Function<void(bool)> reply;
     } external_url{};
+    bool accessibility{};
 };
 
 static AK::OwnPtr<ElarisApplication> s_application;
@@ -340,8 +342,8 @@ class ElarisDownloadObserver final : public WebView::FileDownloaderObserver {
 
   private:
     void emit_download(WebView::FileDownloader::Download const& download) {
-        // This event stream feeds the ordinary download store.
-        if (download.is_private == WebView::IsPrivate::Yes || !m_bridge.callback)
+        // Value 1 marks a private window's download, which only private windows list.
+        if (!m_bridge.callback)
             return;
         auto url = to_utf8(download.url);
         auto path = download.destination.string();
@@ -358,6 +360,7 @@ class ElarisDownloadObserver final : public WebView::FileDownloaderObserver {
         event.has_total_bytes = download.total_size.has_value();
         event.total_bytes = download.total_size.value_or(0);
         event.download_status = static_cast<ElarisLadybirdDownloadStatus>(static_cast<int>(download.status) + 1);
+        event.value = download.is_private == WebView::IsPrivate::Yes;
         m_bridge.callback(m_bridge.context, &event);
     }
 
@@ -492,6 +495,119 @@ extern "C" int32_t elaris_ladybird_reply_to_external_url(ElarisLadybirdView* han
     emit_external_url(*handle);
     if (reply)
         reply(open == 1);
+    return succeed();
+}
+
+static AK::JsonObject accessibility_node_json(WebView::AccessibilityNodeData const& node) {
+    using Node = WebView::AccessibilityNodeData;
+    AK::JsonObject object;
+    object.set("id"sv, node.id);
+    AK::JsonArray children;
+    for (auto child : node.child_ids)
+        children.must_append(child);
+    object.set("children"sv, move(children));
+    object.set("role"sv, node.role);
+    object.set("name"sv, node.name);
+    object.set("description"sv, node.description);
+    object.set("value"sv, node.value);
+    object.set("url"sv, node.url);
+    AK::JsonArray bounds;
+    for (auto value : {node.bounds.x(), node.bounds.y(), node.bounds.width(), node.bounds.height()})
+        bounds.must_append(value);
+    object.set("bounds"sv, move(bounds));
+    object.set("focused"sv, node.is_focused);
+    object.set("disabled"sv, node.is_disabled);
+    object.set("heading_level"sv, node.heading_level);
+    object.set("level"sv, node.hierarchical_level);
+    object.set("live"sv, node.live);
+    object.set("selected"sv, node.is_selected);
+    object.set("checked"sv, static_cast<u8>(node.checked_state));
+    object.set("expanded"sv, static_cast<u8>(node.expanded_state));
+    object.set("pressed"sv, node.pressed_state == Node::PressedState::Pressed);
+    object.set("editable"sv, node.is_editable);
+    object.set("multiline"sv, node.is_multi_line);
+    object.set("password"sv, node.is_password);
+    object.set("read_only"sv, node.is_read_only);
+    object.set("required"sv, node.is_required);
+    object.set("invalid"sv, node.is_invalid);
+    if (node.value_numeric.has_value())
+        object.set("value_numeric"sv, *node.value_numeric);
+    if (node.value_minimum.has_value())
+        object.set("value_minimum"sv, *node.value_minimum);
+    if (node.value_maximum.has_value())
+        object.set("value_maximum"sv, *node.value_maximum);
+    if (node.value_step.has_value())
+        object.set("value_step"sv, *node.value_step);
+    object.set("selection_start"sv, node.selection_start);
+    object.set("selection_end"sv, node.selection_end);
+    object.set("caret"sv, node.caret_offset);
+    return object;
+}
+
+static void emit_accessibility(ElarisLadybirdView const& handle, int32_t kind, AK::JsonObject const& payload) {
+    if (!handle.accessibility || !handle.id)
+        return;
+    auto json = payload.serialized().to_byte_string();
+    emit(&handle, ELARIS_LADYBIRD_ACCESSIBILITY, std::string{json.characters(), json.length()}, kind);
+}
+
+static AK::JsonArray accessibility_nodes_json(Vector<WebView::AccessibilityNodeData> const& nodes) {
+    AK::JsonArray array;
+    for (auto const& node : nodes)
+        array.must_append(accessibility_node_json(node));
+    return array;
+}
+
+static void install_accessibility(ElarisLadybirdView& handle) {
+    handle.view->on_accessibility_tree_received = [&handle](u64 sequence, auto nodes) {
+        AK::JsonObject payload;
+        payload.set("seq"sv, sequence);
+        payload.set("nodes"sv, accessibility_nodes_json(nodes));
+        emit_accessibility(handle, 1, payload);
+    };
+    handle.view->on_accessibility_tree_changed = [&handle](u64 base, u64 sequence, auto delta) {
+        AK::JsonObject payload;
+        payload.set("base"sv, base);
+        payload.set("seq"sv, sequence);
+        payload.set("nodes"sv, accessibility_nodes_json(delta.changed_nodes));
+        AK::JsonArray removed;
+        for (auto id : delta.removed_ids)
+            removed.must_append(id);
+        payload.set("removed"sv, move(removed));
+        emit_accessibility(handle, 2, payload);
+    };
+    handle.view->on_accessibility_focus_changed = [&handle](i64 node) {
+        AK::JsonObject payload;
+        payload.set("focus"sv, node);
+        emit_accessibility(handle, 3, payload);
+    };
+}
+
+extern "C" int32_t elaris_ladybird_set_accessibility(ElarisLadybirdView* handle, int32_t enabled) {
+    if (!handle || !on_owner_thread(handle->bridge))
+        return fail("accessibility requires the view owner thread");
+    handle->accessibility = enabled != 0;
+    if (handle->accessibility)
+        handle->view->request_accessibility_tree();
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_accessibility_action(ElarisLadybirdView* handle, int64_t node, char const* action) {
+    if (!handle || !on_owner_thread(handle->bridge) || !action)
+        return fail("invalid accessibility action");
+    auto name = AK::StringView{action, strlen(action)};
+    if (!name.is_one_of("press"sv, "focus"sv, "scroll_into_view"sv))
+        return fail("unknown accessibility action");
+    handle->view->perform_accessibility_action(node, MUST(String::from_utf8(name)));
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_accessibility_select(ElarisLadybirdView* handle, int64_t node, int32_t start,
+                                                        int32_t end) {
+    if (!handle || !on_owner_thread(handle->bridge) || start < 0 || end < 0)
+        return fail("invalid accessibility selection");
+    auto action = start == end ? "set_caret_offset"_string : "set_selection"_string;
+    handle->view->perform_accessibility_text_action(node, action, start, end, {});
     return succeed();
 }
 
@@ -1110,6 +1226,7 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
         if (permissions.empty() || permissions.front().id != first)
             emit_permission_prompt(*handle);
     };
+    install_accessibility(*handle);
     handle->view->on_request_external_url_confirmation = [handle](auto const& url, auto const& origin,
                                                                   auto const& application, auto reply) {
         if (!handle->id) {

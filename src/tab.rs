@@ -87,6 +87,9 @@ pub(crate) struct Tab {
     pub(crate) page_dialog: Option<PageDialog>,
     pub(crate) permission_prompt: Option<elaris::ladybird::PermissionPrompt>,
     pub(crate) external_url: Option<elaris::ladybird::ExternalUrl>,
+    /// Accessibility reports not yet applied; the browser applies them with the page zoom.
+    pub(crate) accessibility_events: Vec<elaris::ladybird::AccessibilityEvent>,
+    pub(crate) accessibility: crate::page_accessibility::PageAccessibility,
     pub(crate) web_fullscreen: bool,
     pub(crate) permissions_in_use: [bool; PermissionKind::ALL.len()],
     pub(crate) awaiting_close: bool,
@@ -144,6 +147,8 @@ impl Tab {
             page_dialog: None,
             permission_prompt: None,
             external_url: None,
+            accessibility_events: Vec::new(),
+            accessibility: Default::default(),
             web_fullscreen: false,
             permissions_in_use: [false; PermissionKind::ALL.len()],
             awaiting_close: false,
@@ -184,6 +189,8 @@ impl Tab {
             page_dialog: None,
             permission_prompt: None,
             external_url: None,
+            accessibility_events: Vec::new(),
+            accessibility: Default::default(),
             web_fullscreen: false,
             permissions_in_use: [false; PermissionKind::ALL.len()],
             awaiting_close: false,
@@ -239,6 +246,7 @@ impl Tab {
             TabUpdate::WebFullscreen(active) => self.web_fullscreen = active,
             TabUpdate::PermissionPrompt(prompt) => self.permission_prompt = prompt,
             TabUpdate::ExternalUrl(request) => self.external_url = request,
+            TabUpdate::Accessibility(event) => self.accessibility_events.push(event),
             TabUpdate::PermissionUse(kind, visible) => {
                 self.permissions_in_use[kind.index()] = visible
             }

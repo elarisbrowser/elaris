@@ -2,8 +2,10 @@
 //! translation can be tested without the engine; the owner-thread FFI wrappers need the
 //! `ladybird-bridge` feature.
 
+mod accessibility;
 #[cfg(feature = "ladybird-bridge")]
 mod bridge;
+pub use accessibility::{AccessibilityEvent, AccessibilityNode};
 #[cfg(feature = "ladybird-bridge")]
 pub use bridge::{Ladybird, Waker, WebView};
 
@@ -123,7 +125,7 @@ pub struct NavigationItem {
 }
 
 /// What a view raised, delivered with the id it was created with.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Event {
     Navigation(String),
     /// The active top-level document committed this URL, or a history traversal completed.
@@ -154,6 +156,7 @@ pub enum Event {
         request: u64,
         cleared: bool,
     },
+    Accessibility(AccessibilityEvent),
     WebFullscreen(bool),
     Popup {
         request: u64,

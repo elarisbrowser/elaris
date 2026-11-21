@@ -22,6 +22,7 @@ use std::fmt;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+mod accessibility;
 mod downloads;
 mod engine_sync;
 mod input_routing;
@@ -102,6 +103,10 @@ pub(crate) struct Browser {
     active: Option<TabId>,
     /// Opens every page in the shared private session.
     pub(crate) private: bool,
+    /// An assistive client reads this window, so pages report their accessibility trees.
+    accessibility: bool,
+    /// The page trees last handed to Rune, to forget those of closed tabs.
+    accessibility_trees: std::collections::HashSet<rune::accesskit::TreeId>,
     pub(crate) peek: Option<peek::PeekState>,
     peek_origin: Option<(TabId, [f32; 2])>,
     promoted_visit: Option<(TabId, String, String)>,
@@ -143,6 +148,8 @@ impl Default for Browser {
             tabs: Vec::new(),
             active: None,
             private: false,
+            accessibility: false,
+            accessibility_trees: Default::default(),
             peek: None,
             peek_origin: None,
             promoted_visit: None,
@@ -465,6 +472,9 @@ impl Browser {
             if zoom != 100 {
                 engine.send(Command::View(id, ViewCommand::SetZoom(zoom)));
             }
+            if self.accessibility {
+                engine.send(Command::View(id, ViewCommand::SetAccessibility(true)));
+            }
         }
         let index = self
             .tabs
@@ -561,6 +571,9 @@ impl Browser {
             let zoom = self.default_zoom;
             if zoom != 100 {
                 engine.send(Command::View(id, ViewCommand::SetZoom(zoom)));
+            }
+            if self.accessibility {
+                engine.send(Command::View(id, ViewCommand::SetAccessibility(true)));
             }
         }
         if load_now {

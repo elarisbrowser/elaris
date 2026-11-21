@@ -47,6 +47,9 @@ typedef enum {
     ELARIS_LADYBIRD_EXTERNAL_URL = 30,
     /* Browser-level, so view_id is 0. request_id echoes clear_browsing_data; value 0 reports a failure. */
     ELARIS_LADYBIRD_BROWSING_DATA_CLEARED = 31,
+    /* JSON in text while accessibility is on. Value 1 is a whole tree {"seq","nodes"}, 2 a change
+     * {"base","seq","nodes","removed"}, and 3 a focus change {"focus"}. */
+    ELARIS_LADYBIRD_ACCESSIBILITY = 32,
 } ElarisLadybirdEventKind;
 
 /* Permission event text is the origin and selection is the permission key.
@@ -60,6 +63,13 @@ int32_t elaris_ladybird_set_permission_default(ElarisLadybird*, char const* key,
 int32_t elaris_ladybird_adopt_popup(ElarisLadybird*, uint64_t source, uint64_t request_id, uint64_t view_id,
                                     ElarisLadybirdView**);
 int32_t elaris_ladybird_exit_web_fullscreen(ElarisLadybirdView*);
+/* Starts or stops reporting the page's accessibility tree as ACCESSIBILITY events. Starting asks for
+ * the whole tree again, which also recovers from a change that did not apply. */
+int32_t elaris_ladybird_set_accessibility(ElarisLadybirdView*, int32_t enabled);
+/* Asks the page to "press", "focus" or "scroll_into_view" an accessibility node. */
+int32_t elaris_ladybird_accessibility_action(ElarisLadybirdView*, int64_t node_id, char const* action);
+/* Sets the caret or selection in a text node, in Unicode character offsets. */
+int32_t elaris_ladybird_accessibility_select(ElarisLadybirdView*, int64_t node_id, int32_t start, int32_t end);
 /* Answers the view's current EXTERNAL_URL event; stale request ids are ignored. */
 int32_t elaris_ladybird_reply_to_external_url(ElarisLadybirdView*, uint64_t request_id, int32_t open);
 /* Choice 0 resets a permission, 1 allows it, and 2 blocks it. */

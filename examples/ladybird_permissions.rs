@@ -7,8 +7,8 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use elaris::ladybird::{
-    BrowsingData, Event, Ladybird, MouseEvent, MouseKind, PermissionPrompt, WebView, WheelPhase,
-    button,
+    AccessibilityEvent, BrowsingData, Event, Ladybird, MouseEvent, MouseKind, PermissionPrompt,
+    WebView, WheelPhase, button,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -34,6 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 | Event::Title(_)
                 | Event::ExternalUrl(_)
                 | Event::BrowsingDataCleared { .. }
+                | Event::Accessibility(_)
         ) {
             sink.borrow_mut().push_back(event);
         }
@@ -204,6 +205,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert!(browser.set_autoplay(3, &[]).is_err());
     browser.set_autoplay(1, &[])?;
     println!("Passed autoplay settings");
+
+    view.load(&page)?;
+    wait_for_title(&mut browser, &events, "Permission test")?;
+    view.set_accessibility(true)?;
+    let button = wait_for(
+        &mut browser,
+        &events,
+        "the page's accessibility tree",
+        |event| {
+            let Event::Accessibility(AccessibilityEvent::Tree { nodes, .. }) = event else {
+                return None;
+            };
+            assert_eq!(
+                nodes.first().map(|root| root.role.as_str()),
+                Some("document")
+            );
+            nodes
+                .into_iter()
+                .find(|node| node.role == "button" && node.name == "Request location")
+        },
+    )?;
+    assert!(
+        button.bounds[2] > 0 && button.bounds[3] > 0,
+        "the button has a box"
+    );
+    view.accessibility_action(button.id, "focus")?;
+    wait_for(
+        &mut browser,
+        &events,
+        "the page to report the focused button",
+        |event| match event {
+            Event::Accessibility(AccessibilityEvent::Focus(id)) if id == button.id => Some(()),
+            Event::Accessibility(AccessibilityEvent::Change { nodes, .. })
+                if nodes
+                    .iter()
+                    .any(|node| node.id == button.id && node.focused) =>
+            {
+                Some(())
+            }
+            _ => None,
+        },
+    )?;
+    assert!(view.accessibility_action(button.id, "delete").is_err());
+    println!("Passed page accessibility tree and focus action");
     Ok(())
 }
 

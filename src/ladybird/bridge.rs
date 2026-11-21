@@ -170,6 +170,18 @@ unsafe extern "C" {
     ) -> i32;
     fn elaris_ladybird_reply_to_external_url(view: *mut RawView, request_id: u64, open: i32)
     -> i32;
+    fn elaris_ladybird_set_accessibility(view: *mut RawView, enabled: i32) -> i32;
+    fn elaris_ladybird_accessibility_action(
+        view: *mut RawView,
+        node: i64,
+        action: *const c_char,
+    ) -> i32;
+    fn elaris_ladybird_accessibility_select(
+        view: *mut RawView,
+        node: i64,
+        start: i32,
+        end: i32,
+    ) -> i32;
     fn elaris_ladybird_reply_to_permission(view: *mut RawView, request_id: u64, choice: i32)
     -> i32;
     fn elaris_ladybird_set_permission_default(
@@ -356,6 +368,10 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
                 activate: raw.value != 0,
             },
             29 => Event::PopupClosed,
+            32 => match super::AccessibilityEvent::parse(raw.value, &text) {
+                Some(event) => Event::Accessibility(event),
+                None => return,
+            },
             31 => Event::BrowsingDataCleared {
                 request: raw.request_id,
                 cleared: raw.value != 0,
@@ -411,6 +427,7 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
                     bytes_downloaded: raw.bytes_downloaded,
                     total_bytes: (raw.has_total_bytes != 0).then_some(raw.total_bytes),
                     error,
+                    private: raw.value != 0,
                     native_id: raw.download_id,
                 })
             }
@@ -827,6 +844,31 @@ impl WebView {
     pub fn exit_web_fullscreen(&mut self) -> Result<(), String> {
         // SAFETY: The view is live on its owner thread.
         status_result(unsafe { elaris_ladybird_exit_web_fullscreen(self.raw.as_ptr()) })
+    }
+
+    /// Starts or stops reporting the page's accessibility tree. Starting asks for it whole.
+    pub fn set_accessibility(&mut self, enabled: bool) -> Result<(), String> {
+        // SAFETY: The view is live on its owner thread.
+        status_result(unsafe {
+            elaris_ladybird_set_accessibility(self.raw.as_ptr(), i32::from(enabled))
+        })
+    }
+
+    /// Asks the page to `"press"`, `"focus"` or `"scroll_into_view"` an accessibility node.
+    pub fn accessibility_action(&mut self, node: i64, action: &str) -> Result<(), String> {
+        let action = CString::new(action).map_err(|error| error.to_string())?;
+        // SAFETY: The view is live on its owner thread and borrows the string for this call.
+        status_result(unsafe {
+            elaris_ladybird_accessibility_action(self.raw.as_ptr(), node, action.as_ptr())
+        })
+    }
+
+    /// Sets the caret (`start == end`) or selection in a text node, in character offsets.
+    pub fn accessibility_select(&mut self, node: i64, start: i32, end: i32) -> Result<(), String> {
+        // SAFETY: The view is live on its owner thread.
+        status_result(unsafe {
+            elaris_ladybird_accessibility_select(self.raw.as_ptr(), node, start, end)
+        })
     }
 
     /// Answers the view's current external link request; stale ids are ignored.

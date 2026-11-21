@@ -440,6 +440,7 @@ impl Runtime {
                 Event::WebFullscreen(active) => TabUpdate::WebFullscreen(active),
                 Event::PermissionPrompt(prompt) => TabUpdate::PermissionPrompt(prompt),
                 Event::ExternalUrl(request) => TabUpdate::ExternalUrl(request),
+                Event::Accessibility(event) => TabUpdate::Accessibility(event),
                 Event::PermissionUse { key, visible } => {
                     let Some(kind) = crate::permissions::PermissionKind::from_key(&key) else {
                         continue;
@@ -587,6 +588,11 @@ fn apply_to_view(view: &mut View, command: ViewCommand, timing: &mut Timing) -> 
         ViewCommand::FindPrevious { request_id } => web.find_previous(request_id),
         ViewCommand::FindEnd => web.find_end(),
         ViewCommand::ExitWebFullscreen => web.exit_web_fullscreen(),
+        ViewCommand::SetAccessibility(enabled) => web.set_accessibility(enabled),
+        ViewCommand::AccessibilityAction { node, action } => web.accessibility_action(node, action),
+        ViewCommand::AccessibilitySelect { node, start, end } => {
+            web.accessibility_select(node, start, end)
+        }
         ViewCommand::ReplyToExternalUrl { request_id, open } => {
             web.reply_to_external_url(request_id, open)
         }

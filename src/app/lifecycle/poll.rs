@@ -45,6 +45,13 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         }
     }
     let guards_changed = crate::ui::permission_prompt::poll(state, clock);
+    let accessibility = state.browser.take_accessibility_changes();
+    for tree in accessibility.removed {
+        tx.remove_accessibility_subtree(tree);
+    }
+    for update in accessibility.updates {
+        tx.update_accessibility_subtree(update);
+    }
     crate::ui::horizontal_tabs::reveal_active(state, tx);
     record_history_updates(state, &polled);
     refresh_find_after_navigation(state, &polled);
