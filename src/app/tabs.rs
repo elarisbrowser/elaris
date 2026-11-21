@@ -24,6 +24,7 @@ pub(super) struct ClosingTabs {
     action: CloseAction,
     checking: usize,
     cancelled: bool,
+    started: std::time::Instant,
 }
 
 impl super::AppState {
@@ -142,6 +143,7 @@ impl super::AppState {
             action,
             checking: 0,
             cancelled: false,
+            started: std::time::Instant::now(),
         });
         self.advance_close()
     }
@@ -173,6 +175,7 @@ impl super::AppState {
         self.page_menu = Default::default();
         self.navigation_menu = None;
         self.zoom_menu = None;
+        crate::perf::record(crate::perf::Stage::TabClose, close.started.elapsed());
         for tab in close.targets.into_iter().rev() {
             if let Some(tab_state) = self.browser.tab(tab) {
                 self.remember_closed(RecentlyClosedTab::from_tab(tab_state));

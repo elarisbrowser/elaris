@@ -36,6 +36,8 @@ pub(crate) enum Stage {
     InputToFrame,
     /// From a new viewport size to the first frame at that size.
     ResizeToFrame,
+    /// From a tab close request to the tab leaving the UI, including the page's close decision.
+    TabClose,
 }
 
 /// Counters that are not durations.
