@@ -26,6 +26,26 @@ never waits on it.
 
 The view is not rebuilt for a new frame unless its size changed, so animation costs no layout.
 
+## GPU frames (macOS)
+
+On macOS a frame is never copied. The bridge turns off `presents_from_cpu_memory`, so Ladybird's
+Compositor renders into IOSurface-backed backing stores without a CPU readback, and
+`elaris_ladybird_gpu_frame` hands out the displayed frame's `IOSurfaceRef`. The engine thread
+wraps it in a `PixelBuffer` and pushes it into the tab's Rune `NativeSurface` (`src/engine/gpu.rs`);
+the viewport draws that at one texel per device pixel. No RGBA conversion, `Pixels::set` or atlas
+upload remains, and the CPU reads pixels back only for the once-a-second tab thumbnail.
+
+Ladybird recycles a backing store as soon as the next frame replaces it, which would let it paint
+into a texture Rune is still sampling. The bridge therefore holds each replaced store
+(`ElarisWebView::release_backing_store`) until the host reports, through
+`elaris_ladybird_release_frames`, that its GPU finished a frame at least as new as the one that
+replaced it. Rune reports that per drawn frame through the `NativeSurface` observer
+(`FrameTiming::completed_at`, keyed by the frame serial), which also wakes the engine thread. A
+frame Rune never draws is covered by any later one, and a hidden tab paints nothing, so nothing
+waits on it.
+
+`ELARIS_CPU_FRAMES=1` selects the copying path described below, which Linux always uses.
+
 ## Measuring
 
 `ELARIS_PERF=1 ./elaris run <url>` prints, every 5 s and per thread:
@@ -135,6 +155,12 @@ processes left, five runs out of five.
   viewport while Ladybird lays out and presents the new size; the next complete frame replaces it.
 
 ## Not verified
+
+- The GPU frame path (macOS) is untested at runtime. Check that pages draw with the right colours
+  and no tearing, that tabs keep painting while scrolling, and compare `ELARIS_PERF=1` frame
+  intervals against `ELARIS_CPU_FRAMES=1`. If a page freezes after a few frames, the backing
+  stores are not being released.
+- Frames' alpha is assumed opaque; the CPU path forced it, the GPU path samples what Ladybird wrote.
 
 - Visual smoothness of real trackpad scrolling beyond the user's report on slaterlabs.dev; the
   test pages are driven by script and were measured, not watched.
