@@ -633,12 +633,12 @@ extern "C" int32_t elaris_ladybird_test_start_private_download(ElarisLadybirdVie
     return succeed();
 }
 
-extern "C" uint64_t elaris_ladybird_test_private_browser_request_servers(ElarisLadybird* bridge) {
+extern "C" uint64_t elaris_ladybird_test_private_request_servers(ElarisLadybird* bridge) {
     if (!bridge || !s_application || !on_owner_thread(bridge))
         return 0;
     uint64_t count = 0;
     WebView::Application::request_server_manager().for_each_instance([&](auto& instance) {
-        if (!instance.site().has_value() && instance.session().is_private() == WebView::IsPrivate::Yes)
+        if (instance.session().is_private() == WebView::IsPrivate::Yes)
             ++count;
         return IterationDecision::Continue;
     });

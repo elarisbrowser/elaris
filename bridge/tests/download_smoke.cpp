@@ -355,14 +355,18 @@ static bool test_private_session(ElarisLadybird* bridge, HttpFixture const& fixt
         std::cerr << "Private download failed or escaped into the ordinary download observer\n";
         return false;
     }
-    auto private_servers = elaris_ladybird_test_private_browser_request_servers(bridge);
+    if (!elaris_ladybird_test_private_request_servers(bridge)) {
+        std::cerr << "Privacy probe did not create a private RequestServer\n";
+        return false;
+    }
     second.reset();
     if (!check(elaris_ladybird_test_reset_private_session(bridge), "reset private browsing session"))
         return false;
 
-    // Report the upstream retirement gap without treating it as desired behavior.
-    if (private_servers && elaris_ladybird_test_private_browser_request_servers(bridge))
-        std::cout << "Ladybird retained a browser-level private RequestServer after reset\n";
+    if (elaris_ladybird_test_private_request_servers(bridge)) {
+        std::cerr << "A private RequestServer survived reset\n";
+        return false;
+    }
     if (!std::filesystem::exists(private_download)) {
         std::cerr << "Private reset removed a completed download\n";
         return false;
@@ -375,6 +379,10 @@ static bool test_private_session(ElarisLadybird* bridge, HttpFixture const& fixt
         fresh.reset();
         if (!check(elaris_ladybird_test_reset_private_session(bridge), "reset after reopening private session"))
             return false;
+        if (elaris_ladybird_test_private_request_servers(bridge)) {
+            std::cerr << "A private RequestServer survived a subsequent reset\n";
+            return false;
+        }
     }
     return load(normal, 201, "/privacy/read", "normal:normal:normal") && events.downloads.empty();
 }

@@ -6,7 +6,14 @@ set(ELARIS_BRIDGE_DIR "${CMAKE_CURRENT_LIST_DIR}")
 include("${ELARIS_BRIDGE_DIR}/Peek.cmake")
 
 function(elaris_add_ladybird_bridge)
-    elaris_patch_peek()
+    elaris_patch_ladybird(peek
+        Libraries/LibWeb/DOM/Element.cpp
+        Libraries/LibWebView/WebContentPage.cpp)
+    target_include_directories(LibWebView PRIVATE "${ELARIS_BRIDGE_DIR}/src")
+    elaris_patch_ladybird(private-request-servers
+        Libraries/LibWebView/Application.cpp
+        Libraries/LibWebView/RequestServerManager.cpp
+        Libraries/LibWebView/RequestServerManager.h)
     if(TARGET harfbuzz AND ELARIS_VCPKG_PREFIX)
         # The installed vcpkg config incorrectly publishes `//include/harfbuzz`.
         set_property(TARGET harfbuzz PROPERTY INTERFACE_INCLUDE_DIRECTORIES

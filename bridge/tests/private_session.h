@@ -5,4 +5,4 @@
 extern "C" int32_t elaris_ladybird_test_create_private_view(ElarisLadybird*, uint64_t, ElarisLadybirdView**);
 extern "C" int32_t elaris_ladybird_test_reset_private_session(ElarisLadybird*);
 extern "C" int32_t elaris_ladybird_test_start_private_download(ElarisLadybirdView*, char const* url);
-extern "C" uint64_t elaris_ladybird_test_private_browser_request_servers(ElarisLadybird*);
+extern "C" uint64_t elaris_ladybird_test_private_request_servers(ElarisLadybird*);
