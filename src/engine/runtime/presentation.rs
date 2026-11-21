@@ -3,8 +3,6 @@
 use std::ffi::OsStr;
 use std::time::{Duration, Instant};
 
-use elaris::ladybird::Frame;
-
 use super::Verdict;
 use super::View;
 use super::thumbnails::{self, Sample};
@@ -15,6 +13,11 @@ const FALLBACK_MAX_SIDE: u32 = 160;
 const THUMBNAIL_INTERVAL: Duration = Duration::from_secs(1);
 
 pub(super) fn evict_frame(view: &mut View) -> bool {
+    // A GPU frame costs no CPU memory to keep, and has no pixels to shrink.
+    #[cfg(target_os = "macos")]
+    if view.surface.gpu.is_some() {
+        return false;
+    }
     let Ok(Some(frame)) = view.view.frame() else {
         return false;
     };
@@ -54,6 +57,10 @@ pub(super) fn show_frame(
     if view.showing_fallback && !view.visible {
         return Ok(None);
     }
+    #[cfg(target_os = "macos")]
+    if view.surface.gpu.is_some() {
+        return show_gpu_frame(view, timing, sample);
+    }
     let Some(frame) = view.view.frame()? else {
         return Ok(None);
     };
@@ -82,12 +89,61 @@ pub(super) fn show_frame(
         None
     };
     view.surface.count_frame();
-    timing.shown(&frame, skipped);
+    timing.shown(frame.width, frame.height, skipped);
     view.gate.shown(frame.serial);
     view.showing_fallback = false;
     perf::time(Stage::Set, || {
         view.surface.pixels.set(frame.width, frame.height, rgba)
     });
+    Ok(thumbnail)
+}
+
+/// Shows the view's newest frame by handing Rune its GPU surface, without copying the pixels.
+/// Only the thumbnail sample, at most once a second, reads them back.
+#[cfg(target_os = "macos")]
+fn show_gpu_frame(
+    view: &mut View,
+    timing: &mut Timing,
+    sample: bool,
+) -> Result<Option<Sample>, String> {
+    let Some(frame) = view.view.gpu_frame()? else {
+        return Ok(None);
+    };
+    let skipped = match view.gate.check(frame.serial, frame.scale) {
+        Verdict::Show { skipped } => skipped,
+        Verdict::Duplicate => {
+            perf::count(Count::Duplicate, 1);
+            return Ok(None);
+        }
+        Verdict::Stale => {
+            perf::count(Count::Stale, 1);
+            return Ok(None);
+        }
+    };
+    let thumbnail = if sample
+        && view.visible
+        && view.surface.preview_source.revision() == view.preview_revision
+        && view
+            .last_thumbnail
+            .is_none_or(|last| last.elapsed() >= THUMBNAIL_INTERVAL)
+    {
+        view.last_thumbnail = Some(Instant::now());
+        match view.view.frame()? {
+            Some(cpu) => {
+                let rgba = view.view.copy_frame(&cpu)?;
+                thumbnails::sample(cpu.width, cpu.height, &rgba)
+            }
+            None => None,
+        }
+    } else {
+        None
+    };
+    let gpu = view.surface.gpu.as_ref().expect("checked by the caller");
+    perf::time(Stage::Set, || gpu.show(&frame))?;
+    view.surface.count_frame();
+    timing.shown(frame.width, frame.height, skipped);
+    view.gate.shown(frame.serial);
+    view.showing_fallback = false;
     Ok(thumbnail)
 }
 
@@ -113,7 +169,7 @@ impl Timing {
         }
     }
 
-    fn shown(&mut self, frame: &Frame, skipped: u64) {
+    fn shown(&mut self, width: u32, height: u32, skipped: u64) {
         if !perf::enabled() {
             return;
         }
@@ -127,7 +183,7 @@ impl Timing {
             perf::record(Stage::InputToFrame, now - input);
         }
         if let Some((size, since)) = self.pending_resize
-            && size == (frame.width, frame.height)
+            && size == (width, height)
         {
             perf::record(Stage::ResizeToFrame, now - since);
             self.pending_resize = None;

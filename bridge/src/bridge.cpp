@@ -246,6 +246,28 @@ class ElarisWebView final : public WebView::HeadlessWebView {
         return m_serial;
     }
 
+    // Presents frames in GPU memory for the host to sample, instead of in CPU memory. A frame's backing store
+    // stays out of the Compositor's hands until the host reports its GPU finished with the frame after it.
+    void set_gpu_frames(bool enabled) {
+        m_gpu_frames = enabled;
+        set_presents_from_cpu_memory(!enabled);
+        if (!enabled)
+            release_completed(UINT64_MAX);
+    }
+    bool gpu_frames() const {
+        return m_gpu_frames;
+    }
+
+    // Lets the Compositor paint into the backing stores of frames up to `completed_serial` again.
+    void release_completed(uint64_t completed_serial) {
+        auto const done = [&](auto const& held) { return held.until_serial <= completed_serial; };
+        for (auto const& held : m_held_stores) {
+            if (done(held))
+                ViewImplementation::release_backing_store(held.bitmap_id);
+        }
+        std::erase_if(m_held_stores, done);
+    }
+
     // Called when whether the view can go back or forward changes.
     AK::Function<void()> on_navigation_state_change;
     AK::Function<void(WebView::ContextMenuRequest)> on_menu;
@@ -275,15 +297,34 @@ class ElarisWebView final : public WebView::HeadlessWebView {
     ElarisWebView(Core::AnonymousBuffer theme, Web::DevicePixelSize size, WebView::IsPrivate mode)
         : HeadlessWebView(AK::move(theme), size, mode) {}
 
+    void release_backing_store(i32 bitmap_id) override {
+        // The old front backing store is still being read until the frame that replaces it has been drawn. One
+        // handed straight back was never shown, so it is free at once.
+        auto replaced_front = m_gpu_frames && bitmap_id >= 0 && backing_stores().front_bitmap_id() != m_shown_front;
+        if (replaced_front)
+            m_held_stores.push_back({bitmap_id, m_serial + 1});
+        else
+            ViewImplementation::release_backing_store(bitmap_id);
+    }
+
     void did_accept_presented_backing_store(i32, Gfx::IntRect damage_rect) override {
+        m_shown_front = backing_stores().front_bitmap_id();
         m_damage = m_damage.is_empty() ? damage_rect : m_damage.united(damage_rect);
         ++m_serial;
         if (on_presented)
             on_presented();
     }
 
+    struct HeldStore {
+        i32 bitmap_id;
+        uint64_t until_serial;
+    };
+
     Gfx::IntRect m_damage;
     uint64_t m_serial{};
+    bool m_gpu_frames{};
+    i32 m_shown_front{-1};
+    std::vector<HeldStore> m_held_stores;
 };
 
 class ElarisDownloadObserver;
@@ -2248,6 +2289,18 @@ extern "C" int32_t elaris_ladybird_copy_frame(ElarisLadybirdView* handle, uint8_
     if (length != row_length * static_cast<size_t>(size.height()))
         return fail("pixel buffer does not match the displayed frame");
 
+    // GPU-presented frames were written by another process's GPU; reading them takes the surface's lock.
+    Core::IOSurfaceHandle const* locked_surface = nullptr;
+#if defined(AK_OS_MACOS)
+    if (handle->view->gpu_frames()) {
+        auto displayed = handle->view->backing_stores().displayed_frame();
+        if (displayed.has_value() && displayed->shared_image_buffer) {
+            auto const& surface = displayed->shared_image_buffer->iosurface_handle();
+            if (surface.lock_read_only())
+                locked_surface = &surface;
+        }
+    }
+#endif
     // Whole pixels at a time: the source is BGRx or RGBx in native order; the host wants RGBA bytes.
     auto red_is_low_byte =
         bitmap->format() == Gfx::BitmapFormat::RGBA8888 || bitmap->format() == Gfx::BitmapFormat::RGBx8888;
@@ -2262,8 +2315,58 @@ extern "C" int32_t elaris_ladybird_copy_frame(ElarisLadybirdView* handle, uint8_
             std::memcpy(destination + static_cast<size_t>(x) * 4, &pixel, sizeof(pixel));
         }
     }
+    if (locked_surface)
+        locked_surface->unlock_read_only();
     handle->copied_size = size;
     handle->view->clear_damage();
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_set_gpu_frames(ElarisLadybirdView* handle, int32_t enabled) {
+    if (!handle)
+        return fail("view is required");
+    if (!on_owner_thread(handle->bridge))
+        return fail("frame presentation must change on the initialization thread");
+#if defined(AK_OS_MACOS)
+    handle->view->set_gpu_frames(enabled != 0);
+    return succeed();
+#else
+    (void)enabled;
+    return fail("GPU frames are not available on this platform");
+#endif
+}
+
+extern "C" int32_t elaris_ladybird_gpu_frame(ElarisLadybirdView* handle, ElarisLadybirdGpuFrame* out_frame) {
+    if (!handle || !out_frame)
+        return fail("view and output frame are required");
+    if (!on_owner_thread(handle->bridge))
+        return fail("frames must be read on the initialization thread");
+#if defined(AK_OS_MACOS)
+    auto frame = handle->view->backing_stores().displayed_frame();
+    if (!frame.has_value() || !frame->shared_image_buffer || frame->size.is_empty()) {
+        s_last_error.clear();
+        return ELARIS_LADYBIRD_NO_FRAME;
+    }
+    auto const& surface = frame->shared_image_buffer->iosurface_handle();
+    *out_frame = {surface.core_foundation_pointer(),
+                  frame->size.width(),
+                  frame->size.height(),
+                  static_cast<int32_t>(surface.width()),
+                  static_cast<int32_t>(surface.height()),
+                  frame->device_pixel_ratio,
+                  handle->view->serial()};
+    return succeed();
+#else
+    return fail("GPU frames are not available on this platform");
+#endif
+}
+
+extern "C" int32_t elaris_ladybird_release_frames(ElarisLadybirdView* handle, uint64_t completed_serial) {
+    if (!handle)
+        return fail("view is required");
+    if (!on_owner_thread(handle->bridge))
+        return fail("frames must be released on the initialization thread");
+    handle->view->release_completed(completed_serial);
     return succeed();
 }
 

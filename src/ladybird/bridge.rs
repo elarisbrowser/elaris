@@ -8,7 +8,7 @@ use std::ptr::NonNull;
 use std::rc::Rc;
 use std::time::Duration;
 
-use super::{Event, Favicon, Frame, Key, KeyEvent, MouseEvent};
+use super::{Event, Favicon, Frame, GpuFrame, Key, KeyEvent, MouseEvent};
 use crate::downloads::{Status as DownloadStatus, Update as DownloadUpdate};
 
 #[repr(C)]
@@ -49,6 +49,31 @@ struct RawEvent {
     current_match_index: u64,
     total_match_count: u64,
     has_total_match_count: i32,
+}
+
+#[repr(C)]
+struct RawGpuFrame {
+    io_surface: *mut c_void,
+    width: i32,
+    height: i32,
+    surface_width: i32,
+    surface_height: i32,
+    device_pixel_ratio: f64,
+    serial: u64,
+}
+
+impl Default for RawGpuFrame {
+    fn default() -> Self {
+        Self {
+            io_surface: std::ptr::null_mut(),
+            width: 0,
+            height: 0,
+            surface_width: 0,
+            surface_height: 0,
+            device_pixel_ratio: 1.0,
+            serial: 0,
+        }
+    }
 }
 
 #[repr(C)]
@@ -138,6 +163,9 @@ unsafe extern "C" {
     fn elaris_ladybird_resize(view: *mut RawView, width: i32, height: i32, scale: f64) -> i32;
     fn elaris_ladybird_frame(view: *mut RawView, out_frame: *mut RawFrame) -> i32;
     fn elaris_ladybird_copy_frame(view: *mut RawView, rgba: *mut u8, length: usize) -> i32;
+    fn elaris_ladybird_set_gpu_frames(view: *mut RawView, enabled: i32) -> i32;
+    fn elaris_ladybird_gpu_frame(view: *mut RawView, out_frame: *mut RawGpuFrame) -> i32;
+    fn elaris_ladybird_release_frames(view: *mut RawView, completed_serial: u64) -> i32;
     fn elaris_ladybird_mouse_event(view: *mut RawView, event: *const RawMouseEvent) -> i32;
     fn elaris_ladybird_discard_prepared(view: *mut RawView, request: u64) -> i32;
     fn elaris_ladybird_load_prepared(view: *mut RawView, source: u64, request: u64) -> i32;
@@ -1075,6 +1103,44 @@ impl WebView {
             ],
             serial: raw.serial,
         }))
+    }
+
+    /// Presents this view's frames in GPU memory, for [`Self::gpu_frame`]. macOS only; call before
+    /// the first frame. Once on, call [`Self::release_frames`] as the host's GPU finishes frames.
+    pub fn set_gpu_frames(&mut self, enabled: bool) -> Result<(), String> {
+        // SAFETY: The view is live on its owner's thread.
+        status_result(unsafe { elaris_ladybird_set_gpu_frames(self.raw.as_ptr(), enabled.into()) })
+    }
+
+    /// The frame on display as a GPU surface, or `None` before the first one.
+    pub fn gpu_frame(&self) -> Result<Option<GpuFrame>, String> {
+        let mut raw = RawGpuFrame::default();
+        // SAFETY: The view is live on its owner's thread and `raw` is a valid output.
+        match unsafe { elaris_ladybird_gpu_frame(self.raw.as_ptr(), &mut raw) } {
+            0 => {}
+            NO_FRAME => return Ok(None),
+            _ => return Err(last_error()),
+        }
+        if raw.io_surface.is_null() || raw.width <= 0 || raw.height <= 0 {
+            return Err("Ladybird described an unsupported GPU frame".to_owned());
+        }
+        Ok(Some(GpuFrame {
+            io_surface: raw.io_surface,
+            width: raw.width as u32,
+            height: raw.height as u32,
+            surface_size: [raw.surface_width as u32, raw.surface_height as u32],
+            scale: raw.device_pixel_ratio,
+            serial: raw.serial,
+        }))
+    }
+
+    /// Tells Ladybird the host's GPU has finished every frame up to `completed_serial`, so the
+    /// backing stores those frames replaced can be painted into again.
+    pub fn release_frames(&mut self, completed_serial: u64) -> Result<(), String> {
+        // SAFETY: The view is live on its owner's thread.
+        status_result(unsafe {
+            elaris_ladybird_release_frames(self.raw.as_ptr(), completed_serial)
+        })
     }
 
     /// Copies the frame `frame` described into a new RGBA buffer and clears its damage.

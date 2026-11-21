@@ -12,6 +12,8 @@
 //! - `frames`: which of Ladybird's frames are worth showing.
 
 mod frames;
+#[cfg(target_os = "macos")]
+mod gpu;
 #[cfg(feature = "ladybird-bridge")]
 mod runtime;
 #[cfg(feature = "ladybird-bridge")]
@@ -71,13 +73,28 @@ pub(crate) fn wake_all_windows() {
 type Wake = Arc<OnceLock<Box<dyn Fn() + Send + Sync>>>;
 
 /// Where the engine shows a tab's frames, shared between the two threads.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub(crate) struct Surface {
     /// The latest frame. The engine thread replaces it; Rune draws it.
     pub(crate) pixels: Pixels,
+    /// Where GPU frames go instead of `pixels`, on platforms that share them with Rune's GPU.
+    #[cfg(target_os = "macos")]
+    pub(crate) gpu: Option<gpu::GpuSurface>,
     /// Frames shown so far, which rises while the page animates.
     frames: Arc<AtomicU64>,
     pub(crate) preview_source: PreviewSource,
+}
+
+impl Default for Surface {
+    fn default() -> Self {
+        Self {
+            pixels: Pixels::default(),
+            #[cfg(target_os = "macos")]
+            gpu: gpu::enabled().then(gpu::GpuSurface::new),
+            frames: Arc::default(),
+            preview_source: PreviewSource::default(),
+        }
+    }
 }
 
 impl Surface {

@@ -103,7 +103,7 @@ pub(crate) fn view(
             .filter(|tab| !tab.is_internal())
         {
             // The surface stays on the tab's keyed container when the input region changes sides.
-            pane = pane.pixels(&tab.surface.pixels);
+            pane = page_surface(pane, &tab.surface);
         }
         pane = pane.child(child);
         if !horizontal
@@ -871,4 +871,19 @@ pub(crate) fn ime(state: &mut AppState, event: &Ime, tx: &mut Tx) -> bool {
     };
     state.browser.send(tab.id(), ViewCommand::Edit(edit));
     true
+}
+
+/// Shows the page's frames in `pane`: Rune's GPU samples Ladybird's own surface where it can,
+/// and otherwise the engine copies each frame into pixels.
+fn page_surface(pane: El, surface: &crate::engine::Surface) -> El {
+    #[cfg(target_os = "macos")]
+    if let Some(gpu) = &surface.gpu {
+        // Frames are laid out at the pane's device size. One texel per device pixel, pinned to the
+        // corner, keeps the last frame still, not stretched, while a resize waits for the next.
+        return pane
+            .native_surface(gpu.native(), rune::SurfaceFit::Fill)
+            .surface_anchor(rune::Align::Start, rune::Align::Start)
+            .surface_unscaled(true);
+    }
+    pane.pixels(&surface.pixels)
 }

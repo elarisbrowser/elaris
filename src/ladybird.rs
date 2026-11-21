@@ -232,6 +232,19 @@ pub struct Frame {
     pub serial: u64,
 }
 
+/// The frame a view displays as a GPU surface ([`WebView::gpu_frame`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GpuFrame {
+    /// A borrowed `IOSurfaceRef`, valid until the view accepts its next frame. Retain it to keep it.
+    pub io_surface: *mut std::ffi::c_void,
+    /// The frame's size in device pixels: the top-left corner of the surface.
+    pub width: u32,
+    pub height: u32,
+    pub surface_size: [u32; 2],
+    pub scale: f64,
+    pub serial: u64,
+}
+
 /// Mouse button bit flags, as the C ABI defines them.
 pub mod button {
     pub const PRIMARY: i32 = 1;

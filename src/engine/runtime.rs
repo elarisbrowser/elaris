@@ -40,6 +40,9 @@ struct View {
     last_thumbnail: Option<Instant>,
     /// Whether the view belongs to the shared private session.
     private: bool,
+    /// The newest GPU frame serial Ladybird was told Rune finished drawing.
+    #[cfg(target_os = "macos")]
+    released_serial: u64,
 }
 
 pub(super) struct Runtime {
@@ -59,6 +62,9 @@ pub(super) struct Runtime {
     // Oldest hidden view first. Absent when the experiment is disabled.
     hidden_order: Option<Vec<TabId>>,
     hidden_frames_dirty: bool,
+    /// Wakes the engine thread when Rune's GPU finishes a frame.
+    #[cfg(target_os = "macos")]
+    gpu_waker: Option<std::sync::Arc<Waker>>,
 }
 
 impl Runtime {
@@ -93,6 +99,8 @@ impl Runtime {
                 )
                 .then(Vec::new),
                 hidden_frames_dirty: false,
+                #[cfg(target_os = "macos")]
+                gpu_waker: None,
             },
             download_directory_error,
         ))
@@ -227,7 +235,9 @@ impl Runtime {
                     Ok(Some(view)) => {
                         // Ladybird opens a popup in its opener's session.
                         let private = self.views.get(&source).is_some_and(|view| view.private);
-                        self.insert_view(tab, view, surface, private);
+                        if let Err(error) = self.insert_view(tab, view, surface, private) {
+                            return Some(Update::Tab(tab, TabUpdate::Error(error)));
+                        }
                     }
                     Ok(None) => return Some(Update::PopupClosed(tab)),
                     Err(error) => return Some(Update::Tab(tab, TabUpdate::Error(error))),
@@ -317,11 +327,30 @@ impl Runtime {
         let view = self
             .ladybird
             .create_view_in(tab.raw(), self.display_refresh_rate, private)?;
-        self.insert_view(tab, view, surface, private);
-        Ok(())
+        self.insert_view(tab, view, surface, private)
     }
 
-    fn insert_view(&mut self, tab: TabId, view: WebView, surface: Surface, private: bool) {
+    /// Starts showing `view`'s frames in `surface`, in the GPU's memory where it can.
+    fn insert_view(
+        &mut self,
+        tab: TabId,
+        #[cfg_attr(not(target_os = "macos"), allow(unused_mut))] mut view: WebView,
+        surface: Surface,
+        private: bool,
+    ) -> Result<(), String> {
+        #[cfg(target_os = "macos")]
+        if let Some(gpu) = &surface.gpu {
+            view.set_gpu_frames(true)?;
+            let waker = match &self.gpu_waker {
+                Some(waker) => std::sync::Arc::clone(waker),
+                None => {
+                    let waker = std::sync::Arc::new(self.ladybird.waker()?);
+                    self.gpu_waker = Some(std::sync::Arc::clone(&waker));
+                    waker
+                }
+            };
+            gpu.on_completed(move || waker.wake());
+        }
         self.views.insert(
             tab,
             View {
@@ -334,8 +363,26 @@ impl Runtime {
                 preview_committed: false,
                 last_thumbnail: None,
                 private,
+                #[cfg(target_os = "macos")]
+                released_serial: 0,
             },
         );
+        Ok(())
+    }
+
+    /// Lets Ladybird paint into the backing stores of frames Rune's GPU has finished with.
+    #[cfg(target_os = "macos")]
+    fn release_gpu_frames(&mut self) {
+        for view in self.views.values_mut() {
+            let Some(gpu) = &view.surface.gpu else {
+                continue;
+            };
+            let completed = gpu.completed();
+            if completed > view.released_serial {
+                view.released_serial = completed;
+                let _ = view.view.release_frames(completed);
+            }
+        }
     }
 
     /// Keeps full frames for the newest hidden views that have painted.
@@ -370,6 +417,8 @@ impl Runtime {
     /// Turns the events Ladybird raised into updates, showing each tab's new frame if it has
     /// one. Events from views that have closed since are dropped.
     pub(super) fn handle_events(&mut self) -> Vec<Update> {
+        #[cfg(target_os = "macos")]
+        self.release_gpu_frames();
         let events = std::mem::take(&mut *self.events.borrow_mut());
         let mut updates = Vec::new();
         let mut painted: Vec<(TabId, bool)> = Vec::new();
