@@ -4,7 +4,7 @@
 import argparse
 import sys
 
-from elaris_cli import cpp, engine, linux, project
+from elaris_cli import cpp, engine, linux, project, rune
 
 
 if sys.version_info < (3, 9):
@@ -18,6 +18,7 @@ def parser() -> argparse.ArgumentParser:
     cpp.register_commands(commands)
     engine.register_commands(commands)
     linux.register_commands(commands)
+    rune.register_commands(commands)
     return cli
 
 

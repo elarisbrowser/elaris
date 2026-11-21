@@ -41,24 +41,34 @@ published branches, and do not merge upstream changes without review.
 
 ## Update Elaris's pin
 
-Choose the tested commit on `elaris`, then update the shared revision in Elaris's
-`Cargo.toml` for `rune`, `rune-kit`, and every Rune-owned `[patch.crates-io]` entry. Keep
-all these dependencies on the same fork commit and retain their features and platform
-configuration. Update the lockfile with the targeted command below and verify its Rune git
-sources resolve to that commit.
+After the fork's `elaris` branch passes both projects' checks, pin it:
 
 ```sh
-cargo update -p rune --precise <tested-commit>
-cargo metadata --locked --no-deps --format-version 1
+./elaris pin              # the head of the fork's elaris branch
+./elaris pin <branch|tag|full-commit>
+```
+
+It rewrites the shared revision of `rune`, `rune-kit` and every Rune-owned
+`[patch.crates-io]` entry in `Cargo.toml`, re-locks only those sources, verifies
+`cargo metadata --locked`, and runs `cargo check --locked` (skip with `--no-check`). It
+refuses while a local `.cargo/config.toml` patches Rune. Then run the remaining checks:
+
+```sh
 cargo fmt --check
-cargo check --locked
 cargo clippy --locked -- -D warnings
 cargo test --locked
 ```
 
-The Elaris repository currently has no Rune-specific dependency sync helper; its Python
-dependency tooling manages system packages. Update the Cargo pin and the hot-reload
-dependency lookup in `scripts/elaris_cli/project.py` together.
+To develop against a local clone first, add a git-ignored `.cargo/config.toml`:
+
+```toml
+[patch."https://github.com/elarisbrowser/rune"]
+rune = { path = "../rune/crates/rune" }
+rune-kit = { path = "../rune/crates/rune-kit" }
+```
+
+The hot-reload launcher lookup in `scripts/elaris_cli/project.py` reads the pinned
+revision from `cargo metadata`, so it follows the pin.
 
 ## Window API investigation
 
