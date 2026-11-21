@@ -44,7 +44,7 @@ replaced it. Rune reports that per drawn frame through the `NativeSurface` obser
 frame Rune never draws is covered by any later one, and a hidden tab paints nothing, so nothing
 waits on it.
 
-`ELARIS_CPU_FRAMES=1` selects the copying path described below, which Linux always uses.
+The path is opt-in (`ELARIS_GPU_FRAMES=1`) until verified; otherwise frames take the copying path described below, which Linux always uses.
 
 ## Measuring
 
@@ -158,7 +158,7 @@ processes left, five runs out of five.
 
 - The GPU frame path (macOS) is untested at runtime. Check that pages draw with the right colours
   and no tearing, that tabs keep painting while scrolling, and compare `ELARIS_PERF=1` frame
-  intervals against `ELARIS_CPU_FRAMES=1`. If a page freezes after a few frames, the backing
+  intervals with and without `ELARIS_GPU_FRAMES=1`. If a page freezes after a few frames, the backing
   stores are not being released.
 - Frames' alpha is assumed opaque; the CPU path forced it, the GPU path samples what Ladybird wrote.
 
