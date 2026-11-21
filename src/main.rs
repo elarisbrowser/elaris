@@ -105,6 +105,7 @@ fn configure_app(app: App<app::AppState>) -> App<app::AppState> {
             let retained_window = window.clone();
             let register_handle = app_handle.clone();
             register_handle.update(move |state, _| {
+                menu_macos::install_close_button(&retained_window, state.window_id);
                 app::register_window(state.window_id, retained_window);
             });
             window_macos::install(window);

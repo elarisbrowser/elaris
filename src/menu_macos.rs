@@ -3,7 +3,7 @@
 //! Native macOS application menus, dispatched into Elaris's shared browser actions.
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use objc2_05::rc::Retained;
 use objc2_05::runtime::{AnyClass, AnyObject, AnyProtocol, ClassBuilder, ProtocolObject, Sel};
@@ -26,6 +26,9 @@ thread_local! {
     static MENU_STATE: RefCell<Option<MenuState>> = const { RefCell::new(None) };
     static APP_HANDLES: RefCell<HashMap<u64, rune::AppHandle<AppState>>> = RefCell::new(HashMap::new());
     static ACTIVE_WINDOW: Cell<Option<u64>> = const { Cell::new(None) };
+    /// Windows whose pages have not yet agreed to unload for a pending quit.
+    static QUIT_PENDING: RefCell<Option<HashSet<u64>>> = const { RefCell::new(None) };
+    static WINDOW_TARGET: RefCell<Option<Retained<AnyObject>>> = const { RefCell::new(None) };
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -154,6 +157,8 @@ fn menu(
                 item.setTag(action_id(action));
             }
             items.push(item.clone());
+        } else if spec.title == "Quit Elaris" {
+            unsafe { item.setTarget(Some(target_object(target))) };
         } else if spec.title == "Enter Full Screen" {
             FULL_SCREEN_ITEM.with(|slot| *slot.borrow_mut() = Some(item.clone()));
         }
@@ -193,7 +198,7 @@ fn native_selector(title: &str) -> Sel {
         "Hide Elaris" => sel!(hide:),
         "Hide Others" => sel!(hideOtherApplications:),
         "Show All" => sel!(unhideAllApplications:),
-        "Quit Elaris" => sel!(terminate:),
+        "Quit Elaris" => sel!(quitElaris:),
         "Undo" => sel!(undo:),
         "Redo" => sel!(redo:),
         "Cut" => sel!(cut:),
@@ -421,6 +426,11 @@ pub(crate) fn unregister_window(id: u64) {
     APP_HANDLES.with(|handles| {
         handles.borrow_mut().remove(&id);
     });
+    QUIT_PENDING.with(|pending| {
+        if let Some(pending) = pending.borrow_mut().as_mut() {
+            pending.remove(&id);
+        }
+    });
     set_active_window(id, false);
 }
 
@@ -610,6 +620,14 @@ fn menu_target_class() -> &'static AnyClass {
             menu_action as unsafe extern "C" fn(_, _, _),
         );
         builder.add_method(
+            sel!(quitElaris:),
+            quit_from_menu as unsafe extern "C" fn(_, _, _),
+        );
+        builder.add_method(
+            sel!(closeWindow:),
+            close_from_button as unsafe extern "C" fn(_, _, _),
+        );
+        builder.add_method(
             sel!(menuNeedsUpdate:),
             refresh_from_menu as unsafe extern "C" fn(_, _, _),
         );
@@ -691,4 +709,80 @@ fn shortcut_id(shortcut: Shortcut) -> isize {
         Shortcut::ResetZoom => 14,
         _ => -1,
     }
+}
+
+/// Starts a quit that waits for every window's pages to agree to unload.
+fn request_quit() {
+    let handles: Vec<_> = APP_HANDLES.with(|handles| handles.borrow().values().cloned().collect());
+    if handles.is_empty() {
+        if let Some(mtm) = MainThreadMarker::new() {
+            unsafe { NSApplication::sharedApplication(mtm).terminate(None) };
+        }
+        return;
+    }
+    let ids = APP_HANDLES.with(|handles| handles.borrow().keys().copied().collect());
+    let already_pending = QUIT_PENDING.with(|pending| pending.borrow_mut().replace(ids).is_some());
+    if already_pending {
+        return;
+    }
+    for handle in handles {
+        handle.update(|state, tx| state.request_quit_close(tx));
+    }
+}
+
+/// Records one window's approval and quits once every window has approved.
+pub(crate) fn quit_window_approved(id: u64, tx: &mut Tx) {
+    let finished = QUIT_PENDING.with(|pending| {
+        let mut pending = pending.borrow_mut();
+        let Some(windows) = pending.as_mut() else {
+            return false;
+        };
+        windows.remove(&id);
+        let finished = windows.is_empty();
+        if finished {
+            *pending = None;
+        }
+        finished
+    });
+    if finished {
+        tx.quit();
+    }
+}
+
+/// A page kept its window open, so the whole quit is abandoned.
+pub(crate) fn quit_cancelled() {
+    QUIT_PENDING.with(|pending| *pending.borrow_mut() = None);
+}
+
+unsafe extern "C" fn quit_from_menu(_: &AnyObject, _: Sel, _: &AnyObject) {
+    request_quit();
+}
+
+unsafe extern "C" fn close_from_button(_: &AnyObject, _: Sel, sender: &AnyObject) {
+    let id: isize = unsafe { msg_send![sender, tag] };
+    let handle = APP_HANDLES.with(|handles| handles.borrow().get(&(id as u64)).cloned());
+    if let Some(handle) = handle {
+        handle.update(AppState::request_window_close);
+    }
+}
+
+/// Routes the native close button through the page unload check instead of closing at once.
+pub(crate) fn install_close_button(window: &rune::WindowHandle, id: u64) {
+    let target = WINDOW_TARGET.with(|slot| {
+        slot.borrow_mut()
+            .get_or_insert_with(|| unsafe { msg_send_id![menu_target_class(), new] })
+            .clone()
+    });
+    crate::window_macos::with_window(window, |native| {
+        if let Some(button) =
+            native.standardWindowButton(objc2_app_kit_02::NSWindowButton::NSWindowCloseButton)
+        {
+            // SAFETY: AppKit retains nothing here; the target lives for the process in WINDOW_TARGET.
+            unsafe {
+                let _: () = msg_send![&button, setTarget: &*target];
+                let _: () = msg_send![&button, setAction: sel!(closeWindow:)];
+                let _: () = msg_send![&button, setTag: id as isize];
+            }
+        }
+    });
 }

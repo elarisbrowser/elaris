@@ -11,8 +11,11 @@ enum CloseAction {
     Tabs {
         keep: Option<TabId>,
     },
-    #[cfg(target_os = "linux")]
-    Window,
+    /// Closes the window, or approves this window's part of an app quit.
+    Window {
+        #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+        quit: bool,
+    },
 }
 
 /// Targets stay open until the entire close request has been approved.
@@ -80,11 +83,41 @@ impl super::AppState {
         }
     }
 
-    #[cfg(target_os = "linux")]
+    /// Closes the window once every page has agreed to unload.
     pub(crate) fn request_window_close(&mut self, tx: &mut Tx) {
+        self.request_window_unload(false, tx);
+    }
+
+    /// Asks this window's pages to unload as part of quitting the app.
+    #[cfg(target_os = "macos")]
+    pub(crate) fn request_quit_close(&mut self, tx: &mut Tx) {
+        self.request_window_unload(true, tx);
+    }
+
+    fn request_window_unload(&mut self, quit: bool, tx: &mut Tx) {
         let targets = self.browser.tabs().iter().map(Tab::id).collect();
-        if self.begin_close(targets, CloseAction::Window) {
-            tx.close_window();
+        if self.closing_tabs.is_some() {
+            self.close_window_cancelled(quit);
+        } else if self.begin_close(targets, CloseAction::Window { quit }) {
+            self.close_window_approved(quit, tx);
+        }
+    }
+
+    #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
+    fn close_window_approved(&self, quit: bool, tx: &mut Tx) {
+        #[cfg(target_os = "macos")]
+        if quit {
+            crate::menu_macos::quit_window_approved(self.window_id, tx);
+            return;
+        }
+        tx.close_window();
+    }
+
+    #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
+    fn close_window_cancelled(&self, quit: bool) {
+        #[cfg(target_os = "macos")]
+        if quit {
+            crate::menu_macos::quit_cancelled();
         }
     }
 
@@ -123,8 +156,7 @@ impl super::AppState {
 
         let keep = match close.action {
             CloseAction::Tabs { keep } => keep,
-            #[cfg(target_os = "linux")]
-            CloseAction::Window => return true,
+            CloseAction::Window { .. } => return true,
         };
         self.site_permissions_open = false;
         self.page_menu = Default::default();
@@ -161,10 +193,10 @@ impl super::AppState {
                 .committed
                 .iter()
                 .any(|(tab, _, _)| close.targets.contains(tab));
-        #[cfg(target_os = "linux")]
-        if matches!(close.action, CloseAction::Window) {
+        if matches!(close.action, CloseAction::Window { .. }) {
             close.cancelled |= self.browser.tabs().len() != close.targets.len();
         }
+        let quit = matches!(close.action, CloseAction::Window { quit: true });
         let decision = polled
             .close_decisions
             .iter()
@@ -174,7 +206,7 @@ impl super::AppState {
                 let previous = self.browser.active_tab().map(Tab::id);
                 close.checking += 1;
                 if self.advance_close() {
-                    tx.close_window();
+                    self.close_window_approved(quit, tx);
                 } else if self.closing_tabs.is_none()
                     && self.browser.active_tab().map(Tab::id) != previous
                 {
@@ -186,13 +218,17 @@ impl super::AppState {
                     tx.focus(key, false);
                 }
             }
-            Some(_) => self.closing_tabs = None,
+            Some(_) => {
+                self.closing_tabs = None;
+                self.close_window_cancelled(quit);
+            }
             None if self
                 .browser
                 .tab(checking)
                 .is_none_or(|tab| !tab.awaiting_close) =>
             {
                 self.closing_tabs = None;
+                self.close_window_cancelled(quit);
             }
             None => {}
         }
