@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/brand-kit/logo/logo-color.svg" alt="elaris logo" width="112" />
   <h1>elaris</h1>
-  <p>A cross-platform browser built with Rust and Rune, powered by Ladybird.</p>
+  <p>A cross-platform browser built in Rust, powered by <a href="https://ladybird.org/">Ladybird</a>.</p>
   <p>
     <a href="https://github.com/elarisbrowser/elaris/actions/workflows/ci.yml?query=branch%3Amain">
       <img src="https://github.com/elarisbrowser/elaris/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status" />
