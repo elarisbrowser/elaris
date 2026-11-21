@@ -48,7 +48,9 @@ pub(crate) struct SiteControlPresentation {
     pub(crate) tab: Option<TabId>,
     pub(crate) url: Option<String>,
     pub(crate) origin: Option<String>,
-    /// The URL uses HTTPS. This does not represent certificate validation status.
+    /// The committed page loaded over HTTPS. Ladybird's RequestServer fails any load whose
+    /// certificate does not verify and offers no bypass, so this implies a validated certificate.
+    /// It does not cover subresources or certificate details, which Ladybird does not expose.
     pub(crate) https_scheme: bool,
     pub(crate) permissions: [(PermissionKind, PermissionState); 4],
     /// The site's autoplay exception, or `None` when it follows the browser default.
