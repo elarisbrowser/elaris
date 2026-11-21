@@ -44,9 +44,9 @@
 #include <LibWebView/Settings.h>
 #include <LibWebView/Utilities.h>
 #if defined(AK_OS_MACOS)
-#include <LibWebView/NotificationBackendMacOS.h>
-
 #include <UI/Qt/MicrophoneAuthorizerMacOS.h>
+
+#include "notification_backend_macos.h"
 #elif defined(AK_OS_LINUX)
 #include <LibWebView/NotificationBackendFreedesktop.h>
 #endif
@@ -60,6 +60,7 @@
 #include <deque>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -123,7 +124,7 @@ class ElarisApplication final : public WebView::Application {
         : WebView::Application(AK::move(helper_directory)) {}
     NonnullOwnPtr<WebView::NotificationBackend> create_notification_backend() override {
 #if defined(AK_OS_MACOS)
-        return make<WebView::NotificationBackendMacOS>();
+        return Elaris::make_notification_backend_macos();
 #elif defined(AK_OS_LINUX)
         return make<WebView::NotificationBackendFreedesktop>();
 #else
@@ -230,6 +231,9 @@ struct ElarisLadybird {
     std::unique_ptr<ElarisDownloadObserver> download_observer;
     uint64_t next_picker_request{};
     bool permissions_initialized{};
+    // Elaris's browser defaults. Ladybird only prompts when a site has no decision, so a blocked default
+    // turns that prompt into a silent refusal and leaves explicit site exceptions in charge.
+    std::set<Web::Permissions::PermissionName> blocked_by_default;
 };
 
 struct PendingPageDialog {
@@ -514,11 +518,10 @@ extern "C" int32_t elaris_ladybird_set_permission_default(ElarisLadybird* bridge
     if (!bridge || !on_owner_thread(bridge) || !key || (blocked != 0 && blocked != 1))
         return fail("invalid default permission");
     if (auto name = permission_name({key, strlen(key)}); name.has_value()) {
-        using State = Web::Permissions::EffectiveState;
-        auto state = blocked ? State::Denied : State::Prompt;
-        if (*name == Web::Permissions::PermissionName::Geolocation && !s_application->sites_can_ask_for_location())
-            state = State::Denied;
-        WebView::Application::default_session().permission_manager->set_global_default(*name, state);
+        if (blocked)
+            bridge->blocked_by_default.insert(*name);
+        else
+            bridge->blocked_by_default.erase(*name);
     }
     return succeed();
 }
@@ -900,6 +903,7 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
         .download_observer = nullptr,
         .next_picker_request = 0,
         .permissions_initialized = false,
+        .blocked_by_default = {},
     };
     s_application->host = *out_bridge;
     (*out_bridge)->download_observer = std::make_unique<ElarisDownloadObserver>(**out_bridge);
@@ -999,7 +1003,8 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
     }
     install_form_pickers(*handle);
     handle->view->on_request_permission = [handle](auto const& request, auto reply) {
-        if (request.is_file || request.top_level_origin.is_opaque() || !handle->bridge->callback) {
+        if (request.is_file || request.top_level_origin.is_opaque() || !handle->bridge->callback ||
+            handle->bridge->blocked_by_default.contains(request.name)) {
             reply(Web::Permissions::PromptOutcome::Cancelled);
             return;
         }

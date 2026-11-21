@@ -11,7 +11,6 @@ function(elaris_add_ladybird_bridge)
         Libraries/LibWebView/WebContentPage.cpp
         Libraries/LibWebView/ViewImplementation.h)
     elaris_patch_ladybird(color-picker-cancel Libraries/LibWeb/HTML/HTMLInputElement.cpp)
-    elaris_patch_ladybird(permission-defaults Libraries/LibWebView/PermissionManager.cpp)
     elaris_patch_ladybird(file-picker-document Libraries/LibWeb/Page/Page.cpp)
     target_include_directories(LibWebView PRIVATE "${ELARIS_BRIDGE_DIR}/src")
     elaris_patch_ladybird(private-request-servers
@@ -22,13 +21,6 @@ function(elaris_add_ladybird_bridge)
         # The installed vcpkg config incorrectly publishes `//include/harfbuzz`.
         set_property(TARGET harfbuzz PROPERTY INTERFACE_INCLUDE_DIRECTORIES
             "${ELARIS_VCPKG_PREFIX}/include/harfbuzz")
-    endif()
-
-    if(APPLE)
-        elaris_patch_ladybird(notification-owner-thread Libraries/LibWebView/NotificationBackendMacOS.mm)
-        set_source_files_properties(
-            "${CMAKE_BINARY_DIR}/elaris-notification-owner-thread/compiled/Libraries/LibWebView/NotificationBackendMacOS.mm"
-            TARGET_DIRECTORY LibWebView PROPERTIES COMPILE_FLAGS "-fobjc-arc")
     endif()
 
     if(APPLE AND ELARIS_VCPKG_PREFIX)
@@ -43,10 +35,13 @@ function(elaris_add_ladybird_bridge)
 
     add_library(elaris_ladybird SHARED "${ELARIS_BRIDGE_DIR}/src/bridge.cpp")
     if(APPLE)
-        target_sources(elaris_ladybird PRIVATE "${LADYBIRD_SOURCE_DIR}/UI/Qt/MicrophoneAuthorizerMacOS.mm")
-        set_source_files_properties("${LADYBIRD_SOURCE_DIR}/UI/Qt/MicrophoneAuthorizerMacOS.mm"
-            PROPERTIES COMPILE_FLAGS "-fobjc-arc")
-        target_link_libraries(elaris_ladybird PRIVATE "-framework AVFoundation" "-framework CoreServices")
+        set(objc_sources
+            "${ELARIS_BRIDGE_DIR}/src/notification_backend_macos.mm"
+            "${LADYBIRD_SOURCE_DIR}/UI/Qt/MicrophoneAuthorizerMacOS.mm")
+        target_sources(elaris_ladybird PRIVATE ${objc_sources})
+        set_source_files_properties(${objc_sources} PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+        target_link_libraries(elaris_ladybird PRIVATE
+            "-framework AVFoundation" "-framework CoreServices" "-framework UserNotifications")
     endif()
     target_compile_features(elaris_ladybird PRIVATE cxx_std_20)
     target_include_directories(elaris_ladybird PUBLIC "${ELARIS_BRIDGE_DIR}/include")

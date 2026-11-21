@@ -65,24 +65,7 @@
 
 --- a/Libraries/LibWebView/WebContentPage.cpp
 +++ b/Libraries/LibWebView/WebContentPage.cpp
-@@ -1806,6 +1806,16 @@
-     }
-
-     auto deny = [&] { async_permission_request_completed(request_id, Web::Permissions::EffectiveState::Denied); };
-+    bool document_is_active = false;
-+    traversable().for_each_in_inclusive_subtree([&](CanonicalNavigable const& navigable) {
-+        auto const& active = navigable.active_document();
-+        if (active.id() != document_id || active.host() != this)
-+            return IterationDecision::Continue;
-+        document_is_active = true;
-+        return IterationDecision::Break;
-+    });
-+    if (!document_is_active)
-+        return deny();
-
-     view().did_request_permission({}, *permission_name);
-
-@@ -1885,7 +1895,7 @@
+@@ -1885,7 +1885,7 @@
          }
          VERIFY_NOT_REACHED();
      }();

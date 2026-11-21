@@ -100,8 +100,10 @@ access in the system and allow the site to check the activity indicator and
 bundle and the desktop notification daemon on the Linux session bus.
 
 Defaults can be edited in Elaris's `config.toml` using `ask` or `block`.
-A saved site decision takes precedence over the browser default, and system
-authorization still applies.
+Elaris applies a blocked default in the bridge by refusing the prompt, so a
+saved site decision still takes precedence, Ladybird's own settings and system
+authorization still apply, and `navigator.permissions.query` reports `prompt`
+for blocked-by-default sites.
 
 ```toml
 [permission_defaults]
