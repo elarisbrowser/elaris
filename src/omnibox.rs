@@ -11,7 +11,7 @@ use elaris::history::Entry as HistoryEntry;
 const MAX_TAB_SUGGESTIONS: usize = 4;
 const MAX_HISTORY_SUGGESTIONS: usize = 3;
 
-#[derive(Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Mode {
     #[default]
     Current,
