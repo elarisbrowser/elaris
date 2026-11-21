@@ -4,7 +4,6 @@ use rune::{El, Key, KeyEvent, PointerPress, Tx, el};
 use rune_kit::{MenuItem, context_menu};
 
 use crate::app::AppState;
-#[cfg(target_os = "macos")]
 use crate::permissions::PermissionState;
 use crate::site_controls::SiteControlPresentation;
 use crate::site_controls::SiteControlsPage;
