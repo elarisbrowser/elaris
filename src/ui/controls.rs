@@ -32,6 +32,11 @@ pub(super) fn icon_button_style(
     size: f32,
     theme: &Theme,
 ) -> El {
+    icon_button_frame(key, label, size, theme).child(icon(glyph, theme::ICON).color(theme.icon))
+}
+
+/// An icon button's surface without its glyph, for a caller that stacks its own.
+pub(super) fn icon_button_frame(key: &str, label: &str, size: f32, theme: &Theme) -> El {
     el().key(key)
         .size(size, size)
         .center()
@@ -41,7 +46,6 @@ pub(super) fn icon_button_style(
         .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
         .label(label)
         .help(label)
-        .child(icon(glyph, theme::ICON).color(theme.icon))
 }
 
 /// `glyph`, or the confirmation tick once `confirmed`: the tick draws itself on as the glyph
