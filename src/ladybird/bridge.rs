@@ -126,6 +126,8 @@ unsafe extern "C" {
     fn elaris_ladybird_set_display_refresh_rate(view: *mut RawView, refresh_rate: f64) -> i32;
     fn elaris_ladybird_load(view: *mut RawView, url: *const c_char) -> i32;
     fn elaris_ladybird_reload(view: *mut RawView) -> i32;
+    fn elaris_ladybird_reload_bypassing_cache(view: *mut RawView) -> i32;
+    fn elaris_ladybird_set_zoom(view: *mut RawView, zoom: f64) -> i32;
     fn elaris_ladybird_stop_loading(view: *mut RawView) -> i32;
     fn elaris_ladybird_traverse_history(view: *mut RawView, delta: i32) -> i32;
     fn elaris_ladybird_set_visible(view: *mut RawView, visible: i32) -> i32;
@@ -650,6 +652,18 @@ impl WebView {
     pub fn reload(&mut self) -> Result<(), String> {
         // SAFETY: The view is live on its owner's thread.
         status_result(unsafe { elaris_ladybird_reload(self.raw.as_ptr()) })
+    }
+
+    /// Reloads the current page without using cached resources.
+    pub fn reload_bypassing_cache(&mut self) -> Result<(), String> {
+        // SAFETY: The view is live on its owner's thread.
+        status_result(unsafe { elaris_ladybird_reload_bypassing_cache(self.raw.as_ptr()) })
+    }
+
+    /// Sets the page zoom factor.
+    pub fn set_zoom(&mut self, zoom: f64) -> Result<(), String> {
+        // SAFETY: The view is live on its owner's thread; the bridge validates zoom.
+        status_result(unsafe { elaris_ladybird_set_zoom(self.raw.as_ptr(), zoom) })
     }
 
     pub fn stop_loading(&mut self) -> Result<(), String> {

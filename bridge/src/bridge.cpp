@@ -1,3 +1,4 @@
+#include <cmath>
 #ifdef ELARIS_BUILD_SMOKE_TESTS
 #include <LibWebView/RequestServerManager.h>
 
@@ -1122,6 +1123,26 @@ extern "C" int32_t elaris_ladybird_reload(ElarisLadybirdView* handle) {
     if (!on_owner_thread(handle->bridge))
         return fail("navigation must run on the initialization thread");
     handle->view->reload();
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_reload_bypassing_cache(ElarisLadybirdView* handle) {
+    if (!handle)
+        return fail("view is required");
+    if (!on_owner_thread(handle->bridge))
+        return fail("navigation must run on the initialization thread");
+    handle->view->reload(WebView::BypassCache::Yes);
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_set_zoom(ElarisLadybirdView* handle, double zoom) {
+    if (!handle)
+        return fail("view is required");
+    if (!on_owner_thread(handle->bridge))
+        return fail("zoom must run on the initialization thread");
+    if (!std::isfinite(zoom) || zoom <= 0)
+        return fail("zoom must be finite and positive");
+    handle->view->set_zoom(zoom);
     return succeed();
 }
 

@@ -210,6 +210,8 @@ int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t view_id, El
 int32_t elaris_ladybird_set_display_refresh_rate(ElarisLadybirdView* view, double refresh_rate);
 int32_t elaris_ladybird_load(ElarisLadybirdView* view, const char* url);
 int32_t elaris_ladybird_reload(ElarisLadybirdView* view);
+int32_t elaris_ladybird_reload_bypassing_cache(ElarisLadybirdView* view);
+int32_t elaris_ladybird_set_zoom(ElarisLadybirdView* view, double zoom);
 int32_t elaris_ladybird_stop_loading(ElarisLadybirdView* view);
 /* Moves through the view's session history: -1 goes back, 1 forward. */
 int32_t elaris_ladybird_traverse_history(ElarisLadybirdView* view, int32_t delta);
