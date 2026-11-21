@@ -124,6 +124,8 @@ class ElarisApplication final : public WebView::Application {
     ElarisLadybird* host{};
     explicit ElarisApplication(Optional<AK::ByteString> helper_directory = {})
         : WebView::Application(AK::move(helper_directory)) {}
+    // The host process is Elaris, not a Ladybird browser, so its own crashes are never captured or reported.
+    bool captures_browser_crashes() const override { return false; }
     NonnullOwnPtr<WebView::NotificationBackend> create_notification_backend() override {
 #if defined(AK_OS_MACOS)
         return Elaris::make_notification_backend_macos();

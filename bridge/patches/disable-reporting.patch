@@ -1,16 +1,39 @@
 --- a/Libraries/LibWebView/ReportSubmission.cpp
 +++ b/Libraries/LibWebView/ReportSubmission.cpp
-@@ -27,6 +27,9 @@
+@@ -27,6 +27,12 @@
  
  namespace WebView {
  
 +// Elaris does not send reports. Every submission fails before it reaches the network. The rest of the reporting code is
 +// kept, so a future Elaris reporting backend only needs to turn this on and choose its endpoint.
 +static constexpr bool reporting_enabled = false;
++// Every report names the application that sent it, so Elaris reports are never mistaken for Ladybird's own.
++static constexpr auto application_name = "elaris"sv;
++static constexpr auto application_version = StringView { ELARIS_APPLICATION_VERSION, sizeof(ELARIS_APPLICATION_VERSION) - 1 };
  static constexpr auto default_endpoint = "https://reports.app.ladybird.org"sv;
  static constexpr auto challenge_path = "/api/v1/challenges"sv;
  static constexpr auto report_path = "/api/v1/reports"sv;
-@@ -229,6 +232,10 @@
+@@ -103,6 +109,19 @@
+         fields.must_append(move(entry));
+     }
+ 
++    auto add_application_field = [&](StringView key, StringView value) {
++        JsonObject typed;
++        typed.set("type"sv, "text"sv);
++        typed.set("value"sv, to_string(value));
++        JsonObject entry;
++        entry.set("key"sv, to_string(key));
++        entry.set("value"sv, move(typed));
++        fields.must_append(move(entry));
++    };
++    add_application_field("application"sv, application_name);
++    add_application_field("application_version"sv, application_version);
++    add_application_field("engine"sv, "ladybird"sv);
++
+     JsonArray described_attachments;
+     for (auto const& attachment : attachments) {
+         JsonObject described;
+@@ -229,6 +248,10 @@
  // A submission keeps itself alive until it is sent or fails for good, so it outlives the review that started it.
  void ReportSubmission::start()
  {

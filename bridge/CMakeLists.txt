@@ -17,6 +17,10 @@ function(elaris_add_ladybird_bridge)
     elaris_patch_ladybird(disable-reporting
         Libraries/LibWebView/ReportSubmission.cpp
         Libraries/LibWebView/Settings.h)
+    # Reports name the Elaris version that sent them.
+    file(STRINGS "${ELARIS_BRIDGE_DIR}/../Cargo.toml" elaris_version_line REGEX "^version = " LIMIT_COUNT 1)
+    string(REGEX REPLACE "^version = \"([^\"]+)\".*" "\\1" elaris_version "${elaris_version_line}")
+    target_compile_definitions(LibWebView PRIVATE "ELARIS_APPLICATION_VERSION=\"${elaris_version}\"")
     target_include_directories(LibWebView PRIVATE "${ELARIS_BRIDGE_DIR}/src")
     elaris_patch_ladybird(private-request-servers
         Libraries/LibWebView/Application.cpp
