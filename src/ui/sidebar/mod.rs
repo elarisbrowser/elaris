@@ -210,24 +210,14 @@ fn copy_link(state: &AppState, url: &str, theme: &Theme, reduced: bool) -> El {
     let copied = state.sidebar.link_copied_until.is_some();
     let size = theme::ICON_BUTTON;
     let inset = (size - theme::ICON) / 2.0;
-    let swap = |enter: Transition| if reduced { Transition::none() } else { enter };
-    let glyph = if copied {
-        rune::canvas(
-            rune::Shape::new()
-                .stroke(icons::TICK.to_vec(), theme::TICK_STROKE, theme.icon)
-                .view_box(theme::ICON, theme::ICON),
-        )
-        .key("copy-link-tick")
-        .transition(swap(Transition::asymmetric(
-            Transition::draw(),
-            Transition::opacity(),
-        )))
-    } else {
-        icon(&icons::LINK, theme::ICON)
-            .key("copy-link-chain")
-            .color(theme.icon)
-            .transition(swap(Transition::scale(0.6).allow_small_scale()))
-    };
+    let glyph = crate::ui::controls::confirm_glyph(
+        "copy-link",
+        &icons::LINK,
+        theme::ICON,
+        copied,
+        theme,
+        reduced,
+    );
     let url = url.to_owned();
     super::hover_highlight::attach(
         rune::el()

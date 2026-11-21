@@ -4,9 +4,10 @@
 //! sidebar buttons share.
 
 use rune::tok::type_;
-use rune::{Color, El, Icon, el, icon, row, text};
+use rune::{Color, El, Icon, Transition, el, icon, row, text};
 
 use super::hover_highlight::{self, Group};
+use super::icons;
 use super::theme::{self, Theme};
 
 /// A square button showing `glyph`, labelled for assistive technology and its tooltip.
@@ -41,6 +42,37 @@ pub(super) fn icon_button_style(
         .label(label)
         .help(label)
         .child(icon(glyph, theme::ICON).color(theme.icon))
+}
+
+/// `glyph`, or the confirmation tick once `confirmed`: the tick draws itself on as the glyph
+/// shrinks away. `key` names both so each keeps its own transition.
+pub(crate) fn confirm_glyph(
+    key: &str,
+    glyph: &'static Icon,
+    size: f32,
+    confirmed: bool,
+    theme: &Theme,
+    reduced: bool,
+) -> El {
+    let swap = |enter: Transition| if reduced { Transition::none() } else { enter };
+    if confirmed {
+        rune::canvas(
+            rune::Shape::new()
+                .stroke(icons::TICK.to_vec(), theme::TICK_STROKE, theme.icon)
+                .view_box(theme::ICON, theme::ICON),
+        )
+        .key(format!("{key}-tick"))
+        .size(size, size)
+        .transition(swap(Transition::asymmetric(
+            Transition::draw(),
+            Transition::opacity(),
+        )))
+    } else {
+        icon(glyph, size)
+            .key(format!("{key}-glyph"))
+            .color(theme.icon)
+            .transition(swap(Transition::scale(0.6).allow_small_scale()))
+    }
 }
 
 /// A standalone icon button that stays legible over webpage content.
