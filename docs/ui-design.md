@@ -23,6 +23,23 @@ as `[appearance].tab_layout` in `config.toml` and defaults to `"vertical"`. Both
 same open tabs and Split View state. The horizontal strip scrolls sideways with a trackpad or
 Shift-wheel and reveals the newly selected tab when switching with the keyboard.
 
+## Alignment lines
+
+Gridline review, 21 November 2026:
+
+| Area | Text line | Other lines |
+|---|---:|---|
+| Vertical sidebar | The shared `SIDEBAR_PADDING` inset | Search and tab icons share a centred icon column; section labels follow the icon column plus one gap. |
+| Native page groups | The shared `PAGE_GROUP_PADDING` inset inside the group and section heading | Group controls end at the matching trailing inset. |
+| Downloads popover | 12 pt inside the popover frame | The body content receives a 4 pt inset inside the popover's 8 pt content padding to match its title. |
+| Window toolbar | Centred on the native titlebar controls | First and last controls use the frame's leading and trailing insets. |
+
+The Downloads empty state was 4 pt left of the popover title. Its content container now supplies the
+missing inset; active rows use the same container inset. The live macOS review covered the default
+sidebar, Settings, and the empty Downloads popover. The Rune UI is native, so the web-only gridline
+probe cannot measure it; narrow-window layouts, populated downloads, history, menus, and other
+overlays were not reached in this pass.
+
 ## Split view grid
 
 Split View opens with two panes. Settings → Split View sets the maximum between two and four;
