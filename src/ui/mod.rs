@@ -110,7 +110,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     } else {
         #[cfg(target_os = "linux")]
         {
-            window = window.child(sidebar::header::view(state, &theme, cx, &mut overlays));
+            window = window.child(sidebar::header::view(state, &theme, cx));
         }
         let sidebar = sidebar::view(state, &theme, &mut overlays, reduced_motion);
         let page = viewport::view(state, &theme, &mut overlays, reduced_motion);
@@ -133,7 +133,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
             window = window
                 .child(sidebar)
                 .child(page)
-                .child(sidebar::header::view(state, &theme, cx, &mut overlays));
+                .child(sidebar::header::view(state, &theme, cx));
             if !state.sidebar.collapsed {
                 window = window.child(sidebar::resize::handle(state.sidebar.width));
             }

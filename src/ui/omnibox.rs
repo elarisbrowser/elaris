@@ -331,6 +331,9 @@ pub(super) fn address_bar(
                 ),
         );
     }
+    if let Some(zoom) = super::sidebar::header::zoom_indicator(state, theme, overlays) {
+        bar = bar.child(zoom);
+    }
     bar
 }
 

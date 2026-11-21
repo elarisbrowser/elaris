@@ -124,7 +124,7 @@ fn body(state: &AppState, theme: &Theme, overlays: &mut Vec<El>, reduced_motion:
         .px(theme::SIDEBAR_PADDING)
         .pb(theme::VIEWPORT_INSET)
         .gap(theme::SIDEBAR_GAP)
-        .child(search_launcher(state, theme, reduced_motion));
+        .child(search_launcher(state, theme, reduced_motion, overlays));
     if let Some(status) = state.status() {
         body = body.child(
             text(status)
@@ -147,7 +147,21 @@ fn body(state: &AppState, theme: &Theme, overlays: &mut Vec<El>, reduced_motion:
         )
 }
 
-fn search_launcher(state: &AppState, theme: &Theme, reduced: bool) -> El {
+fn search_launcher(state: &AppState, theme: &Theme, reduced: bool, overlays: &mut Vec<El>) -> El {
+    let launcher = search_field(state, theme, reduced);
+    match header::zoom_indicator(state, theme, overlays) {
+        Some(zoom) => row()
+            .key("omnibox-row")
+            .w_full()
+            .center_y()
+            .gap(theme::ROW_GAP)
+            .child(launcher.w(0.0).min_w(0.0).grow(1.0))
+            .child(zoom),
+        None => launcher,
+    }
+}
+
+fn search_field(state: &AppState, theme: &Theme, reduced: bool) -> El {
     let address = state
         .browser
         .active_tab()

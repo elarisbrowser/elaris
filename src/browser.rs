@@ -617,6 +617,10 @@ impl Browser {
         }
     }
 
+    pub(crate) fn default_zoom(&self) -> u16 {
+        self.default_zoom
+    }
+
     pub(crate) fn page_zoom(&self, tab: &Tab) -> u16 {
         tab.zoom_override.unwrap_or(self.default_zoom)
     }
