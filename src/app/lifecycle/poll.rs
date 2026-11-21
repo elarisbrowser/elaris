@@ -44,6 +44,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
             state.save_permission_choice(origin, kind, permission);
         }
     }
+    let guards_changed = crate::ui::permission_prompt::poll(state, clock);
     crate::ui::horizontal_tabs::reveal_active(state, tx);
     record_history_updates(state, &polled);
     refresh_find_after_navigation(state, &polled);
@@ -58,6 +59,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         || incoming_drag
         || transferred
         || polled.changed
+        || guards_changed
         || peek_changed
         || preview_changed
         || history_changed

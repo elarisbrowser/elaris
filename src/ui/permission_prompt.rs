@@ -7,19 +7,78 @@ use rune_kit::{Button, ButtonVariant};
 use crate::app::AppState;
 use crate::engine::ViewCommand;
 use crate::permissions::PermissionKind;
+use crate::tab::{Tab, TabId};
 use crate::ui::theme::{self, Theme};
 
-pub(super) fn view(state: &AppState, theme: &Theme, origin: [f32; 2]) -> Option<El> {
-    let tab = state
+/// Keeps page timing from steering browser UI: prompts ignore clicks until armed, and
+/// entering fullscreen shows who took the screen and how to leave.
+#[derive(Debug, Default)]
+pub(crate) struct Guards {
+    /// The visible prompt and the clock time it accepts answers.
+    prompt: Option<(TabId, u64, f64)>,
+    prompt_armed: bool,
+    /// The fullscreen tab and the clock time its notice hides.
+    fullscreen: Option<(TabId, f64)>,
+}
+
+impl Guards {
+    fn armed(&self, tab: TabId, request_id: u64) -> bool {
+        self.prompt_armed
+            && self
+                .prompt
+                .is_some_and(|(id, request, _)| id == tab && request == request_id)
+    }
+}
+
+fn prompt_tab(state: &AppState) -> Option<&Tab> {
+    state
         .browser
         .peek
         .as_ref()
         .map(|peek| &peek.page)
-        .or_else(|| state.browser.active_tab())?;
+        .or_else(|| state.browser.active_tab())
+        .filter(|tab| tab.permission_prompt.is_some())
+}
+
+/// Advances the guards on Rune's frame clock; returns whether the interface must rebuild.
+pub(crate) fn poll(state: &mut AppState, clock: f64) -> bool {
+    let prompt = prompt_tab(state)
+        .and_then(|tab| Some((tab.id(), tab.permission_prompt.as_ref()?.request_id)));
+    let fullscreen = state.browser.fullscreen_tab().map(Tab::id);
+    let guards = &mut state.page_guards;
+    let mut changed = false;
+    if prompt != guards.prompt.map(|(tab, request, _)| (tab, request)) {
+        guards.prompt = prompt
+            .map(|(tab, request)| (tab, request, clock + theme::PERMISSION_PROMPT_ARM_SECONDS));
+        guards.prompt_armed = false;
+        changed = true;
+    } else if let Some((_, _, armed_at)) = guards.prompt
+        && !guards.prompt_armed
+        && clock >= armed_at
+    {
+        guards.prompt_armed = true;
+        changed = true;
+    }
+    if fullscreen != guards.fullscreen.map(|(tab, _)| tab) {
+        guards.fullscreen = fullscreen.map(|tab| (tab, clock + theme::FULLSCREEN_NOTICE_SECONDS));
+        changed = true;
+    } else if let Some((tab, until)) = guards.fullscreen
+        && until.is_finite()
+        && clock >= until
+    {
+        guards.fullscreen = Some((tab, f64::INFINITY));
+        changed = true;
+    }
+    changed
+}
+
+pub(super) fn view(state: &AppState, theme: &Theme, origin: [f32; 2]) -> Option<El> {
+    let tab = prompt_tab(state)?;
     let prompt = tab.permission_prompt.as_ref()?;
     let kind = PermissionKind::from_key(&prompt.key)?;
     let id = tab.id();
     let request_id = prompt.request_id;
+    let armed = state.page_guards.armed(id, request_id);
     let answer = move |state: &mut AppState, choice| {
         state
             .browser
@@ -30,6 +89,7 @@ pub(super) fn view(state: &AppState, theme: &Theme, origin: [f32; 2]) -> Option<
     let title = if prompt.os_denied {
         actions = actions.child(
             Button::new("OK")
+                .disabled(!armed)
                 .on_press(move |state| answer(state, None))
                 .build(&kit),
         );
@@ -38,12 +98,14 @@ pub(super) fn view(state: &AppState, theme: &Theme, origin: [f32; 2]) -> Option<
         actions = actions
             .child(
                 Button::new("Block")
+                    .disabled(!armed)
                     .on_press(move |state| answer(state, Some(false)))
                     .build(&kit),
             )
             .child(
                 Button::new("Allow")
                     .variant(ButtonVariant::Submit)
+                    .disabled(!armed)
                     .on_press(move |state| answer(state, Some(true)))
                     .build(&kit),
             );
@@ -110,4 +172,33 @@ pub(super) fn indicators(tab: &crate::tab::Tab, theme: &Theme) -> Option<El> {
             .fill(theme.overlay_panel)
             .border(theme::OMNIBOX_BORDER_WIDTH, theme.overlay_border)
     })
+}
+
+/// Names the site that took the screen while its fullscreen notice is up.
+pub(super) fn fullscreen_notice(state: &AppState, theme: &Theme) -> Option<El> {
+    let tab = state.browser.fullscreen_tab()?;
+    state
+        .page_guards
+        .fullscreen
+        .filter(|&(id, until)| id == tab.id() && until.is_finite())?;
+    let site = crate::permissions::PermissionStore::origin(&tab.committed_url)
+        .unwrap_or_else(|| tab.committed_url.clone());
+    Some(
+        row()
+            .key("fullscreen-notice")
+            .absolute(theme::FIND_INSET, theme::FIND_INSET)
+            .max_w(theme::FIND_WIDTH)
+            .px(space::S3)
+            .py(space::S2)
+            .radius(theme::FIND_RADIUS)
+            .fill(theme.overlay_panel)
+            .border(theme::OMNIBOX_BORDER_WIDTH, theme.overlay_border)
+            .role("status")
+            .child(
+                text(format!("{site} is now full screen. Press Esc to exit."))
+                    .font(type_::LABEL)
+                    .color(theme.text)
+                    .wrap(),
+            ),
+    )
 }

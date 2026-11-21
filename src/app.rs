@@ -156,6 +156,8 @@ pub(crate) struct AppState {
     #[cfg(any(target_os = "macos", feature = "ladybird-bridge"))]
     display_refresh_rate: f64,
     pub(crate) omnibox: omnibox::State,
+    /// Clock guards for website permission prompts and fullscreen.
+    pub(crate) page_guards: crate::ui::permission_prompt::Guards,
     /// Whether the floating Find in Page bar is mounted.
     pub(crate) find_open: bool,
     pub(crate) tab_switcher: Option<crate::ui::tab_switcher::Switcher>,
@@ -339,6 +341,7 @@ impl AppState {
             #[cfg(any(target_os = "macos", feature = "ladybird-bridge"))]
             display_refresh_rate: 60.0,
             omnibox: omnibox::State::default(),
+            page_guards: Default::default(),
             find_open: false,
             tab_switcher: None,
             find_input: TextEdit::default(),

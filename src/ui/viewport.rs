@@ -461,6 +461,9 @@ fn indicator(theme: &Theme, radius: f32) -> El {
 
 /// The webpage's top-left origin in the window, used to anchor its native find overlay.
 pub(crate) fn page_origin(state: &AppState) -> [f32; 2] {
+    if state.browser.fullscreen_tab().is_some() {
+        return [0.0, 0.0];
+    }
     let left = if state.sidebar.collapsed {
         theme::VIEWPORT_INSET
     } else {

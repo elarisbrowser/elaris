@@ -303,6 +303,10 @@ pub(crate) const OMNIBOX_SEARCH_BUTTON_GAP: f32 = 4.0;
 pub(crate) const FIND_WIDTH: f32 = 344.0;
 pub(crate) const FIND_HEIGHT: f32 = 44.0;
 pub(crate) const FIND_INSET: f32 = 16.0;
+/// How long a website permission prompt ignores clicks, so a page cannot time one under the pointer.
+pub(crate) const PERMISSION_PROMPT_ARM_SECONDS: f64 = 0.6;
+/// How long the exit hint stays up after a page enters fullscreen.
+pub(crate) const FULLSCREEN_NOTICE_SECONDS: f64 = 4.0;
 pub(crate) const FIND_RADIUS: f32 = radius::LG;
 pub(crate) const FIND_MOTION: Spring = Spring::new(0.22, 0.0);
 pub(crate) const FIND_BUTTON: f32 = 26.0;
