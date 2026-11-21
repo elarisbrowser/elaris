@@ -22,6 +22,7 @@ pub(crate) use tabs::floating_drag_preview;
 
 use super::controls::row_button;
 use super::icons;
+use super::permission_prompt;
 use super::theme::{self, Theme};
 use crate::app::{self, AppState};
 use crate::appearance::Appearance;
@@ -148,11 +149,16 @@ fn body(state: &AppState, theme: &Theme, overlays: &mut Vec<El>, reduced_motion:
 }
 
 fn search_launcher(state: &AppState, theme: &Theme, reduced: bool, overlays: &mut Vec<El>) -> El {
-    let zoom = header::zoom_indicator(state, theme, overlays);
-    search_field(state, theme, reduced, zoom)
+    let mut marks = state
+        .browser
+        .active_tab()
+        .map(|tab| permission_prompt::address_indicators(tab, theme))
+        .unwrap_or_default();
+    marks.extend(header::zoom_indicator(state, theme, overlays));
+    search_field(state, theme, reduced, marks)
 }
 
-fn search_field(state: &AppState, theme: &Theme, reduced: bool, zoom: Option<El>) -> El {
+fn search_field(state: &AppState, theme: &Theme, reduced: bool, marks: Vec<El>) -> El {
     let address = state
         .browser
         .active_tab()
@@ -187,7 +193,7 @@ fn search_field(state: &AppState, theme: &Theme, reduced: bool, zoom: Option<El>
     .shortcut_hint("cmd+l")
     .focusable(true)
     .on_press_tx(app::open_from_launcher)
-    .children(zoom);
+    .children(marks);
     // Keep the buttons while site controls are open, since the popover is anchored to them.
     let revealed = state.sidebar.pointer_inside || state.site_permissions_open;
     if state.browser.active_tab().is_none() || !revealed {
