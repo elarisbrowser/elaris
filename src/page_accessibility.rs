@@ -63,6 +63,7 @@ impl PageAccessibility {
                 if self.seq != Some(base) {
                     return Applied::NeedsWholeTree;
                 }
+                let before = self.reachable();
                 for id in removed {
                     self.nodes.remove(&id);
                 }
@@ -73,12 +74,18 @@ impl PageAccessibility {
                     }
                     self.nodes.insert(node.id, node);
                 }
-                self.seq = Some(seq);
                 let reachable = self.reachable();
                 if changed.iter().any(|id| !reachable.contains(id)) {
+                    // The stored tree no longer matches AccessKit's, so refuse later changes too
+                    // until the page sends a whole tree.
+                    self.seq = None;
                     return Applied::NeedsWholeTree;
                 }
-                if scale != self.scale {
+                self.seq = Some(seq);
+                // A subtree that just became reachable is new to AccessKit, and its parent may not
+                // be in this update, which AccessKit rejects. Graft the whole tree instead.
+                let grafted = reachable.iter().any(|id| !before.contains(id));
+                if grafted || scale != self.scale {
                     self.scale = scale;
                     self.push_whole(tree);
                 } else {
@@ -423,6 +430,66 @@ mod tests {
             page.take_updates()[0].tree.is_some(),
             "a zoom change resends the whole tree"
         );
+    }
+
+    #[test]
+    fn a_subtree_attached_without_its_parent_is_grafted_whole() {
+        let tree = tree_id(7);
+        let mut page = PageAccessibility::default();
+        let whole = AccessibilityEvent::Tree {
+            seq: 1,
+            nodes: vec![
+                node(1, "document", &[]),
+                node(5, "group", &[6]),
+                node(6, "button", &[]),
+            ],
+        };
+        page.apply(tree, whole, 1.0);
+        page.take_updates();
+
+        // The page attaches group 5 under the document and renames button 6, but does not resend 5.
+        let attach = AccessibilityEvent::Change {
+            base: 1,
+            seq: 2,
+            nodes: vec![node(1, "document", &[5]), node(6, "button", &[])],
+            removed: Vec::new(),
+        };
+        assert_eq!(page.apply(tree, attach, 1.0), Applied::Done);
+        let updates = page.take_updates();
+        assert!(
+            updates[0].tree.is_some(),
+            "new nodes are grafted with the whole tree"
+        );
+        assert_eq!(updates[0].nodes.len(), 3);
+    }
+
+    #[test]
+    fn changes_wait_for_a_whole_tree_after_a_failed_change() {
+        let tree = tree_id(7);
+        let mut page = PageAccessibility::default();
+        let whole = AccessibilityEvent::Tree {
+            seq: 1,
+            nodes: vec![node(1, "document", &[2]), node(2, "button", &[])],
+        };
+        page.apply(tree, whole, 1.0);
+        page.take_updates();
+
+        let orphan = AccessibilityEvent::Change {
+            base: 1,
+            seq: 2,
+            nodes: vec![node(10, "link", &[])],
+            removed: Vec::new(),
+        };
+        assert_eq!(page.apply(tree, orphan, 1.0), Applied::NeedsWholeTree);
+
+        let next = AccessibilityEvent::Change {
+            base: 2,
+            seq: 3,
+            nodes: vec![node(2, "button", &[])],
+            removed: Vec::new(),
+        };
+        assert_eq!(page.apply(tree, next, 1.0), Applied::NeedsWholeTree);
+        assert!(page.take_updates().is_empty());
     }
 
     #[test]
