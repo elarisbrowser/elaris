@@ -17,6 +17,26 @@ pub struct PageMenu {
     pub image: bool,
     pub editable: bool,
     pub selection: String,
+    /// Set when the menu was opened on a video or audio element.
+    pub media: Option<MediaMenu>,
+}
+
+/// The state of the media a context menu was opened on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MediaMenu {
+    pub playing: bool,
+    pub muted: bool,
+    pub can_enter_picture_in_picture: bool,
+    pub in_picture_in_picture: bool,
+}
+
+/// What a media context menu asks the engine to do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(i32)]
+pub enum MediaAction {
+    TogglePlay = 1,
+    ToggleMute = 2,
+    TogglePictureInPicture = 3,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

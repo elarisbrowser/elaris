@@ -1656,6 +1656,14 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
         event.text = url.c_str();
         event.selection = selection.characters();
         event.value = (menu.kind == WebView::ContextMenuKind::Image ? 1 : 0) | (menu.is_editable ? 2 : 0);
+        if (menu.kind == WebView::ContextMenuKind::Media && menu.media.has_value()) {
+            // Bits 4 to 64: the menu is for media, and what state that media is in.
+            event.value |= 4;
+            event.value |= menu.media->is_playing ? 8 : 0;
+            event.value |= menu.media->is_muted ? 16 : 0;
+            event.value |= menu.media->can_enter_picture_in_picture ? 32 : 0;
+            event.value |= menu.media->is_picture_in_picture ? 64 : 0;
+        }
         handle->bridge->callback(handle->bridge->context, &event);
     };
     handle->view->on_input_method_state_change = [handle] {
@@ -2027,6 +2035,25 @@ extern "C" int32_t elaris_ladybird_open_context_target(ElarisLadybirdView* handl
             handle->view->open_navigation_in_new_tab(AK::move(navigation), Web::HTML::ActivateTab::No);
         else
             handle->view->load(AK::move(navigation));
+    }
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_media_action(ElarisLadybirdView* handle, int32_t action) {
+    if (!handle || !on_owner_thread(handle->bridge))
+        return fail("invalid input view");
+    switch (action) {
+    case ELARIS_LADYBIRD_MEDIA_TOGGLE_PLAY:
+        handle->view->do_context_menu_media_action(WebView::ContextMenuMediaAction::TogglePlay);
+        break;
+    case ELARIS_LADYBIRD_MEDIA_TOGGLE_MUTE:
+        handle->view->do_context_menu_media_action(WebView::ContextMenuMediaAction::ToggleMute);
+        break;
+    case ELARIS_LADYBIRD_MEDIA_TOGGLE_PICTURE_IN_PICTURE:
+        handle->view->do_context_menu_media_action(WebView::ContextMenuMediaAction::TogglePictureInPicture);
+        break;
+    default:
+        return fail("unknown media action");
     }
     return succeed();
 }

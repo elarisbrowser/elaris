@@ -182,6 +182,7 @@ unsafe extern "C" {
     fn elaris_ladybird_discard_prepared(view: *mut RawView, request: u64) -> i32;
     fn elaris_ladybird_load_prepared(view: *mut RawView, source: u64, request: u64) -> i32;
     fn elaris_ladybird_open_context_target(view: *mut RawView, request: u64, new_tab: i32) -> i32;
+    fn elaris_ladybird_media_action(view: *mut RawView, action: i32) -> i32;
     fn elaris_ladybird_find(view: *mut RawView, query: *const c_char, request_id: u64) -> i32;
     fn elaris_ladybird_find_next(view: *mut RawView, request_id: u64) -> i32;
     fn elaris_ladybird_find_previous(view: *mut RawView, request_id: u64) -> i32;
@@ -317,6 +318,12 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
                 url: text,
                 image: raw.value & 1 != 0,
                 editable: raw.value & 2 != 0,
+                media: (raw.value & 4 != 0).then(|| super::MediaMenu {
+                    playing: raw.value & 8 != 0,
+                    muted: raw.value & 16 != 0,
+                    can_enter_picture_in_picture: raw.value & 32 != 0,
+                    in_picture_in_picture: raw.value & 64 != 0,
+                }),
                 selection: if raw.selection.is_null() {
                     String::new()
                 } else {
@@ -1227,6 +1234,11 @@ impl WebView {
         status_result(unsafe {
             elaris_ladybird_open_context_target(self.raw.as_ptr(), request, new_tab.into())
         })
+    }
+
+    pub fn media_action(&mut self, action: super::MediaAction) -> Result<(), String> {
+        // SAFETY: The view lives on the calling engine thread.
+        status_result(unsafe { elaris_ladybird_media_action(self.raw.as_ptr(), action as i32) })
     }
 
     pub fn mouse_event(&mut self, event: MouseEvent) -> Result<(), String> {

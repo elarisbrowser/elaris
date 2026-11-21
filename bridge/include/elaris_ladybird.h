@@ -342,6 +342,13 @@ int32_t elaris_ladybird_edit(ElarisLadybirdView*, ElarisEdit, const uint8_t* tex
 int32_t elaris_ladybird_discard_prepared(ElarisLadybirdView*, uint64_t request);
 int32_t elaris_ladybird_load_prepared(ElarisLadybirdView*, uint64_t source, uint64_t request);
 int32_t elaris_ladybird_open_context_target(ElarisLadybirdView*, uint64_t request, int32_t new_tab);
+/* Applies a media context menu action to the media the menu was opened on. */
+typedef enum {
+    ELARIS_LADYBIRD_MEDIA_TOGGLE_PLAY = 1,
+    ELARIS_LADYBIRD_MEDIA_TOGGLE_MUTE = 2,
+    ELARIS_LADYBIRD_MEDIA_TOGGLE_PICTURE_IN_PICTURE = 3,
+} ElarisLadybirdMediaAction;
+int32_t elaris_ladybird_media_action(ElarisLadybirdView*, int32_t action);
 /* Searches case-insensitively, highlights all matches, and reports the request ID with the result. */
 int32_t elaris_ladybird_find(ElarisLadybirdView*, const char* query, uint64_t request_id);
 int32_t elaris_ladybird_find_next(ElarisLadybirdView*, uint64_t request_id);

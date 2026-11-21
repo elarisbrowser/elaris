@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use elaris::ladybird::{Edit, PageMenu};
+use elaris::ladybird::{Edit, MediaAction, PageMenu};
 use rune::{El, PointerPress, Tx, el};
 use rune_kit::{MenuItem, context_menu};
 
@@ -45,6 +45,37 @@ pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
     let request = info.request;
     let mut menu = context_menu("page-context-menu", el(), Some(*point))
         .on_close(|s: &mut AppState| s.page_menu = Default::default());
+    if let Some(media) = info.media {
+        menu = menu.item(item(
+            id,
+            if media.playing { "Pause" } else { "Play" },
+            move |s, _| {
+                s.browser
+                    .send(id, ViewCommand::MediaAction(MediaAction::TogglePlay))
+            },
+        ));
+        menu = menu.item(item(
+            id,
+            if media.muted { "Unmute" } else { "Mute" },
+            move |s, _| {
+                s.browser
+                    .send(id, ViewCommand::MediaAction(MediaAction::ToggleMute))
+            },
+        ));
+        if media.can_enter_picture_in_picture || media.in_picture_in_picture {
+            let label = if media.in_picture_in_picture {
+                "Exit Picture in Picture"
+            } else {
+                "Picture in Picture"
+            };
+            menu = menu.item(item(id, label, move |s, _| {
+                s.browser.send(
+                    id,
+                    ViewCommand::MediaAction(MediaAction::TogglePictureInPicture),
+                )
+            }));
+        }
+    }
     if !info.url.is_empty() {
         if !info.image {
             menu = menu.item(item(id, "Open Link", move |s, _| {
@@ -84,7 +115,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
             },
             move |_, tx| tx.copy(&url),
         ));
-    } else {
+    } else if info.media.is_none() {
         if tab.can_go_back {
             menu = menu.item(item(id, "Back", move |s, _| s.browser.go_back(id)));
         }

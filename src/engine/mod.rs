@@ -28,7 +28,7 @@ use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use elaris::downloads::{DownloadId, Request as DownloadRequest, Update as DownloadUpdate};
-use elaris::ladybird::{Favicon, KeyEvent, MouseEvent};
+use elaris::ladybird::{Favicon, KeyEvent, MediaAction, MouseEvent};
 use rune::Pixels;
 
 use crate::tab::TabId;
@@ -212,6 +212,7 @@ pub(crate) enum ViewCommand {
         request: u64,
         new_tab: bool,
     },
+    MediaAction(MediaAction),
     /// Searches the page asynchronously and highlights every result.
     Find {
         query: String,

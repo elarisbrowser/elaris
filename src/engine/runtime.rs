@@ -652,6 +652,7 @@ fn apply_to_view(view: &mut View, command: ViewCommand, timing: &mut Timing) -> 
         ViewCommand::LoadPrepared { source, request } => web.load_prepared(source.raw(), request),
         ViewCommand::DiscardPrepared(request) => web.discard_prepared(request),
         ViewCommand::OpenContext { request, new_tab } => web.open_context_target(request, new_tab),
+        ViewCommand::MediaAction(action) => web.media_action(action),
         ViewCommand::Find { query, request_id } => web.find(&query, request_id),
         ViewCommand::FindNext { request_id } => web.find_next(request_id),
         ViewCommand::FindPrevious { request_id } => web.find_previous(request_id),
