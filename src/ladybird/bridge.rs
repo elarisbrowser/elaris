@@ -146,6 +146,12 @@ unsafe extern "C" {
         response: *const u8,
         response_size: usize,
     ) -> i32;
+    fn elaris_ladybird_reply_to_picker(
+        view: *mut RawView,
+        request_id: u64,
+        response: *const u8,
+        response_size: usize,
+    ) -> i32;
     fn elaris_ladybird_preflight_close(view: *mut RawView) -> i32;
     fn elaris_ladybird_find_end(view: *mut RawView) -> i32;
     fn elaris_ladybird_selected_text(view: *mut RawView, request_id: u64) -> i32;
@@ -225,6 +231,11 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
             },
             16 => Event::LoadError(text),
             21 => Event::CloseDecision(raw.value != 0),
+            22 => Event::FormPicker(
+                serde_json::from_str(&text)
+                    .ok()
+                    .map(|picker| (raw.request_id, picker)),
+            ),
             17 => Event::HoveredLink(text),
             18 => Event::Tooltip(text),
             19 => Event::Cursor(text),
@@ -596,6 +607,20 @@ impl WebView {
                 text.as_ptr(),
                 text.len(),
             )
+        })
+    }
+
+    /// Replies to the picker that still owns the request ID.
+    pub fn reply_to_picker(
+        &mut self,
+        request_id: u64,
+        response: Option<&[u8]>,
+    ) -> Result<(), String> {
+        let (bytes, size) =
+            response.map_or((std::ptr::null(), 0), |bytes| (bytes.as_ptr(), bytes.len()));
+        // SAFETY: The view belongs to this thread and the response is borrowed for the call.
+        status_result(unsafe {
+            elaris_ladybird_reply_to_picker(self.raw.as_ptr(), request_id, bytes, size)
         })
     }
 

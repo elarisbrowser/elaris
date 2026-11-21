@@ -70,6 +70,21 @@ fn card(state: &AppState, theme: &theme::Theme, reduced: bool, peek: &peek::Peek
         .child(content)
 }
 
+pub(super) fn page_point(state: &AppState, point: [f32; 2], reduced: bool) -> Option<[f32; 2]> {
+    let peek = state.browser.peek.as_ref()?;
+    let pose = opening_pose(
+        state.split_rect,
+        peek.origin,
+        state.peek_presentation.opening_time(),
+        reduced,
+    );
+    let [x, y, _, _] = pose.drawn_rect();
+    Some([
+        state.split_rect[0] + x + point[0] * pose.scale,
+        state.split_rect[1] - theme::VIEWPORT_INSET + y + point[1] * pose.scale,
+    ])
+}
+
 fn page_status(page: &Tab) -> Option<&str> {
     page.error.as_deref().or_else(|| {
         (page.loading && page.committed_url == "about:blank").then_some("Loading preview…")

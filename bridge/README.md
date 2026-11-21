@@ -18,6 +18,8 @@ ctest --test-dir build/cpp-ladybird --output-on-failure -R elaris_ladybird_smoke
 
 The smoke executable checks invalid arguments and a failed profile initialization, then creates three views in one application. Each view loads the deterministic `tests/smoke.html`, observes navigation, title, loading start/finish and ready-to-paint callbacks, pumps without blocking, resizes, waits with a timeout and until woken from another thread, and is closed and destroyed. It also destroys and reinitializes the application. The test verifies invalid dimensions and rejects a resize from a non-owner thread. CTest passes resource, profile and page paths to the executable.
 
+The focused `elaris_ladybird_form_pickers` test loads a webpage and answers its picker requests through the bridge. It checks file contents, multiple files, color and date choices, grouped select options, disabled options, and cancellation. Run it with `ctest --test-dir build/cpp-ladybird --output-on-failure -R elaris_ladybird_form_pickers`. The pinned Ladybird revision accepts individual files and has no directory-upload request.
+
 ## Rust boundary
 
 The Rust wrapper and executable smoke example are behind the `ladybird-bridge` feature. After building the C++ bridge, link and run them on macOS with:

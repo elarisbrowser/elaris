@@ -9,6 +9,7 @@ function(elaris_add_ladybird_bridge)
     elaris_patch_ladybird(peek
         Libraries/LibWeb/DOM/Element.cpp
         Libraries/LibWebView/WebContentPage.cpp)
+    elaris_patch_ladybird(color-picker-cancel Libraries/LibWeb/HTML/HTMLInputElement.cpp)
     target_include_directories(LibWebView PRIVATE "${ELARIS_BRIDGE_DIR}/src")
     elaris_patch_ladybird(private-request-servers
         Libraries/LibWebView/Application.cpp
@@ -39,7 +40,9 @@ function(elaris_add_ladybird_bridge)
         set_property(TARGET elaris_ladybird APPEND PROPERTY BUILD_RPATH "${ELARIS_VCPKG_PREFIX}/lib")
         target_link_options(elaris_ladybird PRIVATE "-Wl,-rpath,${ELARIS_VCPKG_PREFIX}/lib")
     endif()
+    get_target_property(patched_headers LibWebView ELARIS_PATCHED_INCLUDE_DIRS)
     target_include_directories(elaris_ladybird SYSTEM PRIVATE
+        ${patched_headers}
         "${LADYBIRD_SOURCE_DIR}"
         "${LADYBIRD_SOURCE_DIR}/Libraries"
         "${LADYBIRD_SOURCE_DIR}/Services"
@@ -72,11 +75,18 @@ function(elaris_add_ladybird_bridge)
                 "${CMAKE_BINARY_DIR}/elaris-smoke-profile"
                 "${ELARIS_BRIDGE_DIR}/tests/smoke.html"
         )
+        add_test(NAME elaris_ladybird_form_pickers
+            COMMAND elaris_ladybird_smoke
+                "${LADYBIRD_SOURCE_DIR}/Base/res"
+                "${CMAKE_BINARY_DIR}/elaris-picker-smoke-profile"
+                "${ELARIS_BRIDGE_DIR}/tests/smoke.html"
+                --form-pickers
+        )
         if(APPLE)
-            set_tests_properties(elaris_ladybird_smoke PROPERTIES
+            set_tests_properties(elaris_ladybird_smoke elaris_ladybird_form_pickers PROPERTIES
                 ENVIRONMENT "DYLD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib:${ELARIS_VCPKG_PREFIX}/lib")
         elseif(UNIX)
-            set_tests_properties(elaris_ladybird_smoke PROPERTIES
+            set_tests_properties(elaris_ladybird_smoke elaris_ladybird_form_pickers PROPERTIES
                 ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib:${ELARIS_VCPKG_PREFIX}/lib")
         endif()
 

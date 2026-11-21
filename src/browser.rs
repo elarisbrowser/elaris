@@ -75,6 +75,7 @@ pub(crate) struct Polled {
     pub(crate) changed: bool,
     pub(crate) clipboard: Option<String>,
     pub(crate) close_decisions: Vec<(TabId, bool)>,
+    pub(crate) form_pickers: Vec<(TabId, Option<(u64, elaris::ladybird::FormPicker)>)>,
     pub(crate) menu: Option<(TabId, elaris::ladybird::PageMenu)>,
     /// A visible tab showed a frame since the last poll, so it is likely animating.
     pub(crate) animating: bool,

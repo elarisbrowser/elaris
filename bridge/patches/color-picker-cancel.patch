@@ -1,0 +1,12 @@
+--- a/Libraries/LibWeb/HTML/HTMLInputElement.cpp
++++ b/Libraries/LibWeb/HTML/HTMLInputElement.cpp
+@@ -609,6 +609,9 @@
+
+ void HTMLInputElement::did_pick_color(Optional<Color> picked_color, ColorPickerUpdateState state)
+ {
++    if (state == ColorPickerUpdateState::Closed)
++        set_is_open(false);
++
+     if (type_state() == TypeAttributeState::Color && picked_color.has_value()) {
+         // then when the user changes the element's value
+         m_dirty_value = true;

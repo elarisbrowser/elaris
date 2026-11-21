@@ -6,6 +6,7 @@
 mod controls;
 mod downloads;
 mod find;
+pub(crate) mod form_picker;
 pub(crate) mod horizontal_tabs;
 pub(crate) mod hover_highlight;
 mod icons;
@@ -174,6 +175,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     ));
     overlays.extend(tab_switcher::view(state, &theme, height, reduced_motion));
     site_permissions::view(state, cx, &theme, &mut overlays, reduced_motion);
+    form_picker::view(state, &theme, &mut overlays, reduced_motion);
     page_dialog::view(state, &theme, &mut overlays);
     let (hover_enter, hover_exit) = if reduced_motion {
         (rune::Anim::INSTANT, rune::Anim::INSTANT)

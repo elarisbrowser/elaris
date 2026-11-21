@@ -188,6 +188,7 @@ pub(crate) struct AppState {
     /// Per-origin permission choices loaded from config.toml.
     pub(crate) permission_store: PermissionStore,
     pub(crate) page_menu: crate::ui::PageMenuState,
+    pub(crate) form_picker: Option<crate::ui::form_picker::ActivePicker>,
     pub(crate) sidebar: SidebarState,
     pub(crate) hover_highlight: Option<crate::ui::hover_highlight::Target>,
     pub(crate) context_menu_highlight: Option<String>,
@@ -353,6 +354,7 @@ impl AppState {
             site_overflow_anchor: None,
             permission_store,
             page_menu: Default::default(),
+            form_picker: None,
             sidebar: SidebarState::default(),
             hover_highlight: None,
             context_menu_highlight: None,

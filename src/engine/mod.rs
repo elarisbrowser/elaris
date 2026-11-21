@@ -193,6 +193,10 @@ pub(crate) enum ViewCommand {
     SelectedText {
         request_id: u64,
     },
+    ReplyToPicker {
+        request_id: u64,
+        response: Option<Vec<u8>>,
+    },
     Focus(bool),
     /// Whether the view is on screen; hidden ones stop painting.
     Visible(bool),
@@ -225,6 +229,7 @@ pub(crate) enum Update {
     ContextMenu(TabId, elaris::ladybird::PageMenu),
     Clipboard(TabId, String),
     CloseDecision(TabId, bool),
+    FormPicker(TabId, Option<(u64, elaris::ladybird::FormPicker)>),
     Download(DownloadId, DownloadUpdate),
     DownloadStartFailed(DownloadId, String),
     DownloadActionFailed(DownloadId, String),
@@ -410,7 +415,8 @@ fn update_tab(update: &Update) -> Option<TabId> {
         | Update::Peek(id, _, _)
         | Update::ContextMenu(id, _)
         | Update::Clipboard(id, _)
-        | Update::CloseDecision(id, _) => Some(*id),
+        | Update::CloseDecision(id, _)
+        | Update::FormPicker(id, _) => Some(*id),
         _ => None,
     }
 }

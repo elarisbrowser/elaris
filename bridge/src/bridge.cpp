@@ -6,6 +6,10 @@
 
 #include <elaris_ladybird.h>
 
+#include <AK/JsonArray.h>
+#include <AK/JsonObject.h>
+#include <LibWebCommon/HTML/ColorPickerUpdateState.h>
+#include <LibWebView/Utilities.h>
 #include <AK/ByteString.h>
 #include <AK/LexicalPath.h>
 #include <AK/OwnPtr.h>
@@ -162,6 +166,8 @@ struct PendingPageDialog {
     AK::Function<void(bool)> before_unload;
 };
 
+enum class FormPicker { None, File, Color, Date, Select };
+
 struct ElarisLadybirdView {
     ElarisLadybird* bridge{};
     uint64_t id{};
@@ -174,6 +180,10 @@ struct ElarisLadybirdView {
     // ViewImplementation reports find callbacks in the order its page IPC handles requests.
     std::deque<uint64_t> pending_find_requests;
     PendingPageDialog dialog;
+    FormPicker picker{FormPicker::None};
+    uint64_t picker_id{};
+    std::vector<uint32_t> picker_options;
+    bool picker_allows_multiple{};
 };
 
 static AK::OwnPtr<ElarisApplication> s_application;
@@ -404,6 +414,129 @@ static void show_page_dialog(ElarisLadybirdView& handle, ElarisLadybirdDialogKin
         finish_page_dialog(handle, kind == ELARIS_LADYBIRD_DIALOG_BEFORE_UNLOAD);
 }
 
+static void cancel_form_picker(ElarisLadybirdView& handle, bool notify_page) {
+    auto picker = handle.picker;
+    handle.picker = FormPicker::None;
+    handle.picker_id = 0;
+    handle.picker_options.clear();
+    handle.picker_allows_multiple = false;
+    if (picker == FormPicker::None)
+        return;
+    if (notify_page) {
+        switch (picker) {
+        case FormPicker::None:
+            break;
+        case FormPicker::File:
+            handle.view->file_picker_closed({});
+            break;
+        case FormPicker::Color:
+            handle.view->color_picker_update({}, Web::HTML::ColorPickerUpdateState::Closed);
+            break;
+        case FormPicker::Date:
+            handle.view->date_picker_closed({});
+            break;
+        case FormPicker::Select:
+            handle.view->select_dropdown_closed({});
+            break;
+        }
+    }
+    emit(&handle, ELARIS_LADYBIRD_FORM_PICKER);
+}
+
+static void show_form_picker(ElarisLadybirdView& handle, FormPicker picker, AK::JsonObject const& payload) {
+    handle.picker = picker;
+    handle.picker_id = ++handle.next_request;
+    if (!handle.bridge->callback) {
+        cancel_form_picker(handle, true);
+        return;
+    }
+    auto json = payload.serialized().to_byte_string();
+    ElarisLadybirdEvent event{};
+    event.kind = ELARIS_LADYBIRD_FORM_PICKER;
+    event.view_id = handle.id;
+    event.request_id = handle.picker_id;
+    event.text = json.characters();
+    handle.bridge->callback(handle.bridge->context, &event);
+}
+
+static void install_form_pickers(ElarisLadybirdView& handle) {
+    handle.view->on_request_file_picker = [&handle](auto const& filter, auto multiple) {
+        if (handle.picker == FormPicker::File)
+            return;
+        cancel_form_picker(handle, true);
+        AK::JsonArray extensions;
+        for (auto const& item : filter.filters) {
+            if (auto const* extension = item.template get_pointer<Web::HTML::FileFilter::Extension>())
+                extensions.must_append(extension->value.to_utf8());
+        }
+        AK::JsonObject payload;
+        payload.set("kind"sv, "file"sv);
+        handle.picker_allows_multiple = multiple == Web::HTML::AllowMultipleFiles::Yes;
+        payload.set("multiple"sv, handle.picker_allows_multiple);
+        payload.set("extensions"sv, AK::move(extensions));
+        show_form_picker(handle, FormPicker::File, payload);
+    };
+    handle.view->on_request_color_picker = [&handle](auto color) {
+        if (handle.picker == FormPicker::Color)
+            return;
+        cancel_form_picker(handle, true);
+        AK::JsonObject payload;
+        payload.set("kind"sv, "color"sv);
+        payload.set("value"sv, MUST(String::formatted("#{:02x}{:02x}{:02x}", color.red(), color.green(), color.blue())));
+        show_form_picker(handle, FormPicker::Color, payload);
+    };
+    handle.view->on_request_date_picker = [&handle](auto const& type, auto const& value, auto const& minimum, auto const& maximum) {
+        if (handle.picker == FormPicker::Date)
+            return;
+        cancel_form_picker(handle, true);
+        AK::JsonObject payload;
+        payload.set("kind"sv, "date"sv);
+        payload.set("input_type"sv, type.to_utf8());
+        payload.set("value"sv, value.to_utf8());
+        payload.set("minimum"sv, minimum.to_utf8());
+        payload.set("maximum"sv, maximum.to_utf8());
+        show_form_picker(handle, FormPicker::Date, payload);
+    };
+    handle.view->on_request_select_dropdown = [&handle](auto position, auto minimum_width, auto items) {
+        if (handle.picker == FormPicker::Select)
+            return;
+        cancel_form_picker(handle, true);
+        AK::JsonArray rows;
+        auto append_option = [&](auto const& option) {
+            AK::JsonObject row;
+            row.set("kind"sv, "option"sv);
+            row.set("id"sv, option.id);
+            row.set("label"sv, option.label.to_utf8());
+            row.set("disabled"sv, option.disabled);
+            row.set("selected"sv, option.selected);
+            if (!option.disabled)
+                handle.picker_options.push_back(option.id);
+            rows.must_append(AK::move(row));
+        };
+        for (auto const& item : items) {
+            item.visit([&](Web::HTML::SelectItemOption const& option) { append_option(option); }, [&](Web::HTML::SelectItemOptionGroup const& group) {
+                AK::JsonObject row;
+                row.set("kind"sv, "group"sv);
+                row.set("label"sv, group.label.to_utf8());
+                rows.must_append(AK::move(row));
+                for (auto const& option : group.items)
+                    append_option(option);
+            }, [&](Web::HTML::SelectItemSeparator const&) {
+                AK::JsonObject row;
+                row.set("kind"sv, "separator"sv);
+                rows.must_append(AK::move(row));
+            });
+        }
+        AK::JsonObject payload;
+        payload.set("kind"sv, "select"sv);
+        payload.set("x"sv, position.x());
+        payload.set("y"sv, position.y());
+        payload.set("minimum_width"sv, minimum_width);
+        payload.set("rows"sv, AK::move(rows));
+        show_form_picker(handle, FormPicker::Select, payload);
+    };
+}
+
 static std::string to_utf8(URL::URL const& url) {
     auto utf8 = url.to_string().to_byte_string();
     return {utf8.characters(), utf8.length()};
@@ -559,9 +692,10 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
     apply_selection_colors(*theme_buffer.data<Gfx::SystemTheme>());
 
     auto view = ElarisWebView::create(AK::move(theme_buffer), {1024, 768}, mode);
-    auto* handle = new ElarisLadybirdView{bridge, view_id, AK::move(view), {}, 0, 0, {}, {}, {}, {}};
+    auto* handle = new ElarisLadybirdView{bridge, view_id, AK::move(view), {}, 0, 0, {}, {}, {}, {}, FormPicker::None, 0, {}, false};
     bridge->views.push_back(handle);
     // The callbacks live in the view, which the handle owns, so they never outlive it.
+    install_form_pickers(*handle);
     handle->view->on_request_alert = [handle](auto const& message) {
         show_page_dialog(*handle, ELARIS_LADYBIRD_DIALOG_ALERT, to_utf8(message));
     };
@@ -586,7 +720,10 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
         finish_page_dialog(*handle, true, handle->dialog.prompt_text);
     };
     handle->view->on_request_dismiss_dialog = [handle] { finish_page_dialog(*handle, false); };
-    handle->view->on_before_browser_initiated_navigation = [handle] { finish_page_dialog(*handle, false); };
+    handle->view->on_before_browser_initiated_navigation = [handle] {
+        finish_page_dialog(*handle, false);
+        cancel_form_picker(*handle, true);
+    };
     handle->view->on_link_hover = [handle](auto const& url) {
         emit(handle, ELARIS_LADYBIRD_HOVERED_LINK, to_utf8(url));
     };
@@ -616,11 +753,13 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
                  (view.can_navigate_forward() ? ELARIS_LADYBIRD_HISTORY_FORWARD : 0));
     };
     handle->view->on_top_level_navigation_commit = [handle] {
+        cancel_form_picker(*handle, true);
         emit(handle, ELARIS_LADYBIRD_NAVIGATION_COMMITTED, to_utf8(handle->view->url()));
         if (handle->view->traversable().active_document().creation_url() == URL::about_error())
             emit(handle, ELARIS_LADYBIRD_LOAD_ERROR, "This page could not be loaded.");
     };
     handle->view->on_web_content_crashed = [handle](auto) {
+        cancel_form_picker(*handle, false);
         handle->dialog = {};
         emit_page_dialog(*handle);
         emit(handle, ELARIS_LADYBIRD_LOAD_ERROR, "This page stopped responding.");
@@ -843,6 +982,56 @@ extern "C" int32_t elaris_ladybird_reply_to_dialog(ElarisLadybirdView* handle, u
         return fail("invalid UTF-8 page dialog response");
     auto text = Utf16String::from_utf8(bytes);
     finish_page_dialog(*handle, accepted != 0, AK::move(text));
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_reply_to_picker(ElarisLadybirdView* handle, uint64_t request_id,
+                                                       uint8_t const* response, size_t response_size) {
+    if (!handle || !on_owner_thread(handle->bridge) || (!response && response_size))
+        return fail("invalid form picker response");
+    if (!request_id || handle->picker_id != request_id)
+        return succeed();
+    if (!response) {
+        cancel_form_picker(*handle, true);
+        return succeed();
+    }
+    auto value = AK::StringView{response, response_size};
+    switch (handle->picker) {
+    case FormPicker::None:
+        return succeed();
+    case FormPicker::File: {
+        Vector<Web::HTML::SelectedFile> files;
+        auto paths = value.split_view('\0');
+        if (paths.size() > 1 && !handle->picker_allows_multiple)
+            return fail("file picker accepts only one file");
+        for (auto path : paths) {
+            auto filename = AK::LexicalPath::basename(path);
+            if (!Utf8View(filename).validate())
+                continue;
+            auto file = WebView::create_selected_file(AK::ByteString{path});
+            if (!file.is_error())
+                files.append(file.release_value());
+        }
+        handle->view->file_picker_closed(AK::move(files));
+        break;
+    }
+    case FormPicker::Color:
+        handle->view->color_picker_update(Gfx::Color::from_string(value), Web::HTML::ColorPickerUpdateState::Closed);
+        break;
+    case FormPicker::Date:
+        if (!Utf8View(value).validate())
+            return fail("invalid date picker text");
+        handle->view->date_picker_closed(Utf16String::from_utf8(value));
+        break;
+    case FormPicker::Select: {
+        auto option = value.to_number<uint32_t>();
+        if (option.has_value() && std::find(handle->picker_options.begin(), handle->picker_options.end(), *option) == handle->picker_options.end())
+            return fail("invalid select option");
+        handle->view->select_dropdown_closed(option);
+        break;
+    }
+    }
+    cancel_form_picker(*handle, false);
     return succeed();
 }
 

@@ -116,6 +116,10 @@ impl Browser {
                         polled.changed = true;
                     }
                 }
+                Update::FormPicker(id, picker) => {
+                    polled.form_pickers.push((id, picker));
+                    polled.changed = true;
+                }
                 Update::CloseDecision(id, approved) => {
                     if let Some(tab) = self.tab_mut(id)
                         && std::mem::take(&mut tab.awaiting_close)

@@ -34,6 +34,7 @@ typedef enum {
     ELARIS_LADYBIRD_CURSOR = 19,
     ELARIS_LADYBIRD_PAGE_DIALOG = 20,
     ELARIS_LADYBIRD_CLOSE_DECISION = 21,
+    ELARIS_LADYBIRD_FORM_PICKER = 22, /* JSON in text, empty when dismissed. */
 } ElarisLadybirdEventKind;
 
 typedef enum {
@@ -242,6 +243,9 @@ int32_t elaris_ladybird_find_previous(ElarisLadybirdView*, uint64_t request_id);
 /* PAGE_DIALOG events carry the dialog kind in value and prompt default in selection. */
 int32_t elaris_ladybird_reply_to_dialog(ElarisLadybirdView*, uint64_t request_id, int32_t accepted,
                                       const uint8_t* response, size_t response_size);
+/* A null response cancels. File paths use the platform filesystem encoding, separated by NUL bytes. */
+int32_t elaris_ladybird_reply_to_picker(ElarisLadybirdView*, uint64_t request_id,
+                                       const uint8_t* response, size_t response_size);
 int32_t elaris_ladybird_preflight_close(ElarisLadybirdView*);
 int32_t elaris_ladybird_find_end(ElarisLadybirdView*);
 /* Reads the current webpage selection and returns it asynchronously with the request ID. */

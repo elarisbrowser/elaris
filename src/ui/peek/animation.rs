@@ -121,7 +121,7 @@ pub(super) struct CardPose {
 }
 
 impl CardPose {
-    fn drawn_rect(&self) -> [f32; 4] {
+    pub(super) fn drawn_rect(&self) -> [f32; 4] {
         let [x, y, w, h] = self.rect;
         [
             x + self.offset[0] + w * (1.0 - self.scale) / 2.0,

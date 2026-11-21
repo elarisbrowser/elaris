@@ -43,6 +43,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
             }
         }
     }
+    crate::ui::form_picker::poll(state, &mut polled, tx);
     let peek_changed = update_peek(state, previous_peek, clock, tx);
     close_site_controls_after_navigation(state, &polled);
 

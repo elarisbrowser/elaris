@@ -45,6 +45,47 @@ pub enum PageDialogKind {
     BeforeUnload,
 }
 
+/// A browser-hosted form control requested by a page.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum FormPicker {
+    File {
+        extensions: Vec<String>,
+        multiple: bool,
+    },
+    Color {
+        value: String,
+    },
+    Date {
+        input_type: String,
+        value: String,
+        minimum: String,
+        maximum: String,
+    },
+    Select {
+        x: i32,
+        y: i32,
+        minimum_width: i32,
+        rows: Vec<SelectRow>,
+    },
+}
+
+/// One row in a page's select menu.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum SelectRow {
+    Option {
+        id: u32,
+        label: String,
+        disabled: bool,
+        selected: bool,
+    },
+    Group {
+        label: String,
+    },
+    Separator,
+}
+
 /// What a view raised, delivered with the id it was created with.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
@@ -71,6 +112,7 @@ pub enum Event {
     Cursor(String),
     PageDialog(Option<PageDialog>),
     CloseDecision(bool),
+    FormPicker(Option<(u64, FormPicker)>),
     ContextMenu(PageMenu),
     Clipboard(String),
     ImeCaret(Option<[i32; 4]>),

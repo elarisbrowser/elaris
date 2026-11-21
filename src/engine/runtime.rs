@@ -325,6 +325,10 @@ impl Runtime {
                 Event::Tooltip(text) => TabUpdate::Tooltip(text),
                 Event::Cursor(name) => TabUpdate::Cursor(name),
                 Event::PageDialog(dialog) => TabUpdate::PageDialog(dialog),
+                Event::FormPicker(picker) => {
+                    updates.push(Update::FormPicker(tab, picker));
+                    continue;
+                }
                 Event::CloseDecision(approved) => {
                     updates.push(Update::CloseDecision(tab, approved));
                     continue;
@@ -484,6 +488,10 @@ fn apply_to_view(view: &mut View, command: ViewCommand, timing: &mut Timing) -> 
             timing.input();
             web.key_event(event)
         }
+        ViewCommand::ReplyToPicker {
+            request_id,
+            response,
+        } => web.reply_to_picker(request_id, response.as_deref()),
         ViewCommand::Focus(focused) => web.set_focus(focused),
         ViewCommand::Visible(visible) => {
             web.set_visible(visible)?;

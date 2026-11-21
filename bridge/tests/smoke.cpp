@@ -3,6 +3,8 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <optional>
+#include <string_view>
 #include <string>
 #include <thread>
 #include <vector>
@@ -33,6 +35,8 @@ struct Events {
     uint64_t dialog_id{};
     std::string dialog_message;
     std::string dialog_default;
+    uint64_t picker_id{};
+    std::string picker_payload;
     std::string clipboard;
     bool editing{};
     unsigned title{};
@@ -68,6 +72,10 @@ static void on_event(void* context, ElarisLadybirdEvent const* event) {
         break;
     case ELARIS_LADYBIRD_LOAD_ERROR:
         ++events.load_errors;
+        break;
+    case ELARIS_LADYBIRD_FORM_PICKER:
+        events.picker_id = event->request_id;
+        events.picker_payload = event->text;
         break;
     case ELARIS_LADYBIRD_CLOSE_DECISION:
         events.close_decision = event->value;
@@ -205,6 +213,72 @@ static bool page_before_unload(ElarisLadybird* bridge, ElarisLadybirdView* view,
     if (!navigate() || !check(elaris_ladybird_reply_to_dialog(view, events.dialog_id, 1, nullptr, 0), "leave page"))
         return false;
     return pump_until(bridge, [&] { return events.last_title == "Next page"; });
+}
+
+static bool page_form_pickers(ElarisLadybird* bridge, ElarisLadybirdView* view, Events& events,
+                              std::filesystem::path const& upload) {
+    auto page = R"HTML(data:text/html,<title>Form pickers</title>
+<style>body{margin:0}button,select{display:block;width:160px;height:36px}</style>
+<button onclick="f.showPicker()">Upload</button>
+<button onclick="c.showPicker()">Color</button>
+<button onclick="d.showPicker()">Date</button>
+<select onchange="document.title=this.value">
+<option>First</option><optgroup label="Group"><option disabled>Disabled</option><option>Second</option></optgroup>
+</select>
+<button onclick="m.showPicker()">Upload multiple</button>
+<input hidden id=f type=file accept=".html" onchange="this.files[0].text().then(value=>document.title=value.includes('Ladybird bridge integration test')?this.files[0].name:'bad content')" oncancel="document.title='upload canceled'">
+<input hidden id=m type=file multiple onchange="document.title=String(this.files.length)">
+<input hidden id=c type=color value="%23123456" onchange="document.title=this.value">
+<input hidden id=d type=date value="2026-01-02" min="2026-01-01" max="2026-12-31" onchange="document.title=this.value">)HTML";
+    if (!check(elaris_ladybird_load(view, page), "load form picker page") ||
+        !pump_until(bridge, [&] { return events.last_title == "Form pickers"; }))
+        return false;
+
+    auto open = [&](int y, std::string_view kind, std::string_view detail) {
+        auto old_id = events.picker_id;
+        ElarisLadybirdMouseEvent event{};
+        event.x = 50;
+        event.y = y;
+        event.button = ELARIS_LADYBIRD_BUTTON_PRIMARY;
+        event.buttons = ELARIS_LADYBIRD_BUTTON_PRIMARY;
+        event.click_count = 1;
+        event.type = ELARIS_LADYBIRD_MOUSE_DOWN;
+        if (!check(elaris_ladybird_mouse_event(view, &event), "press picker"))
+            return false;
+        event.buttons = 0;
+        event.type = ELARIS_LADYBIRD_MOUSE_UP;
+        if (!check(elaris_ladybird_mouse_event(view, &event), "release picker"))
+            return false;
+        if (pump_until(bridge, [&] { return events.picker_id && events.picker_id != old_id; }) &&
+            events.picker_payload.contains(kind) && events.picker_payload.contains(detail))
+            return true;
+        std::cerr << "Expected picker " << kind << "; observed " << events.picker_payload << '\n';
+        return false;
+    };
+    auto reply = [&](std::optional<std::string> const& response, std::string const& title) {
+        auto text = response ? reinterpret_cast<uint8_t const*>(response->data()) : nullptr;
+        auto size = response ? response->size() : 0;
+        if (check(elaris_ladybird_reply_to_picker(view, events.picker_id, text, size), "reply to picker") &&
+            pump_until(bridge, [&] { return !events.picker_id && events.last_title == title; }))
+            return true;
+        std::cerr << "Expected page title " << title << "; observed " << events.last_title << '\n';
+        return false;
+    };
+
+    auto multiple_paths = upload.string();
+    multiple_paths.push_back('\0');
+    multiple_paths += (upload.parent_path() / "download_smoke.cpp").string();
+    return open(18, "file", "html") && reply({}, "upload canceled") &&
+           open(18, "file", "html") && reply(upload.string(), upload.filename().string()) &&
+           open(54, "color", "#123456") && reply({}, upload.filename().string()) &&
+           open(54, "color", "#123456") && reply("#abcdef", "#abcdef") &&
+           open(90, "date", "2026-12-31") && reply({}, "#abcdef") &&
+           open(90, "date", "2026-12-31") && reply("2026-03-04", "2026-03-04") &&
+           open(126, "select", "Group") && reply({}, "2026-03-04") &&
+           open(126, "select", "Group") &&
+           elaris_ladybird_reply_to_picker(view, events.picker_id, reinterpret_cast<uint8_t const*>("2"), 1) != 0 &&
+           reply("3", "Second") &&
+           open(162, "file", "\"multiple\":true") && reply(multiple_paths, "2");
 }
 
 static bool page_find(ElarisLadybird* bridge, ElarisLadybirdView* view, Events& events) {
@@ -431,8 +505,9 @@ static bool two_views(ElarisLadybird* bridge, EventsByView& events, std::string 
 }
 
 int main(int argc, char** argv) {
-    if (argc != 4) {
-        std::cerr << "usage: elaris_ladybird_smoke RESOURCE_DIR PROFILE_DIR HTML_FILE\n";
+    bool form_pickers_only = argc == 5 && std::string_view(argv[4]) == "--form-pickers";
+    if (argc != 4 && !form_pickers_only) {
+        std::cerr << "usage: elaris_ladybird_smoke RESOURCE_DIR PROFILE_DIR HTML_FILE [--form-pickers]\n";
         return 2;
     }
 
@@ -456,6 +531,17 @@ int main(int argc, char** argv) {
     EventsByView events_by_view;
     if (!check(elaris_ladybird_create(argv[1], profile_dir.c_str(), on_event, &events_by_view, &bridge), "initialize"))
         return 1;
+
+    if (form_pickers_only) {
+        ElarisLadybirdView* view = nullptr;
+        auto passed = check(elaris_ladybird_create_view(bridge, 1, &view), "create picker view") &&
+                      check(elaris_ladybird_resize(view, 800, 600, 1), "resize picker view") &&
+                      check(elaris_ladybird_set_focus(view, 1), "focus picker view") &&
+                      page_form_pickers(bridge, view, events_by_view[1], std::filesystem::absolute(argv[3]));
+        elaris_ladybird_destroy_view(view);
+        elaris_ladybird_destroy(bridge);
+        return passed ? 0 : 1;
+    }
 
     bool passed = true;
     for (int cycle = 0; cycle < 3 && passed; ++cycle) {
@@ -550,7 +636,7 @@ int main(int argc, char** argv) {
         elaris_ladybird_destroy_view(view);
         auto close_deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
         while (std::chrono::steady_clock::now() < close_deadline) {
-            passed = check(elaris_ladybird_pump(bridge), "pump while closing view");
+            passed = check(elaris_ladybird_pump(bridge), "pump while closing view") && passed;
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
     }
