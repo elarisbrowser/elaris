@@ -127,3 +127,18 @@ autoplay = "allow"
 
 The same fixture server also serves `external.html` (external link prompts and the missing-handler
 notice) and `storage.html` (site data clearing); the example exercises both.
+
+## Content blocking
+
+Ladybird's content blocker is off until `config.toml` or the settings page turns it on. The four built-in lists are independent; none is used until enabled.
+
+```toml
+[content_blocking]
+enabled = false      # download the enabled lists and block matching requests
+easylist = true      # advertising
+easyprivacy = true   # trackers
+cookie_notices = false
+annoyances = false
+```
+
+Turning blocking on starts the download of every enabled list that has never been fetched or is older than a day. Enabling a list while blocking is on fetches it too: `elaris_ladybird_set_content_blocking` turns the engine's filter list updates off and on again, because Ladybird otherwise fetches a new list only at its daily check. A page loaded before its list arrives is not blocked, so reload it afterwards. Custom list URLs and per-site exceptions exist in Ladybird's settings but are not exposed yet.
