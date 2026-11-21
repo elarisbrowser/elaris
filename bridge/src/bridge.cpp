@@ -1344,13 +1344,12 @@ extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t 
     return create_view(bridge, view_id, WebView::IsPrivate::No, out_view);
 }
 
-#ifdef ELARIS_BUILD_SMOKE_TESTS
-extern "C" int32_t elaris_ladybird_test_create_private_view(ElarisLadybird* bridge, uint64_t view_id,
-                                                            ElarisLadybirdView** out_view) {
+extern "C" int32_t elaris_ladybird_create_private_view(ElarisLadybird* bridge, uint64_t view_id,
+                                                       ElarisLadybirdView** out_view) {
     return create_view(bridge, view_id, WebView::IsPrivate::Yes, out_view);
 }
 
-extern "C" int32_t elaris_ladybird_test_reset_private_session(ElarisLadybird* bridge) {
+extern "C" int32_t elaris_ladybird_reset_private_session(ElarisLadybird* bridge) {
     if (!bridge || !s_application || !on_owner_thread(bridge))
         return fail("private session reset requires the bridge owner thread");
     for (auto const* handle : bridge->views) {
@@ -1359,6 +1358,16 @@ extern "C" int32_t elaris_ladybird_test_reset_private_session(ElarisLadybird* br
     }
     s_application->reset_private_browsing_session();
     return succeed();
+}
+
+#ifdef ELARIS_BUILD_SMOKE_TESTS
+extern "C" int32_t elaris_ladybird_test_create_private_view(ElarisLadybird* bridge, uint64_t view_id,
+                                                            ElarisLadybirdView** out_view) {
+    return elaris_ladybird_create_private_view(bridge, view_id, out_view);
+}
+
+extern "C" int32_t elaris_ladybird_test_reset_private_session(ElarisLadybird* bridge) {
+    return elaris_ladybird_reset_private_session(bridge);
 }
 extern "C" int32_t elaris_ladybird_test_start_private_download(ElarisLadybirdView* view, char const* url,
                                                                char const* filename) {

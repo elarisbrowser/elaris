@@ -130,6 +130,15 @@ fn header_content(
         header = header.child(window_controls(_cx.titlebar_inset(), theme));
     }
     header = header.child(toggle);
+    if state.browser.private {
+        header = header.child(
+            text("Private")
+                .key("private-window")
+                .font(rune::tok::type_::LABEL)
+                .color(theme.accent)
+                .label("Private window"),
+        );
+    }
 
     let (mut header, gap) = if collapsed || in_flow {
         (header.w_full(), el().w(theme::HEADER_GROUP_GAP))

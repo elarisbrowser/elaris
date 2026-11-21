@@ -100,6 +100,8 @@ pub(crate) struct Browser {
     /// In the order the sidebar shows them.
     tabs: Vec<Tab>,
     active: Option<TabId>,
+    /// Opens every page in the shared private session.
+    pub(crate) private: bool,
     pub(crate) peek: Option<peek::PeekState>,
     peek_origin: Option<(TabId, [f32; 2])>,
     promoted_visit: Option<(TabId, String, String)>,
@@ -140,6 +142,7 @@ impl Default for Browser {
         Self {
             tabs: Vec::new(),
             active: None,
+            private: false,
             peek: None,
             peek_origin: None,
             promoted_visit: None,
@@ -177,7 +180,7 @@ impl Browser {
     pub(crate) fn connect(&mut self, engine: Engine) {
         for tab in &self.tabs {
             if !tab.is_internal() {
-                engine.send(Command::Open(tab.id(), tab.surface.clone()));
+                engine.send(Command::Open(tab.id(), tab.surface.clone(), self.private));
                 let zoom = tab.zoom_override.unwrap_or(self.default_zoom);
                 if zoom != 100 {
                     engine.send(Command::View(tab.id(), ViewCommand::SetZoom(zoom)));
@@ -456,7 +459,7 @@ impl Browser {
                     surface,
                 });
             } else {
-                engine.send(Command::Open(id, surface));
+                engine.send(Command::Open(id, surface, self.private));
             }
             let zoom = self.default_zoom;
             if zoom != 100 {
@@ -554,7 +557,7 @@ impl Browser {
         if let Some(surface) = surface
             && let Some(engine) = &self.engine
         {
-            engine.send(Command::Open(id, surface));
+            engine.send(Command::Open(id, surface, self.private));
             let zoom = self.default_zoom;
             if zoom != 100 {
                 engine.send(Command::View(id, ViewCommand::SetZoom(zoom)));

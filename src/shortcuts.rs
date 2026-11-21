@@ -15,6 +15,7 @@ use crate::ui;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Shortcut {
     NewWindow,
+    NewPrivateWindow,
     NewTab,
     OpenFile,
     ReopenClosedTab,
@@ -96,6 +97,7 @@ pub(crate) fn dispatch(state: &mut AppState, shortcut: Shortcut, tx: &mut Tx) {
     crate::ui::tab_switcher::finish(state, None, tx);
     match shortcut {
         Shortcut::NewWindow => crate::open_browser_window(),
+        Shortcut::NewPrivateWindow => crate::open_private_browser_window(),
         Shortcut::NewTab => app::new_tab(state, tx),
         Shortcut::OpenFile => open_file(tx),
         Shortcut::ReopenClosedTab => {
@@ -200,6 +202,7 @@ pub(crate) fn shortcut(event: &KeyEvent) -> Option<Shortcut> {
     let shift = event.mods.shift;
     Some(match (key.to_ascii_lowercase(), shift) {
         ('n', false) => Shortcut::NewWindow,
+        ('n' | 'N', true) => Shortcut::NewPrivateWindow,
         ('o', false) => Shortcut::OpenFile,
         ('f', false) => Shortcut::Find,
         ('g', false) => Shortcut::FindNext,
@@ -248,6 +251,7 @@ mod tests {
     #[test]
     fn knows_the_browser_shortcuts() {
         assert_eq!(press('n', false), Some(Shortcut::NewWindow));
+        assert_eq!(press('n', true), Some(Shortcut::NewPrivateWindow));
         assert_eq!(press('t', false), Some(Shortcut::NewTab));
         assert_eq!(press('t', true), Some(Shortcut::ReopenClosedTab));
         assert_eq!(press('T', true), Some(Shortcut::ReopenClosedTab));

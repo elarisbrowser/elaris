@@ -27,4 +27,13 @@ The host bridge also rejects prepared navigations between distinct Ladybird sess
 
 ## Release status
 
-Elaris has no production private-window command. Releasing the feature requires session-scoped website storage where the web platform requires it, verification that old worker and content clients cannot exchange messages with a new private session, and context-aware history, sessions, permissions, downloads, and tab transfer in the host. The smoke test exercises Ladybird reset through the bridge. The bridge smoke test cancels an active private download on reset, checks staging cleanup, and checks that the closed view emits no callbacks while later sessions open. Native window closure, crashes, permission prompts, stale worker callbacks, disk cache behavior, and TLS cleanup remain unverified.
+Elaris ships private windows (File › New Private Window, ⌘⇧N / Ctrl+Shift+N). Every page in a private
+window, including popups and Peek, opens in the shared private session. Private windows record no
+history and save no session, tabs cannot be dragged or detached between private and ordinary windows,
+and the engine resets the private session when the last private view closes, so the next private
+window starts empty.
+
+Still open: private downloads run without download UI, because the bridge keeps private records out
+of the ordinary download stream, and the session reset discards them. Worker and content-client
+isolation across successive private generations, permission prompts in private windows, disk cache
+behavior and TLS cleanup remain unverified.

@@ -11,7 +11,7 @@ use history::HistoryPage;
 #[cfg(test)]
 use rune::{Key, KeyEvent, Tx};
 use rune::{PointerPress, TextEdit};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 #[cfg(not(test))]
 use std::sync::Arc;
@@ -415,6 +415,21 @@ impl AppState {
         state
     }
 
+    /// A window whose pages share the private session and leave no history or saved session.
+    pub(crate) fn new_private_window() -> Self {
+        let mut state = Self::build(None, false);
+        state.make_private();
+        state.open_omnibox(omnibox::Mode::New);
+        state
+    }
+
+    /// Marks an empty window as private before any page opens in it.
+    pub(crate) fn make_private(&mut self) {
+        debug_assert!(self.browser.tabs().is_empty());
+        self.browser.private = true;
+        mark_private_window(self.window_id);
+    }
+
     pub(crate) fn new_window_from_session(session: Session) -> Self {
         let mut state = Self::build(None, false);
         state.omnibox.close();
@@ -576,7 +591,33 @@ pub(crate) fn register_window(id: u64, handle: rune::WindowHandle) {
         .insert(id, handle);
 }
 
+static PRIVATE_WINDOWS: OnceLock<Mutex<HashSet<u64>>> = OnceLock::new();
+
+fn mark_private_window(id: u64) {
+    PRIVATE_WINDOWS
+        .get_or_init(Default::default)
+        .lock()
+        .expect("private window registry poisoned")
+        .insert(id);
+}
+
+/// Tabs only move between windows of the same kind, since a page cannot change session.
+pub(crate) fn is_private_window(id: u64) -> bool {
+    PRIVATE_WINDOWS.get().is_some_and(|windows| {
+        windows
+            .lock()
+            .expect("private window registry poisoned")
+            .contains(&id)
+    })
+}
+
 pub(crate) fn unregister_window(id: u64) {
+    if let Some(windows) = PRIVATE_WINDOWS.get() {
+        windows
+            .lock()
+            .expect("private window registry poisoned")
+            .remove(&id);
+    }
     if let Some(registry) = WINDOW_REGISTRY.get() {
         registry
             .lock()

@@ -16,8 +16,8 @@ fn only_the_active_tab_is_shown_resized_and_focused() {
     assert_eq!(
         sent(&fake),
         [
-            Command::Open(first, surface(&browser, first)),
-            Command::Open(second, surface(&browser, second)),
+            Command::Open(first, surface(&browser, first), false),
+            Command::Open(second, surface(&browser, second), false),
             view(first, resize(100, 50, 1.0)),
             view(first, ViewCommand::Load("https://example.com".into())),
             view(first, ViewCommand::Focus(true)),
@@ -74,8 +74,8 @@ fn restored_background_tabs_load_only_when_selected() {
 
     browser.poll();
     let commands = sent(&fake);
-    assert!(commands.contains(&Command::Open(first, surface(&browser, first))));
-    assert!(commands.contains(&Command::Open(second, surface(&browser, second))));
+    assert!(commands.contains(&Command::Open(first, surface(&browser, first), false)));
+    assert!(commands.contains(&Command::Open(second, surface(&browser, second), false)));
     assert!(!commands.iter().any(|command| {
         matches!(command, Command::View(id, ViewCommand::Load(_)) if *id == first)
     }));
@@ -156,7 +156,10 @@ fn the_first_page_waits_for_its_viewport_and_colour_scheme() {
     let (mut browser, fake) = connected();
     let tab = browser.open_tab("about:blank").unwrap();
     browser.poll();
-    assert_eq!(sent(&fake), [Command::Open(tab, surface(&browser, tab))]);
+    assert_eq!(
+        sent(&fake),
+        [Command::Open(tab, surface(&browser, tab), false)]
+    );
 
     lay_out(&mut browser, [100.0, 50.0], 2.0, true);
     browser.poll();

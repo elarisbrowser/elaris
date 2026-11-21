@@ -37,6 +37,9 @@ pub(crate) fn release(source: &AppState, tab: TabId) -> bool {
         return false;
     };
     let mut destination = AppState::new_window();
+    if source.browser.private {
+        destination.make_private();
+    }
     destination.omnibox.close();
     destination.pending_detach = true;
     let id = destination.window_id;

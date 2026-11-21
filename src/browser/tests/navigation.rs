@@ -46,7 +46,7 @@ fn internal_tabs_never_open_ladybird_views_and_close_like_other_tabs() {
     );
 
     let website = browser.open_tab("example.com").unwrap();
-    assert!(matches!(sent(&fake).as_slice(), [Command::Open(id, _)] if *id == website));
+    assert!(matches!(sent(&fake).as_slice(), [Command::Open(id, _, _)] if *id == website));
     browser.close_tab(settings);
     assert!(browser.tab(settings).is_none());
     assert_eq!(browser.active_tab().map(Tab::id), Some(website));
@@ -96,7 +96,10 @@ fn navigation_between_websites_and_native_pages_opens_and_closes_views() {
 
     browser.navigate(tab, "example.org").unwrap();
     assert!(!browser.tab(tab).unwrap().is_internal());
-    assert_eq!(sent(&fake), [Command::Open(tab, surface(&browser, tab))]);
+    assert_eq!(
+        sent(&fake),
+        [Command::Open(tab, surface(&browser, tab), false)]
+    );
     browser.poll();
     assert!(sent(&fake).contains(&view(tab, ViewCommand::Load("https://example.org".into()))));
 }
@@ -204,7 +207,7 @@ fn restored_internal_tabs_stay_native_and_do_not_record_history() {
     assert_eq!(
         sent(&fake),
         [
-            Command::Open(website, surface(&browser, website)),
+            Command::Open(website, surface(&browser, website), false),
             view(website, ViewCommand::Visible(false)),
         ]
     );

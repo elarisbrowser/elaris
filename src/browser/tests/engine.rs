@@ -11,8 +11,27 @@ fn a_tab_opened_before_the_engine_opens_once_it_connects() {
     let tab = browser.open_tab("example.com").unwrap();
     let (engine, fake) = Engine::fake();
     browser.connect(engine);
-    assert_eq!(sent(&fake), [Command::Open(tab, surface(&browser, tab))]);
+    assert_eq!(
+        sent(&fake),
+        [Command::Open(tab, surface(&browser, tab), false)]
+    );
     assert_eq!(browser.active_tab().map(Tab::id), Some(tab));
+}
+
+#[test]
+fn a_private_browser_opens_every_page_in_the_private_session() {
+    let (engine, fake) = Engine::fake();
+    let mut browser = Browser {
+        private: true,
+        ..Browser::default()
+    };
+    browser.connect(engine);
+    let tab = browser.open_tab("example.com").unwrap();
+    assert!(
+        sent(&fake)
+            .iter()
+            .any(|command| matches!(command, Command::Open(id, _, true) if *id == tab))
+    );
 }
 
 #[test]

@@ -97,7 +97,7 @@ impl Browser {
             {
                 engine.send(Command::View(old.page.id(), ViewCommand::Focus(false)));
             }
-            engine.send(Command::Open(id, page.surface.clone()));
+            engine.send(Command::Open(id, page.surface.clone(), self.private));
             if self.default_zoom != 100 {
                 engine.send(Command::View(id, ViewCommand::SetZoom(self.default_zoom)));
             }
@@ -230,7 +230,7 @@ mod tests {
         assert_eq!(browser.input_page(), Some(preview));
         assert_eq!(browser.peek.as_ref().unwrap().origin, [24.0, 38.0]);
         let commands: Vec<_> = fake.commands.try_iter().collect();
-        assert!(matches!(commands.first(), Some(Command::Open(id, _)) if *id == preview));
+        assert!(matches!(commands.first(), Some(Command::Open(id, _, _)) if *id == preview));
         assert!(
             matches!(commands.last(), Some(Command::View(id, ViewCommand::LoadPrepared { source: from, request: 1 })) if *id == preview && *from == source)
         );

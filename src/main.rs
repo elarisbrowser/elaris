@@ -145,6 +145,11 @@ pub(crate) fn open_browser_window() {
     queue_browser_window(app::AppState::new_window(), None);
 }
 
+/// Queues a private browser window in Rune's current event loop turn.
+pub(crate) fn open_private_browser_window() {
+    queue_browser_window(app::AppState::new_private_window(), None);
+}
+
 fn open_browser_window_with_session(session: storage::Session) {
     queue_browser_window(app::AppState::new_window_from_session(session), None);
 }

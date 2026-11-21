@@ -277,8 +277,10 @@ fn locate_pointer(source: u64, pointer: &DesktopPointer) -> Option<(u64, [f32; 2
         .get()?
         .lock()
         .expect("window registry poisoned");
+    let private = crate::app::is_private_window(source);
     let mut hits = windows
         .iter()
+        .filter(|&(&id, _)| crate::app::is_private_window(id) == private)
         .filter_map(|(&id, window)| pointer.in_window(window).map(|point| (id, point)));
     let hit = hits.next()?;
     // X11 placements alone cannot establish stacking order for overlapping frames.

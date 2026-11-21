@@ -73,7 +73,7 @@ fn history_shortcut_restores_native_tab_and_keyboard_opens_a_result() {
     assert_eq!(
         fake.commands
             .try_iter()
-            .filter(|command| matches!(command, Command::Open(id, _) if *id == tab))
+            .filter(|command| matches!(command, Command::Open(id, _, _) if *id == tab))
             .count(),
         1
     );

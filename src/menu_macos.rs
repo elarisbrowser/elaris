@@ -252,6 +252,12 @@ pub(crate) fn install(app: rune::AppHandle<AppState>) {
                 "n",
                 false,
             ),
+            item(
+                "New Private Window",
+                Action::Shortcut(Shortcut::NewPrivateWindow),
+                "n",
+                true,
+            ),
             item("New Tab", Action::Shortcut(Shortcut::NewTab), "t", false),
             item(
                 "Open File…",
@@ -504,7 +510,9 @@ fn menu_command(action: Action) -> Option<MenuCommand> {
         Action::ExitSplit => MenuCommand::ExitSplit,
         Action::Edit(_) => MenuCommand::Edit,
         Action::Shortcut(Shortcut::NewTab) => MenuCommand::NewTab,
-        Action::Shortcut(Shortcut::NewWindow) => MenuCommand::NewWindow,
+        Action::Shortcut(Shortcut::NewWindow | Shortcut::NewPrivateWindow) => {
+            MenuCommand::NewWindow
+        }
         Action::Shortcut(Shortcut::Close) => MenuCommand::CloseTab,
         Action::Shortcut(Shortcut::ReopenClosedTab) => MenuCommand::ReopenClosedTab,
         Action::Shortcut(Shortcut::Find) => MenuCommand::Find,
@@ -601,6 +609,8 @@ unsafe extern "C" fn menu_action(_: &AnyObject, _: Sel, sender: &AnyObject) {
         handle.update(move |state, tx| perform_action(state, action, tx));
     } else if action == Action::Shortcut(Shortcut::NewWindow) {
         crate::open_browser_window();
+    } else if action == Action::Shortcut(Shortcut::NewPrivateWindow) {
+        crate::open_private_browser_window();
     }
 }
 
@@ -686,6 +696,7 @@ fn action_from_id(id: isize) -> Option<Action> {
         112 => Action::Shortcut(Shortcut::ZoomIn),
         113 => Action::Shortcut(Shortcut::ZoomOut),
         114 => Action::Shortcut(Shortcut::ResetZoom),
+        115 => Action::Shortcut(Shortcut::NewPrivateWindow),
         _ => return None,
     })
 }
@@ -707,6 +718,7 @@ fn shortcut_id(shortcut: Shortcut) -> isize {
         Shortcut::ZoomIn => 12,
         Shortcut::ZoomOut => 13,
         Shortcut::ResetZoom => 14,
+        Shortcut::NewPrivateWindow => 15,
         _ => -1,
     }
 }

@@ -21,7 +21,7 @@ fn hidden_frames_keep_two_recent_views_and_restore_idle_tabs() {
     for (id, surface) in &tabs {
         surface.request_preview_invalidation();
         for command in [
-            Command::Open(*id, surface.clone()),
+            Command::Open(*id, surface.clone(), false),
             Command::View(
                 *id,
                 ViewCommand::Resize {
@@ -90,7 +90,11 @@ fn visible_views_sample_their_own_ladybird_frames() {
         (right, 320, right_surface.clone()),
         (hidden, 480, Surface::default()),
     ] {
-        assert!(runtime.apply(Command::Open(id, surface.clone())).is_none());
+        assert!(
+            runtime
+                .apply(Command::Open(id, surface.clone(), false))
+                .is_none()
+        );
         if id == hidden {
             assert!(
                 runtime

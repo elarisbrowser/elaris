@@ -151,6 +151,12 @@ unsafe extern "C" {
         view: *mut *mut RawView,
     ) -> i32;
     fn elaris_ladybird_exit_web_fullscreen(view: *mut RawView) -> i32;
+    fn elaris_ladybird_create_private_view(
+        bridge: *mut RawBridge,
+        id: u64,
+        view: *mut *mut RawView,
+    ) -> i32;
+    fn elaris_ladybird_reset_private_session(bridge: *mut RawBridge) -> i32;
     fn elaris_ladybird_reply_to_external_url(view: *mut RawView, request_id: u64, open: i32)
     -> i32;
     fn elaris_ladybird_reply_to_permission(view: *mut RawView, request_id: u64, choice: i32)
@@ -518,9 +524,24 @@ impl Ladybird {
 
     /// A new view, whose events carry `id`.
     pub fn create_view(&mut self, id: u64, display_refresh_rate: f64) -> Result<WebView, String> {
+        self.create_view_in(id, display_refresh_rate, false)
+    }
+
+    /// Creates a view in the ordinary session, or in the shared private session when `private`.
+    pub fn create_view_in(
+        &mut self,
+        id: u64,
+        display_refresh_rate: f64,
+        private: bool,
+    ) -> Result<WebView, String> {
         let mut raw = std::ptr::null_mut();
+        let create = if private {
+            elaris_ladybird_create_private_view
+        } else {
+            elaris_ladybird_create_view
+        };
         // SAFETY: `self.owner.raw` is a live bridge owned on this thread.
-        let status = unsafe { elaris_ladybird_create_view(self.owner.raw.as_ptr(), id, &mut raw) };
+        let status = unsafe { create(self.owner.raw.as_ptr(), id, &mut raw) };
         status_result(status)?;
         let raw = NonNull::new(raw).ok_or_else(|| "Ladybird returned a null view".to_owned())?;
         // SAFETY: the view was just created and is still owned by this thread.
@@ -558,6 +579,12 @@ impl Ladybird {
             elaris_ladybird_set_display_refresh_rate(view.raw.as_ptr(), refresh_rate)
         })?;
         Ok(Some(view))
+    }
+
+    /// Discards the private session once no private view remains, so the next one starts empty.
+    pub fn reset_private_session(&mut self) -> Result<(), String> {
+        // SAFETY: The bridge is live on its owner thread.
+        status_result(unsafe { elaris_ladybird_reset_private_session(self.owner.raw.as_ptr()) })
     }
 
     pub fn pump(&mut self) -> Result<(), String> {

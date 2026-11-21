@@ -112,7 +112,8 @@ impl fmt::Debug for Surface {
 #[derive(Debug, PartialEq)]
 pub(crate) enum Command {
     /// Creates the tab's view, which shows its frames in the surface.
-    Open(TabId, Surface),
+    /// The flag opens it in the shared private session.
+    Open(TabId, Surface, bool),
     AdoptPopup {
         source: TabId,
         request: u64,

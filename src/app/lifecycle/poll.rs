@@ -180,6 +180,9 @@ fn update_configuration(state: &mut AppState, polled: &crate::browser::Polled) -
 }
 
 fn record_history_updates(state: &AppState, polled: &crate::browser::Polled) {
+    if state.browser.private {
+        return;
+    }
     if let Some(storage) = &state.storage {
         for (_, url, title) in &polled.committed {
             if let Err(error) = storage.history().record_visit(url, title) {

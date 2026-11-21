@@ -38,6 +38,8 @@ struct View {
     preview_revision: u64,
     preview_committed: bool,
     last_thumbnail: Option<Instant>,
+    /// Whether the view belongs to the shared private session.
+    private: bool,
 }
 
 pub(super) struct Runtime {
@@ -189,7 +191,7 @@ impl Runtime {
 
     fn apply_tab_command(&mut self, command: Command) -> Option<Update> {
         let (tab, result) = match command {
-            Command::Open(tab, surface) => (tab, self.open(tab, surface)),
+            Command::Open(tab, surface, private) => (tab, self.open(tab, surface, private)),
             Command::AdoptPopup {
                 source,
                 request,
@@ -202,7 +204,11 @@ impl Runtime {
                     tab.raw(),
                     self.display_refresh_rate,
                 ) {
-                    Ok(Some(view)) => self.insert_view(tab, view, surface),
+                    Ok(Some(view)) => {
+                        // Ladybird opens a popup in its opener's session.
+                        let private = self.views.get(&source).is_some_and(|view| view.private);
+                        self.insert_view(tab, view, surface, private);
+                    }
                     Ok(None) => return Some(Update::PopupClosed(tab)),
                     Err(error) => return Some(Update::Tab(tab, TabUpdate::Error(error))),
                 }
@@ -219,7 +225,13 @@ impl Runtime {
                 };
             }
             Command::Close(tab) => {
-                self.views.remove(&tab);
+                let closed_private = self.views.remove(&tab).is_some_and(|view| view.private);
+                if closed_private && !self.views.values().any(|view| view.private) {
+                    // The last private view is gone; the next private window starts empty.
+                    if let Err(error) = self.ladybird.reset_private_session() {
+                        eprintln!("Elaris: could not reset the private session: {error}");
+                    }
+                }
                 if let Some(order) = &mut self.hidden_order {
                     order.retain(|id| *id != tab);
                 }
@@ -278,15 +290,15 @@ impl Runtime {
             .map(|error| Update::Tab(tab, TabUpdate::Error(error)))
     }
 
-    fn open(&mut self, tab: TabId, surface: Surface) -> Result<(), String> {
+    fn open(&mut self, tab: TabId, surface: Surface, private: bool) -> Result<(), String> {
         let view = self
             .ladybird
-            .create_view(tab.raw(), self.display_refresh_rate)?;
-        self.insert_view(tab, view, surface);
+            .create_view_in(tab.raw(), self.display_refresh_rate, private)?;
+        self.insert_view(tab, view, surface, private);
         Ok(())
     }
 
-    fn insert_view(&mut self, tab: TabId, view: WebView, surface: Surface) {
+    fn insert_view(&mut self, tab: TabId, view: WebView, surface: Surface, private: bool) {
         self.views.insert(
             tab,
             View {
@@ -298,6 +310,7 @@ impl Runtime {
                 preview_revision: 0,
                 preview_committed: false,
                 last_thumbnail: None,
+                private,
             },
         );
     }

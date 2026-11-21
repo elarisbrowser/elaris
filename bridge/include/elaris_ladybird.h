@@ -232,6 +232,10 @@ int32_t elaris_ladybird_cancel_download(ElarisLadybird* bridge, uint64_t downloa
 int32_t elaris_ladybird_cancel_active_downloads(ElarisLadybird* bridge);
 /* Creates a view; every event it raises carries view_id, which the host chooses. */
 int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t view_id, ElarisLadybirdView** out_view);
+/* Creates a view in the shared private session. Its cookies, storage and cache never reach disk. */
+int32_t elaris_ladybird_create_private_view(ElarisLadybird*, uint64_t view_id, ElarisLadybirdView** out_view);
+/* Starts a fresh private session. Fails while any private view is open. */
+int32_t elaris_ladybird_reset_private_session(ElarisLadybird*);
 /* Sets the maximum frame rate reported to pages and used by Ladybird's compositor. */
 int32_t elaris_ladybird_set_display_refresh_rate(ElarisLadybirdView* view, double refresh_rate);
 int32_t elaris_ladybird_load(ElarisLadybirdView* view, const char* url);
