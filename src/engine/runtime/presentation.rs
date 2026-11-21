@@ -108,6 +108,9 @@ fn show_gpu_frame(
     timing: &mut Timing,
     sample: bool,
 ) -> Result<Option<Sample>, String> {
+    if view.gpu_waiting {
+        return Ok(None);
+    }
     // Whether the frame is new comes before the copy, which takes one of few surfaces.
     let Some(cpu) = view.view.frame()? else {
         return Ok(None);
@@ -132,7 +135,6 @@ fn show_gpu_frame(
             return Ok(None);
         }
     };
-    view.gpu_waiting = false;
     let thumbnail = if sample
         && view.visible
         && view.surface.preview_source.revision() == view.preview_revision

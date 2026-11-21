@@ -382,11 +382,12 @@ impl Runtime {
                 continue;
             };
             let completed = gpu.completed();
-            if completed > view.released_serial {
-                view.released_serial = completed;
-                let _ = view.view.release_frames(completed);
+            if completed <= view.released_serial {
+                continue;
             }
-            if view.gpu_waiting
+            view.released_serial = completed;
+            let _ = view.view.release_frames(completed);
+            if std::mem::take(&mut view.gpu_waiting)
                 && let Err(error) = show_frame(view, &mut self.timing, false)
             {
                 updates.push(Update::Tab(tab, TabUpdate::Error(error)));
