@@ -125,6 +125,12 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
     menu = menu
         .separator()
         .item(
+            MenuItem::new("Open File…").on_select_tx(|state: &mut AppState, tx: &mut Tx| {
+                state.dismiss_context_menu();
+                crate::shortcuts::open_file(tx);
+            }),
+        )
+        .item(
             MenuItem::new("Settings").on_select_tx(|state: &mut AppState, tx: &mut Tx| {
                 state.dismiss_context_menu();
                 app::open_settings(state, tx);

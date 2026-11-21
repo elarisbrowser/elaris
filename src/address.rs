@@ -2,7 +2,7 @@
 
 //! Classifies omnibox input as a URL or a web search.
 
-use std::net::IpAddr;
+use std::{fmt::Write as _, net::IpAddr, path::Path};
 
 /// A provider used for text that is not an address.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -82,7 +82,7 @@ pub(crate) fn destination_for_input(input: &str) -> Result<Destination, &'static
         return Ok(Destination::Url(input.to_owned()));
     }
     if input.starts_with('/') {
-        return Ok(Destination::Url(format!("file://{input}")));
+        return Ok(Destination::Url(file_url(Path::new(input))));
     }
 
     let host = host_for_address(input);
@@ -108,15 +108,28 @@ pub(crate) fn search_url(engine: SearchEngine, query: &str) -> String {
     let prefix = engine.search_prefix();
     let mut url = String::with_capacity(prefix.len() + query.len() * 3);
     url.push_str(prefix);
-    for byte in query.bytes() {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+    encode_url_bytes(&mut url, query.as_bytes(), false);
+    url
+}
+
+/// Encodes an absolute local path without treating filename punctuation as URL syntax.
+pub(crate) fn file_url(path: &Path) -> String {
+    let mut url = String::from("file://");
+    encode_url_bytes(&mut url, path.as_os_str().as_encoded_bytes(), true);
+    url
+}
+
+fn encode_url_bytes(url: &mut String, bytes: &[u8], preserve_slashes: bool) {
+    for &byte in bytes {
+        if byte.is_ascii_alphanumeric()
+            || matches!(byte, b'-' | b'_' | b'.' | b'~')
+            || (preserve_slashes && byte == b'/')
+        {
             url.push(char::from(byte));
         } else {
-            use std::fmt::Write as _;
             let _ = write!(url, "%{byte:02X}");
         }
     }
-    url
 }
 
 /// A compact sidebar label for web pages. Keep the port and subdomains that identify the site.
@@ -171,7 +184,18 @@ fn is_local_host(host: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{Destination, SearchEngine, destination_for_input, search_url, url_for_address};
+    use super::{
+        Destination, SearchEngine, destination_for_input, file_url, search_url, url_for_address,
+    };
+    use std::path::Path;
+
+    #[test]
+    fn local_path_keeps_filename_punctuation_out_of_url_syntax() {
+        assert_eq!(
+            file_url(Path::new("/tmp/100% # café?.html")),
+            "file:///tmp/100%25%20%23%20caf%C3%A9%3F.html"
+        );
+    }
 
     #[test]
     fn sidebar_addresses_keep_the_site_and_port() {

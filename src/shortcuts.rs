@@ -5,7 +5,7 @@
 //! table serves both. The page never sees these: it takes no Command or Control chords, so they
 //! reach the window.
 
-use rune::{Key, KeyEvent, Tx};
+use rune::{FileDialogOptions, Key, KeyEvent, Tx};
 
 use crate::app::{self, AppState};
 use crate::browser::Browser;
@@ -16,6 +16,7 @@ use crate::ui;
 pub(crate) enum Shortcut {
     NewWindow,
     NewTab,
+    OpenFile,
     ReopenClosedTab,
     Close,
     /// Open the omnibox with the active page address selected.
@@ -89,6 +90,7 @@ pub(crate) fn dispatch(state: &mut AppState, shortcut: Shortcut, tx: &mut Tx) {
     match shortcut {
         Shortcut::NewWindow => crate::open_browser_window(),
         Shortcut::NewTab => app::new_tab(state, tx),
+        Shortcut::OpenFile => open_file(tx),
         Shortcut::ReopenClosedTab => {
             if state.reopen_recently_closed(0).is_some() {
                 tx.focus(ui::viewport::focus_key(&state.browser), false);
@@ -138,6 +140,28 @@ pub(crate) fn dispatch(state: &mut AppState, shortcut: Shortcut, tx: &mut Tx) {
     }
 }
 
+pub(crate) fn open_file(tx: &mut Tx) {
+    let options = FileDialogOptions {
+        title: "Open File".into(),
+        ..Default::default()
+    };
+    tx.open_file(options, |state: &mut AppState, result, tx| match result {
+        Ok(Some(path)) => {
+            let url = crate::address::file_url(&path);
+            match state.browser.open_tab(&url) {
+                Ok(tab) => {
+                    state.omnibox.close();
+                    state.activate(tab);
+                    tx.focus(ui::viewport::focus_key(&state.browser), false);
+                }
+                Err(error) => eprintln!("Elaris: {error}"),
+            }
+        }
+        Ok(None) => {}
+        Err(error) => eprintln!("Elaris: {error}"),
+    });
+}
+
 /// The tab a tab-selecting shortcut picks.
 fn target(browser: &Browser, shortcut: Shortcut) -> Option<TabId> {
     let tabs = browser.tabs();
@@ -165,6 +189,7 @@ pub(crate) fn shortcut(event: &KeyEvent) -> Option<Shortcut> {
     let shift = event.mods.shift;
     Some(match (key.to_ascii_lowercase(), shift) {
         ('n', false) => Shortcut::NewWindow,
+        ('o', false) => Shortcut::OpenFile,
         ('f', false) => Shortcut::Find,
         ('g', false) => Shortcut::FindNext,
         ('g', true) => Shortcut::FindPrevious,

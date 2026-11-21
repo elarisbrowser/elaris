@@ -248,6 +248,12 @@ pub(crate) fn install(app: rune::AppHandle<AppState>) {
                 false,
             ),
             item("New Tab", Action::Shortcut(Shortcut::NewTab), "t", false),
+            item(
+                "Open File…",
+                Action::Shortcut(Shortcut::OpenFile),
+                "o",
+                false,
+            ),
             item("Close Tab", Action::Shortcut(Shortcut::Close), "w", false),
             item(
                 "Reopen Closed Tab",
@@ -636,6 +642,7 @@ fn action_from_id(id: isize) -> Option<Action> {
         107 => Action::Shortcut(Shortcut::NextTab),
         108 => Action::Shortcut(Shortcut::PreviousTab),
         109 => Action::Shortcut(Shortcut::OpenSettings),
+        110 => Action::Shortcut(Shortcut::OpenFile),
         _ => return None,
     })
 }
@@ -652,6 +659,7 @@ fn shortcut_id(shortcut: Shortcut) -> isize {
         Shortcut::NextTab => 7,
         Shortcut::PreviousTab => 8,
         Shortcut::OpenSettings => 9,
+        Shortcut::OpenFile => 10,
         _ => -1,
     }
 }
