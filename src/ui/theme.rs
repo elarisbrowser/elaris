@@ -21,6 +21,8 @@ pub(crate) struct Theme {
     pub(crate) page: Color,
     /// Soft surface behind cohesive settings groups.
     pub(crate) settings_surface: Color,
+    /// Hairlines between rows inside a grouped surface.
+    pub(crate) separator: Color,
     pub(crate) text: Color,
     /// Labels that matter less: inactive tabs, the status line, placeholders.
     pub(crate) text_muted: Color,
@@ -104,6 +106,7 @@ pub(crate) fn palette(
             window: oklch(0.185, 0.004, HUE).alpha(alpha),
             page: oklch(0.232, 0.005, HUE),
             settings_surface: oklch(0.255, 0.006, HUE),
+            separator: oklcha(1.0, 0.0, 0.0, 0.07),
             text: oklch(0.955, 0.003, HUE),
             text_muted: oklch(0.81, 0.008, HUE),
             icon: oklch(0.82, 0.006, HUE),
@@ -132,6 +135,7 @@ pub(crate) fn palette(
             window: oklch(0.947, 0.008, HUE).alpha(alpha),
             page: oklch(1.0, 0.0, 0.0),
             settings_surface: oklch(0.975, 0.004, HUE),
+            separator: oklcha(0.2, 0.02, HUE, 0.08),
             text: oklch(0.2, 0.008, HUE),
             text_muted: oklch(0.38, 0.016, HUE),
             icon: oklch(0.32, 0.01, HUE),
@@ -284,6 +288,14 @@ pub(super) fn overlay_reveal(reduced_motion: bool) -> Transition {
 
 /// Headings for native pages. Compact labels and body copy use Rune’s type scale.
 pub(crate) const PAGE_TITLE: rune::TextStyle = rune::TextStyle::new(26.0, 600.0).lh(32.0);
+/// Headings above each grouped surface on a native page.
+pub(crate) const PAGE_SECTION_TITLE: rune::TextStyle = rune::TextStyle::new(14.0, 600.0).lh(19.0);
+/// How far a native page's content sits from the top, and the gap under each section heading.
+pub(crate) const PAGE_TOP_PADDING: f32 = 48.0;
+pub(crate) const PAGE_SECTION_TITLE_GAP: f32 = 9.0;
+/// The rounded surface that groups a native page's rows.
+pub(crate) const PAGE_GROUP_RADIUS: f32 = radius::LG;
+pub(crate) const PAGE_GROUP_PADDING: f32 = space::S3 + space::S1;
 
 /// The address field.
 pub(crate) const FOCUS_WIDTH: f32 = 2.0;

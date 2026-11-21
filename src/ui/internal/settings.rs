@@ -17,7 +17,6 @@ use crate::ui::theme::{self, Theme};
 
 const CONTENT_WIDTH: f32 = 720.0;
 const CONTENT_INSET: f32 = 28.0;
-const TOP_PADDING: f32 = 48.0;
 const SECTION_GAP: f32 = 25.0;
 const ROW_GAP: f32 = 16.0;
 const CONTROL_WIDTH: f32 = 220.0;
@@ -34,7 +33,7 @@ pub(super) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> E
         .w_full()
         .max_w(CONTENT_WIDTH)
         .px(CONTENT_INSET)
-        .pt(TOP_PADDING)
+        .pt(theme::PAGE_TOP_PADDING)
         .pb(40.0)
         .gap(SECTION_GAP)
         .child(
@@ -690,26 +689,13 @@ fn configuration_section(state: &AppState, theme: &Theme, kit: &Kit, compact: bo
 }
 
 fn section(title: &str, theme: &Theme, content: El) -> El {
-    col()
-        .key(format!("settings-section-{title}"))
-        .w_full()
-        .gap(9.0)
-        .child(
-            text(title)
-                .font(TextStyle::new(14.0, 600.0).lh(19.0))
-                .color(theme.text_muted),
-        )
-        .child(content)
+    super::section(format!("settings-section-{title}"), title, theme, content)
 }
 
 fn settings_group(content: El, theme: &Theme) -> El {
-    col()
-        .w_full()
-        .px(16.0)
+    super::group(theme)
+        .px(theme::PAGE_GROUP_PADDING)
         .py(12.0)
-        .fill(theme.settings_surface)
-        .continuous_corners()
-        .clip_rounded(theme::FIELD_RADIUS)
         .child(content)
 }
 

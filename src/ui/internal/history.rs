@@ -5,7 +5,7 @@
 use elaris::history::{Page, PageEntry};
 use rune::tok::{space, type_};
 use rune::{El, GrowthSpec, Key, ScrollSpec, Transition, col, el, icon, row, text, text_input};
-use rune_kit::{Button, ButtonVariant, Dialog, Kit};
+use rune_kit::{Button, ButtonVariant, Checkbox, Dialog, Kit};
 
 use crate::address::compact_address;
 use crate::app::AppState;
@@ -15,9 +15,11 @@ use crate::ui::{
     theme::{self, Theme},
 };
 
-const CONTENT_WIDTH: f32 = 860.0;
-const ROW_HEIGHT: f32 = 56.0;
-const SECTION_GAP: f32 = 16.0;
+const CONTENT_WIDTH: f32 = 960.0;
+const SEARCH_WIDTH: f32 = 520.0;
+const ROW_HEIGHT: f32 = 48.0;
+const TIME_WIDTH: f32 = 72.0;
+const SECTION_GAP: f32 = 24.0;
 
 pub(super) fn view(
     state: &AppState,
@@ -34,44 +36,34 @@ pub(super) fn view(
         .page
         .as_ref()
         .is_some_and(|page| !page.entries.is_empty());
-    let clear = Button::new("Clear History")
-        .variant(ButtonVariant::GhostMuted)
-        .disabled(
-            history.writing
-                || (!has_entries
-                    && history.input.text.trim().is_empty()
-                    && history.previous.is_empty()),
-        )
-        .on_press(|state: &mut AppState| state.history_page.confirming = true)
-        .build(&kit)
-        .key("history-clear");
-    let header = col()
+    let header = row()
+        .key("history-header")
         .w_full()
-        .gap(SECTION_GAP)
+        .gap(theme::PAGE_GROUP_PADDING)
+        .center_y()
         .child(
-            col()
-                .gap(space::S1)
-                .child(
-                    text("History")
-                        .font(theme::PAGE_TITLE)
-                        .color(theme.text)
-                        .role("heading"),
-                )
-                .child(
-                    text("Your most recent visit to each address.")
-                        .font(type_::BODY)
-                        .color(theme.text_muted),
-                ),
+            text("History")
+                .font(theme::PAGE_TITLE)
+                .color(theme.text)
+                .role("heading")
+                .grow(1.0)
+                .min_w(0.0),
         )
+        .child(search(state, theme))
         .child(
             row()
-                .w_full()
+                .grow(1.0)
+                .min_w(0.0)
                 .gap(space::S2)
                 .center_y()
-                .child(search(state, theme))
-                .child(clear),
+                .justify_end()
+                .children(actions(state, theme, &kit, has_entries)),
         );
-    let mut results = col().key("history-results").w_full().gap(space::S2);
+    let mut results = col()
+        .key("history-results")
+        .w_full()
+        .gap(space::S2)
+        .pb(space::S6);
     if let Some(error) = &history.action_error {
         results = results.child(
             text(error)
@@ -120,17 +112,22 @@ pub(super) fn view(
             )
         });
     }
-    results = results.child(entries(state, theme, reduced_motion));
-    let content = col()
-        .key("history-content")
+    results = results.child(entries(state, theme, &kit, reduced_motion));
+    let list = row().w_full().justify_center().child(
+        col()
+            .w_full()
+            .max_w(CONTENT_WIDTH)
+            .px(space::S6)
+            .child(results)
+            .children(pagination(state, &kit)),
+    );
+    col()
+        .key("history-page")
         .w_full()
         .h_full()
-        .max_w(CONTENT_WIDTH)
-        .px(space::S6)
-        .pt(48.0)
-        .pb(space::S3)
-        .gap(SECTION_GAP)
-        .child(header)
+        .pt(space::S6)
+        .gap(space::S6)
+        .child(header.px(space::S6))
         .child(
             col()
                 .key(HISTORY_SCROLL)
@@ -140,15 +137,46 @@ pub(super) fn view(
                 .scroll(ScrollSpec {
                     stick_bottom: false,
                 })
-                .child(results),
+                .child(list),
         )
-        .children(pagination(state, &kit));
-    row()
-        .key("history-page")
-        .w_full()
-        .h_full()
-        .justify_center()
-        .child(content)
+}
+
+/// The header's trailing controls: selection actions while any row is ticked, otherwise Clear.
+fn actions(state: &AppState, theme: &Theme, kit: &Kit, has_entries: bool) -> Vec<El> {
+    let history = &state.history_page;
+    if history.selected.is_empty() {
+        return vec![
+            Button::new("Clear History")
+                .variant(ButtonVariant::GhostMuted)
+                .disabled(
+                    history.writing
+                        || (!has_entries
+                            && history.input.text.trim().is_empty()
+                            && history.previous.is_empty()),
+                )
+                .on_press(|state: &mut AppState| state.history_page.confirming = true)
+                .build(kit)
+                .key("history-clear"),
+        ];
+    }
+    vec![
+        text(format!("{} selected", history.selected.len()))
+            .font(type_::BODY)
+            .color(theme.text_muted)
+            .single_line()
+            .role("status"),
+        Button::new("Cancel")
+            .variant(ButtonVariant::Neutral)
+            .on_press(|state: &mut AppState| state.history_page.selected.clear())
+            .build(kit)
+            .key("history-selection-cancel"),
+        Button::new("Delete")
+            .variant(ButtonVariant::Danger)
+            .disabled(history.writing)
+            .on_press(AppState::delete_selected_history)
+            .build(kit)
+            .key("history-selection-delete"),
+    ]
 }
 
 fn search(state: &AppState, theme: &Theme) -> El {
@@ -193,8 +221,9 @@ fn search(state: &AppState, theme: &Theme) -> El {
         .on_press_tx(AppState::clear_history_search)
     });
     row()
-        .grow(1.0)
-        .min_w(0.0)
+        .w_full()
+        .max_w(SEARCH_WIDTH)
+        .shrink()
         .h(theme::FIELD_HEIGHT)
         .center_y()
         .px(theme::FIELD_PADDING)
@@ -212,69 +241,109 @@ fn search(state: &AppState, theme: &Theme) -> El {
         .children(clear)
 }
 
-fn entries(state: &AppState, theme: &Theme, reduced_motion: bool) -> El {
-    let list = col().key("history-entries").w_full();
-    let mut list = if reduced_motion {
-        list.child_exit(Transition::none()).instant_changes()
-    } else {
-        list.growth(GrowthSpec::default())
-    };
-    if let Some(page) = &state.history_page.page {
-        let mut previous_date = None;
-        for entry in &page.entries {
-            if previous_date != Some(entry.date.as_str()) {
-                list = list.child(
-                    text(date_label(&entry.date, page))
-                        .key(format!("history-date-{}", entry.date))
-                        .font(type_::LABEL)
-                        .color(theme.text_muted)
-                        .role("heading")
-                        .px(space::S2)
-                        .pt(if previous_date.is_none() {
-                            space::S2
-                        } else {
-                            SECTION_GAP
-                        })
-                        .pb(space::S1)
-                        .arrives_whole(),
-                );
-                previous_date = Some(&entry.date);
-            }
-            list = list.child(entry_row(state, entry, theme));
+fn entries(state: &AppState, theme: &Theme, kit: &Kit, reduced_motion: bool) -> El {
+    let motion = |list: El| {
+        if reduced_motion {
+            list.child_exit(Transition::none()).instant_changes()
+        } else {
+            list.growth(GrowthSpec::default())
         }
+    };
+    let mut list = motion(col().key("history-entries").w_full().gap(SECTION_GAP));
+    let Some(page) = &state.history_page.page else {
+        return list;
+    };
+    for day in page.entries.chunk_by(|a, b| a.date == b.date) {
+        let date = &day[0].date;
+        let mut rows = motion(super::group(theme));
+        for (index, entry) in day.iter().enumerate() {
+            rows = rows.child(entry_row(state, entry, index == 0, theme, kit));
+        }
+        list = list.child(
+            super::section(
+                format!("history-date-{date}"),
+                &date_label(date, page),
+                theme,
+                rows,
+            )
+            .arrives_whole(),
+        );
     }
     list
 }
 
+const MONTHS: [&str; 12] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
+const WEEKDAYS: [&str; 7] = [
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+];
+
+/// A `YYYY-MM-DD` day as "Saturday, November 21, 2026", led by Today or Yesterday when it is one.
 fn date_label(date: &str, page: &Page) -> String {
+    let full = full_date(date).unwrap_or_else(|| "Unknown date".into());
     if date == page.today {
-        return "Today".into();
+        format!("Today – {full}")
+    } else if date == page.yesterday {
+        format!("Yesterday – {full}")
+    } else {
+        full
     }
-    if date == page.yesterday {
-        return "Yesterday".into();
-    }
-    let mut parts = date.split('-');
-    let months = [
-        "January",
-        "February",
-        "March",
-        "April",
-        "May",
-        "June",
-        "July",
-        "August",
-        "September",
-        "October",
-        "November",
-        "December",
-    ];
-    if let (Some(year), Some(month), Some(day)) = (parts.next(), parts.next(), parts.next())
-        && let Ok(month) = month.parse::<usize>()
-        && let Some(month) = month.checked_sub(1).and_then(|index| months.get(index))
-    {
-        return format!("{} {month} {year}", day.trim_start_matches('0'));
-    }
-    "Unknown date".into()
+}
+
+fn full_date(date: &str) -> Option<String> {
+    let mut parts = date.split('-').map(str::parse::<i64>);
+    let (year, month, day) = (
+        parts.next()?.ok()?,
+        parts.next()?.ok()?,
+        parts.next()?.ok()?,
+    );
+    let name = MONTHS.get(usize::try_from(month.checked_sub(1)?).ok()?)?;
+    let weekday = WEEKDAYS[days_from_civil(year, month, day).rem_euclid(7) as usize];
+    Some(format!("{weekday}, {name} {day}, {year}"))
+}
+
+/// Days since 1970-01-01 (a Thursday) for a proleptic Gregorian date.
+fn days_from_civil(year: i64, month: i64, day: i64) -> i64 {
+    let year = if month <= 2 { year - 1 } else { year };
+    let era = year.div_euclid(400);
+    let year_of_era = year - era * 400;
+    let day_of_year = (153 * (month + if month > 2 { -3 } else { 9 }) + 2) / 5 + day - 1;
+    let day_of_era = year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year;
+    era * 146_097 + day_of_era - 719_468
+}
+
+/// A 24-hour `HH:MM` time as "1:03 PM".
+fn clock_time(time: &str) -> String {
+    let Some((hour, minute)) = time
+        .split_once(':')
+        .and_then(|(hour, minute)| Some((hour.parse::<u8>().ok()?, minute)))
+    else {
+        return time.into();
+    };
+    let suffix = if hour < 12 { "AM" } else { "PM" };
+    let hour = match hour % 12 {
+        0 => 12,
+        hour => hour,
+    };
+    format!("{hour}:{minute} {suffix}")
 }
 
 fn entry_key(url: &str) -> String {
@@ -312,7 +381,7 @@ fn navigate_entries(state: &mut AppState, url: &str, key: &Key, tx: &mut rune::T
     true
 }
 
-fn entry_row(state: &AppState, row_entry: &PageEntry, theme: &Theme) -> El {
+fn entry_row(state: &AppState, row_entry: &PageEntry, first: bool, theme: &Theme, kit: &Kit) -> El {
     let entry = &row_entry.entry;
     let title = if entry.title.trim().is_empty() {
         &entry.url
@@ -320,6 +389,7 @@ fn entry_row(state: &AppState, row_entry: &PageEntry, theme: &Theme) -> El {
         &entry.title
     };
     let address = compact_address(&entry.url);
+    let selected = state.history_page.selected.contains(&entry.url);
     let favicon = state
         .browser
         .tabs()
@@ -330,9 +400,20 @@ fn entry_row(state: &AppState, row_entry: &PageEntry, theme: &Theme) -> El {
             || icon(&icons::PAGE, theme::ICON).color(theme.icon),
             |pixels| el().size(theme::ICON, theme::ICON).pixels(pixels),
         );
-    let (open_url, middle_url, delete_url) =
-        (entry.url.clone(), entry.url.clone(), entry.url.clone());
+    let (open_url, middle_url, delete_url, toggle_url) = (
+        entry.url.clone(),
+        entry.url.clone(),
+        entry.url.clone(),
+        entry.url.clone(),
+    );
     let key_url = open_url.clone();
+    let check = Checkbox::new(selected)
+        .label(format!("Select {title}"))
+        .hide_label()
+        .disabled(state.history_page.writing)
+        .on_toggle(move |state: &mut AppState| state.toggle_history_selection(&toggle_url))
+        .build(kit)
+        .key(format!("history-select:{}", entry.url));
     let open = row()
         .key(entry_key(&entry.url))
         .h_full()
@@ -340,7 +421,6 @@ fn entry_row(state: &AppState, row_entry: &PageEntry, theme: &Theme) -> El {
         .min_w(0.0)
         .gap(space::S3)
         .center_y()
-        .pl(space::S2)
         .radius(theme::ROW_RADIUS)
         .focus_ring(theme::FOCUS_WIDTH, 0.0, theme.focus)
         .label(format!("{} — {}", title, entry.url))
@@ -353,6 +433,11 @@ fn entry_row(state: &AppState, row_entry: &PageEntry, theme: &Theme) -> El {
                     state.open_history_entry(&key_url, false, tx);
                 }
                 true
+            } else if matches!(&event.key, Key::Text(text) if text == " ")
+                && event.mods == rune::Mods::default()
+            {
+                state.toggle_history_selection(&key_url);
+                true
             } else if event.mods == rune::Mods::default() {
                 navigate_entries(state, &key_url, &event.key, tx)
             } else {
@@ -364,38 +449,35 @@ fn entry_row(state: &AppState, row_entry: &PageEntry, theme: &Theme) -> El {
             state.open_history_entry(&middle_url, true, tx)
         })
         .child(
-            el().size(30.0, 30.0)
-                .radius(theme::FIELD_RADIUS)
-                .fill(theme.settings_surface)
-                .center()
-                .child(favicon)
-                .a11y_hidden(),
+            text(clock_time(&row_entry.time))
+                .font(type_::BODY)
+                .color(theme.text_muted)
+                .single_line()
+                .w(TIME_WIDTH),
         )
+        .child(el().child(favicon).a11y_hidden())
         .child(
-            col()
+            row()
                 .grow(1.0)
                 .min_w(0.0)
-                .gap(space::S1)
+                .gap(space::S3)
+                .center_y()
                 .child(
                     text(title)
                         .font(type_::BODY)
                         .color(theme.text)
                         .single_line()
-                        .truncate(),
+                        .truncate()
+                        .shrink(),
                 )
                 .child(
                     text(address)
-                        .font(type_::LABEL)
+                        .font(type_::BODY)
                         .color(theme.text_muted)
                         .single_line()
-                        .truncate(),
+                        .truncate()
+                        .shrink(),
                 ),
-        )
-        .child(
-            text(&row_entry.time)
-                .font(type_::LABEL)
-                .color(theme.text_muted)
-                .single_line(),
         );
     let label = format!("Remove all visits to {}", entry.url);
     let remove = controls::icon_button(
@@ -410,22 +492,31 @@ fn entry_row(state: &AppState, row_entry: &PageEntry, theme: &Theme) -> El {
     .focusable(!state.history_page.writing)
     .disabled(state.history_page.writing)
     .on_press(move |state: &mut AppState| {
-        state.mutate_history(HistoryMutation::Remove(delete_url.clone()))
+        state.mutate_history(HistoryMutation::Remove(vec![delete_url.clone()]))
     });
-    row()
-        .key(format!("history-entry:{}", entry.url))
+    let content = row()
         .w_full()
         .h(ROW_HEIGHT)
         .center_y()
-        .pr(space::S2)
-        .gap(space::S2)
-        .radius(theme::ROW_RADIUS)
+        .px(theme::PAGE_GROUP_PADDING)
+        .gap(theme::PAGE_GROUP_PADDING)
         .hover_group()
         .hover(theme.hover)
+        .child(check)
+        .child(open)
+        .child(remove);
+    col()
+        .key(format!("history-entry:{}", entry.url))
+        .w_full()
+        .fill(if selected {
+            theme.selection
+        } else {
+            rune::Color::TRANSPARENT
+        })
         .arrives_whole()
         .transition(Transition::opacity())
-        .child(open)
-        .child(remove)
+        .children((!first).then(|| super::separator(theme)))
+        .child(content)
 }
 
 fn pagination(state: &AppState, kit: &Kit) -> Option<El> {
@@ -523,4 +614,29 @@ fn confirmation(theme: &Theme, overlays: &mut Vec<El>) {
                 .child(actions),
         )
         .build(&kit, overlays);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dates_and_times_read_naturally() {
+        assert_eq!(
+            full_date("2026-11-21").as_deref(),
+            Some("Saturday, November 21, 2026")
+        );
+        assert_eq!(
+            full_date("2026-10-28").as_deref(),
+            Some("Wednesday, October 28, 2026")
+        );
+        assert_eq!(
+            full_date("2000-02-29").as_deref(),
+            Some("Tuesday, February 29, 2000")
+        );
+        assert_eq!(full_date("garbage"), None);
+        assert_eq!(clock_time("00:05"), "12:05 AM");
+        assert_eq!(clock_time("13:03"), "1:03 PM");
+        assert_eq!(clock_time("12:30"), "12:30 PM");
+    }
 }
