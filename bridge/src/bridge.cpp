@@ -1548,6 +1548,38 @@ extern "C" int32_t elaris_ladybird_set_autoplay(ElarisLadybird* bridge, int32_t 
     return succeed();
 }
 
+extern "C" int32_t elaris_ladybird_set_content_blocking(ElarisLadybird* bridge, int32_t enabled, char const* json) {
+    if (!bridge || !s_application || !on_owner_thread(bridge) || !json)
+        return fail("content blocking requires the bridge owner thread");
+    auto rows = JsonValue::from_string(AK::StringView{json, strlen(json)});
+    if (rows.is_error() || !rows.value().is_array())
+        return fail("invalid content blocker lists");
+    HashTable<String> selected;
+    for (auto const& row : rows.value().as_array().values()) {
+        if (!row.is_string())
+            return fail("invalid content blocker list identifier");
+        selected.set(row.as_string());
+    }
+
+    auto& settings = WebView::Application::settings();
+    bool enabling_list = false;
+    for (auto const& list : Vector<WebView::ContentBlockerList>(settings.content_blocker_lists())) {
+        auto should_enable = selected.contains(list.identifier);
+        enabling_list = enabling_list || (should_enable && !list.enabled);
+        if (should_enable != list.enabled)
+            settings.set_content_blocker_list_enabled(list.identifier, should_enable);
+    }
+
+    // Engine downloads lists only when filter list updates turn on, or on its daily check. Turning them off first makes
+    // turning them back on fetch the list that was just enabled.
+    bool updating = enabled != 0;
+    if (updating && enabling_list && settings.filter_list_updates_enabled())
+        settings.set_filter_list_updates_enabled(false);
+    settings.set_content_blocker_enabled(updating);
+    settings.set_filter_list_updates_enabled(updating);
+    return succeed();
+}
+
 extern "C" int32_t elaris_ladybird_create_private_view(ElarisLadybird* bridge, uint64_t view_id,
                                                        ElarisLadybirdView** out_view) {
     return create_view(bridge, view_id, WebView::IsPrivate::Yes, out_view);

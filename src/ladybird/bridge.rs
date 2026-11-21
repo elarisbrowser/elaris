@@ -164,6 +164,11 @@ unsafe extern "C" {
         default_policy: i32,
         json: *const c_char,
     ) -> i32;
+    fn elaris_ladybird_set_content_blocking(
+        bridge: *mut RawBridge,
+        enabled: i32,
+        json: *const c_char,
+    ) -> i32;
     fn elaris_ladybird_clear_browsing_data(
         bridge: *mut RawBridge,
         since_ms: i64,
@@ -633,6 +638,20 @@ impl Ladybird {
         // SAFETY: The bridge is live on its owner thread and borrows the string for this call.
         status_result(unsafe {
             elaris_ladybird_set_autoplay(self.owner.raw.as_ptr(), default_policy, json.as_ptr())
+        })
+    }
+
+    /// Turns the content blocker on or off and enables the built-in lists named by identifier.
+    pub fn set_content_blocking(&mut self, enabled: bool, lists: &[&str]) -> Result<(), String> {
+        let json = serde_json::to_string(lists).map_err(|error| error.to_string())?;
+        let json = CString::new(json).map_err(|error| error.to_string())?;
+        // SAFETY: The bridge is live on its owner thread and borrows the string for this call.
+        status_result(unsafe {
+            elaris_ladybird_set_content_blocking(
+                self.owner.raw.as_ptr(),
+                i32::from(enabled),
+                json.as_ptr(),
+            )
         })
     }
 

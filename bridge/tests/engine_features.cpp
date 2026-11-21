@@ -1,6 +1,6 @@
-// Checks two engine behaviours that Elaris relies on without any code of its own: the bundled site compatibility
-// rules load and override the user agent for the sites they name, and a PDF opens in Ladybird's pdf.js viewer
-// instead of downloading.
+// Checks engine behaviours that Elaris relies on: the bundled site compatibility rules load and override the user agent
+// for the sites they name, a PDF opens in Ladybird's pdf.js viewer instead of downloading, and the bridge's content
+// blocker call reaches the engine's settings.
 
 #include <elaris_ladybird.h>
 
@@ -10,6 +10,7 @@
 #include <LibWebCommon/Loader/SiteCompatibility.h>
 #include <LibWebCommon/Loader/UserAgent.h>
 #include <LibWebView/Application.h>
+#include <LibWebView/Settings.h>
 
 #include <chrono>
 #include <cstring>
@@ -107,6 +108,35 @@ bool pdf_opens_in_viewer(ElarisLadybird* bridge, Events& events, std::string con
     return true;
 }
 
+// Turns the content blocker on with two built-in lists, then off, reading the engine's settings back each time.
+// Turning it off again also cancels the list downloads that turning it on starts.
+bool content_blocker_settings_apply(ElarisLadybird* bridge) {
+    auto& settings = WebView::Application::settings();
+    auto enabled_list = [&](StringView identifier) {
+        auto list = settings.content_blocker_list(identifier);
+        return list.has_value() && list.value().enabled;
+    };
+    if (!check(elaris_ladybird_set_content_blocking(bridge, 1, R"(["easyList","easyPrivacy"])"),
+               "enable content blocking"))
+        return false;
+    if (!settings.content_blocker_enabled() || !enabled_list("easyList"sv) || !enabled_list("easyPrivacy"sv) ||
+        enabled_list("fanboySocial"sv)) {
+        std::cerr << "the engine did not apply the enabled content blocker lists\n";
+        return false;
+    }
+    if (elaris_ladybird_set_content_blocking(bridge, 1, "{") == 0) {
+        std::cerr << "malformed content blocker lists unexpectedly succeeded\n";
+        return false;
+    }
+    if (!check(elaris_ladybird_set_content_blocking(bridge, 0, "[]"), "disable content blocking"))
+        return false;
+    if (settings.content_blocker_enabled() || enabled_list("easyList"sv)) {
+        std::cerr << "disabling content blocking did not reach the engine\n";
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -122,7 +152,8 @@ int main(int argc, char** argv) {
         return 1;
 
     auto pdf_url = "file://" + std::filesystem::absolute(argv[3]).string();
-    bool passed = site_compatibility_loads() && pdf_opens_in_viewer(bridge, events, pdf_url);
+    bool passed = site_compatibility_loads() && pdf_opens_in_viewer(bridge, events, pdf_url) &&
+                  content_blocker_settings_apply(bridge);
     elaris_ladybird_destroy(bridge);
     return passed ? 0 : 1;
 }

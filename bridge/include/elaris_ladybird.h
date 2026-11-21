@@ -265,6 +265,10 @@ int32_t elaris_ladybird_clear_browsing_data(ElarisLadybird*, int64_t since_ms, i
 /* Replaces the autoplay default and site exceptions. Policies are 0 allow, 1 block audio, 2 block all;
  * json is an array of [origin, policy] rows. */
 int32_t elaris_ladybird_set_autoplay(ElarisLadybird*, int32_t default_policy, char const* json);
+/* Turns the content blocker on or off. Filter lists refresh while it is on, so turning it on fetches them. json is an
+ * array of the built-in list identifiers to enable; the others are disabled. Enabling a list while the blocker is on
+ * fetches it straight away. */
+int32_t elaris_ladybird_set_content_blocking(ElarisLadybird*, int32_t enabled, char const* json);
 /* Starts a fresh private session. Fails while any private view is open. */
 int32_t elaris_ladybird_reset_private_session(ElarisLadybird*);
 /* Sets the maximum frame rate reported to pages and used by Ladybird's compositor. */
