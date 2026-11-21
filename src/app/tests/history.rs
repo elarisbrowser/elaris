@@ -167,13 +167,13 @@ fn history_mutation_preserves_tabs_and_query_on_success_or_failure() {
 
     let db = rusqlite::Connection::open(&paths.history_file).unwrap();
     db.execute_batch("CREATE TRIGGER prevent_delete BEFORE DELETE ON history BEGIN SELECT RAISE(ABORT, 'test failure'); END;").unwrap();
-    state.mutate_history(HistoryMutation::Remove(url.into()));
+    state.mutate_history(HistoryMutation::Remove(vec![url.into()]));
     pump(&mut state);
     assert!(state.history_page.action_error.is_some());
     assert_eq!(state.history_page.page.as_ref().unwrap().entries.len(), 2);
     db.execute_batch("DROP TRIGGER prevent_delete").unwrap();
 
-    state.mutate_history(HistoryMutation::Remove(url.into()));
+    state.mutate_history(HistoryMutation::Remove(vec![url.into()]));
     pump(&mut state);
     pump(&mut state);
     assert_eq!(state.history_page.page.as_ref().unwrap().entries.len(), 1);

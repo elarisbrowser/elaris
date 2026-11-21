@@ -66,7 +66,7 @@ fn history_worker_reports_failed_writes_and_refreshes_omnibox_after_success() {
     assert_eq!(history.search("github", 10).len(), 1);
 
     for operation in [
-        HistoryMutation::Remove("https://github.com/".into()),
+        HistoryMutation::Remove(vec!["https://github.com/".into()]),
         HistoryMutation::Clear,
     ] {
         history.mutate(7, operation).unwrap();
@@ -81,7 +81,10 @@ fn history_worker_reports_failed_writes_and_refreshes_omnibox_after_success() {
 
     database.execute_batch("DROP TRIGGER block_delete").unwrap();
     history
-        .mutate(7, HistoryMutation::Remove("https://github.com/".into()))
+        .mutate(
+            7,
+            HistoryMutation::Remove(vec!["https://github.com/".into()]),
+        )
         .unwrap();
     storage.flush_on_close().unwrap();
     assert!(matches!(

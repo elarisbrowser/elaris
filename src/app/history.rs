@@ -2,6 +2,8 @@
 
 //! State and storage coordination for the native latest-visited list.
 
+use std::collections::BTreeSet;
+
 use elaris::history::{Cursor, Page};
 use rune::{TextEdit, Tx};
 
@@ -21,6 +23,8 @@ pub(crate) struct HistoryPage {
     pub(crate) writing: bool,
     pub(crate) active: Option<TabId>,
     pub(crate) previous: Vec<Cursor>,
+    /// Addresses ticked for removal on the current page.
+    pub(crate) selected: BTreeSet<String>,
     revision: u64,
 }
 
@@ -81,6 +85,7 @@ impl AppState {
         self.history_page.previous.clear();
         self.history_page.page = None;
         self.history_page.action_error = None;
+        self.history_page.selected.clear();
         self.request_history_page();
         tx.instant();
         tx.scroll_to_instant(crate::ui::HISTORY_SCROLL, 0.0, 0.0);
@@ -110,6 +115,7 @@ impl AppState {
             return;
         }
         self.history_page.page = None;
+        self.history_page.selected.clear();
         self.request_history_page();
         tx.instant();
         tx.scroll_to_instant(crate::ui::HISTORY_SCROLL, 0.0, 0.0);
@@ -131,6 +137,21 @@ impl AppState {
         if !self.history_page.writing {
             self.history_page.action_error =
                 Some("Could not save changes to browsing history.".into());
+        }
+    }
+
+    pub(crate) fn toggle_history_selection(&mut self, url: &str) {
+        let selected = &mut self.history_page.selected;
+        if !selected.remove(url) {
+            selected.insert(url.to_owned());
+        }
+    }
+
+    /// Removes every ticked address.
+    pub(crate) fn delete_selected_history(&mut self) {
+        if !self.history_page.selected.is_empty() {
+            let urls = self.history_page.selected.iter().cloned().collect();
+            self.mutate_history(HistoryMutation::Remove(urls));
         }
     }
 
@@ -161,6 +182,7 @@ impl AppState {
         if changed {
             self.history_page.active = active;
             self.history_page.confirming = false;
+            self.history_page.selected.clear();
         }
         if active.is_some() && (changed || visits_changed) {
             self.request_history_page();
@@ -181,9 +203,12 @@ impl AppState {
                             self.request_history_page();
                             tx.scroll_to_instant(crate::ui::HISTORY_SCROLL, 0.0, 0.0);
                         }
-                        Ok(HistoryMutation::Remove(url)) => {
+                        Ok(HistoryMutation::Remove(urls)) => {
                             if let Some(page) = &mut self.history_page.page {
-                                page.entries.retain(|row| row.entry.url != url);
+                                page.entries.retain(|row| !urls.contains(&row.entry.url));
+                            }
+                            for url in &urls {
+                                self.history_page.selected.remove(url);
                             }
                             self.request_history_page();
                             tx.animated();

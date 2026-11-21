@@ -205,6 +205,18 @@ impl History {
         })
     }
 
+    /// Removes the entries for every address in `urls` together.
+    pub fn remove_all(&self, urls: &[String]) -> rusqlite::Result<()> {
+        let transaction = self.connection.unchecked_transaction()?;
+        {
+            let mut statement = transaction.prepare_cached("DELETE FROM history WHERE url = ?1")?;
+            for url in urls {
+                statement.execute([url])?;
+            }
+        }
+        transaction.commit()
+    }
+
     /// Removes the entry for `url`, returning whether a row was deleted.
     pub fn remove(&self, url: &str) -> rusqlite::Result<bool> {
         Ok(self

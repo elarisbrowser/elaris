@@ -126,7 +126,8 @@ pub(crate) enum HistoryEvent {
 
 #[derive(Debug)]
 pub(crate) enum HistoryMutation {
-    Remove(String),
+    /// Removes every visit to each of these addresses.
+    Remove(Vec<String>),
     Clear,
     /// Removes entries last visited at or after this many microseconds since the Unix epoch.
     ClearSince(i64),
@@ -660,7 +661,7 @@ fn run_worker(
             Command::HistoryMutation(window, mutation) => {
                 let result = history.as_ref().and_then(|history| {
                     let result = match &mutation {
-                        HistoryMutation::Remove(url) => history.remove(url).map(|_| ()),
+                        HistoryMutation::Remove(urls) => history.remove_all(urls),
                         HistoryMutation::Clear => history.clear(),
                         HistoryMutation::ClearSince(since) => history.clear_since(*since),
                     };
@@ -670,7 +671,7 @@ fn run_worker(
                     result.ok()
                 });
                 let message = match mutation {
-                    HistoryMutation::Remove(_) => "Could not remove this address from history.",
+                    HistoryMutation::Remove(_) => "Could not remove these addresses from history.",
                     HistoryMutation::Clear | HistoryMutation::ClearSince(_) => {
                         "Could not clear browsing history."
                     }
