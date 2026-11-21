@@ -509,7 +509,7 @@ pub(super) fn page_hover(page: El, tab: &crate::tab::Tab, theme: &Theme) -> El {
             .inert()
             .a11y_hidden()
             .child(
-                rune::text(tab.hovered_link.as_str())
+                rune::text(crate::address::compact_address(&tab.hovered_link))
                     .min_w(0.0)
                     .truncate()
                     .font(type_::LABEL)
@@ -517,7 +517,8 @@ pub(super) fn page_hover(page: El, tab: &crate::tab::Tab, theme: &Theme) -> El {
                     .fill(theme.overlay_panel)
                     .radius(radius::SM)
                     .px(space::S2)
-                    .py(space::S1),
+                    .py(space::S1)
+                    .help(tab.hovered_link.as_str()),
             ),
     )
 }
