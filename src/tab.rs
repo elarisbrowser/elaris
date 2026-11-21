@@ -244,6 +244,8 @@ impl Tab {
             }
             TabUpdate::ImeCaret(rect) => self.ime_caret = rect,
             TabUpdate::WebFullscreen(active) => self.web_fullscreen = active,
+            // The browser's swipe tracking takes these before they reach a tab.
+            TabUpdate::WheelResult(_) => {}
             TabUpdate::PermissionPrompt(prompt) => self.permission_prompt = prompt,
             TabUpdate::ExternalUrl(request) => self.external_url = request,
             TabUpdate::Accessibility(event) => self.accessibility_events.push(event),

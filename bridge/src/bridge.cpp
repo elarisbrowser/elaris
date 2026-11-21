@@ -1274,6 +1274,10 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
             emit(handle, ELARIS_LADYBIRD_POPUP_CLOSED);
         };
     }
+    handle->view->on_finish_handling_mouse_event = [handle](auto const& event, auto result) {
+        if (event.type == Web::MouseEvent::Type::MouseWheel)
+            emit(handle, ELARIS_LADYBIRD_WHEEL_RESULT, {}, result == Web::EventResult::Accepted ? 0 : 1);
+    };
     handle->view->on_fullscreen_window = [handle] { set_web_fullscreen(*handle, true); };
     handle->view->on_exit_fullscreen_window = [handle] { set_web_fullscreen(*handle, false); };
     handle->view->on_request_alert = [handle](auto const& message) {

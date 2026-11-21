@@ -438,6 +438,7 @@ impl Runtime {
                     continue;
                 }
                 Event::WebFullscreen(active) => TabUpdate::WebFullscreen(active),
+                Event::WheelResult { used } => TabUpdate::WheelResult(used),
                 Event::PermissionPrompt(prompt) => TabUpdate::PermissionPrompt(prompt),
                 Event::ExternalUrl(request) => TabUpdate::ExternalUrl(request),
                 Event::Accessibility(event) => TabUpdate::Accessibility(event),
