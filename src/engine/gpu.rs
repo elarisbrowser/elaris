@@ -14,13 +14,13 @@ use rune::NativeSurface;
 use rune::native_surface::macos::PixelBuffer;
 use rune::native_surface::{ColorInfo, FrameTiming};
 
-/// Set to anything but `0` to show frames through the GPU. Off until the path is verified.
-const GPU_FRAMES_VARIABLE: &str = "ELARIS_GPU_FRAMES";
+/// Set to anything but `0` to copy frames through the CPU instead, as other platforms do.
+const CPU_FRAMES_VARIABLE: &str = "ELARIS_CPU_FRAMES";
 
 /// Whether new tabs show their frames through the GPU.
 pub(super) fn enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
-    *ENABLED.get_or_init(|| std::env::var_os(GPU_FRAMES_VARIABLE).is_some_and(|value| value != "0"))
+    *ENABLED.get_or_init(|| std::env::var_os(CPU_FRAMES_VARIABLE).is_none_or(|value| value == "0"))
 }
 
 /// Where the engine shows a tab's GPU frames, shared with the window that draws them.

@@ -26,9 +26,9 @@ never waits on it.
 
 The view is not rebuilt for a new frame unless its size changed, so animation costs no layout.
 
-## GPU frames (macOS, opt-in)
+## GPU frames (macOS)
 
-With `ELARIS_GPU_FRAMES=1` no frame reaches the CPU. The bridge copies the displayed frame on the
+On macOS no frame reaches the CPU. The bridge copies the displayed frame on the
 GPU (`FrameBlitter`, a Metal blit) into one of three IOSurfaces of its own and returns that
 surface; the engine thread wraps it in a `PixelBuffer` and pushes it into the tab's Rune
 `NativeSurface` (`src/engine/gpu.rs`), which the viewport draws at one texel per device pixel. No
@@ -46,7 +46,7 @@ three are busy the frame waits, and the engine shows it when one is released.
 
 Frames keep their alpha as the Compositor wrote it; the CPU path forced it opaque.
 
-Without the variable, and always on Linux, frames take the copying path described below.
+`ELARIS_CPU_FRAMES=1` selects the copying path described below, which Linux always uses.
 
 ## Measuring
 
