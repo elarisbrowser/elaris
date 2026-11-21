@@ -206,8 +206,19 @@ pub(in crate::ui) fn navigation(state: &AppState, theme: &Theme) -> impl Iterato
         })
 }
 
-/// The page-zoom chip with its menu. It shows only while the active page is zoomed away from the
-/// default, so it sits in the address bar where the zoom change is visible.
+/// Hides the zoom chip once its time is up.
+pub(crate) fn settle_zoom_chip(state: &mut AppState, clock: f64) -> bool {
+    match state.zoom_chip {
+        Some((_, until)) if clock >= until => {
+            state.zoom_chip = None;
+            true
+        }
+        _ => false,
+    }
+}
+
+/// The page-zoom chip with its menu. It shows for a moment after the active page's zoom changes,
+/// and stays while its menu is open.
 pub(in crate::ui) fn zoom_indicator(
     state: &AppState,
     theme: &Theme,
@@ -217,12 +228,12 @@ pub(in crate::ui) fn zoom_indicator(
         .browser
         .active_tab()
         .filter(|tab| !tab.is_internal())?;
-    let zoom = state.browser.page_zoom(tab);
-    if zoom == state.browser.default_zoom() {
+    let id = tab.id();
+    let flashing = state.zoom_chip.is_some_and(|(shown, _)| shown == id);
+    if !flashing && state.zoom_menu != Some(id) {
         return None;
     }
-    let id = tab.id();
-    let caption = format!("{zoom}%");
+    let caption = format!("{}%", state.browser.page_zoom(tab));
     let trigger = el()
         .key("zoom-indicator")
         .min_w(theme::ICON_BUTTON)

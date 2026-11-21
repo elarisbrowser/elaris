@@ -27,6 +27,7 @@ pub(crate) mod theme;
 pub(crate) mod viewport;
 pub(crate) use viewport::menu::PageMenuState;
 
+pub(crate) use sidebar::header::settle_zoom_chip;
 pub(crate) use sidebar::resize::settle as settle_sidebar;
 pub(crate) use sidebar::settle_copy_link;
 pub(crate) use sidebar::{

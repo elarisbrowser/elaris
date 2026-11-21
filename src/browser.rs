@@ -116,6 +116,8 @@ pub(crate) struct Browser {
     pub(crate) split: Option<split::Split>,
     pub(crate) split_view_limit: usize,
     default_zoom: u16,
+    /// The tab whose zoom changed since the window last polled.
+    zoom_changed: Option<TabId>,
     recent: Vec<TabId>,
     input: input_routing::Held,
     /// None until the app connects one, and in a build without an engine.
@@ -159,6 +161,7 @@ impl Default for Browser {
             split: None,
             split_view_limit: 2,
             default_zoom: 100,
+            zoom_changed: None,
             recent: Vec::new(),
             input: Default::default(),
             engine: None,
@@ -617,10 +620,6 @@ impl Browser {
         }
     }
 
-    pub(crate) fn default_zoom(&self) -> u16 {
-        self.default_zoom
-    }
-
     pub(crate) fn page_zoom(&self, tab: &Tab) -> u16 {
         tab.zoom_override.unwrap_or(self.default_zoom)
     }
@@ -638,8 +637,14 @@ impl Browser {
         };
         tab.zoom_override = (zoom != default).then_some(zoom);
         if zoom != current {
+            self.zoom_changed = Some(id);
             self.send(id, ViewCommand::SetZoom(zoom));
         }
+    }
+
+    /// The tab whose zoom changed since the last call, if any.
+    pub(crate) fn take_zoom_changed(&mut self) -> Option<TabId> {
+        self.zoom_changed.take()
     }
 
     pub(crate) fn reload_bypassing_cache(&mut self, id: TabId) {

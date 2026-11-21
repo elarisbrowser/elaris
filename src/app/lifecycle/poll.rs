@@ -25,6 +25,17 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     let focus_changed = state.browser.set_viewport_focus(focused);
     let settling = crate::ui::settle_sidebar(state, tx);
     let link_copy_settled = crate::ui::settle_copy_link(state, clock);
+    let zoom_chip_settled = crate::ui::settle_zoom_chip(state, clock);
+    let zoom_chip_shown = match state.browser.take_zoom_changed() {
+        Some(id) => {
+            state.zoom_chip = Some((id, clock + crate::ui::theme::ZOOM_CHIP_SECONDS));
+            tx.wake_after(std::time::Duration::from_secs_f64(
+                crate::ui::theme::ZOOM_CHIP_SECONDS,
+            ));
+            true
+        }
+        None => false,
+    };
     let previous_peek = state.browser.peek.as_ref().map(|peek| peek.page.id());
     let mut polled = state.browser.poll();
     state.poll_tab_close(&polled, tx);
@@ -79,6 +90,8 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         || history_page_changed
         || settling
         || link_copy_settled
+        || zoom_chip_settled
+        || zoom_chip_shown
         || focus_changed
         || configuration_changed
         || shared_settings_changed

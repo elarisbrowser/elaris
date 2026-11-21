@@ -229,6 +229,8 @@ pub(crate) struct AppState {
     /// The page title the window shows.
     window_title: Option<String>,
     pub(crate) zoom_menu: Option<TabId>,
+    /// The tab whose zoom chip shows, and the clock time it hides.
+    pub(crate) zoom_chip: Option<(TabId, f64)>,
     pub(crate) navigation_menu: Option<(TabId, PointerPress)>,
     context_menu: Option<(Option<TabId>, PointerPress)>,
     recently_closed: Vec<RecentlyClosedTab>,
@@ -402,6 +404,7 @@ impl AppState {
             history_page: HistoryPage::default(),
             window_title: None,
             zoom_menu: None,
+            zoom_chip: None,
             navigation_menu: None,
             context_menu: None,
             recently_closed: Vec::new(),
