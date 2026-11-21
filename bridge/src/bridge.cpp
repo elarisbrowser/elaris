@@ -72,6 +72,16 @@
 #include "external_url_handler.h"
 #include "peek_disposition.h"
 
+#if defined(AK_OS_MACOS)
+#include <memory>
+#include <vector>
+
+#include "media_controls.h"
+#include "picture_in_picture.h"
+#endif
+#include <LibCompositing/PictureInPictureControls.h>
+#include <LibWebView/PictureInPictureManager.h>
+
 static Core::EventLoop* s_event_loop;
 static std::thread::id s_event_loop_thread;
 static Optional<AK::ByteString> s_download_directory_override;
@@ -150,6 +160,17 @@ class ElarisApplication final : public WebView::Application {
 #endif
     void display_error_dialog(AK::StringView message) const override;
 
+    bool supports_picture_in_picture() const override {
+#if defined(AK_OS_MACOS)
+        return true;
+#else
+        return false;
+#endif
+    }
+    AK::OwnPtr<WebView::PictureInPictureWindow> create_picture_in_picture_window(WebView::WebContentPage& requesting_page,
+                                                                                 WebView::CanonicalTraversable& traversable,
+                                                                                 Gfx::IntSize video_size) override;
+
   private:
 #if defined(AK_OS_MACOS)
     NonnullOwnPtr<WebView::MicrophoneAuthorizer> create_microphone_authorizer() override {
@@ -175,6 +196,26 @@ class ElarisApplication final : public WebView::Application {
 #endif
     }
 };
+
+#if defined(AK_OS_MACOS)
+// Work that another thread hands to the owner thread. The owner clears `live` before it tears down what the work uses,
+// so work that runs later does nothing.
+struct OwnerLink {
+    NonnullRefPtr<Core::WeakEventLoopReference> loop = Core::EventLoop::current_weak();
+    bool live{true};
+};
+
+static void post_to_owner(std::shared_ptr<OwnerLink> const& link, AK::Function<void()> work) {
+    auto owner = link->loop->take();
+    if (!owner)
+        return;
+    owner->deferred_invoke([link, work = AK::move(work)] {
+        if (link->live)
+            work();
+    });
+    owner->wake();
+}
+#endif
 
 // A headless view whose frames the host reads from CPU memory, as Ladybird's TerminalWebView does.
 class ElarisWebView final : public WebView::HeadlessWebView {
@@ -209,6 +250,12 @@ class ElarisWebView final : public WebView::HeadlessWebView {
     AK::Function<void()> on_navigation_state_change;
     AK::Function<void(WebView::ContextMenuRequest)> on_menu;
     AK::Function<void(Web::HTML::PreparedNavigationDescriptor, Web::HTML::ActivateTab)> on_open_tab;
+    // Called on the owner thread each time the view presents a frame.
+    AK::Function<void()> on_presented;
+
+    void set_owner(WebView::ViewImplementation const& owner) {
+        set_owner_view(owner);
+    }
 
     void did_request_context_menu(WebView::ContextMenuRequest request) override {
         if (on_menu)
@@ -231,6 +278,8 @@ class ElarisWebView final : public WebView::HeadlessWebView {
     void did_accept_presented_backing_store(i32, Gfx::IntRect damage_rect) override {
         m_damage = m_damage.is_empty() ? damage_rect : m_damage.united(damage_rect);
         ++m_serial;
+        if (on_presented)
+            on_presented();
     }
 
     Gfx::IntRect m_damage;
@@ -252,6 +301,11 @@ struct ElarisLadybird {
     std::set<Web::Permissions::PermissionName> blocked_by_default;
     // The view with system focus, which receives application-level error notices.
     ElarisLadybirdView* focused_view{};
+#if defined(AK_OS_MACOS)
+    // Media keys and Now Playing. Commands reach the owner thread only while `media_link` is live.
+    std::shared_ptr<OwnerLink> media_link;
+    AK::OwnPtr<Elaris::MediaControls> media_controls;
+#endif
 };
 
 struct PendingPageDialog {
@@ -306,6 +360,8 @@ struct ElarisLadybirdView {
         AK::Function<void(bool)> reply;
     } external_url{};
     bool accessibility{};
+    // A Picture-in-Picture window's own view. Rust never sees it, and media keys leave it out.
+    bool picture_in_picture{};
 };
 
 static AK::OwnPtr<ElarisApplication> s_application;
@@ -1047,6 +1103,65 @@ void ElarisApplication::open_navigation_in_new_tab(Web::HTML::PreparedNavigation
     }
 }
 
+#if defined(AK_OS_MACOS)
+// Pauses the media a view is playing, and resumes only what such a pause stopped, so the media keys act on what the
+// person was watching.
+static constexpr auto pause_media_script = R"js((() => {
+    for (const media of document.querySelectorAll('video, audio')) {
+        if (!media.paused) {
+            media.__elarisResume = true;
+            media.pause();
+        }
+    }
+})())js"sv;
+
+static constexpr auto resume_media_script = R"js((() => {
+    for (const media of document.querySelectorAll('video, audio')) {
+        if (media.__elarisResume) {
+            media.__elarisResume = false;
+            const playing = media.play();
+            if (playing && playing.catch)
+                playing.catch(() => {});
+        }
+    }
+})())js"sv;
+
+// Runs on the owner thread. The media playing in a tab is the target, and failing that the focused tab is.
+static void media_command(ElarisLadybird& bridge, Elaris::MediaCommand command) {
+    ElarisLadybirdView* target = nullptr;
+    for (auto* view : bridge.views) {
+        if (!view->picture_in_picture && view->view->is_playing_audio()) {
+            target = view;
+            break;
+        }
+    }
+    if (!target && bridge.focused_view && !bridge.focused_view->picture_in_picture)
+        target = bridge.focused_view;
+    if (!target)
+        return;
+    bool pause = command == Elaris::MediaCommand::Pause ||
+                 (command == Elaris::MediaCommand::Toggle && target->view->is_playing_audio());
+    target->view->run_javascript(MUST(String::from_utf8(pause ? pause_media_script : resume_media_script)));
+}
+#endif
+
+// Shows the playing tab in Now Playing, or clears it when no tab is playing.
+static void update_now_playing(ElarisLadybird& bridge) {
+#if defined(AK_OS_MACOS)
+    if (!bridge.media_controls)
+        return;
+    for (auto const* view : bridge.views) {
+        if (!view->picture_in_picture && view->view->is_playing_audio()) {
+            bridge.media_controls->set_now_playing(to_utf8(view->view->title()), true);
+            return;
+        }
+    }
+    bridge.media_controls->clear_now_playing();
+#else
+    (void)bridge;
+#endif
+}
+
 extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* profile_dir,
                                           ElarisLadybirdEventCallback callback, void* context,
                                           ElarisLadybird** out_bridge) {
@@ -1103,8 +1218,19 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
         .permissions_initialized = false,
         .blocked_by_default = {},
         .focused_view = nullptr,
+#if defined(AK_OS_MACOS)
+        .media_link = nullptr,
+        .media_controls = nullptr,
+#endif
     };
     s_application->host = *out_bridge;
+#if defined(AK_OS_MACOS)
+    auto* bridge = *out_bridge;
+    bridge->media_link = std::make_shared<OwnerLink>();
+    bridge->media_controls = Elaris::MediaControls::create([link = bridge->media_link, bridge](Elaris::MediaCommand command) {
+        post_to_owner(link, [bridge, command] { media_command(*bridge, command); });
+    });
+#endif
     (*out_bridge)->download_observer = std::make_unique<ElarisDownloadObserver>(**out_bridge);
     return succeed();
 }
@@ -1269,6 +1395,7 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
             emit(handle, ELARIS_LADYBIRD_PERMISSION_USE, "microphone", visible);
             break;
         case WebView::TabIndicator::PlayingAudio:
+            update_now_playing(*handle->bridge);
             break;
         }
     };
@@ -1450,6 +1577,111 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
     *out_view = handle;
     return succeed();
 }
+
+#if defined(AK_OS_MACOS)
+// Shows a view's Picture-in-Picture video in a floating panel. The view is a page of its own, and the panel shows the
+// frames it presents. Input and size changes from the panel reach the owner thread, which owns the view.
+class ElarisPictureInPictureWindow final : public WebView::PictureInPictureWindow {
+  public:
+    AK_ALLOC_WITH_KMALLOC;
+
+    ElarisPictureInPictureWindow(ElarisLadybirdView& handle, Gfx::IntSize video_size)
+        : m_handle(&handle)
+        , m_screen(Elaris::PictureInPicturePanel::screen_size())
+        , m_size(initial_size(video_size, m_screen))
+        , m_link(std::make_shared<OwnerLink>()) {
+        report_page_close_of(*m_handle->view);
+
+        Elaris::PictureInPicturePanel::Handlers handlers;
+        handlers.on_mouse = [link = m_link, this](ElarisLadybirdMouseEvent event) {
+            post_to_owner(link, [this, event] { elaris_ladybird_mouse_event(m_handle, &event); });
+        };
+        handlers.on_resize = [link = m_link, this](Gfx::IntSize size) {
+            post_to_owner(link, [this, size] { apply_panel_size(size); });
+        };
+        m_panel = Elaris::PictureInPicturePanel::create(m_size, AK::move(handlers));
+        m_scale = m_panel->scale();
+        m_handle->view->set_viewport(device_size(m_size), m_scale);
+        m_panel->configure(m_size, video_size, minimum_size(video_size), maximum_size(video_size, m_screen));
+
+        m_handle->view->enable_picture_in_picture_controls();
+        m_handle->view->on_picture_in_picture_control_activated = [this](Compositing::PictureInPictureControl control) {
+            // Going back to the tab leaves the video playing there, as Ladybird's Qt frontend does.
+            if (on_close)
+                on_close(control == Compositing::PictureInPictureControl::BackToTab ? VideoKeepsPlaying::Yes
+                                                                                    : VideoKeepsPlaying::No);
+        };
+        m_handle->view->on_presented = [this] { present_frame(); };
+    }
+
+    ~ElarisPictureInPictureWindow() override {
+        m_link->live = false;
+        m_panel = nullptr;
+        elaris_ladybird_destroy_view(m_handle);
+    }
+
+    Gfx::IntSize size() const override { return m_size; }
+    String handle() const override { return m_handle->view->handle(); }
+    void hide() override { m_panel->hide(); }
+
+    void set_video_size(Gfx::IntSize video_size) override {
+        auto size = size_for_video_size(m_size, video_size, m_screen);
+        m_panel->configure(size, video_size, minimum_size(video_size), maximum_size(video_size, m_screen));
+        apply_panel_size(size);
+    }
+
+  private:
+    void apply_panel_size(Gfx::IntSize size) {
+        if (size == m_size)
+            return;
+        m_size = size;
+        m_handle->view->set_viewport(device_size(size), m_scale);
+        if (on_resize)
+            on_resize(size);
+    }
+
+    Web::DevicePixelSize device_size(Gfx::IntSize size) const {
+        return Gfx::IntSize(static_cast<int>(size.width() * m_scale), static_cast<int>(size.height() * m_scale))
+            .to_type<Web::DevicePixels>();
+    }
+
+    void present_frame() {
+        ElarisLadybirdFrame frame{};
+        if (elaris_ladybird_frame(m_handle, &frame) != 0)
+            return;
+        std::vector<uint8_t> pixels(static_cast<size_t>(frame.width) * static_cast<size_t>(frame.height) * 4);
+        if (elaris_ladybird_copy_frame(m_handle, pixels.data(), pixels.size()) != 0)
+            return;
+        m_panel->show_frame(std::move(pixels), frame.width, frame.height);
+    }
+
+    ElarisLadybirdView* m_handle;
+    Gfx::IntSize m_screen;
+    Gfx::IntSize m_size;
+    double m_scale{1};
+    std::shared_ptr<OwnerLink> m_link;
+    AK::OwnPtr<Elaris::PictureInPicturePanel> m_panel;
+};
+
+AK::OwnPtr<WebView::PictureInPictureWindow> ElarisApplication::create_picture_in_picture_window(
+    WebView::WebContentPage& requesting_page, WebView::CanonicalTraversable& traversable, Gfx::IntSize video_size) {
+    if (!host)
+        return {};
+    auto& owner = requesting_page.view();
+    ElarisLadybirdView* handle = nullptr;
+    auto mode = owner.is_private() == WebView::IsPrivate::Yes ? WebView::IsPrivate::Yes : WebView::IsPrivate::No;
+    if (create_view(host, 0, mode, &handle, &traversable) != 0 || !handle)
+        return {};
+    handle->picture_in_picture = true;
+    handle->view->set_owner(owner);
+    return AK::make<ElarisPictureInPictureWindow>(*handle, video_size);
+}
+#else
+AK::OwnPtr<WebView::PictureInPictureWindow> ElarisApplication::create_picture_in_picture_window(
+    WebView::WebContentPage&, WebView::CanonicalTraversable&, Gfx::IntSize) {
+    return {};
+}
+#endif
 
 extern "C" int32_t elaris_ladybird_adopt_popup(ElarisLadybird* bridge, uint64_t source, uint64_t request_id,
                                                uint64_t id, ElarisLadybirdView** out_view) {
@@ -2344,6 +2576,7 @@ extern "C" void elaris_ladybird_destroy_view(ElarisLadybirdView* handle) {
         elaris_ladybird_destroy_view(child);
     auto close = handle->popup_closed ? AK::Function<void()>{} : handle->view->prepare_for_close_without_prompting();
     views.erase(std::remove(views.begin(), views.end(), handle), views.end());
+    update_now_playing(*handle->bridge);
     delete handle;
     if (close)
         close();
@@ -2358,6 +2591,14 @@ extern "C" void elaris_ladybird_destroy(ElarisLadybird* bridge) {
     }
     (void)elaris_ladybird_suspend_downloads(bridge);
     bridge->download_observer.reset();
+#if defined(AK_OS_MACOS)
+    // Commands and windows must stop before the views they use are destroyed.
+    if (bridge->media_link)
+        bridge->media_link->live = false;
+    bridge->media_controls = nullptr;
+#endif
+    // Picture-in-Picture windows own views of this bridge, so they close before the other views do.
+    WebView::PictureInPictureManager::the().destroy_all_windows();
     while (!bridge->views.empty())
         elaris_ladybird_destroy_view(bridge->views.back());
     delete bridge;

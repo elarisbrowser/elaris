@@ -48,11 +48,14 @@ function(elaris_add_ladybird_bridge)
             "${ELARIS_BRIDGE_DIR}/src/notification_backend_macos.mm"
             "${ELARIS_BRIDGE_DIR}/src/external_url_handler_macos.mm"
             "${ELARIS_BRIDGE_DIR}/src/spell_checker_macos.mm"
+            "${ELARIS_BRIDGE_DIR}/src/picture_in_picture_macos.mm"
+            "${ELARIS_BRIDGE_DIR}/src/media_controls_macos.mm"
             "${LADYBIRD_SOURCE_DIR}/UI/Qt/MicrophoneAuthorizerMacOS.mm")
         target_sources(elaris_ladybird PRIVATE ${objc_sources})
         set_source_files_properties(${objc_sources} PROPERTIES COMPILE_FLAGS "-fobjc-arc")
         target_link_libraries(elaris_ladybird PRIVATE
-            "-framework AVFoundation" "-framework CoreServices" "-framework UserNotifications" "-framework Cocoa")
+            "-framework AVFoundation" "-framework CoreServices" "-framework UserNotifications" "-framework Cocoa"
+            "-framework MediaPlayer" "-framework QuartzCore")
     elseif(LINUX)
         find_package(PkgConfig REQUIRED)
         pkg_check_modules(ELARIS_GIO REQUIRED IMPORTED_TARGET gio-2.0)
@@ -135,6 +138,25 @@ function(elaris_add_ladybird_bridge)
         elseif(UNIX)
             set_tests_properties(elaris_ladybird_download_smoke PROPERTIES
                 ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib:${ELARIS_VCPKG_PREFIX}/lib")
+        endif()
+
+        if(APPLE)
+            add_executable(elaris_ladybird_picture_in_picture "${ELARIS_BRIDGE_DIR}/tests/picture_in_picture.cpp")
+            target_compile_features(elaris_ladybird_picture_in_picture PRIVATE cxx_std_20)
+            target_link_libraries(elaris_ladybird_picture_in_picture PRIVATE elaris_ladybird)
+            if(ELARIS_VCPKG_PREFIX)
+                set_property(TARGET elaris_ladybird_picture_in_picture APPEND PROPERTY BUILD_RPATH "${ELARIS_VCPKG_PREFIX}/lib")
+                target_link_options(elaris_ladybird_picture_in_picture PRIVATE "-Wl,-rpath,${ELARIS_VCPKG_PREFIX}/lib")
+            endif()
+            add_test(NAME elaris_ladybird_picture_in_picture
+                COMMAND elaris_ladybird_picture_in_picture
+                    "${LADYBIRD_SOURCE_DIR}/Base/res"
+                    "${CMAKE_BINARY_DIR}/elaris-picture-in-picture-profile"
+                    "${ELARIS_BRIDGE_DIR}/tests/picture_in_picture.html"
+                    "${LADYBIRD_SOURCE_DIR}/Tests/LibMedia/vp9_in_webm.webm"
+            )
+            set_tests_properties(elaris_ladybird_picture_in_picture PROPERTIES
+                ENVIRONMENT "DYLD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib:${ELARIS_VCPKG_PREFIX}/lib")
         endif()
 
         add_executable(elaris_ladybird_engine_features "${ELARIS_BRIDGE_DIR}/tests/engine_features.cpp")

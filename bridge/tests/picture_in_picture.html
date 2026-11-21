@@ -1,0 +1,24 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Picture-in-Picture smoke</title>
+<video id="video" muted loop></video>
+<script>
+  // The video's file URL arrives in the fragment, so the test chooses the media. Picture-in-Picture needs a user
+  // gesture, so the test clicks the page once the video is ready.
+  const video = document.getElementById("video");
+  video.addEventListener("enterpictureinpicture", () => {
+    document.title = "pip-entered";
+  });
+  video.addEventListener("loadeddata", () => {
+    document.title = "pip-ready";
+  });
+  document.addEventListener("click", async () => {
+    try {
+      await video.play();
+      await video.requestPictureInPicture();
+    } catch (error) {
+      document.title = "pip-failed " + error.name;
+    }
+  });
+  video.src = location.hash.slice(1);
+</script>
