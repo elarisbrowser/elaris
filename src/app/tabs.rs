@@ -67,6 +67,8 @@ impl super::AppState {
     fn refresh_active_page(&mut self) {
         self.site_permissions_open = false;
         self.page_menu = Default::default();
+        self.navigation_menu = None;
+        self.zoom_menu = None;
         self.sync_find_tab();
         self.address_error = None;
     }
@@ -126,6 +128,8 @@ impl super::AppState {
         };
         self.site_permissions_open = false;
         self.page_menu = Default::default();
+        self.navigation_menu = None;
+        self.zoom_menu = None;
         for tab in close.targets.into_iter().rev() {
             if let Some(tab_state) = self.browser.tab(tab) {
                 self.remember_closed(RecentlyClosedTab::from_tab(tab_state));
@@ -328,6 +332,8 @@ impl super::AppState {
 
     pub(crate) fn open_context_menu(&mut self, tab: Option<TabId>, point: PointerPress) {
         self.page_menu = Default::default();
+        self.navigation_menu = None;
+        self.zoom_menu = None;
         self.context_menu = Some((tab, point));
     }
 

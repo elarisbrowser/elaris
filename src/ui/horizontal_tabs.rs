@@ -234,7 +234,7 @@ pub(super) fn view(
         .px(theme::SIDEBAR_PADDING)
         .gap(theme::NAV_GAP)
         .center_y()
-        .children(header::navigation(state, theme))
+        .children(header::navigation(state, theme, overlays))
         .child(super::omnibox::address_bar(
             state, cx, theme, reduced, overlays,
         ))

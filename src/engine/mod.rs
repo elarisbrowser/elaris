@@ -149,6 +149,10 @@ pub(crate) enum DownloadAction {
 pub(crate) enum ViewCommand {
     Load(String),
     Reload,
+    ReloadBypassingCache,
+    SetZoom(u16),
+    TraverseToStep(i32),
+    NavigationItems(i32),
     StopLoading,
     /// Moves through the session history: -1 goes back, 1 forward.
     Traverse(i32),
@@ -208,6 +212,8 @@ impl ViewCommand {
             self,
             Self::Load(_)
                 | Self::LoadPrepared { .. }
+                | Self::ReloadBypassingCache
+                | Self::TraverseToStep(_)
                 | Self::Reload
                 | Self::Traverse(_)
                 | Self::OpenContext { new_tab: false, .. }
@@ -281,6 +287,7 @@ pub(crate) enum TabUpdate {
     Loading(bool),
     Favicon(Option<Favicon>),
     History { back: bool, forward: bool },
+    NavigationItems(Vec<elaris::ladybird::NavigationItem>),
     LoadError(String),
     HoveredLink(String),
     Tooltip(String),

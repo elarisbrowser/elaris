@@ -100,6 +100,7 @@ pub(crate) struct Browser {
     promoted_visit: Option<(TabId, String, String)>,
     pub(crate) split: Option<split::Split>,
     pub(crate) split_view_limit: usize,
+    default_zoom: u16,
     recent: Vec<TabId>,
     input: input_routing::Held,
     /// None until the app connects one, and in a build without an engine.
@@ -139,6 +140,7 @@ impl Default for Browser {
             promoted_visit: None,
             split: None,
             split_view_limit: 2,
+            default_zoom: 100,
             recent: Vec::new(),
             input: Default::default(),
             engine: None,
@@ -165,6 +167,10 @@ impl Browser {
         for tab in &self.tabs {
             if !tab.is_internal() {
                 engine.send(Command::Open(tab.id(), tab.surface.clone()));
+                let zoom = tab.zoom_override.unwrap_or(self.default_zoom);
+                if zoom != 100 {
+                    engine.send(Command::View(tab.id(), ViewCommand::SetZoom(zoom)));
+                }
             }
         }
         for tab in &mut self.tabs {
@@ -397,6 +403,10 @@ impl Browser {
             && let Some(engine) = &self.engine
         {
             engine.send(Command::Open(id, tab.surface.clone()));
+            let zoom = self.default_zoom;
+            if zoom != 100 {
+                engine.send(Command::View(id, ViewCommand::SetZoom(zoom)));
+            }
         }
         let index = self
             .tabs
@@ -490,6 +500,10 @@ impl Browser {
             && let Some(engine) = &self.engine
         {
             engine.send(Command::Open(id, surface));
+            let zoom = self.default_zoom;
+            if zoom != 100 {
+                engine.send(Command::View(id, ViewCommand::SetZoom(zoom)));
+            }
         }
         if load_now {
             self.send(id, ViewCommand::Load(url));
@@ -513,10 +527,55 @@ impl Browser {
         Ok(())
     }
 
+    pub(crate) fn set_default_zoom(&mut self, zoom: u16) {
+        if self.default_zoom == zoom {
+            return;
+        }
+        self.default_zoom = zoom;
+        for tab in self
+            .tabs
+            .iter()
+            .chain(self.peek.iter().map(|peek| &peek.page))
+        {
+            if !tab.is_internal() && tab.zoom_override.is_none() {
+                self.send(tab.id(), ViewCommand::SetZoom(zoom));
+            }
+        }
+    }
+
+    pub(crate) fn page_zoom(&self, tab: &Tab) -> u16 {
+        tab.zoom_override.unwrap_or(self.default_zoom)
+    }
+
+    pub(crate) fn change_zoom(&mut self, id: TabId, delta: i16) {
+        let default = self.default_zoom;
+        let Some(tab) = self.tab_mut(id).filter(|tab| !tab.is_internal()) else {
+            return;
+        };
+        let current = tab.zoom_override.unwrap_or(default);
+        let zoom = if delta == 0 {
+            default
+        } else {
+            current.saturating_add_signed(delta).clamp(30, 500)
+        };
+        tab.zoom_override = (zoom != default).then_some(zoom);
+        if zoom != current {
+            self.send(id, ViewCommand::SetZoom(zoom));
+        }
+    }
+
+    pub(crate) fn reload_bypassing_cache(&mut self, id: TabId) {
+        self.reload_page(id, ViewCommand::ReloadBypassingCache);
+    }
+
     pub(crate) fn reload(&mut self, id: TabId) {
+        self.reload_page(id, ViewCommand::Reload);
+    }
+
+    fn reload_page(&mut self, id: TabId, command: ViewCommand) {
         if self.tab(id).is_some_and(|tab| !tab.is_internal()) {
             self.invalidate_find(id);
-            self.send(id, ViewCommand::Reload);
+            self.send(id, command);
         }
     }
 
@@ -528,6 +587,11 @@ impl Browser {
     pub(crate) fn duplicate_tab(&mut self, id: TabId) -> Option<TabId> {
         let url = self.tab(id)?.url.clone();
         self.open_tab(&url).ok()
+    }
+
+    pub(crate) fn traverse_to_step(&mut self, id: TabId, step: i32) {
+        self.invalidate_find(id);
+        self.send(id, ViewCommand::TraverseToStep(step));
     }
 
     pub(crate) fn go_back(&mut self, id: TabId) {

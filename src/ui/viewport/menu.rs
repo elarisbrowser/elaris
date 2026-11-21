@@ -91,7 +91,11 @@ pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
         if tab.can_go_forward {
             menu = menu.item(item(id, "Forward", move |s, _| s.browser.go_forward(id)));
         }
-        menu = menu.item(item(id, "Reload", move |s, _| s.browser.reload(id)));
+        menu = menu
+            .item(item(id, "Reload", move |s, _| s.browser.reload(id)))
+            .item(item(id, "Reload Without Cache", move |s, _| {
+                s.browser.reload_bypassing_cache(id);
+            }));
     }
     if !info.selection.is_empty() {
         let text = info.selection.clone();

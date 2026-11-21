@@ -288,6 +288,21 @@ pub(crate) fn install(app: rune::AppHandle<AppState>) {
         &[
             item("Reload", Action::Shortcut(Shortcut::Reload), "r", false),
             item(
+                "Reload Without Cache",
+                Action::Shortcut(Shortcut::ReloadBypassingCache),
+                "r",
+                true,
+            ),
+            separator(),
+            item("Zoom In", Action::Shortcut(Shortcut::ZoomIn), "=", false),
+            item("Zoom Out", Action::Shortcut(Shortcut::ZoomOut), "-", false),
+            item(
+                "Reset Page Zoom",
+                Action::Shortcut(Shortcut::ResetZoom),
+                "0",
+                false,
+            ),
+            item(
                 "Toggle Sidebar",
                 Action::Shortcut(Shortcut::ToggleSidebar),
                 "s",
@@ -484,6 +499,12 @@ fn menu_command(action: Action) -> Option<MenuCommand> {
         Action::Shortcut(Shortcut::ReopenClosedTab) => MenuCommand::ReopenClosedTab,
         Action::Shortcut(Shortcut::Find) => MenuCommand::Find,
         Action::Shortcut(Shortcut::Reload) => MenuCommand::Reload,
+        Action::Shortcut(
+            Shortcut::ReloadBypassingCache
+            | Shortcut::ZoomIn
+            | Shortcut::ZoomOut
+            | Shortcut::ResetZoom,
+        ) => MenuCommand::WebPage,
         Action::Shortcut(Shortcut::ToggleSidebar) => MenuCommand::ToggleSidebar,
         Action::Shortcut(Shortcut::OpenHistory) => MenuCommand::History,
         Action::Shortcut(Shortcut::NextTab) => MenuCommand::NextTab,
@@ -643,6 +664,10 @@ fn action_from_id(id: isize) -> Option<Action> {
         108 => Action::Shortcut(Shortcut::PreviousTab),
         109 => Action::Shortcut(Shortcut::OpenSettings),
         110 => Action::Shortcut(Shortcut::OpenFile),
+        111 => Action::Shortcut(Shortcut::ReloadBypassingCache),
+        112 => Action::Shortcut(Shortcut::ZoomIn),
+        113 => Action::Shortcut(Shortcut::ZoomOut),
+        114 => Action::Shortcut(Shortcut::ResetZoom),
         _ => return None,
     })
 }
@@ -660,6 +685,10 @@ fn shortcut_id(shortcut: Shortcut) -> isize {
         Shortcut::PreviousTab => 8,
         Shortcut::OpenSettings => 9,
         Shortcut::OpenFile => 10,
+        Shortcut::ReloadBypassingCache => 11,
+        Shortcut::ZoomIn => 12,
+        Shortcut::ZoomOut => 13,
+        Shortcut::ResetZoom => 14,
         _ => -1,
     }
 }

@@ -86,6 +86,13 @@ pub enum SelectRow {
     Separator,
 }
 
+/// A target in a page's session history.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+pub struct NavigationItem {
+    pub step: i32,
+    pub url: String,
+}
+
 /// What a view raised, delivered with the id it was created with.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Event {
@@ -119,6 +126,8 @@ pub enum Event {
     Title(String),
     Loading(bool),
     ReadyToPaint,
+    /// The requested session history targets, starting with the closest entry.
+    NavigationItems(Vec<NavigationItem>),
     /// Whether the view can go back or forward through its session history now.
     History {
         back: bool,

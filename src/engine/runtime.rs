@@ -379,6 +379,7 @@ impl Runtime {
                     updates.push(Update::FindSelection(tab, request_id, text));
                     continue;
                 }
+                Event::NavigationItems(items) => TabUpdate::NavigationItems(items),
                 Event::History { back, forward } => TabUpdate::History { back, forward },
                 Event::Download(_) => unreachable!("download events are handled above"),
                 Event::ReadyToPaint => {
@@ -469,6 +470,10 @@ fn apply_to_view(view: &mut View, command: ViewCommand, timing: &mut Timing) -> 
         ViewCommand::Edit(edit) => web.edit(&edit),
         ViewCommand::Load(url) => web.load(&url),
         ViewCommand::Reload => web.reload(),
+        ViewCommand::ReloadBypassingCache => web.reload_bypassing_cache(),
+        ViewCommand::SetZoom(zoom) => web.set_zoom(f64::from(zoom) / 100.0),
+        ViewCommand::TraverseToStep(step) => web.traverse_to_step(step),
+        ViewCommand::NavigationItems(direction) => web.navigation_items(direction),
         ViewCommand::StopLoading => web.stop_loading(),
         ViewCommand::Traverse(delta) => web.traverse_history(delta),
         ViewCommand::Resize {

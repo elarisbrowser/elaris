@@ -4,6 +4,32 @@ use super::*;
 use crate::engine::{TabUpdate, Update};
 
 #[test]
+fn zoom_overrides_are_local_and_reset_to_the_current_default() {
+    let (mut browser, fake) = ready();
+    let first = browser.open_tab("example.com").unwrap();
+    let second = browser.open_tab("example.org").unwrap();
+    sent(&fake);
+
+    browser.change_zoom(first, 10);
+    browser.set_default_zoom(125);
+    browser.change_zoom(first, 0);
+    browser.reload_bypassing_cache(second);
+    browser.traverse_to_step(first, 3);
+
+    assert_eq!(
+        sent(&fake),
+        [
+            view(first, ViewCommand::SetZoom(110)),
+            view(second, ViewCommand::SetZoom(125)),
+            view(first, ViewCommand::SetZoom(125)),
+            view(second, ViewCommand::ReloadBypassingCache),
+            view(first, ViewCommand::TraverseToStep(3)),
+        ]
+    );
+    assert_eq!(browser.page_zoom(browser.tab(first).unwrap()), 125);
+}
+
+#[test]
 fn internal_tabs_never_open_ladybird_views_and_close_like_other_tabs() {
     let (mut browser, fake) = connected();
     let settings = browser.open_tab("elaris://settings").unwrap();

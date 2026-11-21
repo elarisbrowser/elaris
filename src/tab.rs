@@ -89,6 +89,8 @@ pub(crate) struct Tab {
     pub(crate) favicon_data: Option<elaris::ladybird::Favicon>,
     pub(crate) error: Option<String>,
     pub(crate) internal: Option<InternalRoute>,
+    pub(crate) zoom_override: Option<u16>,
+    pub(crate) navigation_items: Vec<elaris::ladybird::NavigationItem>,
     pub(crate) can_go_back: bool,
     pub(crate) can_go_forward: bool,
     /// The query and latest acknowledged Ladybird result for this tab.
@@ -140,6 +142,8 @@ impl Tab {
             favicon_data: None,
             error: None,
             internal: None,
+            zoom_override: None,
+            navigation_items: Vec::new(),
             can_go_back: false,
             can_go_forward: false,
             find: FindState::default(),
@@ -174,6 +178,8 @@ impl Tab {
             favicon_data: None,
             error: None,
             internal: Some(route),
+            zoom_override: None,
+            navigation_items: Vec::new(),
             can_go_back: false,
             can_go_forward: false,
             find: FindState::default(),
@@ -271,6 +277,7 @@ impl Tab {
                     pixels
                 });
             }
+            TabUpdate::NavigationItems(items) => self.navigation_items = items,
             TabUpdate::History { back, forward } => {
                 self.can_go_back = back;
                 self.can_go_forward = forward;

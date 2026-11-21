@@ -125,6 +125,8 @@ unsafe extern "C" {
     ) -> i32;
     fn elaris_ladybird_set_display_refresh_rate(view: *mut RawView, refresh_rate: f64) -> i32;
     fn elaris_ladybird_load(view: *mut RawView, url: *const c_char) -> i32;
+    fn elaris_ladybird_navigation_items(view: *mut RawView, direction: i32) -> i32;
+    fn elaris_ladybird_traverse_to_step(view: *mut RawView, step: i32) -> i32;
     fn elaris_ladybird_reload(view: *mut RawView) -> i32;
     fn elaris_ladybird_reload_bypassing_cache(view: *mut RawView) -> i32;
     fn elaris_ladybird_set_zoom(view: *mut RawView, zoom: f64) -> i32;
@@ -233,6 +235,7 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
             },
             16 => Event::LoadError(text),
             21 => Event::CloseDecision(raw.value != 0),
+            23 => Event::NavigationItems(serde_json::from_str(&text).unwrap_or_default()),
             22 => Event::FormPicker(
                 serde_json::from_str(&text)
                     .ok()
@@ -669,6 +672,18 @@ impl WebView {
     pub fn stop_loading(&mut self) -> Result<(), String> {
         // SAFETY: The view is live on its owner's thread.
         status_result(unsafe { elaris_ladybird_stop_loading(self.raw.as_ptr()) })
+    }
+
+    /// Requests the targets in one direction of the view's session history.
+    pub fn navigation_items(&mut self, direction: i32) -> Result<(), String> {
+        // SAFETY: The view is live on its owner's thread and the bridge validates the direction.
+        status_result(unsafe { elaris_ladybird_navigation_items(self.raw.as_ptr(), direction) })
+    }
+
+    /// Traverses to a step reported by the view's session history.
+    pub fn traverse_to_step(&mut self, step: i32) -> Result<(), String> {
+        // SAFETY: The view is live on its owner's thread.
+        status_result(unsafe { elaris_ladybird_traverse_to_step(self.raw.as_ptr(), step) })
     }
 
     /// Moves through the session history: -1 goes back, 1 forward.

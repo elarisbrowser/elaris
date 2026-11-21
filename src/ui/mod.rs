@@ -105,7 +105,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     } else {
         #[cfg(target_os = "linux")]
         {
-            window = window.child(sidebar::header::view(state, &theme, cx));
+            window = window.child(sidebar::header::view(state, &theme, cx, &mut overlays));
         }
         let sidebar = sidebar::view(state, &theme, &mut overlays, reduced_motion);
         let page = viewport::view(state, &theme, &mut overlays, reduced_motion);
@@ -128,7 +128,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
             window = window
                 .child(sidebar)
                 .child(page)
-                .child(sidebar::header::view(state, &theme, cx));
+                .child(sidebar::header::view(state, &theme, cx, &mut overlays));
             if !state.sidebar.collapsed {
                 window = window.child(sidebar::resize::handle(state.sidebar.width));
             }
@@ -159,6 +159,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     overlays.extend(tab_preview::view(state, cx, &theme, reduced_motion));
     viewport::menu::view(state, &theme, &mut overlays);
     sidebar::context_menu(state, &theme, &mut overlays);
+    sidebar::header::history_menu(state, &theme, &mut overlays);
     #[cfg(target_os = "linux")]
     if !horizontal {
         overlays.push(sidebar::header::hover_zone());

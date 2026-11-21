@@ -7,12 +7,14 @@
 use rune::Chrome;
 #[cfg(target_os = "linux")]
 use rune::tok::motion;
-use rune::{Cx, El, Icon, el, row, spacer};
+use rune::{Cx, El, Icon, el, row, spacer, text};
 #[cfg(target_os = "linux")]
 use rune::{Spring, Transition};
+use rune_kit::{Menu, MenuItem, context_menu};
 
 use crate::app::AppState;
 use crate::browser::Browser;
+use crate::engine::ViewCommand;
 use crate::tab::TabId;
 use crate::ui::controls::icon_button;
 use crate::ui::icons;
@@ -21,10 +23,15 @@ use crate::ui::theme::{self, Theme};
 /// What a navigation button does to the active tab.
 type Navigate = fn(&mut Browser, TabId);
 
-pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El {
+pub(crate) fn view(
+    state: &AppState,
+    theme: &Theme,
+    cx: &mut Cx<AppState>,
+    overlays: &mut Vec<El>,
+) -> El {
     #[cfg(target_os = "linux")]
     {
-        let visible = state.titlebar.is_visible();
+        let visible = state.titlebar.is_visible() || state.zoom_menu.is_some();
         let reduced_motion = cx.system_reduced_motion() || cx.is_reduced_motion();
         let mut slot = el()
             .key("linux-titlebar-slot")
@@ -45,7 +52,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
                     .springs(motion::pair::SNAP)
             };
             slot = slot.child(
-                header_content(state, theme, cx, true)
+                header_content(state, theme, cx, overlays, true)
                     .fill(theme.window)
                     .on_hover_change(|state: &mut AppState, inside, tx| {
                         if state.titlebar.set_toolbar_hovered(inside) {
@@ -59,7 +66,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
     }
     #[cfg(not(target_os = "linux"))]
     {
-        header_content(state, theme, cx, false)
+        header_content(state, theme, cx, overlays, false)
     }
 }
 
@@ -83,7 +90,13 @@ fn titlebar_visibility_changed(tx: &mut rune::Tx) {
     tx.motion(theme::TITLEBAR_REVEAL);
 }
 
-fn header_content(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>, in_flow: bool) -> El {
+fn header_content(
+    state: &AppState,
+    theme: &Theme,
+    _cx: &mut Cx<AppState>,
+    overlays: &mut Vec<El>,
+    in_flow: bool,
+) -> El {
     let collapsed = state.sidebar.collapsed;
     let toggle_label = if collapsed {
         "Show sidebar"
@@ -124,7 +137,7 @@ fn header_content(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>, in_fl
         (header.w(state.sidebar.width), spacer())
     };
     header = header.child(gap);
-    header = header.children(navigation(state, theme));
+    header = header.children(navigation(state, theme, overlays));
     if collapsed || in_flow {
         header = header.child(spacer());
     }
@@ -135,7 +148,11 @@ fn header_content(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>, in_fl
     header
 }
 
-pub(in crate::ui) fn navigation(state: &AppState, theme: &Theme) -> impl Iterator<Item = El> {
+pub(in crate::ui) fn navigation(
+    state: &AppState,
+    theme: &Theme,
+    overlays: &mut Vec<El>,
+) -> impl Iterator<Item = El> {
     let tab = state.browser.active_tab();
     let buttons: [(&str, &'static Icon, bool, Navigate); 3] = [
         (
@@ -153,12 +170,117 @@ pub(in crate::ui) fn navigation(state: &AppState, theme: &Theme) -> impl Iterato
         if tab.is_some_and(|tab| tab.loading) {
             ("Stop loading", &icons::CLOSE, true, Browser::stop_loading)
         } else {
-            ("Reload", &icons::RELOAD, tab.is_some(), Browser::reload)
+            (
+                "Reload",
+                &icons::RELOAD,
+                tab.is_some_and(|tab| !tab.is_internal()),
+                Browser::reload,
+            )
         },
     ];
-    buttons
-        .into_iter()
-        .map(|(label, glyph, enabled, navigate)| nav_button(label, glyph, enabled, navigate, theme))
+    let navigation =
+        buttons
+            .into_iter()
+            .enumerate()
+            .map(|(index, (label, glyph, enabled, navigate))| {
+                let button = nav_button(label, glyph, enabled, navigate, theme);
+                if !enabled || index > 1 {
+                    return button;
+                }
+                let direction = if index == 0 { -1 } else { 1 };
+                let help = if direction < 0 {
+                    "Back (right-click for history)"
+                } else {
+                    "Forward (right-click for history)"
+                };
+                button
+                    .help(help)
+                    .on_secondary_press(move |state: &mut AppState, point, _| {
+                        let Some(id) = state.browser.active_tab().map(crate::tab::Tab::id) else {
+                            return;
+                        };
+                        state.dismiss_context_menu();
+                        state.zoom_menu = None;
+                        state.page_menu = Default::default();
+                        if let Some(tab) = state.browser.tab_mut(id) {
+                            tab.navigation_items.clear();
+                        }
+                        state.navigation_menu = Some((id, point));
+                        state
+                            .browser
+                            .send(id, ViewCommand::NavigationItems(direction));
+                    })
+            });
+    let zoom = tab
+        .filter(|tab| !tab.is_internal())
+        .map(|tab| zoom_menu(state, theme, overlays, tab));
+    navigation.chain(zoom)
+}
+
+fn zoom_menu(state: &AppState, theme: &Theme, overlays: &mut Vec<El>, tab: &crate::tab::Tab) -> El {
+    let id = tab.id();
+    let caption = format!("{}%", state.browser.page_zoom(tab));
+    let trigger = el()
+        .key("zoom-indicator")
+        .min_w(theme::ICON_BUTTON)
+        .h(theme::ICON_BUTTON)
+        .center()
+        .radius(theme::ICON_BUTTON_RADIUS)
+        .press(theme.press)
+        .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
+        .label(format!("Page zoom {caption}"))
+        .help("Page zoom")
+        .child(
+            text(caption)
+                .font(rune::tok::type_::BODY)
+                .color(theme.text)
+                .single_line(),
+        )
+        .on_press(move |state: &mut AppState| {
+            state.dismiss_context_menu();
+            state.navigation_menu = None;
+            state.page_menu = Default::default();
+            state.zoom_menu = (state.zoom_menu != Some(id)).then_some(id);
+        });
+    let mut menu = Menu::new("page-zoom")
+        .trigger(trigger)
+        .open(state.zoom_menu == Some(id))
+        .on_close(|state: &mut AppState| state.zoom_menu = None);
+    for (label, delta) in [("Zoom In", 10), ("Zoom Out", -10), ("Reset Page Zoom", 0)] {
+        menu = menu.item(MenuItem::new(label).on_select(move |state: &mut AppState| {
+            state.zoom_menu = None;
+            if state.browser.active_tab().is_some_and(|tab| tab.id() == id) {
+                state.browser.change_zoom(id, delta);
+            }
+        }));
+    }
+    menu.build(&theme.kit(theme.overlay_panel), overlays)
+}
+
+pub(in crate::ui) fn history_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
+    let Some((id, point)) = state.navigation_menu else {
+        return;
+    };
+    let Some(tab) = state.browser.active_tab().filter(|tab| tab.id() == id) else {
+        return;
+    };
+    let mut menu = context_menu("navigation-history-menu", el(), Some(point))
+        .on_close(|state: &mut AppState| state.navigation_menu = None);
+    if tab.navigation_items.is_empty() {
+        menu = menu.group_label("No history entries");
+    }
+    for entry in &tab.navigation_items {
+        let step = entry.step;
+        menu = menu.item(
+            MenuItem::new(&entry.url).on_select(move |state: &mut AppState| {
+                state.navigation_menu = None;
+                if state.browser.active_tab().is_some_and(|tab| tab.id() == id) {
+                    state.browser.traverse_to_step(id, step);
+                }
+            }),
+        );
+    }
+    crate::ui::hover_highlight::build_context_menu(state, menu, theme, layer);
 }
 
 #[cfg(target_os = "linux")]

@@ -35,6 +35,7 @@ typedef enum {
     ELARIS_LADYBIRD_PAGE_DIALOG = 20,
     ELARIS_LADYBIRD_CLOSE_DECISION = 21,
     ELARIS_LADYBIRD_FORM_PICKER = 22, /* JSON in text, empty when dismissed. */
+    ELARIS_LADYBIRD_NAVIGATION_ITEMS = 23, /* JSON session history targets in text. */
 } ElarisLadybirdEventKind;
 
 typedef enum {
@@ -209,6 +210,8 @@ int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t view_id, El
 /* Sets the maximum frame rate reported to pages and used by Ladybird's compositor. */
 int32_t elaris_ladybird_set_display_refresh_rate(ElarisLadybirdView* view, double refresh_rate);
 int32_t elaris_ladybird_load(ElarisLadybirdView* view, const char* url);
+int32_t elaris_ladybird_navigation_items(ElarisLadybirdView* view, int32_t direction);
+int32_t elaris_ladybird_traverse_to_step(ElarisLadybirdView* view, int32_t step);
 int32_t elaris_ladybird_reload(ElarisLadybirdView* view);
 int32_t elaris_ladybird_reload_bypassing_cache(ElarisLadybirdView* view);
 int32_t elaris_ladybird_set_zoom(ElarisLadybirdView* view, double zoom);

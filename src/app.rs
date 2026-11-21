@@ -219,6 +219,8 @@ pub(crate) struct AppState {
     pub(crate) history_page: HistoryPage,
     /// The page title the window shows.
     window_title: Option<String>,
+    pub(crate) zoom_menu: Option<TabId>,
+    pub(crate) navigation_menu: Option<(TabId, PointerPress)>,
     context_menu: Option<(Option<TabId>, PointerPress)>,
     recently_closed: Vec<RecentlyClosedTab>,
     closing_tabs: Option<tabs::ClosingTabs>,
@@ -385,11 +387,14 @@ impl AppState {
             history_revision: 0,
             history_page: HistoryPage::default(),
             window_title: None,
+            zoom_menu: None,
+            navigation_menu: None,
             context_menu: None,
             recently_closed: Vec::new(),
             closing_tabs: None,
         };
         state.browser.split_view_limit = state.settings.split_view_limit;
+        state.browser.set_default_zoom(state.settings.page_zoom);
         #[cfg(not(test))]
         state.browser.share_downloads(shared_downloads());
         state.open_start_page(start, initial_session.as_ref());
@@ -430,6 +435,7 @@ impl AppState {
                 let previous = self.engine_download_directory();
                 self.prepare_tab_layout(settings.tab_layout);
                 self.settings = settings;
+                self.browser.set_default_zoom(self.settings.page_zoom);
                 let current = self.engine_download_directory();
                 if previous != current {
                     self.browser.set_download_directory(current);

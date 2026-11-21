@@ -1,3 +1,4 @@
+#include <charconv>
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -45,6 +46,7 @@ struct Events {
     unsigned frames{};
     unsigned favicons{};
     int32_t history{};
+    std::string navigation_items;
     int32_t favicon_width{};
     int32_t favicon_height{};
     std::string last_title;
@@ -119,6 +121,9 @@ static void on_event(void* context, ElarisLadybirdEvent const* event) {
         break;
     case ELARIS_LADYBIRD_FRAME:
         ++events.frames;
+        break;
+    case ELARIS_LADYBIRD_NAVIGATION_ITEMS:
+        events.navigation_items = event->text;
         break;
     case ELARIS_LADYBIRD_HISTORY:
         events.history = event->value;
@@ -503,16 +508,31 @@ static bool two_views(ElarisLadybird* bridge, EventsByView& events, std::string 
     passed = passed && check(elaris_ladybird_set_visible(first, 0), "hide first view") &&
              check(elaris_ladybird_load(second, url.c_str()), "navigate second view") &&
              pump_until(bridge, [&] { return events[11].history == ELARIS_LADYBIRD_HISTORY_BACK; }) &&
-             check(elaris_ladybird_traverse_history(second, -1), "go back") &&
+             check(elaris_ladybird_navigation_items(second, -1), "list back history") &&
+             events[11].navigation_items.find("data:text/html,") != std::string::npos &&
+             [&] {
+                 auto const& items = events[11].navigation_items;
+                 constexpr std::string_view key = "\"step\":";
+                 auto pos = items.find(key);
+                 if (pos == std::string::npos)
+                     return false;
+                 int32_t step{};
+                 auto result = std::from_chars(items.data() + pos + key.size(), items.data() + items.size(), step);
+                 return result.ec == std::errc{} &&
+                        check(elaris_ladybird_traverse_to_step(second, step), "go back to history entry");
+             }() &&
              pump_until(bridge,
                         [&] {
                             return events[11].last_title == "Second" &&
                                    events[11].history == ELARIS_LADYBIRD_HISTORY_FORWARD;
                         }) &&
-             check(elaris_ladybird_reload(second), "reload") &&
+             check(elaris_ladybird_navigation_items(second, 1), "list forward history") &&
+             events[11].navigation_items.find(url) != std::string::npos &&
+             check(elaris_ladybird_set_zoom(second, 1.25), "zoom second view") &&
+             check(elaris_ladybird_reload_bypassing_cache(second), "reload without cache") &&
              check(elaris_ladybird_stop_loading(second), "stop reload") &&
              check(elaris_ladybird_set_visible(first, 1), "show first view");
-    if (passed && (events[10].history != 0 || events[10].last_title != "Elaris Bridge Smoke")) {
+    if (passed && (!events[10].navigation_items.empty() || events[10].history != 0 || events[10].last_title != "Elaris Bridge Smoke")) {
         std::cerr << "the second view's history reached the first\n";
         passed = false;
     }

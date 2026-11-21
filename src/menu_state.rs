@@ -13,6 +13,7 @@ pub(crate) enum MenuCommand {
     ReopenClosedTab,
     Find,
     Reload,
+    WebPage,
     ToggleSidebar,
     History,
     NextTab,
@@ -29,6 +30,7 @@ pub(crate) enum MenuCommand {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct MenuState {
     has_tab: bool,
+    has_web_page: bool,
     can_split: bool,
     can_reopen: bool,
     can_go_back: bool,
@@ -45,6 +47,7 @@ impl MenuState {
         let has_tab = tab.is_some();
         Self {
             has_tab,
+            has_web_page: tab.is_some_and(|tab| !tab.is_internal()),
             can_split: has_tab && state.browser.tabs().len() > 1,
             can_reopen: state.can_reopen_closed_tab(),
             can_go_back: tab.is_some_and(|tab| tab.can_go_back),
@@ -67,6 +70,7 @@ impl MenuState {
             | MenuCommand::Find
             | MenuCommand::Reload
             | MenuCommand::Favourite => self.has_tab,
+            MenuCommand::WebPage => self.has_web_page,
             MenuCommand::ToggleSidebar => self.has_sidebar,
             MenuCommand::ReopenClosedTab => self.can_reopen,
             MenuCommand::NextTab | MenuCommand::PreviousTab => self.has_tab,

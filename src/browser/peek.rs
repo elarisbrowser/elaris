@@ -98,6 +98,9 @@ impl Browser {
                 engine.send(Command::View(old.page.id(), ViewCommand::Focus(false)));
             }
             engine.send(Command::Open(id, page.surface.clone()));
+            if self.default_zoom != 100 {
+                engine.send(Command::View(id, ViewCommand::SetZoom(self.default_zoom)));
+            }
         }
         self.peek = Some(PeekState { page, origin });
         self.sync_engine();

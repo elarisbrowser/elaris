@@ -14,7 +14,7 @@ use crate::appearance::{AccentColor, Appearance};
 use crate::permissions::{PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{DownloadDirectory, Settings, SettingsChange, StartupMode, TabLayout};
 
-const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\naccent = \"blue\"\nglass = true\ntint_opacity = 100\ntab_layout = \"vertical\"\n\n[split_view]\nmax_panes = 2\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n\n[performance]\nreduce_motion = false\n";
+const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\naccent = \"blue\"\nglass = true\ntint_opacity = 100\ntab_layout = \"vertical\"\n\n[split_view]\nmax_panes = 2\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n\n[pages]\nzoom = 100\n\n[performance]\nreduce_motion = false\n";
 static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -99,6 +99,15 @@ pub(crate) fn parse(contents: &str) -> Result<ConfigLoad, String> {
         } else {
             issues.push(format!(
                 "Invalid value for [appearance].tint_opacity: {value}; expected 0 through 100"
+            ));
+        }
+    }
+    if let Some(value) = integer_value(&document, "pages", "zoom", &mut issues) {
+        if (30..=500).contains(&value) {
+            settings.page_zoom = value as u16;
+        } else {
+            issues.push(format!(
+                "Invalid value for [pages].zoom: {value}; expected 30 through 500"
             ));
         }
     }
@@ -311,6 +320,7 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
         Err(error) => return Err(format!("cannot read configuration: {error}")),
     };
     let (section, key, value) = match change {
+        SettingsChange::PageZoom(value) => ("pages", "zoom", value.to_string()),
         SettingsChange::TabLayout(value) => {
             ("appearance", "tab_layout", value.config_key().to_owned())
         }
@@ -362,10 +372,8 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
         .ok_or_else(|| format!("[{section}] must be a TOML table"))?;
     let mut new_value = if key == "glass" || key == "reduce_motion" {
         Value::from(value == "true")
-    } else if key == "tint_opacity" {
-        Value::from(value.parse::<i64>().expect("opacity is an integer"))
-    } else if key == "max_panes" {
-        Value::from(value.parse::<i64>().expect("pane limit is an integer"))
+    } else if matches!(key, "tint_opacity" | "max_panes" | "zoom") {
+        Value::from(value.parse::<i64>().expect("numeric setting is an integer"))
     } else {
         Value::from(value)
     };
@@ -609,6 +617,7 @@ mod tests {
         ));
         fs::write(&path, DEFAULT_CONFIG).expect("write initial config");
         for change in [
+            SettingsChange::PageZoom(125),
             SettingsChange::Appearance(Appearance::Dark),
             SettingsChange::AccentColor(AccentColor::Pink),
             SettingsChange::SearchEngine(SearchEngine::Brave),
@@ -621,6 +630,7 @@ mod tests {
         }
 
         let loaded = load_or_create(&path).expect("reload changed config");
+        assert_eq!(loaded.settings.page_zoom, 125);
         assert_eq!(loaded.settings.appearance, Appearance::Dark);
         assert_eq!(loaded.settings.accent_color, AccentColor::Pink);
         assert_eq!(loaded.settings.search_engine, SearchEngine::Brave);

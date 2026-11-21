@@ -25,6 +25,10 @@ pub(crate) enum Shortcut {
     FindNext,
     FindPrevious,
     Reload,
+    ReloadBypassingCache,
+    ZoomIn,
+    ZoomOut,
+    ResetZoom,
     PreviousTab,
     NextTab,
     /// The tab at this position, from zero.
@@ -125,6 +129,10 @@ pub(crate) fn dispatch(state: &mut AppState, shortcut: Shortcut, tx: &mut Tx) {
             }
         }
         Shortcut::Reload => state.with_active_tab(Browser::reload),
+        Shortcut::ReloadBypassingCache => state.with_active_tab(Browser::reload_bypassing_cache),
+        Shortcut::ZoomIn => state.with_active_tab(|browser, id| browser.change_zoom(id, 10)),
+        Shortcut::ZoomOut => state.with_active_tab(|browser, id| browser.change_zoom(id, -10)),
+        Shortcut::ResetZoom => state.with_active_tab(|browser, id| browser.change_zoom(id, 0)),
         Shortcut::ToggleSidebar if !state.horizontal_tabs() => ui::toggle_sidebar(state, tx),
         Shortcut::ToggleSidebar => {}
         Shortcut::OpenSettings => app::open_settings(state, tx),
@@ -198,6 +206,10 @@ pub(crate) fn shortcut(event: &KeyEvent) -> Option<Shortcut> {
         ('w', false) => Shortcut::Close,
         ('l', false) => Shortcut::FocusOmnibox,
         ('r', false) => Shortcut::Reload,
+        ('r', true) => Shortcut::ReloadBypassingCache,
+        ('=' | '+', _) => Shortcut::ZoomIn,
+        ('-', false) => Shortcut::ZoomOut,
+        ('0', false) => Shortcut::ResetZoom,
         ('s', false) => Shortcut::ToggleSidebar,
         #[cfg(target_os = "macos")]
         ('y', false) => Shortcut::OpenHistory,
@@ -239,6 +251,10 @@ mod tests {
         assert_eq!(press('w', false), Some(Shortcut::Close));
         assert_eq!(press('l', false), Some(Shortcut::FocusOmnibox));
         assert_eq!(press('r', false), Some(Shortcut::Reload));
+        assert_eq!(press('R', true), Some(Shortcut::ReloadBypassingCache));
+        assert_eq!(press('=', false), Some(Shortcut::ZoomIn));
+        assert_eq!(press('-', false), Some(Shortcut::ZoomOut));
+        assert_eq!(press('0', false), Some(Shortcut::ResetZoom));
         assert_eq!(press('f', false), Some(Shortcut::Find));
         assert_eq!(press('g', false), Some(Shortcut::FindNext));
         assert_eq!(press('G', true), Some(Shortcut::FindPrevious));
@@ -255,7 +271,7 @@ mod tests {
     fn leaves_other_keys_alone() {
         assert_eq!(press('q', true), None);
         assert_eq!(press('[', false), None);
-        assert_eq!(press('0', false), None);
+        assert_eq!(press('0', true), None);
         assert_eq!(press('q', false), None);
         let typed = KeyEvent {
             key: Key::Text("t".into()),

@@ -42,6 +42,7 @@ pub(super) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> E
                 .color(theme.text),
         )
         .child(appearance_section(state, theme, &kit, compact))
+        .child(page_zoom_section(state, theme, &kit, compact))
         .child(search_section(state, theme, &kit, overlays, compact))
         .child(downloads_section(state, theme, &kit, compact))
         .child(split_view_section(state, theme, &kit, compact))
@@ -64,6 +65,31 @@ pub(super) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> E
                 .justify_center()
                 .child(content),
         )
+}
+
+fn page_zoom_section(state: &AppState, theme: &Theme, kit: &Kit, compact: bool) -> El {
+    const ZOOM_OPTIONS: [u16; 5] = [75, 90, 100, 125, 150];
+    let current = state.settings.page_zoom;
+    let selected = ZOOM_OPTIONS.iter().position(|&zoom| zoom == current);
+    let control = SegmentedControl::new(&["75%", "90%", "100%", "125%", "150%"], selected)
+        .width(Some(CONTROL_WIDTH))
+        .label("Default page zoom")
+        .on_pick(|state: &mut AppState, index, _| state.set_page_zoom(ZOOM_OPTIONS[index]))
+        .build(kit);
+    section(
+        "Pages",
+        theme,
+        settings_group(
+            setting_row(
+                "Default page zoom",
+                &format!("Current default is {current}%."),
+                theme,
+                control,
+                compact,
+            ),
+            theme,
+        ),
+    )
 }
 
 fn split_view_section(state: &AppState, theme: &Theme, kit: &Kit, compact: bool) -> El {

@@ -187,6 +187,7 @@ struct ElarisLadybirdView {
     Optional<Web::HTML::CrossProcessId> picker_document;
     std::vector<uint32_t> picker_options;
     bool picker_allows_multiple{};
+    double page_zoom{1.0};
 };
 
 static AK::OwnPtr<ElarisApplication> s_application;
@@ -759,6 +760,8 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
                  (view.can_navigate_forward() ? ELARIS_LADYBIRD_HISTORY_FORWARD : 0));
     };
     handle->view->on_top_level_navigation_commit = [handle] {
+        if (handle->view->zoom_level() != handle->page_zoom)
+            handle->view->set_zoom(handle->page_zoom);
         cancel_form_picker(*handle, true);
         emit(handle, ELARIS_LADYBIRD_NAVIGATION_COMMITTED, to_utf8(handle->view->url()));
         if (handle->view->traversable().active_document().creation_url() == URL::about_error())
@@ -1123,6 +1126,31 @@ extern "C" int32_t elaris_ladybird_edit(ElarisLadybirdView* handle, ElarisEdit c
     return succeed();
 }
 
+extern "C" int32_t elaris_ladybird_navigation_items(ElarisLadybirdView* handle, int32_t direction) {
+    if (!handle || !on_owner_thread(handle->bridge))
+        return fail("session history requires a live view on the initialization thread");
+    if (direction != -1 && direction != 1)
+        return fail("invalid session history direction");
+
+    AK::JsonArray items;
+    for (auto const& target : handle->view->session_history_traversal_items(direction)) {
+        AK::JsonObject item;
+        item.set("step"sv, target.step);
+        item.set("url"sv, target.url.to_string());
+        items.must_append(AK::move(item));
+    }
+    auto json = items.serialized().to_byte_string();
+    emit(handle, ELARIS_LADYBIRD_NAVIGATION_ITEMS, {json.characters(), json.length()});
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_traverse_to_step(ElarisLadybirdView* handle, int32_t step) {
+    if (!handle || !on_owner_thread(handle->bridge))
+        return fail("session history requires a live view on the initialization thread");
+    handle->view->traverse_the_history_to_step(step);
+    return succeed();
+}
+
 extern "C" int32_t elaris_ladybird_reload(ElarisLadybirdView* handle) {
     if (!handle)
         return fail("view is required");
@@ -1149,6 +1177,7 @@ extern "C" int32_t elaris_ladybird_set_zoom(ElarisLadybirdView* handle, double z
     if (!std::isfinite(zoom) || zoom <= 0)
         return fail("zoom must be finite and positive");
     handle->view->set_zoom(zoom);
+    handle->page_zoom = handle->view->zoom_level();
     return succeed();
 }
 
