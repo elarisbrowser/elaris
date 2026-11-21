@@ -444,7 +444,12 @@ pub(crate) fn refresh(state: &AppState) {
         return;
     }
     let snapshot = MenuState::from(state);
-    MENU_STATE.with(|slot| *slot.borrow_mut() = Some(snapshot));
+    // Unchanged state needs no AppKit calls: every frame would otherwise rewrite each item.
+    // The menu reapplies its state when it opens, which also covers the full-screen title.
+    let previous = MENU_STATE.with(|slot| slot.borrow_mut().replace(snapshot));
+    if previous == Some(snapshot) {
+        return;
+    }
     if let Some(mtm) = MainThreadMarker::new() {
         apply_menu_state(snapshot, mtm);
     }
