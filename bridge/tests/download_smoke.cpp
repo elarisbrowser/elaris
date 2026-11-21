@@ -297,13 +297,19 @@ static bool finished(Events const& events, uint64_t id, int32_t status) {
     return it != events.downloads.end() && it->second.status == status;
 }
 
-static bool has_temporary_download(std::filesystem::path const& directory) {
+static bool has_temporary_download(std::filesystem::path const& directory, uintmax_t minimum_bytes = 0) {
     std::error_code error;
     std::filesystem::directory_iterator entry(directory, error);
     std::filesystem::directory_iterator end;
     while (!error && entry != end) {
-        if (entry->path().extension() == ".download")
-            return true;
+        if (entry->path().extension() == ".download") {
+            if (!minimum_bytes)
+                return true;
+            std::error_code size_error;
+            auto size = entry->file_size(size_error);
+            if (!size_error && size >= minimum_bytes)
+                return true;
+        }
         entry.increment(error);
     }
     return false;
@@ -364,7 +370,7 @@ static bool test_private_session(ElarisLadybird* bridge, HttpFixture const& fixt
     auto active_path = downloads_dir / "private-active.bin";
     if (!check(elaris_ladybird_test_start_private_download(second.get(), fixture.url("/slow").c_str(), "private-active.bin"),
                "start active private download") ||
-        !pump_until(bridge, [&] { return has_temporary_download(downloads_dir); }) ||
+        !pump_until(bridge, [&] { return has_temporary_download(downloads_dir, 1); }) ||
         std::filesystem::exists(active_path)) {
         std::cerr << "Expected a private download with unfinished staging data\n";
         return false;
