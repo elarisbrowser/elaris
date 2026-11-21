@@ -221,19 +221,10 @@ fn action_tiles(
                 theme,
                 reduced,
             ),
-            SiteControlAction::DuplicateTab => controls::confirm_glyph(
-                "site-action-duplicate",
-                &icons::DUPLICATE,
-                design::GLYPH,
-                confirmed,
-                theme,
-                reduced,
-            ),
-            // Each reload turns the glyph one more full revolution, so it spins on every press.
-            SiteControlAction::Reload => icon(&icons::RELOAD, design::GLYPH)
-                .key("site-action-reload")
-                .color(theme.text)
-                .rotate(state.site_reload_turns as f32 * std::f32::consts::TAU),
+            SiteControlAction::DuplicateTab => {
+                icon(&icons::DUPLICATE, design::GLYPH).color(theme.text)
+            }
+            SiteControlAction::Reload => icon(&icons::RELOAD, design::GLYPH).color(theme.text),
             SiteControlAction::Settings => {
                 icon(&icons::SITE_CONTROLS, design::GLYPH).color(theme.text)
             }
@@ -271,7 +262,6 @@ fn action_tiles(
                         if let Some(tab) = tab {
                             state.browser.reload(tab);
                         }
-                        state.site_reload_turns = state.site_reload_turns.wrapping_add(1);
                     }
                     SiteControlAction::DuplicateTab => {
                         if let Some(tab) = tab {

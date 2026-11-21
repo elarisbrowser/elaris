@@ -45,8 +45,7 @@ impl SiteControlAction {
     pub(crate) fn confirmation(self) -> Option<&'static str> {
         match self {
             Self::CopyUrl => Some("Copied"),
-            Self::DuplicateTab => Some("Duplicated"),
-            Self::Reload | Self::Settings => None,
+            Self::DuplicateTab | Self::Reload | Self::Settings => None,
         }
     }
 }
