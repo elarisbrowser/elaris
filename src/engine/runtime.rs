@@ -123,6 +123,32 @@ impl Runtime {
                 .download_action(id, action)
                 .err()
                 .map(|error| Update::DownloadActionFailed(id, error)),
+            Command::SetPermissionDefault(kind, blocked) => self
+                .ladybird
+                .set_permission_default(kind.key(), blocked)
+                .err()
+                .map(Update::Failed),
+            Command::SetPermissions(store) => {
+                let rows = store
+                    .entries()
+                    .map(|(origin, kind, state)| {
+                        (
+                            origin,
+                            kind.key(),
+                            if state.choice() == Some(true) { 1 } else { 2 },
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                self.ladybird
+                    .set_permissions(&rows)
+                    .err()
+                    .map(Update::Failed)
+            }
+            Command::SetPermission(origin, kind, state) => self
+                .ladybird
+                .set_permission(&origin, kind.key(), state.choice())
+                .err()
+                .map(Update::Failed),
             Command::SetDownloadDirectory(path) => {
                 configure_download_directory(&mut self.ladybird, path.as_deref())
                     .err()
@@ -164,6 +190,24 @@ impl Runtime {
     fn apply_tab_command(&mut self, command: Command) -> Option<Update> {
         let (tab, result) = match command {
             Command::Open(tab, surface) => (tab, self.open(tab, surface)),
+            Command::AdoptPopup {
+                source,
+                request,
+                tab,
+                surface,
+            } => {
+                match self.ladybird.adopt_popup(
+                    source.raw(),
+                    request,
+                    tab.raw(),
+                    self.display_refresh_rate,
+                ) {
+                    Ok(Some(view)) => self.insert_view(tab, view, surface),
+                    Ok(None) => return Some(Update::PopupClosed(tab)),
+                    Err(error) => return Some(Update::Tab(tab, TabUpdate::Error(error))),
+                }
+                return None;
+            }
             Command::PreflightClose(tab) => {
                 return match self.views.get_mut(&tab) {
                     Some(view) => view
@@ -222,7 +266,10 @@ impl Runtime {
             Command::Shutdown
             | Command::StartDownload(..)
             | Command::DownloadAction(..)
-            | Command::SetDownloadDirectory(_) => {
+            | Command::SetDownloadDirectory(_)
+            | Command::SetPermissionDefault(..)
+            | Command::SetPermissions(_)
+            | Command::SetPermission(..) => {
                 return None;
             }
         };
@@ -235,6 +282,11 @@ impl Runtime {
         let view = self
             .ladybird
             .create_view(tab.raw(), self.display_refresh_rate)?;
+        self.insert_view(tab, view, surface);
+        Ok(())
+    }
+
+    fn insert_view(&mut self, tab: TabId, view: WebView, surface: Surface) {
         self.views.insert(
             tab,
             View {
@@ -248,7 +300,6 @@ impl Runtime {
                 last_thumbnail: None,
             },
         );
-        Ok(())
     }
 
     /// Keeps full frames for the newest hidden views that have painted.
@@ -303,6 +354,23 @@ impl Runtime {
                 updates.push(Update::Download(id, update));
                 continue;
             }
+            if let Event::PermissionSaved {
+                origin,
+                key,
+                allowed,
+            } = event
+            {
+                use crate::permissions::{PermissionKind, PermissionState};
+                if let Some(kind) = PermissionKind::from_key(&key) {
+                    let state = if allowed {
+                        PermissionState::Allow
+                    } else {
+                        PermissionState::Block
+                    };
+                    updates.push(Update::PermissionSaved(origin, kind, state));
+                }
+                continue;
+            }
             let tab = TabId::from_raw(id);
             let Some(view) = self.views.get_mut(&tab) else {
                 continue;
@@ -325,6 +393,22 @@ impl Runtime {
                 Event::Tooltip(text) => TabUpdate::Tooltip(text),
                 Event::Cursor(name) => TabUpdate::Cursor(name),
                 Event::PageDialog(dialog) => TabUpdate::PageDialog(dialog),
+                Event::Popup { request, activate } => {
+                    updates.push(Update::Popup(tab, request, activate));
+                    continue;
+                }
+                Event::PopupClosed => {
+                    updates.push(Update::PopupClosed(tab));
+                    continue;
+                }
+                Event::WebFullscreen(active) => TabUpdate::WebFullscreen(active),
+                Event::PermissionPrompt(prompt) => TabUpdate::PermissionPrompt(prompt),
+                Event::PermissionUse { key, visible } => {
+                    let Some(kind) = crate::permissions::PermissionKind::from_key(&key) else {
+                        continue;
+                    };
+                    TabUpdate::PermissionUse(kind, visible)
+                }
                 Event::FormPicker(picker) => {
                     updates.push(Update::FormPicker(tab, picker));
                     continue;
@@ -382,6 +466,9 @@ impl Runtime {
                 Event::NavigationItems(items) => TabUpdate::NavigationItems(items),
                 Event::History { back, forward } => TabUpdate::History { back, forward },
                 Event::Download(_) => unreachable!("download events are handled above"),
+                Event::PermissionSaved { .. } => {
+                    unreachable!("saved permissions are handled above")
+                }
                 Event::ReadyToPaint => {
                     if let Some((_, sample)) = painted.iter_mut().find(|(id, _)| *id == tab) {
                         *sample = view.preview_committed;
@@ -462,6 +549,10 @@ fn apply_to_view(view: &mut View, command: ViewCommand, timing: &mut Timing) -> 
         ViewCommand::FindNext { request_id } => web.find_next(request_id),
         ViewCommand::FindPrevious { request_id } => web.find_previous(request_id),
         ViewCommand::FindEnd => web.find_end(),
+        ViewCommand::ExitWebFullscreen => web.exit_web_fullscreen(),
+        ViewCommand::ReplyToPermission { request_id, choice } => {
+            web.reply_to_permission(request_id, choice)
+        }
         ViewCommand::ReplyToDialog {
             request_id,
             response,

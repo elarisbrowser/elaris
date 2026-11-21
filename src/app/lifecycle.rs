@@ -43,7 +43,17 @@ fn start_engine(state: &mut AppState) {
         state.engine_download_directory(),
         state.display_refresh_rate,
     ) {
-        Ok(engine) => state.browser.connect(engine),
+        Ok(engine) => {
+            engine.send(crate::engine::Command::SetPermissions(
+                state.permission_store.clone(),
+            ));
+            for kind in crate::permissions::PermissionKind::ALL {
+                if state.permission_store.default_blocked(kind) {
+                    engine.send(crate::engine::Command::SetPermissionDefault(kind, true));
+                }
+            }
+            state.browser.connect(engine);
+        }
         Err(error) => state.browser.fail(error),
     }
 }

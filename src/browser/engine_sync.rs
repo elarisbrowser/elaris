@@ -36,6 +36,12 @@ impl Browser {
             match update {
                 // A tab closed since the engine reported this has nothing to show it.
                 Update::Tab(id, update) => {
+                    if matches!(update, crate::engine::TabUpdate::WebFullscreen(true))
+                        && self.active != Some(id)
+                    {
+                        self.send(id, ViewCommand::ExitWebFullscreen);
+                        continue;
+                    }
                     if let Some(peek) = self.peek.as_mut().filter(|peek| peek.page.id() == id) {
                         if !matches!(&update,
                             crate::engine::TabUpdate::Navigation(url)
@@ -116,6 +122,10 @@ impl Browser {
                         polled.changed = true;
                     }
                 }
+                Update::PermissionSaved(origin, kind, state) => {
+                    polled.permission_choices.push((origin, kind, state));
+                    polled.changed = true;
+                }
                 Update::FormPicker(id, picker) => {
                     polled.form_pickers.push((id, picker));
                     polled.changed = true;
@@ -139,6 +149,16 @@ impl Browser {
                 }
                 Update::Peek(source, url, request) => {
                     polled.changed |= self.open_peek(source, url, request);
+                }
+                Update::Popup(source, request, activate) => {
+                    if self.page(source).is_some_and(|tab| !tab.is_internal()) {
+                        self.insert_popup(source, request, activate);
+                        polled.changed = true;
+                    }
+                }
+                Update::PopupClosed(id) => {
+                    self.close_tab(id);
+                    polled.changed = true;
                 }
                 Update::NewTab(source, url, request, activate) => {
                     if self.tab(source).is_some_and(|tab| !tab.is_internal())

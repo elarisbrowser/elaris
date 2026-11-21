@@ -27,6 +27,16 @@ pub enum Edit {
     Commit(String),
 }
 
+/// A website permission question or operating-system denial notice.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PermissionPrompt {
+    pub request_id: u64,
+    pub origin: String,
+    pub requesting_origin: String,
+    pub key: String,
+    pub os_denied: bool,
+}
+
 /// A page-owned dialog awaiting a response from the browser.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PageDialog {
@@ -118,6 +128,22 @@ pub enum Event {
     /// Ladybird's standard cursor name.
     Cursor(String),
     PageDialog(Option<PageDialog>),
+    PermissionPrompt(Option<PermissionPrompt>),
+    WebFullscreen(bool),
+    Popup {
+        request: u64,
+        activate: bool,
+    },
+    PopupClosed,
+    PermissionUse {
+        key: String,
+        visible: bool,
+    },
+    PermissionSaved {
+        origin: String,
+        key: String,
+        allowed: bool,
+    },
     CloseDecision(bool),
     FormPicker(Option<(u64, FormPicker)>),
     ContextMenu(PageMenu),

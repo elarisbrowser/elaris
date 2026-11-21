@@ -56,7 +56,7 @@ impl SiteControlPresentation {
         let url = state
             .browser
             .active_tab()
-            .map(|tab| tab.url.clone())
+            .map(|tab| tab.committed_url.clone())
             .filter(|url| !url.is_empty() && url != "about:blank");
         let origin = url.as_deref().and_then(PermissionStore::origin);
         let https_scheme = url

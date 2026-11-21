@@ -34,9 +34,29 @@ typedef enum {
     ELARIS_LADYBIRD_CURSOR = 19,
     ELARIS_LADYBIRD_PAGE_DIALOG = 20,
     ELARIS_LADYBIRD_CLOSE_DECISION = 21,
-    ELARIS_LADYBIRD_FORM_PICKER = 22, /* JSON in text, empty when dismissed. */
+    ELARIS_LADYBIRD_FORM_PICKER = 22,      /* JSON in text, empty when dismissed. */
     ELARIS_LADYBIRD_NAVIGATION_ITEMS = 23, /* JSON session history targets in text. */
+    ELARIS_LADYBIRD_PERMISSION_PROMPT = 24,
+    ELARIS_LADYBIRD_PERMISSION_SAVED = 25,
+    ELARIS_LADYBIRD_PERMISSION_USE = 26, /* Permission key in text, visible flag in value. */
+    ELARIS_LADYBIRD_WEB_FULLSCREEN = 27, /* Whether the page entered element fullscreen. */
+    ELARIS_LADYBIRD_POPUP = 28,          /* Pending popup handle in request_id, activation in value. */
+    ELARIS_LADYBIRD_POPUP_CLOSED = 29,
 } ElarisLadybirdEventKind;
+
+/* Permission event text is the origin and selection is the permission key.
+ * Prompt value 1 is a question, 2 is an OS denial notice, and 0 clears the prompt.
+ * Saved value 1 is Allow and 2 is Block. */
+int32_t elaris_ladybird_reply_to_permission(ElarisLadybirdView*, uint64_t request_id, int32_t choice);
+/* Replace the ordinary session's site decisions with rows of [origin, key, choice]. */
+int32_t elaris_ladybird_set_permissions(ElarisLadybird*, char const* json);
+int32_t elaris_ladybird_set_permission_default(ElarisLadybird*, char const* key, int32_t blocked);
+/* Bind a popup opened by source to a host view id. */
+int32_t elaris_ladybird_adopt_popup(ElarisLadybird*, uint64_t source, uint64_t request_id, uint64_t view_id,
+                                    ElarisLadybirdView**);
+int32_t elaris_ladybird_exit_web_fullscreen(ElarisLadybirdView*);
+/* Choice 0 resets a permission, 1 allows it, and 2 blocks it. */
+int32_t elaris_ladybird_set_permission(ElarisLadybird*, char const* origin, char const* key, int32_t choice);
 
 typedef enum {
     ELARIS_LADYBIRD_DIALOG_CLOSED = 0,
@@ -247,10 +267,10 @@ int32_t elaris_ladybird_find_next(ElarisLadybirdView*, uint64_t request_id);
 int32_t elaris_ladybird_find_previous(ElarisLadybirdView*, uint64_t request_id);
 /* PAGE_DIALOG events carry the dialog kind in value and prompt default in selection. */
 int32_t elaris_ladybird_reply_to_dialog(ElarisLadybirdView*, uint64_t request_id, int32_t accepted,
-                                      const uint8_t* response, size_t response_size);
+                                        const uint8_t* response, size_t response_size);
 /* A null response cancels. File paths use the platform filesystem encoding, separated by NUL bytes. */
-int32_t elaris_ladybird_reply_to_picker(ElarisLadybirdView*, uint64_t request_id,
-                                       const uint8_t* response, size_t response_size);
+int32_t elaris_ladybird_reply_to_picker(ElarisLadybirdView*, uint64_t request_id, const uint8_t* response,
+                                        size_t response_size);
 int32_t elaris_ladybird_preflight_close(ElarisLadybirdView*);
 int32_t elaris_ladybird_find_end(ElarisLadybirdView*);
 /* Reads the current webpage selection and returns it asynchronously with the request ID. */

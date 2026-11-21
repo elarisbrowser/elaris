@@ -7,17 +7,16 @@
 
 #include <elaris_ladybird.h>
 
+#include <AK/ByteString.h>
 #include <AK/JsonArray.h>
 #include <AK/JsonObject.h>
-#include <LibWebCommon/HTML/ColorPickerUpdateState.h>
-#include <LibWebView/Utilities.h>
-#include <AK/ByteString.h>
 #include <AK/LexicalPath.h>
 #include <AK/OwnPtr.h>
 #include <AK/String.h>
 #include <AK/Utf16String.h>
 
 #include <LibCore/EventLoop.h>
+#include <LibCore/GeolocationProvider.h>
 #include <LibCore/Promise.h>
 #include <LibCore/StandardPaths.h>
 #include <LibCore/Timer.h>
@@ -27,30 +26,44 @@
 #include <LibGfx/SystemTheme.h>
 #include <LibURL/Parser.h>
 #include <LibURL/URL.h>
+#include <LibWebCommon/HTML/ColorPickerUpdateState.h>
 #include <LibWebCommon/Loader/DownloadFilename.h>
 #include <LibWebCommon/Page/InputEvent.h>
 #include <LibWebCommon/PixelUnits.h>
 #include <LibWebCommon/UIEvents/KeyCode.h>
 #include <LibWebCommon/WebView/Utilities.h>
 #include <LibWebView/Application.h>
+#include <LibWebView/BrowsingSession.h>
 #include <LibWebView/CanonicalDocument.h>
 #include <LibWebView/CanonicalTraversable.h>
 #include <LibWebView/ContextMenuRequest.h>
 #include <LibWebView/FileDownloader.h>
 #include <LibWebView/HeadlessWebView.h>
 #include <LibWebView/PageBackingStores.h>
+#include <LibWebView/PermissionManager.h>
 #include <LibWebView/Settings.h>
+#include <LibWebView/Utilities.h>
+#if defined(AK_OS_MACOS)
+#include <LibWebView/NotificationBackendMacOS.h>
+
+#include <UI/Qt/MicrophoneAuthorizerMacOS.h>
+#elif defined(AK_OS_LINUX)
+#include <LibWebView/NotificationBackendFreedesktop.h>
+#endif
 
 #include <algorithm>
 #include <array>
 #include <cerrno>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <deque>
 #include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "peek_disposition.h"
@@ -62,6 +75,45 @@ static Optional<AK::ByteString> s_download_directory_override;
 static ErrorOr<AK::LexicalPath> unique_download_path(AK::ByteString const& directory, AK::ByteString const& file);
 static std::string to_utf8(URL::URL const& url);
 
+// An opt-in location source for the loopback permission smoke page.
+class TestLocationProvider final : public Core::GeolocationProvider {
+    AK_ALLOC_WITH_KMALLOC;
+
+  public:
+    ErrorOr<RequestId, Core::GeolocationError> request_current_position(SuccessCallback success,
+                                                                        ErrorCallback) override {
+        auto id = ++m_next_id;
+        auto timer = Core::Timer::create_single_shot(AK::Duration::from_milliseconds(1),
+                                                     [this, id, success = AK::move(success)] {
+                                                         auto timer = m_pending.extract(id);
+                                                         success({51.5, -0.12, 100.0, {}, {}, {}, {}});
+                                                     });
+        timer->start();
+        m_pending.emplace(id, AK::move(timer));
+        return id;
+    }
+
+    void cancel_current_position_request(RequestId id) override {
+        m_pending.erase(id);
+    }
+
+    ErrorOr<WatchId, Core::GeolocationError> start_watching_position(SuccessCallback success,
+                                                                     ErrorCallback error) override {
+        return request_current_position(AK::move(success), AK::move(error));
+    }
+
+    void stop_watching_position(WatchId id) override {
+        cancel_current_position_request(id);
+    }
+    Core::GeolocationAuthorization authorization() const override {
+        return Core::GeolocationAuthorization::Authorized;
+    }
+
+  private:
+    RequestId m_next_id{};
+    std::map<RequestId, NonnullRefPtr<Core::Timer>> m_pending;
+};
+
 class ElarisApplication final : public WebView::Application {
     WEB_VIEW_APPLICATION(ElarisApplication)
 
@@ -69,9 +121,25 @@ class ElarisApplication final : public WebView::Application {
     ElarisLadybird* host{};
     explicit ElarisApplication(Optional<AK::ByteString> helper_directory = {})
         : WebView::Application(AK::move(helper_directory)) {}
+    NonnullOwnPtr<WebView::NotificationBackend> create_notification_backend() override {
+#if defined(AK_OS_MACOS)
+        return make<WebView::NotificationBackendMacOS>();
+#elif defined(AK_OS_LINUX)
+        return make<WebView::NotificationBackendFreedesktop>();
+#else
+        return WebView::Application::create_notification_backend();
+#endif
+    }
+
     ErrorOr<AK::LexicalPath> default_path_for_downloaded_file(AK::ByteString const& file) const override;
 
   private:
+#if defined(AK_OS_MACOS)
+    NonnullOwnPtr<WebView::MicrophoneAuthorizer> create_microphone_authorizer() override {
+        return make<Ladybird::MicrophoneAuthorizerMacOS>();
+    }
+#endif
+
     void open_navigation_in_new_tab(Web::HTML::PreparedNavigationDescriptor, Web::HTML::ActivateTab,
                                     WebView::ViewImplementation const*) const override;
     Core::EventLoop& create_platform_event_loop() override;
@@ -95,9 +163,12 @@ class ElarisApplication final : public WebView::Application {
 class ElarisWebView final : public WebView::HeadlessWebView {
   public:
     static AK::NonnullOwnPtr<ElarisWebView> create(Core::AnonymousBuffer theme, Web::DevicePixelSize size,
-                                                   WebView::IsPrivate mode) {
+                                                   WebView::IsPrivate mode, WebView::CanonicalTraversable* popup) {
         auto view = AK::adopt_own(*new ElarisWebView(AK::move(theme), size, mode));
-        view->initialize_tab(Web::HTML::VisibilityState::Visible);
+        if (popup)
+            view->initialize_tab(Web::HTML::VisibilityState::Visible, *popup);
+        else
+            view->initialize_tab(Web::HTML::VisibilityState::Visible);
         view->set_presents_from_cpu_memory(true);
         return view;
     }
@@ -158,6 +229,7 @@ struct ElarisLadybird {
     std::vector<ElarisLadybirdView*> views;
     std::unique_ptr<ElarisDownloadObserver> download_observer;
     uint64_t next_picker_request{};
+    bool permissions_initialized{};
 };
 
 struct PendingPageDialog {
@@ -169,6 +241,15 @@ struct PendingPageDialog {
 };
 
 enum class FormPicker { None, File, Color, Date, Select };
+
+struct PendingPermission {
+    uint64_t id;
+    Web::HTML::CrossProcessId document;
+    WebView::PermissionPromptRequest request;
+    uint64_t generation;
+    WebView::PermissionPromptCallback reply;
+    std::string requesting_origin;
+};
 
 struct ElarisLadybirdView {
     ElarisLadybird* bridge{};
@@ -188,6 +269,11 @@ struct ElarisLadybirdView {
     std::vector<uint32_t> picker_options;
     bool picker_allows_multiple{};
     double page_zoom{1.0};
+    bool web_fullscreen{};
+    std::deque<PendingPermission> permissions{};
+    ElarisLadybirdView* popup_source{};
+    uint64_t popup_request{};
+    bool popup_closed{};
 };
 
 static AK::OwnPtr<ElarisApplication> s_application;
@@ -320,6 +406,200 @@ static void emit(ElarisLadybirdView const* view, ElarisLadybirdEventKind kind, s
     event.text = text.c_str();
     event.value = value;
     view->bridge->callback(view->bridge->context, &event);
+}
+
+static void set_web_fullscreen(ElarisLadybirdView& handle, bool fullscreen) {
+    if (std::exchange(handle.web_fullscreen, fullscreen) == fullscreen)
+        return;
+    handle.view->set_is_fullscreen(fullscreen ? Web::ViewportIsFullscreen::Yes : Web::ViewportIsFullscreen::No);
+    emit(&handle, ELARIS_LADYBIRD_WEB_FULLSCREEN, {}, fullscreen);
+}
+
+extern "C" int32_t elaris_ladybird_exit_web_fullscreen(ElarisLadybirdView* handle) {
+    if (!handle || !on_owner_thread(handle->bridge))
+        return fail("fullscreen exit requires the view owner thread");
+    if (handle->web_fullscreen)
+        handle->view->exit_fullscreen();
+    return succeed();
+}
+
+static void emit_permission(ElarisLadybirdView const& handle, PendingPermission const* pending,
+                            ElarisLadybirdEventKind kind, int32_t value) {
+    if (!handle.bridge->callback)
+        return;
+    ElarisLadybirdEvent event{};
+    event.kind = kind;
+    event.view_id = handle.id;
+    event.value = value;
+    if (!pending) {
+        handle.bridge->callback(handle.bridge->context, &event);
+        return;
+    }
+    auto origin = pending->request.top_level_origin.serialize();
+    auto key = Web::Permissions::to_string(pending->request.name);
+    event.request_id = pending->id;
+    auto key_bytes = AK::ByteString(key);
+    // Keep the borrowed strings alive through the callback.
+    auto origin_bytes = origin.to_byte_string();
+    event.text = origin_bytes.characters();
+    event.selection = key_bytes.characters();
+    event.destination = pending->requesting_origin.c_str();
+    handle.bridge->callback(handle.bridge->context, &event);
+}
+
+static void emit_permission_prompt(ElarisLadybirdView const& handle) {
+    auto const* pending = handle.permissions.empty() ? nullptr : &handle.permissions.front();
+    auto value = !pending ? 0 : pending->request.kind == WebView::PermissionPromptKind::Question ? 1 : 2;
+    emit_permission(handle, pending, ELARIS_LADYBIRD_PERMISSION_PROMPT, value);
+}
+
+static void cancel_permissions(ElarisLadybirdView& handle) {
+    if (handle.permissions.empty())
+        return;
+    auto pending = std::exchange(handle.permissions, {});
+    for (auto& item : pending)
+        item.reply(Web::Permissions::PromptOutcome::Cancelled);
+    emit_permission_prompt(handle);
+}
+
+static WebView::CanonicalDocument const* active_permission_document(ElarisLadybirdView const& handle,
+                                                                    Web::HTML::CrossProcessId document_id) {
+    WebView::CanonicalDocument const* active = nullptr;
+    handle.view->traversable().for_each_in_inclusive_subtree([&](auto const& navigable) {
+        auto const& document = navigable.active_document();
+        if (document.id() != document_id || !document.host())
+            return IterationDecision::Continue;
+        active = &document;
+        return IterationDecision::Break;
+    });
+    return active;
+}
+
+static bool permission_still_pending(ElarisLadybirdView const& handle, PendingPermission const& pending) {
+    if (!active_permission_document(handle, pending.document))
+        return false;
+    if (pending.request.kind != WebView::PermissionPromptKind::Question)
+        return true;
+    auto const& manager = *handle.view->session().permission_manager;
+    auto const& request = pending.request;
+    return manager.decision_generation(request.name, request.top_level_origin) == pending.generation &&
+           manager.effective_state(request.name, request.top_level_origin) == Web::Permissions::EffectiveState::Prompt;
+}
+
+static void discard_stale_permissions(ElarisLadybird& bridge) {
+    for (auto* handle : bridge.views) {
+        auto& prompts = handle->permissions;
+        if (prompts.empty())
+            continue;
+        auto first = prompts.front().id;
+        for (auto it = prompts.begin(); it != prompts.end();) {
+            if (permission_still_pending(*handle, *it)) {
+                ++it;
+                continue;
+            }
+            auto reply = AK::move(it->reply);
+            it = prompts.erase(it);
+            reply(Web::Permissions::PromptOutcome::Cancelled);
+        }
+        if (prompts.empty() || prompts.front().id != first)
+            emit_permission_prompt(*handle);
+    }
+}
+
+static Optional<Web::Permissions::PermissionName> permission_name(AK::StringView key) {
+    return Web::Permissions::permission_name_from_string(key == "location"sv ? "geolocation"sv : key);
+}
+
+extern "C" int32_t elaris_ladybird_set_permission_default(ElarisLadybird* bridge, char const* key, int32_t blocked) {
+    if (!bridge || !on_owner_thread(bridge) || !key || (blocked != 0 && blocked != 1))
+        return fail("invalid default permission");
+    if (auto name = permission_name({key, strlen(key)}); name.has_value()) {
+        using State = Web::Permissions::EffectiveState;
+        auto state = blocked ? State::Denied : State::Prompt;
+        if (*name == Web::Permissions::PermissionName::Geolocation && !s_application->sites_can_ask_for_location())
+            state = State::Denied;
+        WebView::Application::default_session().permission_manager->set_global_default(*name, state);
+    }
+    return succeed();
+}
+
+static Optional<WebView::PermissionDecision> permission_choice(int32_t choice) {
+    if (choice == 1)
+        return WebView::PermissionDecision::Allow;
+    if (choice == 2)
+        return WebView::PermissionDecision::Block;
+    return {};
+}
+
+extern "C" int32_t elaris_ladybird_set_permission(ElarisLadybird* bridge, char const* site, char const* key,
+                                                  int32_t choice) {
+    if (!bridge || !on_owner_thread(bridge) || !site || !key || choice < 0 || choice > 2)
+        return fail("invalid site permission");
+    auto name = permission_name(AK::StringView{key, strlen(key)});
+    auto url = URL::Parser::basic_parse(AK::StringView{site, strlen(site)});
+    if (name.has_value() && url.has_value() && (url->scheme() == "http"sv || url->scheme() == "https"sv))
+        WebView::Application::default_session().permission_manager->set_decision(*name, url->origin(),
+                                                                                 permission_choice(choice));
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_set_permissions(ElarisLadybird* bridge, char const* json) {
+    if (!bridge || !on_owner_thread(bridge) || !json)
+        return fail("invalid site permissions");
+    if (bridge->permissions_initialized)
+        return succeed();
+    auto data = JsonValue::from_string(AK::StringView{json, strlen(json)});
+    if (data.is_error() || !data.value().is_array())
+        return fail("invalid site permission list");
+    for (auto const& row : data.value().as_array().values()) {
+        if (!row.is_array() || row.as_array().size() != 3)
+            return fail("invalid site permission row");
+        auto const& values = row.as_array();
+        if (!values.at(0).is_string() || !values.at(1).is_string() || !values.at(2).get_i32().has_value())
+            return fail("invalid site permission row");
+    }
+    auto& manager = *WebView::Application::default_session().permission_manager;
+    for (auto name : Web::Permissions::PERMISSION_NAMES) {
+        for (auto const& site : manager.site_decisions(name))
+            manager.set_decision(name, site.origin, {});
+    }
+    for (auto const& row : data.value().as_array().values()) {
+        auto const& values = row.as_array();
+        auto site = values.at(0).as_string().to_byte_string();
+        auto key = values.at(1).as_string().to_byte_string();
+        elaris_ladybird_set_permission(bridge, site.characters(), key.characters(), values.at(2).get_i32().value());
+    }
+    bridge->permissions_initialized = true;
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_reply_to_permission(ElarisLadybirdView* handle, uint64_t id, int32_t choice) {
+    if (!handle || !on_owner_thread(handle->bridge) || choice < 0 || choice > 2)
+        return fail("invalid permission response");
+    if (handle->permissions.empty() || handle->permissions.front().id != id)
+        return succeed();
+    auto pending = AK::move(handle->permissions.front());
+    handle->permissions.pop_front();
+    using Outcome = Web::Permissions::PromptOutcome;
+    auto outcome = Outcome::Cancelled;
+    auto& manager = *handle->view->session().permission_manager;
+    auto const& request = pending.request;
+    auto before = manager.decision(request.name, request.top_level_origin);
+    if (request.kind == WebView::PermissionPromptKind::Question && permission_still_pending(*handle, pending)) {
+        if (choice == 1)
+            outcome = Outcome::AllowAlways;
+        else if (choice == 2)
+            outcome = Outcome::Block;
+    }
+    if (request.kind == WebView::PermissionPromptKind::SystemDeniedNotice)
+        handle->view->did_show_permission_prompt(request);
+    pending.reply(outcome);
+    if (outcome != Outcome::Cancelled && handle->view->is_private() == WebView::IsPrivate::No &&
+        before != permission_choice(choice) &&
+        manager.decision(request.name, request.top_level_origin) == permission_choice(choice))
+        emit_permission(*handle, &pending, ELARIS_LADYBIRD_PERMISSION_SAVED, choice);
+    emit_permission_prompt(*handle);
+    return succeed();
 }
 
 static void emit_favicon(ElarisLadybirdView const* view, Optional<Gfx::Bitmap const&> favicon) {
@@ -488,10 +768,12 @@ static void install_form_pickers(ElarisLadybirdView& handle) {
         cancel_form_picker(handle, true);
         AK::JsonObject payload;
         payload.set("kind"sv, "color"sv);
-        payload.set("value"sv, MUST(String::formatted("#{:02x}{:02x}{:02x}", color.red(), color.green(), color.blue())));
+        payload.set("value"sv,
+                    MUST(String::formatted("#{:02x}{:02x}{:02x}", color.red(), color.green(), color.blue())));
         show_form_picker(handle, FormPicker::Color, payload);
     };
-    handle.view->on_request_date_picker = [&handle](auto const& type, auto const& value, auto const& minimum, auto const& maximum) {
+    handle.view->on_request_date_picker = [&handle](auto const& type, auto const& value, auto const& minimum,
+                                                    auto const& maximum) {
         if (handle.picker == FormPicker::Date)
             return;
         cancel_form_picker(handle, true);
@@ -520,18 +802,20 @@ static void install_form_pickers(ElarisLadybirdView& handle) {
             rows.must_append(AK::move(row));
         };
         for (auto const& item : items) {
-            item.visit([&](Web::HTML::SelectItemOption const& option) { append_option(option); }, [&](Web::HTML::SelectItemOptionGroup const& group) {
-                AK::JsonObject row;
-                row.set("kind"sv, "group"sv);
-                row.set("label"sv, group.label.to_utf8());
-                rows.must_append(AK::move(row));
-                for (auto const& option : group.items)
-                    append_option(option);
-            }, [&](Web::HTML::SelectItemSeparator const&) {
-                AK::JsonObject row;
-                row.set("kind"sv, "separator"sv);
-                rows.must_append(AK::move(row));
-            });
+            item.visit([&](Web::HTML::SelectItemOption const& option) { append_option(option); },
+                       [&](Web::HTML::SelectItemOptionGroup const& group) {
+                           AK::JsonObject row;
+                           row.set("kind"sv, "group"sv);
+                           row.set("label"sv, group.label.to_utf8());
+                           rows.must_append(AK::move(row));
+                           for (auto const& option : group.items)
+                               append_option(option);
+                       },
+                       [&](Web::HTML::SelectItemSeparator const&) {
+                           AK::JsonObject row;
+                           row.set("kind"sv, "separator"sv);
+                           rows.must_append(AK::move(row));
+                       });
         }
         AK::JsonObject payload;
         payload.set("kind"sv, "select"sv);
@@ -580,6 +864,11 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
 
     WebView::s_ladybird_resource_root = resource_dir;
     s_download_directory_override.clear();
+    if (auto* fixture = std::getenv("ELARIS_TEST_LOCATION"); fixture && std::string_view(fixture) == "1") {
+        Core::GeolocationProvider::set_provider_functions(
+            []() -> ErrorOr<NonnullOwnPtr<Core::GeolocationProvider>> { return make<TestLocationProvider>(); },
+            [] { return true; });
+    }
 
     // Headless manual mode initializes Ladybird without starting its blocking execute() loop.
     AK::StringView arguments[]{
@@ -610,6 +899,7 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
         .views = {},
         .download_observer = nullptr,
         .next_picker_request = 0,
+        .permissions_initialized = false,
     };
     s_application->host = *out_bridge;
     (*out_bridge)->download_observer = std::make_unique<ElarisDownloadObserver>(**out_bridge);
@@ -683,7 +973,7 @@ extern "C" int32_t elaris_ladybird_cancel_active_downloads(ElarisLadybird* bridg
 }
 
 static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::IsPrivate mode,
-                           ElarisLadybirdView** out_view) {
+                           ElarisLadybirdView** out_view, WebView::CanonicalTraversable* popup = nullptr) {
     if (out_view)
         *out_view = nullptr;
     if (!bridge || !out_view || !s_application)
@@ -698,11 +988,83 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
     auto theme_buffer = theme.release_value();
     apply_selection_colors(*theme_buffer.data<Gfx::SystemTheme>());
 
-    auto view = ElarisWebView::create(AK::move(theme_buffer), {1024, 768}, mode);
-    auto* handle = new ElarisLadybirdView{bridge, view_id, AK::move(view), {}, 0, 0, {}, {}, {}, {}, FormPicker::None, 0, {}, {}, false};
+    auto view = ElarisWebView::create(AK::move(theme_buffer), {1024, 768}, mode, popup);
+    auto* handle = new ElarisLadybirdView{bridge, view_id, AK::move(view),   {}, 0,  0,  {},   {},
+                                          {},     {},      FormPicker::None, 0,  {}, {}, false};
     bridge->views.push_back(handle);
     // The callbacks live in the view, which the handle owns, so they never outlive it.
+    if (auto* fixture = std::getenv("ELARIS_TEST_MICROPHONE_DENIED"); fixture && std::string_view(fixture) == "1") {
+        using Authorization = WebView::MicrophoneAuthorization;
+        handle->view->set_microphone_authorization_for_testing(Authorization::Denied, Authorization::Denied, false);
+    }
     install_form_pickers(*handle);
+    handle->view->on_request_permission = [handle](auto const& request, auto reply) {
+        if (request.is_file || request.top_level_origin.is_opaque() || !handle->bridge->callback) {
+            reply(Web::Permissions::PromptOutcome::Cancelled);
+            return;
+        }
+        auto id = request.document_id.value_or(handle->view->traversable().active_document().id());
+        auto* document = active_permission_document(*handle, id);
+        if (!document) {
+            reply(Web::Permissions::PromptOutcome::Cancelled);
+            return;
+        }
+        auto origin = document->origin().serialize().to_byte_string();
+        auto generation =
+            handle->view->session().permission_manager->decision_generation(request.name, request.top_level_origin);
+        handle->permissions.push_back(
+            {++handle->next_request, id, request, generation, AK::move(reply), origin.characters()});
+        if (handle->permissions.size() == 1)
+            emit_permission_prompt(*handle);
+    };
+    handle->view->on_cancel_permission_prompt = [handle](auto const& request) {
+        auto& permissions = handle->permissions;
+        if (permissions.empty())
+            return;
+        auto first = permissions.front().id;
+        std::erase_if(permissions, [&](auto const& pending) { return pending.request.is_same_request_as(request); });
+        if (permissions.empty() || permissions.front().id != first)
+            emit_permission_prompt(*handle);
+    };
+    handle->view->on_tab_indicator_change = [handle](WebView::TabIndicator indicator, bool visible) {
+        switch (indicator) {
+        case WebView::TabIndicator::UsingLocation:
+            emit(handle, ELARIS_LADYBIRD_PERMISSION_USE, "location", visible);
+            break;
+        case WebView::TabIndicator::UsingMicrophone:
+            emit(handle, ELARIS_LADYBIRD_PERMISSION_USE, "microphone", visible);
+            break;
+        case WebView::TabIndicator::PlayingAudio:
+            break;
+        }
+    };
+    handle->view->on_new_web_view = [handle](auto activate, auto const&, auto& traversable) -> String {
+        // The popup gets Ladybird's actual traversable, so window.opener and the returned WindowProxy
+        // continue to work. A pending popup has no host view id until the tab strip adopts it.
+        if (!handle->id || !handle->bridge->callback)
+            return {};
+        ElarisLadybirdView* child{};
+        if (create_view(handle->bridge, 0, handle->view->is_private(), &child, &traversable) != 0)
+            return {};
+        child->popup_source = handle;
+        child->popup_request = ++handle->next_request;
+        ElarisLadybirdEvent event{};
+        event.kind = ELARIS_LADYBIRD_POPUP;
+        event.view_id = handle->id;
+        event.request_id = child->popup_request;
+        event.value = activate == Web::HTML::ActivateTab::Yes;
+        handle->bridge->callback(handle->bridge->context, &event);
+        return child->view->handle();
+    };
+    if (popup) {
+        handle->view->on_close = [handle] {
+            handle->popup_closed = true;
+            cancel_permissions(*handle);
+            emit(handle, ELARIS_LADYBIRD_POPUP_CLOSED);
+        };
+    }
+    handle->view->on_fullscreen_window = [handle] { set_web_fullscreen(*handle, true); };
+    handle->view->on_exit_fullscreen_window = [handle] { set_web_fullscreen(*handle, false); };
     handle->view->on_request_alert = [handle](auto const& message) {
         show_page_dialog(*handle, ELARIS_LADYBIRD_DIALOG_ALERT, to_utf8(message));
     };
@@ -714,8 +1076,8 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
     };
     handle->view->on_request_before_unload = [handle](auto const& source, auto complete) {
         show_page_dialog(*handle, ELARIS_LADYBIRD_DIALOG_BEFORE_UNLOAD,
-                         {reinterpret_cast<char const*>(source.bytes().data()), source.bytes().size()},
-                         {}, AK::move(complete));
+                         {reinterpret_cast<char const*>(source.bytes().data()), source.bytes().size()}, {},
+                         AK::move(complete));
     };
     handle->view->on_request_set_prompt_text = [handle](auto const& text) {
         if (handle->dialog.kind == ELARIS_LADYBIRD_DIALOG_PROMPT) {
@@ -760,6 +1122,7 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
                  (view.can_navigate_forward() ? ELARIS_LADYBIRD_HISTORY_FORWARD : 0));
     };
     handle->view->on_top_level_navigation_commit = [handle] {
+        set_web_fullscreen(*handle, false);
         if (handle->view->zoom_level() != handle->page_zoom)
             handle->view->set_zoom(handle->page_zoom);
         cancel_form_picker(*handle, true);
@@ -768,6 +1131,10 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
             emit(handle, ELARIS_LADYBIRD_LOAD_ERROR, "This page could not be loaded.");
     };
     handle->view->on_web_content_crashed = [handle](auto) {
+        set_web_fullscreen(*handle, false);
+        cancel_permissions(*handle);
+        emit(handle, ELARIS_LADYBIRD_PERMISSION_USE, "location", false);
+        emit(handle, ELARIS_LADYBIRD_PERMISSION_USE, "microphone", false);
         cancel_form_picker(*handle, false);
         handle->dialog = {};
         emit_page_dialog(*handle);
@@ -843,6 +1210,39 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
     return succeed();
 }
 
+extern "C" int32_t elaris_ladybird_adopt_popup(ElarisLadybird* bridge, uint64_t source, uint64_t request_id,
+                                               uint64_t id, ElarisLadybirdView** out_view) {
+    if (!bridge || !on_owner_thread(bridge) || !out_view || !id)
+        return fail("invalid popup adoption");
+    *out_view = nullptr;
+    auto entry = std::find_if(bridge->views.begin(), bridge->views.end(), [&](auto const* candidate) {
+        return candidate->popup_source && candidate->popup_source->id == source &&
+               candidate->popup_request == request_id;
+    });
+    if (entry == bridge->views.end())
+        return succeed();
+    auto* popup = *entry;
+    if (popup->popup_closed) {
+        elaris_ladybird_destroy_view(popup);
+        return succeed();
+    }
+    popup->popup_source = nullptr;
+    popup->id = id;
+    auto& view = *popup->view;
+    emit(popup, ELARIS_LADYBIRD_NAVIGATION_COMMITTED, to_utf8(view.url()));
+    emit(popup, ELARIS_LADYBIRD_TITLE, to_utf8(view.title()));
+    emit(popup, ELARIS_LADYBIRD_LOADING, {}, view.is_loading());
+    emit(popup, ELARIS_LADYBIRD_FRAME);
+    emit_permission_prompt(*popup);
+    for (auto const& [indicator, key] : {std::pair{WebView::TabIndicator::UsingLocation, "location"},
+                                         std::pair{WebView::TabIndicator::UsingMicrophone, "microphone"}})
+        emit(popup, ELARIS_LADYBIRD_PERMISSION_USE, key, view.tab_indicator_visible(indicator));
+    if (popup->web_fullscreen)
+        emit(popup, ELARIS_LADYBIRD_WEB_FULLSCREEN, {}, 1);
+    *out_view = popup;
+    return succeed();
+}
+
 extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t view_id,
                                                ElarisLadybirdView** out_view) {
     return create_view(bridge, view_id, WebView::IsPrivate::No, out_view);
@@ -864,8 +1264,10 @@ extern "C" int32_t elaris_ladybird_test_reset_private_session(ElarisLadybird* br
     s_application->reset_private_browsing_session();
     return succeed();
 }
-extern "C" int32_t elaris_ladybird_test_start_private_download(ElarisLadybirdView* view, char const* url, char const* filename) {
-    if (!view || !url || !filename || !on_owner_thread(view->bridge) || view->view->is_private() != WebView::IsPrivate::Yes)
+extern "C" int32_t elaris_ladybird_test_start_private_download(ElarisLadybirdView* view, char const* url,
+                                                               char const* filename) {
+    if (!view || !url || !filename || !on_owner_thread(view->bridge) ||
+        view->view->is_private() != WebView::IsPrivate::Yes)
         return fail("private download probe requires a private view");
     auto parsed = URL::Parser::basic_parse(AK::StringView(url, std::char_traits<char>::length(url)));
     if (!parsed.has_value())
@@ -982,7 +1384,7 @@ extern "C" int32_t elaris_ladybird_find_previous(ElarisLadybirdView* handle, uin
 }
 
 extern "C" int32_t elaris_ladybird_reply_to_dialog(ElarisLadybirdView* handle, uint64_t request_id, int32_t accepted,
-                                                       uint8_t const* response, size_t response_size) {
+                                                   uint8_t const* response, size_t response_size) {
     if (!handle || !on_owner_thread(handle->bridge) || (response_size && !response))
         return fail("invalid page dialog response");
     if (!request_id || handle->dialog.id != request_id)
@@ -996,7 +1398,7 @@ extern "C" int32_t elaris_ladybird_reply_to_dialog(ElarisLadybirdView* handle, u
 }
 
 extern "C" int32_t elaris_ladybird_reply_to_picker(ElarisLadybirdView* handle, uint64_t request_id,
-                                                       uint8_t const* response, size_t response_size) {
+                                                   uint8_t const* response, size_t response_size) {
     if (!handle || !on_owner_thread(handle->bridge) || (!response && response_size))
         return fail("invalid form picker response");
     if (!request_id || handle->picker_id != request_id)
@@ -1035,7 +1437,8 @@ extern "C" int32_t elaris_ladybird_reply_to_picker(ElarisLadybirdView* handle, u
         break;
     case FormPicker::Select: {
         auto option = value.to_number<uint32_t>();
-        if (option.has_value() && std::find(handle->picker_options.begin(), handle->picker_options.end(), *option) == handle->picker_options.end())
+        if (option.has_value() && std::find(handle->picker_options.begin(), handle->picker_options.end(), *option) ==
+                                      handle->picker_options.end())
             return fail("invalid select option");
         handle->view->select_dropdown_closed(option);
         break;
@@ -1520,6 +1923,7 @@ extern "C" int32_t elaris_ladybird_pump(ElarisLadybird* bridge) {
     if (!on_owner_thread(bridge))
         return fail("event loop must be pumped on the initialization thread");
     s_event_loop->pump(Core::EventLoop::WaitMode::PollForEvents);
+    discard_stale_permissions(*bridge);
     return succeed();
 }
 
@@ -1535,6 +1939,7 @@ extern "C" int32_t elaris_ladybird_wait(ElarisLadybird* bridge, int32_t timeout_
         timer->start();
     }
     s_event_loop->pump(Core::EventLoop::WaitMode::WaitForEvents);
+    discard_stale_permissions(*bridge);
     if (timer)
         timer->stop();
     return succeed();
@@ -1573,11 +1978,22 @@ extern "C" void elaris_ladybird_destroy_view(ElarisLadybirdView* handle) {
     }
     // The host has already committed to removing this view. Keep its page alive just long
     // enough to run Ladybird's close path without raising a dialog for a removed tab.
-    auto close = handle->view->prepare_for_close_without_prompting();
+    cancel_permissions(*handle);
     auto& views = handle->bridge->views;
+    auto pending_child = [&] {
+        return std::find_if(views.begin(), views.end(),
+                            [handle](auto const* view) { return view->popup_source == handle; });
+    };
+    while (auto* child = [&]() -> ElarisLadybirdView* {
+        auto it = pending_child();
+        return it == views.end() ? nullptr : *it;
+    }())
+        elaris_ladybird_destroy_view(child);
+    auto close = handle->popup_closed ? AK::Function<void()>{} : handle->view->prepare_for_close_without_prompting();
     views.erase(std::remove(views.begin(), views.end(), handle), views.end());
     delete handle;
-    close();
+    if (close)
+        close();
 }
 
 extern "C" void elaris_ladybird_destroy(ElarisLadybird* bridge) {

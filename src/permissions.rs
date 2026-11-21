@@ -63,6 +63,15 @@ pub(crate) enum PermissionState {
 }
 
 impl PermissionState {
+    #[cfg(feature = "ladybird-bridge")]
+    pub(crate) fn choice(self) -> Option<bool> {
+        match self {
+            Self::Ask => None,
+            Self::Allow => Some(true),
+            Self::Block => Some(false),
+        }
+    }
+
     pub(crate) fn key(self) -> &'static str {
         match self {
             Self::Ask => "ask",
@@ -93,9 +102,26 @@ pub(crate) enum PermissionDecision {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct PermissionStore {
     sites: BTreeMap<String, BTreeMap<PermissionKind, PermissionState>>,
+    blocked_by_default: std::collections::BTreeSet<PermissionKind>,
 }
 
 impl PermissionStore {
+    pub(crate) fn default_blocked(&self, kind: PermissionKind) -> bool {
+        self.blocked_by_default.contains(&kind)
+    }
+
+    pub(crate) fn block_by_default(&mut self, kind: PermissionKind) {
+        self.blocked_by_default.insert(kind);
+    }
+
+    pub(crate) fn entries(&self) -> impl Iterator<Item = (&str, PermissionKind, PermissionState)> {
+        self.sites.iter().flat_map(|(origin, permissions)| {
+            permissions
+                .iter()
+                .map(move |(&kind, &state)| (origin.as_str(), kind, state))
+        })
+    }
+
     pub(crate) fn origin(url: &str) -> Option<String> {
         let (scheme, rest) = url.trim().split_once("://")?;
         let scheme = scheme.to_ascii_lowercase();

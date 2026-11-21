@@ -80,6 +80,10 @@ ladybird-bridge = []
 name = "ladybird_smoke"
 required-features = ["ladybird-bridge"]
 
+[[example]]
+name = "ladybird_permissions"
+required-features = ["ladybird-bridge"]
+
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
 

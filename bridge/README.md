@@ -64,3 +64,51 @@ Automatic runs can be added later by defining `push` and `pull_request` path fil
 - AppleClang needs one narrow warning exception for the statement-expression expansion inside Ladybird's `WEB_VIEW_APPLICATION` macro. No other Elaris C++ warnings were suppressed.
 
 The bridge copies frames out as RGBA and leaves showing them to the host. A host can give Ladybird a thread of its own: `elaris_ladybird_wait` blocks that thread until Ladybird has work, and `elaris_ladybird_wake` interrupts it from any other thread. Elaris does this so the UI thread never waits on Ladybird; see `docs/performance/webview.md`.
+
+## Website permission verification
+
+Serve the fixture on loopback so Ladybird considers it a secure context.
+
+```sh
+python3 -m http.server 41729 --bind 127.0.0.1 --directory bridge/tests
+```
+
+In a second terminal, set the bridge library paths as above and run:
+
+```sh
+ELARIS_TEST_LOCATION=1 cargo run --locked --features ladybird-bridge \
+  --example ladybird_permissions -- "$PWD/vendor/ladybird/Base/res" \
+  "$(mktemp -d)" http://127.0.0.1:41729/permissions.html
+```
+
+The fixture selects a deterministic position source for the process. To check the
+browser UI with an isolated profile, launch with `ELARIS_TEST_LOCATION=1`,
+`ELARIS_DATA_DIR` set to a new absolute directory, and
+`./elaris run http://127.0.0.1:41729/permissions.html`. Request location, allow
+it, and repeat the request. Reset Location in site controls, request it again,
+block it, and repeat the request. Reset again, request location, then follow
+**Navigate away** while the prompt is open. The prompt should disappear and a
+fresh request should ask again.
+
+The microphone and notifications buttons use the real Web APIs. For a
+microphone OS-denial check on macOS, deny Elaris access in System Settings,
+reset the site's microphone override, and request it. Elaris should show a
+system denial notice and keep the site override unset. Then set the site
+override to Block and request again to check browser denial. Enable microphone
+access in the system and allow the site to check the activity indicator and
+**Stop microphone**. Notifications use Notification Center in the macOS app
+bundle and the desktop notification daemon on the Linux session bus.
+
+Defaults can be edited in Elaris's `config.toml` using `ask` or `block`.
+A saved site decision takes precedence over the browser default, and system
+authorization still applies.
+
+```toml
+[permission_defaults]
+location = "ask"
+microphone = "ask"
+notifications = "block"
+
+[permissions."https://example.com"]
+notifications = "allow"
+```

@@ -190,6 +190,7 @@ impl super::AppState {
         self.browser.set_default_zoom(self.settings.page_zoom);
         self.browser.split_view_limit = self.settings.split_view_limit;
         super::publish_settings(&self.settings);
+        self.sync_engine_permissions(&load.permissions);
         self.permission_store = load.permissions;
         super::publish_permissions(&self.permission_store);
         let download_directory = self.engine_download_directory();
@@ -199,10 +200,36 @@ impl super::AppState {
         self.configuration_issue = (!load.issues.is_empty()).then(|| load.issues.join("\n"));
     }
 
+    /// Sends the engine every site decision and default that differs in `next`.
+    fn sync_engine_permissions(&self, next: &PermissionStore) {
+        let current = &self.permission_store;
+        let changed_sites = current
+            .entries()
+            .chain(next.entries())
+            .filter(|&(origin, kind, _)| current.state(origin, kind) != next.state(origin, kind))
+            .map(|(origin, kind, _)| (origin, kind))
+            .collect::<std::collections::BTreeSet<_>>();
+        for (origin, kind) in changed_sites {
+            self.browser
+                .send_engine(crate::engine::Command::SetPermission(
+                    origin.to_owned(),
+                    kind,
+                    next.state(origin, kind),
+                ));
+        }
+        for kind in PermissionKind::ALL {
+            let blocked = next.default_blocked(kind);
+            if blocked != current.default_blocked(kind) {
+                self.browser
+                    .send_engine(crate::engine::Command::SetPermissionDefault(kind, blocked));
+            }
+        }
+    }
+
     pub(crate) fn current_permission_origin(&self) -> Option<String> {
         self.browser
             .active_tab()
-            .and_then(|tab| PermissionStore::origin(&tab.url))
+            .and_then(|tab| PermissionStore::origin(&tab.committed_url))
     }
 
     /// Returns the saved decision for a request; `Prompt` means the engine must ask the user.
@@ -222,6 +249,21 @@ impl super::AppState {
         let Some(origin) = self.current_permission_origin() else {
             return;
         };
+        self.browser
+            .send_engine(crate::engine::Command::SetPermission(
+                origin.clone(),
+                kind,
+                permission,
+            ));
+        self.save_permission_choice(origin, kind, permission);
+    }
+
+    pub(crate) fn save_permission_choice(
+        &mut self,
+        origin: String,
+        kind: PermissionKind,
+        permission: PermissionState,
+    ) {
         self.permission_store.set(&origin, kind, permission);
         super::publish_permissions(&self.permission_store);
         if let Some(storage) = &self.storage
@@ -238,6 +280,12 @@ impl super::AppState {
         self.permission_store.reset(&origin);
         super::publish_permissions(&self.permission_store);
         for kind in PermissionKind::ALL {
+            self.browser
+                .send_engine(crate::engine::Command::SetPermission(
+                    origin.clone(),
+                    kind,
+                    PermissionState::Ask,
+                ));
             if let Some(storage) = &self.storage
                 && let Err(error) =
                     storage.save_permission(origin.clone(), kind, PermissionState::Ask)

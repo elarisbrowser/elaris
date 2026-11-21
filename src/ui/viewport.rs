@@ -34,9 +34,17 @@ pub(crate) fn view(
     } else {
         theme::VIEWPORT_INSET
     };
+    let fullscreen = state.browser.fullscreen_tab().is_some();
+    let top_padding = if fullscreen { 0.0 } else { top_padding };
     let horizontal = state.horizontal_tabs();
-    let inset = theme::VIEWPORT_INSET;
-    let radius = if horizontal {
+    let inset = if fullscreen {
+        0.0
+    } else {
+        theme::VIEWPORT_INSET
+    };
+    let radius = if fullscreen {
+        0.0
+    } else if horizontal {
         theme::HORIZONTAL_VIEWPORT_RADIUS
     } else {
         theme::VIEWPORT_RADIUS
@@ -94,6 +102,9 @@ pub(crate) fn view(
         {
             // The surface stays on the tab's keyed container when the input region changes sides.
             pane = pane.pixels(&tab.surface.pixels);
+            if let Some(indicators) = super::permission_prompt::indicators(tab, theme) {
+                pane = pane.child(indicators);
+            }
         }
         pane = pane.child(child);
         if !horizontal
@@ -731,6 +742,9 @@ pub(crate) fn menu_edit(state: &mut AppState, edit: PageEdit, tx: &mut Tx) -> bo
 }
 
 pub(super) fn page_key(state: &mut AppState, key: &KeyEvent, tx: &mut Tx) -> bool {
+    if key.key == Key::Escape && state.browser.exit_web_fullscreen() {
+        return true;
+    }
     if key.key == Key::Escape && super::peek::dismiss(state, tx) {
         return true;
     }

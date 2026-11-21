@@ -14,6 +14,7 @@ pub(crate) mod internal;
 mod omnibox;
 mod page_dialog;
 pub(crate) mod peek;
+mod permission_prompt;
 mod sidebar;
 mod tab_preview;
 pub(crate) use sidebar::hover::{
@@ -66,6 +67,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     state.browser.note_dark(dark);
     let mut overlays = Vec::new();
 
+    let fullscreen = state.browser.fullscreen_tab().is_some();
     let horizontal = state.horizontal_tabs();
     #[cfg(target_os = "macos")]
     cx.set_titlebar(theme::native_titlebar(if horizontal {
@@ -92,7 +94,9 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
                 .fill(theme.window),
         );
     }
-    if horizontal {
+    if fullscreen {
+        window = window.child(viewport::view(state, &theme, &mut overlays, reduced_motion));
+    } else if horizontal {
         window = window
             .child(horizontal_tabs::view(
                 state,
@@ -176,6 +180,9 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     ));
     overlays.extend(tab_switcher::view(state, &theme, height, reduced_motion));
     site_permissions::view(state, cx, &theme, &mut overlays, reduced_motion);
+    if let Some(prompt) = permission_prompt::view(state, &theme, viewport::page_origin(state)) {
+        overlays.push(prompt);
+    }
     form_picker::view(state, &theme, &mut overlays, reduced_motion);
     page_dialog::view(state, &theme, &mut overlays);
     let (hover_enter, hover_exit) = if reduced_motion {

@@ -1,0 +1,65 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Permission test</title>
+<h1>Website permission test</h1>
+<p>Use Elaris site controls to reset the decision between cases.</p>
+<button id="location">Request location</button>
+<button id="microphone">Request microphone</button>
+<button id="stop" disabled>Stop microphone</button>
+<button id="notifications">Request notifications</button>
+<a href="?away">Navigate away</a>
+<pre id="result" aria-live="polite"></pre>
+<script>
+  const result = document.querySelector("#result");
+  function report(message) {
+    result.textContent = document.title = message;
+  }
+
+  function locationRequest() {
+    report("Location pending");
+    navigator.geolocation.getCurrentPosition(
+      () => report("Location granted"),
+      error => report("Location error " + error.code),
+      { timeout: 10000 }
+    );
+  }
+
+  document.querySelector("#location").onclick = locationRequest;
+  let stream;
+  const microphone = document.querySelector("#microphone");
+  const stop = document.querySelector("#stop");
+  microphone.onclick = async () => {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      microphone.disabled = true;
+      stop.disabled = false;
+      report("Microphone active");
+    } catch (error) {
+      report("Microphone error " + error.name);
+    }
+  };
+  stop.onclick = () => {
+    for (const track of stream.getTracks()) track.stop();
+    microphone.disabled = false;
+    stop.disabled = true;
+    report("Microphone stopped");
+  };
+  document.querySelector("#notifications").onclick = async () => {
+    const permission = await Notification.requestPermission();
+    report("Notifications " + permission);
+    if (permission === "granted") new Notification("Elaris permission test");
+  };
+
+  if (location.search === "?location") locationRequest();
+  if (location.search === "?microphone") microphone.onclick();
+  if (location.search === "?frame") {
+    const frame = document.createElement("iframe");
+    frame.src = "?location";
+    document.body.append(frame);
+    setTimeout(() => {
+      frame.remove();
+      report("Frame removed");
+    }, 1500);
+  }
+  if (location.search === "?away") report("Navigated away");
+</script>

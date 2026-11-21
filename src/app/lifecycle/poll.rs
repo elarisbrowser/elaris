@@ -39,6 +39,11 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     let configuration_changed = update_configuration(state, &polled);
     let shared_settings_changed = state.sync_shared_settings();
     let shared_permissions_changed = state.sync_shared_permissions();
+    for (origin, kind, permission) in std::mem::take(&mut polled.permission_choices) {
+        if state.permission_store.state(&origin, kind) == crate::permissions::PermissionState::Ask {
+            state.save_permission_choice(origin, kind, permission);
+        }
+    }
     crate::ui::horizontal_tabs::reveal_active(state, tx);
     record_history_updates(state, &polled);
     refresh_find_after_navigation(state, &polled);

@@ -1,0 +1,113 @@
+--- a/Libraries/LibWebView/NotificationBackendMacOS.mm
++++ b/Libraries/LibWebView/NotificationBackendMacOS.mm
+@@ -13,4 +13,6 @@
+
+ #import <Foundation/Foundation.h>
++#include <LibCore/EventLoop.h>
++
+ #import <UserNotifications/UserNotifications.h>
+
+@@ -18,4 +20,5 @@
+ - (instancetype)initWithBackend:(WebView::NotificationBackendMacOS*)backend;
+ - (void)detach;
++- (void)onBrowserThread:(Function<void()>)function;
+ @end
+
+@@ -31,13 +34,4 @@
+ {
+     return (__bridge LadybirdNotificationCenterDelegate*)bridge.delegate;
+-}
+-
+-// Every callback from the center arrives on a queue of its own; the browser's state is touched on the main thread only.
+-static void on_main_thread(Function<void()> function)
+-{
+-    __block auto held = move(function);
+-    dispatch_async(dispatch_get_main_queue(), ^{
+-        held();
+-    });
+ }
+
+@@ -97,13 +91,14 @@
+     m_authorization = Authorization::Pending;
+     m_waiting_for_authorization.append(move(then));
++    auto* delegate = delegate_of(*m_bridge);
+     [center_of(*m_bridge) requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound)
+                                         completionHandler:^(BOOL granted, NSError* error) {
+                                             if (!granted)
+                                                 dbgln("Notifications: The notification center denied authorization{}{}", error ? ": "sv : ""sv, error ? [[error localizedDescription] UTF8String] : "");
+-                                            on_main_thread([this, granted = static_cast<bool>(granted)] {
++                                            [delegate onBrowserThread:[this, granted = static_cast<bool>(granted)] {
+                                                 m_authorization = granted ? Authorization::Granted : Authorization::Denied;
+                                                 for (auto& waiting : exchange(m_waiting_for_authorization, {}))
+                                                     waiting(granted);
+-                                            });
++                                            }];
+                                         }];
+ }
+@@ -170,4 +165,5 @@
+
+         auto* request = [UNNotificationRequest requestWithIdentifier:ns_string(identifier) content:content trigger:nil];
++        auto* delegate = delegate_of(*m_bridge);
+         [center_of(*m_bridge) addNotificationRequest:request
+                                withCompletionHandler:^(NSError* error) {
+@@ -177,5 +173,5 @@
+                                    if (failed)
+                                        dbgln("Notifications: The notification center refused the request: {}", [[error localizedDescription] UTF8String]);
+-                                   on_main_thread([this, id = notification.id, failed] {
++                                   [delegate onBrowserThread:[this, id = notification.id, failed] {
+                                        if (failed) {
+                                            if (auto identifier = m_identifier_for_id.take(id); identifier.has_value())
+@@ -187,5 +183,5 @@
+                                        if (on_shown)
+                                            on_shown(id);
+-                                   });
++                                   }];
+                                }];
+     });
+@@ -240,10 +236,13 @@
+ {
+     WebView::NotificationBackendMacOS* m_backend;
++    RefPtr<Core::WeakEventLoopReference> m_browser_loop;
+ }
+
+ - (instancetype)initWithBackend:(WebView::NotificationBackendMacOS*)backend
+ {
+-    if ((self = [super init]))
++    if ((self = [super init])) {
+         m_backend = backend;
++        m_browser_loop = Core::EventLoop::current_weak();
++    }
+     return self;
+ }
+@@ -252,4 +251,16 @@
+ {
+     m_backend = nullptr;
++}
++
++// The embedding browser owns Ladybird on a dedicated thread.
++- (void)onBrowserThread:(Function<void()>)function
++{
++    if (auto loop = m_browser_loop->take(); loop.is_alive()) {
++        loop->deferred_invoke([self, function = move(function)] {
++            if (m_backend)
++                function();
++        });
++        loop->wake();
++    }
+ }
+
+@@ -268,12 +279,10 @@
+     auto identifier = MUST(String::from_utf8(StringView { [response.notification.request.identifier UTF8String], strlen([response.notification.request.identifier UTF8String]) }));
+     bool dismissed = [response.actionIdentifier isEqualToString:UNNotificationDismissActionIdentifier];
+-    WebView::on_main_thread([self, identifier, dismissed] {
+-        if (!m_backend)
+-            return;
++    [self onBrowserThread:[self, identifier, dismissed] {
+         if (dismissed)
+             m_backend->did_dismiss(identifier);
+         else
+             m_backend->did_activate(identifier);
+-    });
++    }];
+     completionHandler();
+ }

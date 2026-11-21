@@ -5,6 +5,7 @@
 
 use crate::engine::{FindResult, Surface, TabUpdate, Thumbnail};
 use crate::internal::InternalRoute;
+use crate::permissions::PermissionKind;
 use rune::Pixels;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -84,6 +85,9 @@ pub(crate) struct Tab {
     pub(crate) tooltip: String,
     pub(crate) page_cursor: rune::Cursor,
     pub(crate) page_dialog: Option<PageDialog>,
+    pub(crate) permission_prompt: Option<elaris::ladybird::PermissionPrompt>,
+    pub(crate) web_fullscreen: bool,
+    pub(crate) permissions_in_use: [bool; PermissionKind::ALL.len()],
     pub(crate) awaiting_close: bool,
     pub(crate) favicon: Option<Pixels>,
     pub(crate) favicon_data: Option<elaris::ladybird::Favicon>,
@@ -137,6 +141,9 @@ impl Tab {
             tooltip: String::new(),
             page_cursor: rune::Cursor::Default,
             page_dialog: None,
+            permission_prompt: None,
+            web_fullscreen: false,
+            permissions_in_use: [false; PermissionKind::ALL.len()],
             awaiting_close: false,
             favicon: None,
             favicon_data: None,
@@ -173,6 +180,9 @@ impl Tab {
             tooltip: String::new(),
             page_cursor: rune::Cursor::Default,
             page_dialog: None,
+            permission_prompt: None,
+            web_fullscreen: false,
+            permissions_in_use: [false; PermissionKind::ALL.len()],
             awaiting_close: false,
             favicon: None,
             favicon_data: None,
@@ -223,6 +233,11 @@ impl Tab {
                 self.find.apply_result(request_id, result);
             }
             TabUpdate::ImeCaret(rect) => self.ime_caret = rect,
+            TabUpdate::WebFullscreen(active) => self.web_fullscreen = active,
+            TabUpdate::PermissionPrompt(prompt) => self.permission_prompt = prompt,
+            TabUpdate::PermissionUse(kind, visible) => {
+                self.permissions_in_use[kind.index()] = visible
+            }
             TabUpdate::PageDialog(dialog) => {
                 self.page_dialog = dialog.map(|request| {
                     let mut response = rune::TextEdit::default();

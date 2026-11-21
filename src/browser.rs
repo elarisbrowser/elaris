@@ -73,6 +73,11 @@ impl std::error::Error for Error {}
 pub(crate) struct Polled {
     /// Some tab's state changed, so the interface needs building again.
     pub(crate) changed: bool,
+    pub(crate) permission_choices: Vec<(
+        String,
+        crate::permissions::PermissionKind,
+        crate::permissions::PermissionState,
+    )>,
     pub(crate) clipboard: Option<String>,
     pub(crate) close_decisions: Vec<(TabId, bool)>,
     pub(crate) form_pickers: Vec<(TabId, Option<(u64, elaris::ladybird::FormPicker)>)>,
@@ -161,6 +166,12 @@ impl Default for Browser {
 }
 
 impl Browser {
+    pub(crate) fn send_engine(&self, command: Command) {
+        if let Some(engine) = &self.engine {
+            engine.send(command);
+        }
+    }
+
     /// Gives the browser the engine that shows its tabs, opening a view for each.
     #[cfg(any(feature = "ladybird-bridge", test))]
     pub(crate) fn connect(&mut self, engine: Engine) {
@@ -198,9 +209,13 @@ impl Browser {
             tab.error = Some(error.clone());
             tab.awaiting_close = false;
             tab.page_dialog = None;
+            tab.permission_prompt = None;
+            tab.permissions_in_use.fill(false);
+            tab.web_fullscreen = false;
         }
         if let Some(peek) = &mut self.peek {
             peek.page.error = Some(error.clone());
+            peek.page.permission_prompt = None;
         }
         self.engine_error = Some(error);
     }
@@ -222,6 +237,18 @@ impl Browser {
                 rgba,
             },
         )));
+    }
+
+    pub(crate) fn fullscreen_tab(&self) -> Option<&Tab> {
+        self.active_tab().filter(|tab| tab.web_fullscreen)
+    }
+
+    pub(crate) fn exit_web_fullscreen(&self) -> bool {
+        if let Some(tab) = self.fullscreen_tab() {
+            self.send(tab.id(), ViewCommand::ExitWebFullscreen);
+            return true;
+        }
+        false
     }
 
     pub(crate) fn active_tab(&self) -> Option<&Tab> {
@@ -330,7 +357,7 @@ impl Browser {
     }
 
     pub(super) fn insert_tab(&mut self, url: String) -> TabId {
-        self.insert_tab_with_state(url, String::new(), false, TabSection::Regular)
+        self.insert_tab_with_state(url, String::new(), false, TabSection::Regular, None)
     }
 
     /// Restores a tab without starting a background page until it becomes active.
@@ -355,7 +382,7 @@ impl Browser {
             return Ok(self.insert_internal_tab_in_section(route, section));
         }
         let url = url_for_address(address).map_err(Error::Address)?;
-        Ok(self.insert_tab_with_state(url, title.to_owned(), deferred_load, section))
+        Ok(self.insert_tab_with_state(url, title.to_owned(), deferred_load, section, None))
     }
 
     fn insert_internal_tab(&mut self, route: InternalRoute) -> TabId {
@@ -386,15 +413,32 @@ impl Browser {
         TabId::next()
     }
 
+    pub(super) fn insert_popup(&mut self, source: TabId, request: u64, activate: bool) {
+        let tab = self.insert_tab_with_state(
+            "about:blank".into(),
+            String::new(),
+            false,
+            TabSection::Regular,
+            Some((source, request)),
+        );
+        if activate {
+            self.activate_tab(tab);
+        }
+    }
+
     fn insert_tab_with_state(
         &mut self,
         url: String,
         title: String,
         deferred_load: bool,
         section: TabSection,
+        popup: Option<(TabId, u64)>,
     ) -> TabId {
         let id = self.next_page_id();
         let mut tab = Tab::new(id, url);
+        if popup.is_some() {
+            tab.engine.pending_load = None;
+        }
         tab.section = section;
         tab.title = title;
         tab.engine.deferred_load = deferred_load;
@@ -402,7 +446,17 @@ impl Browser {
         if !tab.is_internal()
             && let Some(engine) = &self.engine
         {
-            engine.send(Command::Open(id, tab.surface.clone()));
+            let surface = tab.surface.clone();
+            if let Some((source, request)) = popup {
+                engine.send(Command::AdoptPopup {
+                    source,
+                    request,
+                    tab: id,
+                    surface,
+                });
+            } else {
+                engine.send(Command::Open(id, surface));
+            }
             let zoom = self.default_zoom;
             if zoom != 100 {
                 engine.send(Command::View(id, ViewCommand::SetZoom(zoom)));

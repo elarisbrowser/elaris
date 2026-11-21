@@ -143,6 +143,28 @@ unsafe extern "C" {
     fn elaris_ladybird_find(view: *mut RawView, query: *const c_char, request_id: u64) -> i32;
     fn elaris_ladybird_find_next(view: *mut RawView, request_id: u64) -> i32;
     fn elaris_ladybird_find_previous(view: *mut RawView, request_id: u64) -> i32;
+    fn elaris_ladybird_adopt_popup(
+        bridge: *mut RawBridge,
+        source: u64,
+        request_id: u64,
+        id: u64,
+        view: *mut *mut RawView,
+    ) -> i32;
+    fn elaris_ladybird_exit_web_fullscreen(view: *mut RawView) -> i32;
+    fn elaris_ladybird_reply_to_permission(view: *mut RawView, request_id: u64, choice: i32)
+    -> i32;
+    fn elaris_ladybird_set_permission_default(
+        bridge: *mut RawBridge,
+        key: *const c_char,
+        blocked: i32,
+    ) -> i32;
+    fn elaris_ladybird_set_permissions(bridge: *mut RawBridge, json: *const c_char) -> i32;
+    fn elaris_ladybird_set_permission(
+        bridge: *mut RawBridge,
+        origin: *const c_char,
+        key: *const c_char,
+        choice: i32,
+    ) -> i32;
     fn elaris_ladybird_reply_to_dialog(
         view: *mut RawView,
         request_id: u64,
@@ -267,6 +289,54 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
                     },
                 }))
             }
+            24 | 25 => {
+                let key = if raw.selection.is_null() {
+                    String::new()
+                } else {
+                    // SAFETY: The bridge lends this NUL-terminated string through callback return.
+                    unsafe { CStr::from_ptr(raw.selection) }
+                        .to_string_lossy()
+                        .into_owned()
+                };
+                // Elaris names Ladybird's geolocation permission "location".
+                let key = if key == "geolocation" {
+                    "location".into()
+                } else {
+                    key
+                };
+                if raw.kind == 24 {
+                    Event::PermissionPrompt((raw.value != 0).then_some(super::PermissionPrompt {
+                        request_id: raw.request_id,
+                        requesting_origin: if raw.destination.is_null() {
+                            text.clone()
+                        } else {
+                            // SAFETY: The bridge lends this NUL-terminated string through callback return.
+                            unsafe { CStr::from_ptr(raw.destination) }
+                                .to_string_lossy()
+                                .into_owned()
+                        },
+                        origin: text,
+                        key,
+                        os_denied: raw.value == 2,
+                    }))
+                } else {
+                    Event::PermissionSaved {
+                        origin: text,
+                        key,
+                        allowed: raw.value == 1,
+                    }
+                }
+            }
+            26 => Event::PermissionUse {
+                key: text,
+                visible: raw.value != 0,
+            },
+            27 => Event::WebFullscreen(raw.value != 0),
+            28 => Event::Popup {
+                request: raw.request_id,
+                activate: raw.value != 0,
+            },
+            29 => Event::PopupClosed,
             12 => {
                 let status = match raw.download_status {
                     1 | 2 => DownloadStatus::Downloading,
@@ -453,6 +523,33 @@ impl Ladybird {
         })
     }
 
+    /// Takes ownership of a popup opened by `source` and gives it the host's view id.
+    pub fn adopt_popup(
+        &mut self,
+        source: u64,
+        request_id: u64,
+        id: u64,
+        refresh_rate: f64,
+    ) -> Result<Option<WebView>, String> {
+        let mut raw = std::ptr::null_mut();
+        // SAFETY: The bridge is live on this thread and the output pointer is writable.
+        status_result(unsafe {
+            elaris_ladybird_adopt_popup(self.owner.raw.as_ptr(), source, request_id, id, &mut raw)
+        })?;
+        let Some(raw) = NonNull::new(raw) else {
+            return Ok(None);
+        };
+        let view = WebView {
+            raw,
+            _owner: Rc::clone(&self.owner),
+        };
+        // SAFETY: The adopted view is live on this thread.
+        status_result(unsafe {
+            elaris_ladybird_set_display_refresh_rate(view.raw.as_ptr(), refresh_rate)
+        })?;
+        Ok(Some(view))
+    }
+
     pub fn pump(&mut self) -> Result<(), String> {
         self.owner.pump()
     }
@@ -482,6 +579,49 @@ impl Ladybird {
         // SAFETY: The bridge is live on its owner thread and the path is borrowed only for this call.
         status_result(unsafe {
             elaris_ladybird_set_download_directory(self.owner.raw.as_ptr(), directory.as_ptr())
+        })
+    }
+
+    /// Replaces the ordinary permission decisions with a serialized list of origin, key and choice rows.
+    pub fn set_permissions(&mut self, rows: &[(&str, &str, i32)]) -> Result<(), String> {
+        let json = serde_json::to_string(rows).map_err(|error| error.to_string())?;
+        let json = CString::new(json).map_err(|error| error.to_string())?;
+        // SAFETY: The bridge is live on the owner thread and borrows the string for this call.
+        status_result(unsafe {
+            elaris_ladybird_set_permissions(self.owner.raw.as_ptr(), json.as_ptr())
+        })
+    }
+
+    /// Sets whether sites without a decision are blocked by default.
+    pub fn set_permission_default(&mut self, key: &str, blocked: bool) -> Result<(), String> {
+        let key = CString::new(key).map_err(|error| error.to_string())?;
+        // SAFETY: The bridge is live on the owner thread and borrows the key for this call.
+        status_result(unsafe {
+            elaris_ladybird_set_permission_default(
+                self.owner.raw.as_ptr(),
+                key.as_ptr(),
+                i32::from(blocked),
+            )
+        })
+    }
+
+    /// Updates a site override. An empty choice resets it.
+    pub fn set_permission(
+        &mut self,
+        origin: &str,
+        key: &str,
+        choice: Option<bool>,
+    ) -> Result<(), String> {
+        let origin = CString::new(origin).map_err(|error| error.to_string())?;
+        let key = CString::new(key).map_err(|error| error.to_string())?;
+        // SAFETY: The bridge is live on the owner thread and borrows both strings for this call.
+        status_result(unsafe {
+            elaris_ladybird_set_permission(
+                self.owner.raw.as_ptr(),
+                origin.as_ptr(),
+                key.as_ptr(),
+                permission_choice(choice),
+            )
         })
     }
 
@@ -595,7 +735,28 @@ impl WebView {
         status_result(unsafe { elaris_ladybird_find_previous(self.raw.as_ptr(), request_id) })
     }
 
-    /// Clears the active match and all highlights.
+    /// Asks the active document to exit element fullscreen.
+    pub fn exit_web_fullscreen(&mut self) -> Result<(), String> {
+        // SAFETY: The view is live on its owner thread.
+        status_result(unsafe { elaris_ladybird_exit_web_fullscreen(self.raw.as_ptr()) })
+    }
+
+    /// Replies to the active permission prompt if its document still owns it.
+    pub fn reply_to_permission(
+        &mut self,
+        request_id: u64,
+        choice: Option<bool>,
+    ) -> Result<(), String> {
+        // SAFETY: The view is live on its owner thread.
+        status_result(unsafe {
+            elaris_ladybird_reply_to_permission(
+                self.raw.as_ptr(),
+                request_id,
+                permission_choice(choice),
+            )
+        })
+    }
+
     /// Replies to the requested page dialog if its document still owns it.
     pub fn reply_to_dialog(
         &mut self,
@@ -876,6 +1037,14 @@ fn last_error() -> String {
         unsafe { CStr::from_ptr(error) }
             .to_string_lossy()
             .into_owned()
+    }
+}
+
+fn permission_choice(choice: Option<bool>) -> i32 {
+    match choice {
+        None => 0,
+        Some(true) => 1,
+        Some(false) => 2,
     }
 }
 

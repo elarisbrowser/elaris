@@ -48,3 +48,46 @@
      auto open_in_background = modifiers == Web::UIEvents::Mod_PlatformCtrl;
      auto open_in_foreground = modifiers == (Web::UIEvents::Mod_PlatformCtrl | Web::UIEvents::Mod_Shift);
      if (open_in_background || open_in_foreground || target == "_blank"sv) {
+--- a/Libraries/LibWebView/ViewImplementation.h
++++ b/Libraries/LibWebView/ViewImplementation.h
+@@ -113,10 +113,11 @@
+     bool is_file { false };
+     bool show_os_hint { false };
+     PermissionPromptKind kind { PermissionPromptKind::Question };
++    Optional<Web::HTML::CrossProcessId> document_id {};
+
+     bool is_same_request_as(PermissionPromptRequest const& other) const
+     {
+-        return name == other.name && kind == other.kind && is_file == other.is_file && top_level_origin.is_same_origin(other.top_level_origin);
++        return name == other.name && kind == other.kind && is_file == other.is_file && document_id == other.document_id && top_level_origin.is_same_origin(other.top_level_origin);
+     }
+ };
+
+--- a/Libraries/LibWebView/WebContentPage.cpp
++++ b/Libraries/LibWebView/WebContentPage.cpp
+@@ -1806,6 +1806,16 @@
+     }
+
+     auto deny = [&] { async_permission_request_completed(request_id, Web::Permissions::EffectiveState::Denied); };
++    bool document_is_active = false;
++    traversable().for_each_in_inclusive_subtree([&](CanonicalNavigable const& navigable) {
++        auto const& active = navigable.active_document();
++        if (active.id() != document_id || active.host() != this)
++            return IterationDecision::Continue;
++        document_is_active = true;
++        return IterationDecision::Break;
++    });
++    if (!document_is_active)
++        return deny();
+
+     view().did_request_permission({}, *permission_name);
+
+@@ -1885,7 +1895,7 @@
+         }
+         VERIFY_NOT_REACHED();
+     }();
+-    PermissionPromptRequest request { *permission_name, *top_level_origin, is_file, show_os_hint };
++    PermissionPromptRequest request { *permission_name, *top_level_origin, is_file, show_os_hint, PermissionPromptKind::Question, document_id };
+
+     view().request_permission_prompt(move(request), [page = NonnullRefPtr(*this), request_id, document_id, permission_name = *permission_name, top_level_origin = *top_level_origin, is_file, generation_when_asked](Web::Permissions::PromptOutcome outcome) {
+         if (!page->is_open())

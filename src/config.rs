@@ -160,6 +160,21 @@ pub(crate) fn parse(contents: &str) -> Result<ConfigLoad, String> {
 
 fn parse_permissions(document: &DocumentMut, issues: &mut Vec<String>) -> PermissionStore {
     let mut store = PermissionStore::default();
+    if let Some(item) = document.get("permission_defaults") {
+        if let Some(table) = item.as_table() {
+            for (key, value) in table {
+                match (PermissionKind::from_key(key), value.as_str()) {
+                    (Some(kind), Some("block")) if kind != PermissionKind::Camera => {
+                        store.block_by_default(kind)
+                    }
+                    (Some(kind), Some("ask")) if kind != PermissionKind::Camera => {}
+                    _ => issues.push(format!("Ignoring invalid permission default {key}")),
+                }
+            }
+        } else {
+            issues.push("[permission_defaults] must be a TOML table".to_owned());
+        }
+    }
     let Some(item) = document.get("permissions") else {
         return store;
     };
@@ -546,6 +561,27 @@ mod tests {
         let loaded = load_or_create(&path).expect("load cleared permission overrides");
         assert_eq!(loaded.permissions, PermissionStore::default());
         fs::remove_file(path).expect("remove permission test config");
+    }
+
+    #[test]
+    fn permission_defaults_block_kinds_and_keep_site_exceptions() {
+        let load = parse(
+            "[permission_defaults]\nlocation = \"ask\"\nnotifications = \"block\"\ncamera = \"block\"\n\
+             [permissions.\"https://example.com\"]\nnotifications = \"allow\"\n",
+        )
+        .expect("parse permission defaults");
+        assert!(
+            load.permissions
+                .default_blocked(PermissionKind::Notifications)
+        );
+        assert!(!load.permissions.default_blocked(PermissionKind::Location));
+        assert!(!load.permissions.default_blocked(PermissionKind::Camera));
+        assert_eq!(
+            load.permissions
+                .state("https://example.com", PermissionKind::Notifications),
+            PermissionState::Allow
+        );
+        assert_eq!(load.issues.len(), 1);
     }
 
     #[test]

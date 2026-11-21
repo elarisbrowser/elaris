@@ -106,7 +106,27 @@ def _configure_bridge_environment(bridge_dir: str) -> None:
     os.environ[loader_variable] = os.pathsep.join(directories)
 
 
+def _macos_browser_bundle(executable: Path) -> Path:
+    contents = ROOT / "build" / "Elaris.app" / "Contents"
+    bundled_executable = contents / "MacOS" / executable.name
+    bundled_executable.parent.mkdir(parents=True, exist_ok=True)
+    for source, destination in (
+        (ROOT / "assets" / "Info.plist", contents / "Info.plist"),
+        (executable, bundled_executable),
+    ):
+        if not destination.exists() or destination.stat().st_mtime_ns != source.stat().st_mtime_ns:
+            shutil.copy2(source, destination)
+    return bundled_executable
+
+
 def launch(args: argparse.Namespace) -> None:
+    if sys.platform == "darwin" and not args.ui:
+        if not _run_artifacts_are_current(ui_only=False):
+            build(args)
+        _configure_bridge_environment(bridge_lib_dir())
+        executable = _macos_browser_bundle(ROOT / "target" / "debug" / "elaris")
+        run(str(executable), *([args.url] if args.url else []), *args.rune_args)
+        return
     if _run_artifacts_are_current(args.ui):
         executable = ROOT / "target" / "debug" / "elaris"
         command = [str(executable)]

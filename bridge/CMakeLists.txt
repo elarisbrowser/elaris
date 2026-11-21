@@ -8,8 +8,10 @@ include("${ELARIS_BRIDGE_DIR}/Peek.cmake")
 function(elaris_add_ladybird_bridge)
     elaris_patch_ladybird(peek
         Libraries/LibWeb/DOM/Element.cpp
-        Libraries/LibWebView/WebContentPage.cpp)
+        Libraries/LibWebView/WebContentPage.cpp
+        Libraries/LibWebView/ViewImplementation.h)
     elaris_patch_ladybird(color-picker-cancel Libraries/LibWeb/HTML/HTMLInputElement.cpp)
+    elaris_patch_ladybird(permission-defaults Libraries/LibWebView/PermissionManager.cpp)
     elaris_patch_ladybird(file-picker-document Libraries/LibWeb/Page/Page.cpp)
     target_include_directories(LibWebView PRIVATE "${ELARIS_BRIDGE_DIR}/src")
     elaris_patch_ladybird(private-request-servers
@@ -20,6 +22,13 @@ function(elaris_add_ladybird_bridge)
         # The installed vcpkg config incorrectly publishes `//include/harfbuzz`.
         set_property(TARGET harfbuzz PROPERTY INTERFACE_INCLUDE_DIRECTORIES
             "${ELARIS_VCPKG_PREFIX}/include/harfbuzz")
+    endif()
+
+    if(APPLE)
+        elaris_patch_ladybird(notification-owner-thread Libraries/LibWebView/NotificationBackendMacOS.mm)
+        set_source_files_properties(
+            "${CMAKE_BINARY_DIR}/elaris-notification-owner-thread/compiled/Libraries/LibWebView/NotificationBackendMacOS.mm"
+            TARGET_DIRECTORY LibWebView PROPERTIES COMPILE_FLAGS "-fobjc-arc")
     endif()
 
     if(APPLE AND ELARIS_VCPKG_PREFIX)
@@ -33,6 +42,12 @@ function(elaris_add_ladybird_bridge)
     endif()
 
     add_library(elaris_ladybird SHARED "${ELARIS_BRIDGE_DIR}/src/bridge.cpp")
+    if(APPLE)
+        target_sources(elaris_ladybird PRIVATE "${LADYBIRD_SOURCE_DIR}/UI/Qt/MicrophoneAuthorizerMacOS.mm")
+        set_source_files_properties("${LADYBIRD_SOURCE_DIR}/UI/Qt/MicrophoneAuthorizerMacOS.mm"
+            PROPERTIES COMPILE_FLAGS "-fobjc-arc")
+        target_link_libraries(elaris_ladybird PRIVATE "-framework AVFoundation" "-framework CoreServices")
+    endif()
     target_compile_features(elaris_ladybird PRIVATE cxx_std_20)
     target_include_directories(elaris_ladybird PUBLIC "${ELARIS_BRIDGE_DIR}/include")
     target_compile_definitions(elaris_ladybird PRIVATE
@@ -42,8 +57,8 @@ function(elaris_add_ladybird_bridge)
         target_link_options(elaris_ladybird PRIVATE "-Wl,-rpath,${ELARIS_VCPKG_PREFIX}/lib")
     endif()
     get_target_property(patched_headers LibWebView ELARIS_PATCHED_INCLUDE_DIRS)
+    target_include_directories(elaris_ladybird SYSTEM BEFORE PRIVATE ${patched_headers})
     target_include_directories(elaris_ladybird SYSTEM PRIVATE
-        ${patched_headers}
         "${LADYBIRD_SOURCE_DIR}"
         "${LADYBIRD_SOURCE_DIR}/Libraries"
         "${LADYBIRD_SOURCE_DIR}/Services"

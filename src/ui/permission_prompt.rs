@@ -1,0 +1,113 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
+use rune::tok::{space, type_};
+use rune::{El, col, row, text};
+use rune_kit::{Button, ButtonVariant};
+
+use crate::app::AppState;
+use crate::engine::ViewCommand;
+use crate::permissions::PermissionKind;
+use crate::ui::theme::{self, Theme};
+
+pub(super) fn view(state: &AppState, theme: &Theme, origin: [f32; 2]) -> Option<El> {
+    let tab = state
+        .browser
+        .peek
+        .as_ref()
+        .map(|peek| &peek.page)
+        .or_else(|| state.browser.active_tab())?;
+    let prompt = tab.permission_prompt.as_ref()?;
+    let kind = PermissionKind::from_key(&prompt.key)?;
+    let id = tab.id();
+    let request_id = prompt.request_id;
+    let answer = move |state: &mut AppState, choice| {
+        state
+            .browser
+            .send(id, ViewCommand::ReplyToPermission { request_id, choice });
+    };
+    let kit = theme.kit(theme.overlay_panel);
+    let mut actions = row().w_full().justify_end().gap(space::S2);
+    let title = if prompt.os_denied {
+        actions = actions.child(
+            Button::new("OK")
+                .on_press(move |state| answer(state, None))
+                .build(&kit),
+        );
+        format!("System settings block {}", kind.label().to_lowercase())
+    } else {
+        actions = actions
+            .child(
+                Button::new("Block")
+                    .on_press(move |state| answer(state, Some(false)))
+                    .build(&kit),
+            )
+            .child(
+                Button::new("Allow")
+                    .variant(ButtonVariant::Submit)
+                    .on_press(move |state| answer(state, Some(true)))
+                    .build(&kit),
+            );
+        format!("Allow access to {}?", kind.label().to_lowercase())
+    };
+    let site = if prompt.requesting_origin == prompt.origin {
+        prompt.origin.clone()
+    } else {
+        format!("{} embedded on {}", prompt.requesting_origin, prompt.origin)
+    };
+    Some(
+        col()
+            .key("website-permission")
+            .absolute(origin[0] + theme::FIND_INSET, origin[1] + theme::FIND_INSET)
+            .max_w(theme::FIND_WIDTH)
+            .px(space::S3)
+            .py(space::S3)
+            .gap(space::S2)
+            .radius(theme::FIND_RADIUS)
+            .fill(theme.overlay_panel)
+            .border(theme::OMNIBOX_BORDER_WIDTH, theme.overlay_border)
+            .role("group")
+            .label("Website permission")
+            .child(text(title).font(type_::BODY).color(theme.text).wrap())
+            .child(text(site).font(type_::LABEL).color(theme.text_muted).wrap())
+            .child(actions),
+    )
+}
+
+pub(super) fn indicators(tab: &crate::tab::Tab, theme: &Theme) -> Option<El> {
+    let mut indicators = row().gap(space::S2);
+    let mut visible = false;
+    for (kind, symbol, label) in [
+        (
+            PermissionKind::Microphone,
+            &super::icons::MICROPHONE,
+            "Microphone in use",
+        ),
+        (
+            PermissionKind::Location,
+            &super::icons::LOCATION,
+            "Location in use",
+        ),
+    ] {
+        if tab.permissions_in_use[kind.index()] {
+            visible = true;
+            indicators = indicators.child(
+                row()
+                    .center_y()
+                    .gap(space::S1)
+                    .label(label)
+                    .child(rune::icon(symbol, theme::ICON).color(theme.text))
+                    .child(text(label).font(type_::LABEL).color(theme.text)),
+            );
+        }
+    }
+    visible.then(|| {
+        indicators
+            .key("site-activity")
+            .absolute(theme::FIND_INSET, theme::FIND_INSET)
+            .px(space::S2)
+            .py(space::S1)
+            .radius(theme::FIND_RADIUS)
+            .fill(theme.overlay_panel)
+            .border(theme::OMNIBOX_BORDER_WIDTH, theme.overlay_border)
+    })
+}

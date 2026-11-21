@@ -113,6 +113,12 @@ impl fmt::Debug for Surface {
 pub(crate) enum Command {
     /// Creates the tab's view, which shows its frames in the surface.
     Open(TabId, Surface),
+    AdoptPopup {
+        source: TabId,
+        request: u64,
+        tab: TabId,
+        surface: Surface,
+    },
     View(TabId, ViewCommand),
     /// Destroys the tab's view. Nothing more is reported for it.
     Close(TabId),
@@ -132,6 +138,14 @@ pub(crate) enum Command {
     ColorScheme(bool),
     /// Changes the native destination for subsequent downloads.
     SetDownloadDirectory(Option<std::path::PathBuf>),
+    #[cfg(feature = "ladybird-bridge")]
+    SetPermissions(crate::permissions::PermissionStore),
+    SetPermissionDefault(crate::permissions::PermissionKind, bool),
+    SetPermission(
+        String,
+        crate::permissions::PermissionKind,
+        crate::permissions::PermissionState,
+    ),
     /// Closes every view and stops the engine.
     Shutdown,
 }
@@ -189,6 +203,11 @@ pub(crate) enum ViewCommand {
     },
     /// Clears Ladybird's active match and highlights.
     FindEnd,
+    ExitWebFullscreen,
+    ReplyToPermission {
+        request_id: u64,
+        choice: Option<bool>,
+    },
     ReplyToDialog {
         request_id: u64,
         response: Option<String>,
@@ -231,6 +250,8 @@ pub(crate) enum Update {
     /// Selected page text for the find bar's guarded initial query.
     FindSelection(TabId, u64, String),
     NewTab(TabId, String, u64, bool),
+    Popup(TabId, u64, bool),
+    PopupClosed(TabId),
     Peek(TabId, String, u64),
     ContextMenu(TabId, elaris::ladybird::PageMenu),
     Clipboard(TabId, String),
@@ -240,6 +261,11 @@ pub(crate) enum Update {
     DownloadStartFailed(DownloadId, String),
     DownloadActionFailed(DownloadId, String),
     DownloadDirectoryFailed(String),
+    PermissionSaved(
+        String,
+        crate::permissions::PermissionKind,
+        crate::permissions::PermissionState,
+    ),
     /// The engine could not start or stopped; no tab will hear from it again.
     Failed(String),
 }
@@ -293,6 +319,9 @@ pub(crate) enum TabUpdate {
     Tooltip(String),
     Cursor(String),
     PageDialog(Option<elaris::ladybird::PageDialog>),
+    PermissionPrompt(Option<elaris::ladybird::PermissionPrompt>),
+    WebFullscreen(bool),
+    PermissionUse(crate::permissions::PermissionKind, bool),
     Error(String),
 }
 
@@ -419,6 +448,8 @@ fn update_tab(update: &Update) -> Option<TabId> {
         | Update::Thumbnail(id, _)
         | Update::FindSelection(id, _, _)
         | Update::NewTab(id, _, _, _)
+        | Update::Popup(id, _, _)
+        | Update::PopupClosed(id)
         | Update::Peek(id, _, _)
         | Update::ContextMenu(id, _)
         | Update::Clipboard(id, _)

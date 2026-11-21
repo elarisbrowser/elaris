@@ -72,7 +72,7 @@ pub(crate) fn target(rect: [f32; 4], point: [f32; 2], count: usize, ratio: f32) 
 
 impl Browser {
     pub(crate) fn focused_side(&self) -> usize {
-        self.split
+        self.displayed_split()
             .and_then(|split| {
                 split
                     .panes(self.split_view_limit)
@@ -83,7 +83,7 @@ impl Browser {
     }
 
     pub(crate) fn visible_tabs(&self) -> Vec<Option<TabId>> {
-        self.split.map_or_else(
+        self.displayed_split().map_or_else(
             || vec![self.active, None],
             |split| {
                 let visible = split.panes(self.split_view_limit);
@@ -98,6 +98,9 @@ impl Browser {
 
     pub(crate) fn displayed_split(&self) -> Option<Split> {
         self.split.filter(|split| {
+            if self.fullscreen_tab().is_some() {
+                return false;
+            }
             let panes = split.panes(self.split_view_limit);
             panes.contains(&None) || panes.contains(&self.active)
         })
