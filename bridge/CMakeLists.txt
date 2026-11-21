@@ -135,6 +135,27 @@ function(elaris_add_ladybird_bridge)
             set_tests_properties(elaris_ladybird_download_smoke PROPERTIES
                 ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib:${ELARIS_VCPKG_PREFIX}/lib")
         endif()
+
+        add_executable(elaris_ladybird_engine_features "${ELARIS_BRIDGE_DIR}/tests/engine_features.cpp")
+        target_compile_features(elaris_ladybird_engine_features PRIVATE cxx_std_20)
+        target_link_libraries(elaris_ladybird_engine_features PRIVATE elaris_ladybird AK LibWebView LibWebCommon LibURL)
+        if(ELARIS_VCPKG_PREFIX)
+            set_property(TARGET elaris_ladybird_engine_features APPEND PROPERTY BUILD_RPATH "${ELARIS_VCPKG_PREFIX}/lib")
+            target_link_options(elaris_ladybird_engine_features PRIVATE "-Wl,-rpath,${ELARIS_VCPKG_PREFIX}/lib")
+        endif()
+        add_test(NAME elaris_ladybird_engine_features
+            COMMAND elaris_ladybird_engine_features
+                "${LADYBIRD_SOURCE_DIR}/Base/res"
+                "${CMAKE_BINARY_DIR}/elaris-engine-features-profile"
+                "${ELARIS_BRIDGE_DIR}/tests/sample.pdf"
+        )
+        if(APPLE)
+            set_tests_properties(elaris_ladybird_engine_features PROPERTIES
+                ENVIRONMENT "DYLD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib:${ELARIS_VCPKG_PREFIX}/lib")
+        elseif(UNIX)
+            set_tests_properties(elaris_ladybird_engine_features PROPERTIES
+                ENVIRONMENT "LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib:${ELARIS_VCPKG_PREFIX}/lib")
+        endif()
     endif()
 endfunction()
 
