@@ -1,56 +1,73 @@
 <div align="center">
-  <img src="assets/brand-kit/logo/logo-color.svg" alt="elaris logo" width="112" />
+  <img src="assets/brand-kit/logo/logo-color.svg" alt="" width="112" />
   <h1>elaris</h1>
-  <p>A cross-platform browser built in Rust, powered by <a href="https://ladybird.org/">Ladybird</a>.</p>
+  <p><strong>A cross-platform browser written in Rust, powered by <a href="https://ladybird.org/">Ladybird</a>.</strong></p>
   <p>
-    <a href="https://github.com/elarisbrowser/elaris/actions/workflows/ci.yml?query=branch%3Amain">
-      <img src="https://github.com/elarisbrowser/elaris/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status" />
-    </a>
-    <a href="LICENSE">
-      <img src="https://img.shields.io/badge/license-GPL--3.0--only-5e5dfb?style=flat" alt="GPL-3.0-only license" />
-    </a>
+    <a href="https://github.com/elarisbrowser/elaris/actions/workflows/ci.yml?query=branch%3Amain"><img src="https://github.com/elarisbrowser/elaris/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0--only-5e5dfb?style=flat" alt="GPL-3.0-only" /></a>
     <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-76b4fb?style=flat" alt="macOS and Linux" />
+    <img src="https://img.shields.io/badge/status-pre--alpha-orange?style=flat" alt="Pre-alpha" />
   </p>
 </div>
 
 <p align="center">
-  <img src="assets/elaris-pre-alpha-demo.png" alt="Elaris pre-alpha demo" width="900" />
+  <img src="assets/elaris-pre-alpha-demo.png" alt="Elaris browser window" width="900" />
 </p>
+
+> **Pre-alpha.** Elaris is under active development. Expect rough edges and breaking changes.
+
+## Features
+
+- **Ladybird engine.** Web content runs in Ladybird's multiprocess engine, with Rune for the browser UI.
+- **Native on macOS and Linux.** Both platforms are first-class targets.
+- **Tabs and windows.** Each window keeps its own tabs, and session state is restored.
+- **Downloads.** Track progress, pause, resume, and retry. Downloads survive restarts.
+- **History.** Search past visits, or remove one address or everything.
+
+See [Multi-window state](docs/multi-window.md) and [Downloads](docs/downloads.md) for details.
 
 ## Quick start
 
-You need Python 3.9+ and Git. macOS also needs [Homebrew](https://brew.sh/) and Xcode 26+. Linux setup supports apt, dnf, pacman, and zypper.
+You need Python 3.9+ and Git. macOS also needs [Homebrew](https://brew.sh/) and Xcode 26+.
 
 ```sh
-./elaris setup
-./elaris build
+./elaris setup             # install prerequisites and initialize Ladybird
+./elaris build             # build the engine and browser (first build is slow)
 ./elaris run https://example.com
 ```
 
-Setup installs system packages and Rust toolchains, then initializes Ladybird. Linux package installation may prompt for your password through `sudo`. The first engine build downloads and compiles dependencies, so it can take a while.
+`setup` installs system packages and Rust toolchains. On Linux it supports apt, dnf, pacman, and zypper, and may ask for your password through `sudo`.
 
-For shell-only work, use `./elaris run --ui`. See [Development setup](SETUP.md) for details.
+For UI work without building the engine, use `./elaris run --ui`.
 
-On Linux, the browser toolbar slides down and pushes the page when the pointer reaches the top of
-the app. Set `ELARIS_LINUX_TITLEBAR=always` to keep it visible.
+### Shortcuts
 
-## Browsing history
+| Action | macOS | Linux |
+| --- | --- | --- |
+| Open history | <kbd>Command</kbd> + <kbd>Y</kbd> | <kbd>Control</kbd> + <kbd>H</kbd> |
 
-Open `elaris://history` with **Command+Y** on macOS or **Control+H** on Linux. Search by page
-title or address, or use **Older** to browse past results. History shows the most recent visit
-to each address. Use the row’s remove button to erase that address or **Clear History** to erase
-all saved browsing history.
+On Linux, the toolbar slides in when the pointer reaches the top of the window. Set `ELARIS_LINUX_TITLEBAR=always` to keep it visible.
 
 ## Development
 
-Run `./elaris check` before opening a pull request. Use `./elaris format` to format Rust and bridge C++ code. Run `./elaris linux-build` to build in Docker and stream Linux build output in the terminal.
+```sh
+./elaris check             # fmt, clippy, and tests
+./elaris format            # format Rust and bridge C++
+./elaris linux-build       # build for Linux in Docker
+```
 
-## Guides
+Run `./elaris check` before opening a pull request. See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow and [SETUP.md](SETUP.md) for full environment details.
 
-- [Contributing](CONTRIBUTING.md)
-- [Development setup](SETUP.md)
-- [Architecture](docs/architecture.md)
-- [Ladybird integration](docs/ladybird-embedding.md)
-- [C++ bridge](bridge/README.md)
+## Documentation
 
-Licensed under [GPL-3.0-only](LICENSE). Contributions are welcome under the same license. See [Trademark policy](TRADEMARKS.md) for branding guidance.
+| Topic | Read |
+| --- | --- |
+| Architecture | [docs/architecture.md](docs/architecture.md) |
+| Ladybird integration | [docs/ladybird-embedding.md](docs/ladybird-embedding.md) |
+| Development setup | [SETUP.md](SETUP.md) |
+| C++ bridge | [bridge/README.md](bridge/README.md) |
+| Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
+
+## License
+
+Elaris is licensed under [GPL-3.0-only](LICENSE). Contributions are welcome under the same license. See [TRADEMARKS.md](TRADEMARKS.md) for branding guidance.
