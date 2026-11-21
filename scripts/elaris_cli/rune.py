@@ -7,7 +7,7 @@ import subprocess
 from .common import ROOT, require, run
 
 RUNE_GIT = "https://github.com/elarisbrowser/rune"
-DEFAULT_BRANCH = "elaris"
+DEFAULT_BRANCH = "dev"
 MANIFEST = ROOT / "Cargo.toml"
 # A `git = <fork>` line and the `rev = "..."` line that follows it in the same table.
 FORK_REV = re.compile(

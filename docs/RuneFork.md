@@ -1,50 +1,39 @@
 # Rune fork
 
 Elaris maintains a Rune fork so framework fixes and platform improvements can be tested
-against Elaris before release. Keep it close to upstream: `dev` is the clean upstream
-reference; `elaris` is the integration branch. Put generally useful changes on `elaris`
-and avoid browser concepts in Rune APIs. Contribute generally useful fixes upstream when
-the project accepts them.
+against Elaris before release. Everything lives on the fork's `dev` branch: upstream's
+history plus Elaris's commits on top. Commit Rune changes straight to `dev` (no long-lived
+feature branches), keep them useful to any Rune app, and avoid browser concepts in Rune
+APIs. Contribute generally useful fixes upstream when the project accepts them.
 
 - Official upstream: <https://github.com/anomalyco/rune>
 - Elaris fork: <https://github.com/elarisbrowser/rune>
-- Upstream development branch: `dev`
-- Elaris integration branch: `elaris`
+- Branch: `dev` on both
 
 ## Synchronise upstream
 
-From a clone of the Rune fork, remotes are `origin` (the Elaris fork) and `upstream`
-(official Rune). The local `dev` branch tracks `upstream/dev`; `elaris` tracks
-`origin/elaris`.
+From a clone of the fork, remotes are `origin` (the fork) and `upstream` (official Rune),
+and `dev` tracks `origin/dev`. Review what upstream added, then merge it:
 
 ```sh
 git fetch upstream
-git log --oneline --left-right elaris...upstream/dev
-git diff --stat elaris...upstream/dev
-git diff elaris...upstream/dev
-```
-
-Review the commits and source changes first. Integrate approved changes explicitly:
-
-```sh
+git log --oneline dev..upstream/dev
+git diff --stat dev...upstream/dev
 git switch dev
-git merge --ff-only upstream/dev
-git push origin dev
-git switch elaris
-git merge --no-ff dev
+git merge --no-ff upstream/dev
 ```
 
-Resolve conflicts on `elaris` by preserving Elaris's reviewed changes and the intended
-upstream behavior. Run Rune's documented checks from its `AGENTS.md`/CI, then run Elaris's
-validation below. Push `elaris` only after both projects pass. Do not rebase or force-push
-published branches, and do not merge upstream changes without review.
+Resolve conflicts by keeping Elaris's reviewed changes and the intended upstream behaviour.
+Run Rune's checks (`bash scripts/check-local.sh`, and the tests its `AGENTS.md` lists), then
+Elaris's validation below. Push `dev` only after both projects pass. Never rebase or
+force-push `dev`; apps pin its commits.
 
 ## Update Elaris's pin
 
-After the fork's `elaris` branch passes both projects' checks, pin it:
+After the fork's `dev` branch passes both projects' checks, pin it:
 
 ```sh
-./elaris pin              # the head of the fork's elaris branch
+./elaris pin              # the head of the fork's dev branch
 ./elaris pin <branch|tag|full-commit>
 ```
 
