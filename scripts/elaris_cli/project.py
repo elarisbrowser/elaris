@@ -120,12 +120,17 @@ def _macos_browser_bundle(executable: Path, name: str = "Elaris") -> Path:
     contents = ROOT / "build" / f"{name}.app" / "Contents"
     bundled_executable = contents / "MacOS" / executable.name
     bundled_executable.parent.mkdir(parents=True, exist_ok=True)
+    copied = False
     for source, destination in (
         (ROOT / "assets" / "Info.plist", contents / "Info.plist"),
         (executable, bundled_executable),
     ):
         if not destination.exists() or destination.stat().st_mtime_ns != source.stat().st_mtime_ns:
             shutil.copy2(source, destination)
+            copied = True
+    if copied:
+        # Replacing any file in a signed bundle invalidates its signature, and macOS kills the app for that.
+        subprocess.run(["codesign", "--force", "--sign", "-", str(contents.parent)], check=True)
     return bundled_executable
 
 
