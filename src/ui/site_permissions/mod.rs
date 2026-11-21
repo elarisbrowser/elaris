@@ -5,6 +5,8 @@
 mod content;
 mod menus;
 
+pub(crate) use content::settle_site_action;
+
 use rune::{Cx, El, KeyEvent, el, icon};
 
 use crate::app::AppState;

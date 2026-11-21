@@ -40,6 +40,15 @@ impl SiteControlAction {
             Self::Settings => "Open settings",
         }
     }
+
+    /// The tooltip shown while the action's confirmation shows, or `None` when it has none.
+    pub(crate) fn confirmation(self) -> Option<&'static str> {
+        match self {
+            Self::CopyUrl => Some("Copied"),
+            Self::DuplicateTab => Some("Duplicated"),
+            Self::Reload | Self::Settings => None,
+        }
+    }
 }
 
 /// A page and its current saved settings, ready to render in either platform host.

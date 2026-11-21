@@ -6,6 +6,7 @@ use rune::{El, PointerPress, Spring, Transition, Tx, el, icon, row, text};
 use crate::app::{self, AppState};
 use crate::permissions::{AutoplayPolicy, PermissionKind, PermissionState};
 use crate::site_controls::{SiteControlAction, SiteControlPresentation, SiteControlsPage};
+use crate::ui::controls;
 use crate::ui::icons;
 use crate::ui::site_control_style as design;
 use crate::ui::theme::{self, Theme};
@@ -57,7 +58,7 @@ pub(super) fn popover(
         } else {
             Transition::opacity()
         })
-        .child(action_tiles(presentation, theme))
+        .child(action_tiles(state, presentation, theme, reduced_motion))
         .child(
             text("This site")
                 .key("site-controls-heading")
@@ -197,17 +198,45 @@ fn security_page(theme: &Theme, presentation: &SiteControlPresentation) -> El {
         )
 }
 
-fn action_tiles(presentation: &SiteControlPresentation, theme: &Theme) -> El {
+fn action_tiles(
+    state: &AppState,
+    presentation: &SiteControlPresentation,
+    theme: &Theme,
+    reduced: bool,
+) -> El {
     let mut actions = row()
         .key("site-control-actions")
         .w_full()
         .gap(design::ACTION_GAP);
     for action in SiteControlAction::ALL {
+        let confirmed = state
+            .site_action_done
+            .is_some_and(|(done, _)| done == action);
         let glyph = match action {
-            SiteControlAction::CopyUrl => &icons::COPY,
-            SiteControlAction::Reload => &icons::RELOAD,
-            SiteControlAction::DuplicateTab => &icons::DUPLICATE,
-            SiteControlAction::Settings => &icons::SITE_CONTROLS,
+            SiteControlAction::CopyUrl => controls::confirm_glyph(
+                "site-action-copy",
+                &icons::COPY,
+                design::GLYPH,
+                confirmed,
+                theme,
+                reduced,
+            ),
+            SiteControlAction::DuplicateTab => controls::confirm_glyph(
+                "site-action-duplicate",
+                &icons::DUPLICATE,
+                design::GLYPH,
+                confirmed,
+                theme,
+                reduced,
+            ),
+            // Each reload turns the glyph one more full revolution, so it spins on every press.
+            SiteControlAction::Reload => icon(&icons::RELOAD, design::GLYPH)
+                .key("site-action-reload")
+                .color(theme.text)
+                .rotate(state.site_reload_turns as f32 * std::f32::consts::TAU),
+            SiteControlAction::Settings => {
+                icon(&icons::SITE_CONTROLS, design::GLYPH).color(theme.text)
+            }
         };
         let url = presentation.url.clone();
         let tab = presentation.tab;
@@ -222,31 +251,55 @@ fn action_tiles(presentation: &SiteControlPresentation, theme: &Theme) -> El {
             .press(theme.press)
             .press_scale(theme::PRESS_SCALE)
             .label(action.label())
-            .help(action.label())
+            .help(if confirmed {
+                action.confirmation().unwrap_or(action.label())
+            } else {
+                action.label()
+            })
+            .help_open(confirmed)
             .role("button")
             .focusable(true)
-            .child(icon(glyph, design::GLYPH).color(theme.text))
-            .on_press_tx(move |state: &mut AppState, tx: &mut Tx| match action {
-                SiteControlAction::CopyUrl => {
-                    if let Some(url) = url.as_deref() {
-                        tx.copy(url);
+            .child(glyph)
+            .on_press_tx(move |state: &mut AppState, tx: &mut Tx| {
+                match action {
+                    SiteControlAction::CopyUrl => {
+                        if let Some(url) = url.as_deref() {
+                            tx.copy(url);
+                        }
                     }
-                }
-                SiteControlAction::Reload => {
-                    if let Some(tab) = tab {
-                        state.browser.reload(tab);
+                    SiteControlAction::Reload => {
+                        if let Some(tab) = tab {
+                            state.browser.reload(tab);
+                        }
+                        state.site_reload_turns = state.site_reload_turns.wrapping_add(1);
                     }
-                }
-                SiteControlAction::DuplicateTab => {
-                    if let Some(tab) = tab {
-                        state.duplicate(tab);
+                    SiteControlAction::DuplicateTab => {
+                        if let Some(tab) = tab {
+                            state.duplicate(tab);
+                        }
                     }
+                    SiteControlAction::Settings => app::open_settings(state, tx),
                 }
-                SiteControlAction::Settings => app::open_settings(state, tx),
+                if action.confirmation().is_some() {
+                    state.site_action_done = Some((action, tx.clock() + theme::COPY_LINK_CONFIRM));
+                    tx.wake_after(std::time::Duration::from_secs_f64(theme::COPY_LINK_CONFIRM));
+                }
+                tx.animated();
             });
         actions = actions.child(tile);
     }
     actions
+}
+
+/// Returns the action tiles to their glyphs once their confirmation has shown long enough.
+pub(crate) fn settle_site_action(state: &mut AppState, clock: f64) -> bool {
+    match state.site_action_done {
+        Some((_, until)) if clock >= until => {
+            state.site_action_done = None;
+            true
+        }
+        _ => false,
+    }
 }
 
 fn permission_row(theme: &Theme, kind: PermissionKind, permission: PermissionState) -> El {

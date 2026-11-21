@@ -192,6 +192,10 @@ pub(crate) struct AppState {
     pub(crate) autoplay_row_anchor: Option<[f32; 4]>,
     /// Whether the compact site overflow menu is open.
     pub(crate) site_overflow_open: bool,
+    /// The site action showing its confirmation, and when it returns to its glyph on the window clock.
+    pub(crate) site_action_done: Option<(crate::site_controls::SiteControlAction, f64)>,
+    /// How many times reload was pressed, so its glyph turns one more revolution each time.
+    pub(crate) site_reload_turns: u32,
     /// The site footer's overflow-button position for the Rune menu host.
     pub(crate) site_overflow_anchor: Option<PointerPress>,
     /// Per-origin permission choices loaded from config.toml.
@@ -370,6 +374,8 @@ impl AppState {
             autoplay_menu_open: false,
             autoplay_row_anchor: None,
             site_overflow_open: false,
+            site_action_done: None,
+            site_reload_turns: 0,
             site_overflow_anchor: None,
             permission_store,
             page_menu: Default::default(),

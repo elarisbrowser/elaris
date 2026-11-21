@@ -25,6 +25,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     let focus_changed = state.browser.set_viewport_focus(focused);
     let settling = crate::ui::settle_sidebar(state, tx);
     let link_copy_settled = crate::ui::settle_copy_link(state, clock);
+    let site_action_settled = crate::ui::settle_site_action(state, clock);
     let zoom_chip_settled = crate::ui::settle_zoom_chip(state, clock);
     let zoom_chip_shown = match state.browser.take_zoom_changed() {
         Some(id) => {
@@ -94,6 +95,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         || history_page_changed
         || settling
         || link_copy_settled
+        || site_action_settled
         || zoom_chip_settled
         || zoom_chip_shown
         || focus_changed

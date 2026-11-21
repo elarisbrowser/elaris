@@ -34,6 +34,7 @@ pub(crate) use sidebar::{
     DragVisual, SidebarState, TabDragMoveResult, TabDragState, TabDropTarget,
     toggle as toggle_sidebar,
 };
+pub(crate) use site_permissions::settle_site_action;
 pub(crate) use theme::{TAB_REORDER_MOTION, TRAFFIC_LIGHTS, WINDOW_MIN_SIZE};
 
 use rune::SystemMaterial;
