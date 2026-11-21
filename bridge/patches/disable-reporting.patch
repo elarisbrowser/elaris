@@ -1,0 +1,36 @@
+--- a/Libraries/LibWebView/ReportSubmission.cpp
++++ b/Libraries/LibWebView/ReportSubmission.cpp
+@@ -27,6 +27,9 @@
+ 
+ namespace WebView {
+ 
++// Elaris does not send reports. Every submission fails before it reaches the network. The rest of the reporting code is
++// kept, so a future Elaris reporting backend only needs to turn this on and choose its endpoint.
++static constexpr bool reporting_enabled = false;
+ static constexpr auto default_endpoint = "https://reports.app.ladybird.org"sv;
+ static constexpr auto challenge_path = "/api/v1/challenges"sv;
+ static constexpr auto report_path = "/api/v1/reports"sv;
+@@ -229,6 +232,10 @@
+ // A submission keeps itself alive until it is sent or fails for good, so it outlives the review that started it.
+ void ReportSubmission::start()
+ {
++    if (!reporting_enabled) {
++        fail_preparation("Reporting is disabled in this build."_string);
++        return;
++    }
+     m_self_while_in_flight = *this;
+     begin_attempt();
+ }
+--- a/Libraries/LibWebView/Settings.h
++++ b/Libraries/LibWebView/Settings.h
+@@ -332,7 +332,9 @@
+     GlobalPrivacyControl global_privacy_control() const { return m_global_privacy_control; }
+     void set_global_privacy_control(GlobalPrivacyControl);
+ 
+-    CrashReportSending crash_report_sending() const { return m_crash_report_sending; }
++    // Elaris never keeps crash reports, whatever the saved setting says. Crash capture still runs, and its reports are
++    // discarded at save time. Change this line to re-enable the review flow.
++    CrashReportSending crash_report_sending() const { return CrashReportSending::NeverSend; }
+     void set_crash_report_sending(CrashReportSending);
+ 
+     bool background_networking_enabled() const { return m_background_networking_enabled; }
