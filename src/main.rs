@@ -5,6 +5,7 @@ mod app;
 mod appearance;
 mod browser;
 mod config;
+mod download_history;
 #[cfg(target_os = "macos")]
 mod drag_overlay_macos;
 mod engine;

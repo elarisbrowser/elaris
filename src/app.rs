@@ -410,7 +410,9 @@ impl AppState {
         state.browser.split_view_limit = state.settings.split_view_limit;
         state.browser.set_default_zoom(state.settings.page_zoom);
         #[cfg(not(test))]
-        state.browser.share_downloads(shared_downloads());
+        state
+            .browser
+            .share_downloads(shared_downloads(state.storage.as_deref()));
         state.open_start_page(start, initial_session.as_ref());
         if start.is_none()
             && let Some(session) = initial_session
@@ -557,9 +559,33 @@ pub(crate) fn publish_settings(settings: &Settings) {
     crate::engine::wake_all_windows();
 }
 
+/// The process's download list, seeded once with the history kept from earlier runs.
 #[cfg(not(test))]
-fn shared_downloads() -> Arc<Mutex<Vec<elaris::downloads::Download>>> {
-    Arc::clone(SHARED_DOWNLOADS.get_or_init(|| Arc::new(Mutex::new(Vec::new()))))
+fn shared_downloads(storage: Option<&Storage>) -> Arc<Mutex<Vec<elaris::downloads::Download>>> {
+    Arc::clone(SHARED_DOWNLOADS.get_or_init(|| {
+        let history = storage
+            .and_then(Storage::take_download_history)
+            .unwrap_or_default();
+        Arc::new(Mutex::new(history))
+    }))
+}
+
+/// Saves the download history when the finished, non-private downloads changed.
+pub(crate) fn persist_download_history(
+    storage: &Storage,
+    downloads: &[elaris::downloads::Download],
+) {
+    static SAVED: Mutex<Option<String>> = Mutex::new(None);
+    let encoded = crate::download_history::encode(downloads);
+    let mut saved = SAVED.lock().expect("download history guard poisoned");
+    if saved.as_deref() == Some(encoded.as_str()) {
+        return;
+    }
+    if let Err(error) = storage.save_download_history(encoded.clone()) {
+        eprintln!("Elaris: {error}");
+        return;
+    }
+    *saved = Some(encoded);
 }
 
 #[cfg(not(test))]

@@ -128,6 +128,7 @@ fn history_mutation_preserves_tabs_and_query_on_success_or_failure() {
         profile_dir: data.join("profile"),
         history_file: data.join("history.sqlite"),
         session_file: data.join("session.json"),
+        download_history_file: data.join("downloads.json"),
         config_file: data.join("config.toml"),
     };
     let mut state = AppState::new(Some("elaris://history"));

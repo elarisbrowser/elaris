@@ -417,6 +417,7 @@ mod tests {
             profile_dir: data.join("profile"),
             history_file: data.join("history.sqlite"),
             session_file: data.join("session.json"),
+            download_history_file: data.join("downloads.json"),
             config_file: data.join("config.toml"),
         };
         let storage = std::sync::Arc::new(crate::storage::Storage::open(paths).unwrap());
@@ -484,6 +485,7 @@ mod tests {
             profile_dir: data.join("profile"),
             history_file: data.join("history.sqlite"),
             session_file: session_file.clone(),
+            download_history_file: session_file.with_file_name("downloads.json"),
             config_file: data.join("config.toml"),
         })
         .unwrap();

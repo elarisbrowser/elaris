@@ -118,6 +118,8 @@ unsafe extern "C" {
     ) -> i32;
     fn elaris_ladybird_cancel_download(bridge: *mut RawBridge, download_id: u64) -> i32;
     fn elaris_ladybird_cancel_active_downloads(bridge: *mut RawBridge) -> i32;
+    fn elaris_ladybird_pause_download(bridge: *mut RawBridge, id: u64, pause: i32) -> i32;
+    fn elaris_ladybird_suspend_downloads(bridge: *mut RawBridge) -> i32;
     fn elaris_ladybird_create_view(
         bridge: *mut RawBridge,
         view_id: u64,
@@ -389,7 +391,8 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
             })),
             12 => {
                 let status = match raw.download_status {
-                    1 | 2 => DownloadStatus::Downloading,
+                    1 => DownloadStatus::Downloading,
+                    2 => DownloadStatus::Paused,
                     3 => DownloadStatus::Completed,
                     4 => DownloadStatus::Cancelled,
                     5 => DownloadStatus::Failed,
@@ -430,7 +433,9 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
                     bytes_downloaded: raw.bytes_downloaded,
                     total_bytes: (raw.has_total_bytes != 0).then_some(raw.total_bytes),
                     error,
-                    private: raw.value != 0,
+                    private: raw.value & 1 != 0,
+                    can_resume: raw.value & 2 != 0,
+                    retrying: raw.value & 4 != 0,
                     native_id: raw.download_id,
                 })
             }
@@ -772,10 +777,25 @@ impl Ladybird {
         status_result(unsafe { elaris_ladybird_cancel_download(self.owner.raw.as_ptr(), id) })
     }
 
-    /// Cancels every in-flight transfer before the Ladybird application shuts down.
+    /// Cancels every in-flight transfer.
     pub fn cancel_active_downloads(&mut self) -> Result<(), String> {
         // SAFETY: The bridge is live on its owner thread.
         status_result(unsafe { elaris_ladybird_cancel_active_downloads(self.owner.raw.as_ptr()) })
+    }
+
+    /// Pauses (`true`) or resumes a transfer by its bridge-side identifier.
+    pub fn pause_download(&mut self, id: u64, pause: bool) -> Result<(), String> {
+        // SAFETY: The bridge is live on its owner thread.
+        status_result(unsafe {
+            elaris_ladybird_pause_download(self.owner.raw.as_ptr(), id, i32::from(pause))
+        })
+    }
+
+    /// Before shutdown: pauses resumable transfers, which Ladybird restores next launch, and
+    /// cancels the rest.
+    pub fn suspend_downloads(&mut self) -> Result<(), String> {
+        // SAFETY: The bridge is live on its owner thread.
+        status_result(unsafe { elaris_ladybird_suspend_downloads(self.owner.raw.as_ptr()) })
     }
 
     /// A handle any thread can use to end a [`Self::wait`].

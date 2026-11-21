@@ -180,13 +180,18 @@ pub(super) fn write_sessions_atomic(
     };
     let bytes = serde_json::to_vec(&collection)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
+    write_private_atomic(path, &bytes, "session")
+}
+
+/// Replaces `path` with `bytes` in one rename, readable only by the user, syncing it to disk.
+pub(super) fn write_private_atomic(path: &Path, bytes: &[u8], prefix: &str) -> io::Result<()> {
     let id = NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed);
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
     let temp = path.with_file_name(format!(
-        ".session-{}-{timestamp}-{id}.tmp",
+        ".{prefix}-{}-{timestamp}-{id}.tmp",
         std::process::id()
     ));
     let result = (|| {
@@ -198,7 +203,7 @@ pub(super) fn write_sessions_atomic(
             options.mode(0o600);
         }
         let mut file = options.open(&temp)?;
-        file.write_all(&bytes)?;
+        file.write_all(bytes)?;
         file.sync_all()?;
         fs::rename(&temp, path)?;
         if let Some(parent) = path.parent()

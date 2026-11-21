@@ -243,8 +243,13 @@ int32_t elaris_ladybird_set_download_directory(ElarisLadybird* bridge, const cha
 int32_t elaris_ladybird_start_download(ElarisLadybird* bridge, const char* url, const char* suggested_filename,
                                        uint64_t* out_download_id);
 int32_t elaris_ladybird_cancel_download(ElarisLadybird* bridge, uint64_t download_id);
-/* Cancels in-flight downloads before the application shuts down. */
+/* Cancels every in-flight download. */
 int32_t elaris_ladybird_cancel_active_downloads(ElarisLadybird* bridge);
+/* Pauses (pause 1) or resumes (pause 0) a download. DOWNLOAD events' value carries bit 1 for a private
+ * window's download, bit 2 when it can resume, and bit 4 while it waits to retry. */
+int32_t elaris_ladybird_pause_download(ElarisLadybird* bridge, uint64_t download_id, int32_t pause);
+/* Before shutdown: pauses resumable downloads, which Ladybird restores next launch, and cancels the rest. */
+int32_t elaris_ladybird_suspend_downloads(ElarisLadybird* bridge);
 /* Creates a view; every event it raises carries view_id, which the host chooses. */
 int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t view_id, ElarisLadybirdView** out_view);
 /* Creates a view in the shared private session. Its cookies, storage and cache never reach disk. */

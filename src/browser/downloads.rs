@@ -20,6 +20,14 @@ impl Browser {
             .collect()
     }
 
+    /// Every download in the process, private ones too, for the history to filter.
+    pub(crate) fn all_downloads(&self) -> Vec<Download> {
+        self.downloads
+            .lock()
+            .expect("download list poisoned")
+            .clone()
+    }
+
     /// Forgets private downloads once the private session they belonged to has ended.
     pub(crate) fn forget_private_downloads(&self) {
         self.downloads
@@ -43,13 +51,6 @@ impl Browser {
     }
 
     /// Starts a Ladybird transfer and returns its stable browser identifier immediately.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "The direct Rust start path complements page initiated downloads from Ladybird."
-        )
-    )]
     pub(crate) fn start_download(
         &mut self,
         mut request: DownloadRequest,
@@ -83,32 +84,77 @@ impl Browser {
         Ok(id)
     }
 
-    /// Cancels an active download without waiting for Ladybird's cancellation callback.
+    /// Cancels an active or paused download without waiting for Ladybird's callback.
     pub(crate) fn cancel_download(&self, id: DownloadId) -> Result<(), Error> {
-        let download = self.download(id)?;
-        if !matches!(
-            download.status,
-            DownloadStatus::Pending | DownloadStatus::Downloading
-        ) {
+        if !self.download(id)?.status.is_active() {
             return Err(Error::Download(downloads::Error::InvalidState));
         }
         self.send_download_action(id, DownloadAction::Cancel)
     }
 
-    /// Opens a completed file through the operating system's default handler.
-    pub(crate) fn open_download(&self, id: DownloadId) -> Result<(), Error> {
-        if self.download(id)?.status != DownloadStatus::Completed {
+    /// Pauses a running download the server lets resume.
+    pub(crate) fn pause_download(&self, id: DownloadId) -> Result<(), Error> {
+        let download = self.download(id)?;
+        if download.status != DownloadStatus::Downloading || !download.can_resume {
             return Err(Error::Download(downloads::Error::InvalidState));
         }
-        self.send_download_action(id, DownloadAction::Open)
+        self.send_download_action(id, DownloadAction::Pause)
+    }
+
+    /// Continues a paused download where it stopped.
+    pub(crate) fn resume_download(&self, id: DownloadId) -> Result<(), Error> {
+        if self.download(id)?.status != DownloadStatus::Paused {
+            return Err(Error::Download(downloads::Error::InvalidState));
+        }
+        self.send_download_action(id, DownloadAction::Resume)
+    }
+
+    /// Starts a failed or cancelled download again from its address, in place of the old record.
+    pub(crate) fn retry_download(&mut self, id: DownloadId) -> Result<DownloadId, Error> {
+        let download = self.download(id)?;
+        if !matches!(
+            download.status,
+            DownloadStatus::Failed | DownloadStatus::Cancelled
+        ) {
+            return Err(Error::Download(downloads::Error::InvalidState));
+        }
+        let request =
+            DownloadRequest::new(download.source_url).suggested_filename(download.filename);
+        let retried = self.start_download(request)?;
+        self.remove_download(id)?;
+        Ok(retried)
+    }
+
+    /// Forgets a finished download. The file itself stays.
+    pub(crate) fn remove_download(&self, id: DownloadId) -> Result<(), Error> {
+        if self.download(id)?.status.is_active() {
+            return Err(Error::Download(downloads::Error::InvalidState));
+        }
+        self.downloads
+            .lock()
+            .expect("download list poisoned")
+            .retain(|download| download.id != id);
+        Ok(())
+    }
+
+    /// Opens a completed file through the operating system's default handler.
+    pub(crate) fn open_download(&self, id: DownloadId) -> Result<(), Error> {
+        let path = self.completed_path(id)?;
+        self.send_download_action(id, DownloadAction::Open(path))
     }
 
     /// Opens the completed file's containing folder in the system file manager.
     pub(crate) fn reveal_download(&self, id: DownloadId) -> Result<(), Error> {
-        if self.download(id)?.status != DownloadStatus::Completed {
-            return Err(Error::Download(downloads::Error::InvalidState));
+        let path = self.completed_path(id)?;
+        self.send_download_action(id, DownloadAction::Reveal(path))
+    }
+
+    fn completed_path(&self, id: DownloadId) -> Result<std::path::PathBuf, Error> {
+        let download = self.download(id)?;
+        match (download.status, download.destination) {
+            (DownloadStatus::Completed, Some(path)) => Ok(path),
+            _ => Err(Error::Download(downloads::Error::InvalidState)),
         }
-        self.send_download_action(id, DownloadAction::Reveal)
     }
 
     fn download(&self, id: DownloadId) -> Result<Download, Error> {

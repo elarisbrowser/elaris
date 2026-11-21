@@ -46,6 +46,11 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         }
     }
     let guards_changed = crate::ui::permission_prompt::poll(state, clock);
+    if polled.downloads_changed
+        && let Some(storage) = &state.storage
+    {
+        super::super::persist_download_history(storage, &state.browser.all_downloads());
+    }
     let accessibility = state.browser.take_accessibility_changes();
     for tree in accessibility.removed {
         tx.remove_accessibility_subtree(tree);
@@ -73,12 +78,12 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         || history_changed
         || history_page_changed
         || settling
+        || link_copy_settled
         || focus_changed
         || configuration_changed
         || shared_settings_changed
         || shared_permissions_changed
         || context_menu_changed
-        || link_copy_settled
         || switcher_changed
         || tab_drag_changed
 }

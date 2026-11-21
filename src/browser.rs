@@ -75,6 +75,8 @@ impl std::error::Error for Error {}
 pub(crate) struct Polled {
     /// Some tab's state changed, so the interface needs building again.
     pub(crate) changed: bool,
+    /// This window's download list changed, so the kept history may need saving.
+    pub(crate) downloads_changed: bool,
     pub(crate) permission_choices: Vec<(
         String,
         crate::permissions::PermissionKind,

@@ -5,7 +5,7 @@ use std::process::Command as ProcessCommand;
 
 use super::{Ladybird, Runtime};
 use crate::engine::DownloadAction;
-use elaris::downloads::{DownloadId, Request as DownloadRequest, Status as DownloadStatus};
+use elaris::downloads::{DownloadId, Request as DownloadRequest};
 
 impl Runtime {
     pub(super) fn start_download(
@@ -39,18 +39,16 @@ impl Runtime {
                 };
                 self.ladybird.cancel_download(native_id)
             }
-            DownloadAction::Open | DownloadAction::Reveal => {
-                let Some(download) = self.downloads.get(&id) else {
-                    return Err("download state is not available yet".to_owned());
+            DownloadAction::Pause | DownloadAction::Resume => {
+                let Some(native_id) = self.native_ids_by_download.get(&id).copied() else {
+                    return Err("download is not running in this session".to_owned());
                 };
-                if download.status != DownloadStatus::Completed {
-                    return Err("download has not completed".to_owned());
-                }
-                let Some(path) = &download.destination else {
-                    return Err("download destination is unavailable".to_owned());
-                };
-                open_download(path, action == DownloadAction::Reveal)
+                self.ladybird
+                    .pause_download(native_id, action == DownloadAction::Pause)
             }
+            // The browser checked the record; a restored history entry has no engine state.
+            DownloadAction::Open(path) => open_download(&path, false),
+            DownloadAction::Reveal(path) => open_download(&path, true),
         }
     }
 }

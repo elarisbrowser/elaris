@@ -564,7 +564,7 @@ impl Runtime {
         } = self;
         drop(views);
         let deadline = Instant::now() + CLOSE_GRACE;
-        let _ = ladybird.cancel_active_downloads();
+        let _ = ladybird.suspend_downloads();
         while let Some(left) = deadline.checked_duration_since(Instant::now())
             && ladybird.wait(Some(left)).is_ok()
         {}

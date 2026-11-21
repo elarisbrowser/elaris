@@ -56,6 +56,7 @@ fn concurrent_window_churn_keeps_the_final_session_snapshot_complete() {
         profile_dir: root.join("profile"),
         history_file: root.join("history.sqlite"),
         session_file: root.join("session.json"),
+        download_history_file: root.join("downloads.json"),
         config_file: root.join("config.toml"),
     };
     let storage = Arc::new(Storage::open(paths.clone()).expect("open isolated storage"));

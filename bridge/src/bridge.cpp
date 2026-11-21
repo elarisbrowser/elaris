@@ -322,15 +322,10 @@ void apply_selection_colors(Gfx::SystemTheme& theme) {
 class ElarisDownloadObserver final : public WebView::FileDownloaderObserver {
   public:
     explicit ElarisDownloadObserver(ElarisLadybird& bridge) : m_bridge(bridge) {
-        // Incomplete records from a previous browser run are deliberately not resumed in this
-        // milestone. Cancelling them also removes Ladybird's temporary files and stored records.
-        Vector<u64> restored;
-        for (auto const& download : WebView::Application::the().file_downloader().downloads()) {
-            if (WebView::FileDownloader::status_is_active(download.status))
-                restored.append(download.id);
-        }
-        for (auto id : restored)
-            WebView::Application::the().file_downloader().cancel_download(id);
+        // Ladybird restores the resumable downloads a previous run paused; report them so the
+        // host lists them, paused, for the user to resume or cancel.
+        for (auto const& download : WebView::Application::the().file_downloader().downloads())
+            emit_download(download);
     }
 
     void download_added(WebView::FileDownloader::Download const& download) override {
@@ -360,7 +355,9 @@ class ElarisDownloadObserver final : public WebView::FileDownloaderObserver {
         event.has_total_bytes = download.total_size.has_value();
         event.total_bytes = download.total_size.value_or(0);
         event.download_status = static_cast<ElarisLadybirdDownloadStatus>(static_cast<int>(download.status) + 1);
-        event.value = download.is_private == WebView::IsPrivate::Yes;
+        // Bit 1: a private window's download. Bit 2: it can resume. Bit 4: it waits to retry.
+        event.value = (download.is_private == WebView::IsPrivate::Yes ? 1 : 0) | (download.can_resume ? 2 : 0) |
+                      (download.is_waiting_to_retry ? 4 : 0);
         m_bridge.callback(m_bridge.context, &event);
     }
 
@@ -1153,6 +1150,26 @@ extern "C" int32_t elaris_ladybird_cancel_download(ElarisLadybird* bridge, uint6
     if (!on_owner_thread(bridge))
         return fail("download cancellation must run on the initialization thread");
     s_application->file_downloader().cancel_download(download_id);
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_pause_download(ElarisLadybird* bridge, uint64_t download_id, int32_t pause) {
+    if (!bridge || !on_owner_thread(bridge))
+        return fail("pausing a download must run on the initialization thread");
+    if (pause)
+        s_application->file_downloader().pause_download(download_id);
+    else
+        s_application->file_downloader().resume_download(download_id);
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_suspend_downloads(ElarisLadybird* bridge) {
+    if (!bridge || !on_owner_thread(bridge))
+        return fail("download shutdown must run on the initialization thread");
+    // Resumable transfers pause, so Ladybird restores them next launch; the rest cannot continue.
+    auto& downloader = s_application->file_downloader();
+    downloader.pause_active_downloads();
+    downloader.cancel_unresumable_downloads();
     return succeed();
 }
 
@@ -2300,7 +2317,7 @@ extern "C" void elaris_ladybird_destroy(ElarisLadybird* bridge) {
         fail("shutdown must run on the initialization thread");
         return;
     }
-    (void)elaris_ladybird_cancel_active_downloads(bridge);
+    (void)elaris_ladybird_suspend_downloads(bridge);
     bridge->download_observer.reset();
     while (!bridge->views.empty())
         elaris_ladybird_destroy_view(bridge->views.back());

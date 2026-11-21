@@ -72,6 +72,8 @@ pub enum Status {
     Pending,
     /// Ladybird is receiving and writing response data.
     Downloading,
+    /// Stopped part way by the user or a previous shutdown; it can resume.
+    Paused,
     /// The completed file is available at [`Download::destination`].
     Completed,
     /// Ladybird could not finish or save the file.
@@ -103,6 +105,17 @@ pub struct Download {
     pub started_at: std::time::SystemTime,
     /// Started from a private window, so only private windows list it.
     pub private: bool,
+    /// The server supports ranges, so a pause or restart can continue where it stopped.
+    pub can_resume: bool,
+    /// Ladybird lost the connection and will try again by itself.
+    pub retrying: bool,
+}
+
+impl Status {
+    /// Still transferring or able to continue: not yet part of the download history.
+    pub fn is_active(self) -> bool {
+        matches!(self, Self::Pending | Self::Downloading | Self::Paused)
+    }
 }
 
 impl Download {
@@ -125,6 +138,8 @@ impl Download {
             error: None,
             started_at: std::time::SystemTime::now(),
             private: false,
+            can_resume: false,
+            retrying: false,
         }
     }
 }
@@ -148,6 +163,10 @@ pub struct Update {
     pub error: Option<String>,
     /// Started from a private window.
     pub private: bool,
+    /// The server supports ranges.
+    pub can_resume: bool,
+    /// Waiting to retry a lost connection.
+    pub retrying: bool,
     pub(crate) native_id: u64,
 }
 
@@ -170,6 +189,8 @@ impl Update {
             error: self.error,
             started_at: std::time::SystemTime::now(),
             private: self.private,
+            can_resume: self.can_resume,
+            retrying: self.retrying,
         }
     }
 }

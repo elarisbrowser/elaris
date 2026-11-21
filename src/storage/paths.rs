@@ -10,6 +10,8 @@ pub(crate) struct Paths {
     pub(crate) profile_dir: PathBuf,
     pub(crate) history_file: PathBuf,
     pub(crate) session_file: PathBuf,
+    /// Finished downloads kept across restarts (`download_history`).
+    pub(crate) download_history_file: PathBuf,
     pub(crate) config_file: PathBuf,
 }
 
@@ -79,6 +81,7 @@ impl Paths {
         Ok(Self {
             history_file: application_dir.join("history.sqlite"),
             session_file: application_dir.join("session.json"),
+            download_history_file: application_dir.join("downloads.json"),
             config_file: config_dir.join("config.toml"),
             application_dir,
             profile_dir,

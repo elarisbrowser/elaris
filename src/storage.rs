@@ -12,7 +12,6 @@
 
 use std::collections::HashMap;
 use std::io;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, Once, OnceLock, RwLock};
@@ -303,6 +302,7 @@ impl HistoryHandle {
 
 pub(crate) struct Storage {
     session: Mutex<Option<Vec<Session>>>,
+    download_history: Mutex<Option<Vec<elaris::downloads::Download>>>,
     config_load: Mutex<Option<Result<ConfigLoad, String>>>,
     commands: Sender<Command>,
     metrics: Arc<QueueMetrics>,
@@ -348,18 +348,22 @@ impl Storage {
         let config_events = Arc::new(Mutex::new(Vec::new()));
         let worker_config_events = Arc::clone(&config_events);
         let worker_metrics = Arc::clone(&metrics);
-        let history_file = paths.history_file.clone();
-        let session_file = paths.session_file.clone();
-        let config_file = paths.config_file.clone();
+        let worker_paths = paths.clone();
+        let download_history = crate::download_history::load(&paths.download_history_file)
+            .unwrap_or_else(|error| {
+                eprintln!(
+                    "Elaris: ignoring unreadable download history {}: {error}",
+                    paths.download_history_file.display()
+                );
+                Vec::new()
+            });
         let worker = std::thread::Builder::new()
             .name("elaris-storage".to_owned())
             .spawn(move || {
                 run_worker(
                     receiver,
                     worker_shared,
-                    history_file,
-                    session_file,
-                    config_file,
+                    worker_paths,
                     worker_config_events,
                     worker_metrics,
                 );
@@ -367,6 +371,7 @@ impl Storage {
         register_worker(commands.clone(), Arc::clone(&metrics), worker);
         Ok(Self {
             session: Mutex::new(session),
+            download_history: Mutex::new(Some(download_history)),
             config_load: Mutex::new(config_load),
             commands: commands.clone(),
             metrics: Arc::clone(&metrics),
@@ -377,6 +382,20 @@ impl Storage {
             },
             config_events,
         })
+    }
+
+    /// The download history read at launch, once.
+    pub(crate) fn take_download_history(&self) -> Option<Vec<elaris::downloads::Download>> {
+        self.download_history
+            .lock()
+            .expect("download history lock poisoned")
+            .take()
+    }
+
+    pub(crate) fn save_download_history(&self, encoded: String) -> Result<(), String> {
+        self.metrics
+            .enqueue(&self.commands, Command::SaveDownloads(encoded))
+            .map_err(|_| "download history storage worker has stopped".to_owned())
     }
 
     pub(crate) fn take_sessions(&self) -> Option<Vec<Session>> {
@@ -526,6 +545,8 @@ enum Command {
     SaveSetting(SettingsChange),
     SavePermission(String, PermissionKind, PermissionState),
     SaveAutoplay(String, Option<crate::permissions::AutoplayPolicy>),
+    /// The download history as `download_history::encode` wrote it.
+    SaveDownloads(String),
     ReloadConfig,
     Flush(Sender<()>),
     Shutdown,
@@ -575,12 +596,17 @@ extern "C" fn finish_workers_at_exit() {
 fn run_worker(
     receiver: mpsc::Receiver<Command>,
     shared: Arc<SharedHistory>,
-    history_file: PathBuf,
-    session_file: PathBuf,
-    config_file: PathBuf,
+    paths: Paths,
     config_events: Arc<Mutex<Vec<ConfigEvent>>>,
     metrics: Arc<QueueMetrics>,
 ) {
+    let Paths {
+        history_file,
+        session_file,
+        config_file,
+        download_history_file,
+        ..
+    } = paths;
     let mut history = match History::open(&history_file) {
         Ok(history) => Some(history),
         Err(error) => {
@@ -728,6 +754,15 @@ fn run_worker(
                     .expect("configuration event lock poisoned")
                     .push(ConfigEvent::Saved(result));
                 notify(&shared);
+            }
+            Command::SaveDownloads(encoded) => {
+                if let Err(error) = session::write_private_atomic(
+                    &download_history_file,
+                    encoded.as_bytes(),
+                    "downloads",
+                ) {
+                    eprintln!("Elaris: could not save download history: {error}");
+                }
             }
             Command::SaveAutoplay(origin, policy) => {
                 let result = config::write_autoplay(&config_file, &origin, policy);

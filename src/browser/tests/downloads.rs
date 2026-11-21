@@ -96,3 +96,86 @@ fn private_and_ordinary_windows_each_list_only_their_own_downloads() {
     browser.private = false;
     assert_eq!(browser.downloads().len(), 1, "ordinary downloads stay");
 }
+
+fn record(browser: &Browser, status: DownloadStatus, can_resume: bool) -> downloads::DownloadId {
+    let request = DownloadRequest::new("https://example.com/big.iso").suggested_filename("big.iso");
+    let mut download = downloads::Download::pending(
+        downloads::DownloadId::next().unwrap(),
+        &request,
+        request.url.clone(),
+    );
+    download.status = status;
+    download.can_resume = can_resume;
+    download.destination = Some(std::path::PathBuf::from("/tmp/big.iso"));
+    let id = download.id;
+    browser.downloads.lock().unwrap().push(download);
+    id
+}
+
+#[test]
+fn pause_resume_open_and_remove_follow_each_downloads_state() {
+    let (browser, fake) = connected();
+    let running = record(&browser, DownloadStatus::Downloading, true);
+    let fixed = record(&browser, DownloadStatus::Downloading, false);
+    let paused = record(&browser, DownloadStatus::Paused, true);
+    let done = record(&browser, DownloadStatus::Completed, false);
+
+    assert!(browser.pause_download(running).is_ok());
+    assert!(
+        browser.pause_download(fixed).is_err(),
+        "a server without ranges can't pause"
+    );
+    assert!(browser.resume_download(paused).is_ok());
+    assert!(browser.resume_download(running).is_err());
+    assert!(
+        browser.cancel_download(paused).is_ok(),
+        "a paused download can be cancelled"
+    );
+    assert!(browser.open_download(done).is_ok());
+    assert!(browser.open_download(running).is_err());
+    assert_eq!(
+        sent(&fake),
+        [
+            Command::DownloadAction(running, DownloadAction::Pause),
+            Command::DownloadAction(paused, DownloadAction::Resume),
+            Command::DownloadAction(paused, DownloadAction::Cancel),
+            Command::DownloadAction(done, DownloadAction::Open("/tmp/big.iso".into())),
+        ]
+    );
+
+    assert!(
+        browser.remove_download(running).is_err(),
+        "active downloads stay listed"
+    );
+    assert!(browser.remove_download(done).is_ok());
+    assert!(
+        browser
+            .downloads()
+            .iter()
+            .all(|download| download.id != done)
+    );
+}
+
+#[test]
+fn retry_starts_the_address_again_in_place_of_the_failed_record() {
+    let (mut browser, fake) = connected();
+    let failed = record(&browser, DownloadStatus::Failed, false);
+    let retried = browser
+        .retry_download(failed)
+        .expect("a failed download can be retried");
+    let downloads = browser.downloads();
+    assert!(downloads.iter().all(|download| download.id != failed));
+    assert_eq!(
+        downloads
+            .iter()
+            .find(|d| d.id == retried)
+            .map(|d| d.filename.as_str()),
+        Some("big.iso")
+    );
+    assert!(matches!(
+        sent(&fake).as_slice(),
+        [Command::StartDownload(id, request)] if *id == retried && request.url == "https://example.com/big.iso"
+    ));
+    let done = record(&browser, DownloadStatus::Completed, false);
+    assert!(browser.retry_download(done).is_err());
+}

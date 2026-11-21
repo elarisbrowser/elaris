@@ -120,7 +120,7 @@ fn download_row(download: &Download, theme: &Theme) -> El {
                 .single_line()
                 .truncate(),
         );
-    let details = if matches!(download.status, Status::Pending | Status::Downloading) {
+    let details = if download.status.is_active() {
         let fill = if let Some(progress) = progress(download) {
             el().h_full().w_frac(progress).radius(2.0).fill(theme.icon)
         } else {
@@ -148,7 +148,24 @@ fn download_row(download: &Download, theme: &Theme) -> El {
         .key(format!("download-actions-{}", download.id.get()))
         .gap(2.0);
     match download.status {
-        Status::Pending | Status::Downloading => {
+        Status::Pending | Status::Downloading | Status::Paused => {
+            if download.status == Status::Paused {
+                actions = actions.child(action_button(
+                    download.id,
+                    "Resume download",
+                    &super::icons::RESUME,
+                    theme,
+                    |browser, id| browser.resume_download(id),
+                ));
+            } else if download.can_resume {
+                actions = actions.child(action_button(
+                    download.id,
+                    "Pause download",
+                    &super::icons::PAUSE,
+                    theme,
+                    |browser, id| browser.pause_download(id),
+                ));
+            }
             actions = actions.child(action_button(
                 download.id,
                 "Cancel download",
@@ -172,9 +189,20 @@ fn download_row(download: &Download, theme: &Theme) -> El {
                     &super::icons::FOLDER,
                     theme,
                     |browser, id| browser.reveal_download(id),
-                ));
+                ))
+                .child(remove_button(download.id, theme));
         }
-        Status::Failed | Status::Cancelled => {}
+        Status::Failed | Status::Cancelled => {
+            actions = actions
+                .child(action_button(
+                    download.id,
+                    "Retry download",
+                    &super::icons::RELOAD,
+                    theme,
+                    |browser, id| browser.retry_download(id).map(drop),
+                ))
+                .child(remove_button(download.id, theme));
+        }
         _ => {}
     }
 
@@ -196,7 +224,8 @@ fn action_button(
     label: &'static str,
     glyph: &'static rune::Icon,
     theme: &Theme,
-    action: impl Fn(&crate::browser::Browser, DownloadId) -> Result<(), crate::browser::Error> + 'static,
+    action: impl Fn(&mut crate::browser::Browser, DownloadId) -> Result<(), crate::browser::Error>
+    + 'static,
 ) -> El {
     icon_button(
         &format!("download-action-{}-{label}", id.get()),
@@ -206,13 +235,25 @@ fn action_button(
         theme,
     )
     .on_press(move |state: &mut AppState| {
-        let _ = action(&state.browser, id);
+        let _ = action(&mut state.browser, id);
     })
+}
+
+/// Forgets a finished download from the list; the file stays where it is.
+fn remove_button(id: DownloadId, theme: &Theme) -> El {
+    action_button(
+        id,
+        "Remove from list",
+        &super::icons::CLOSE,
+        theme,
+        |browser, id| browser.remove_download(id),
+    )
 }
 
 fn status_text(download: &Download) -> String {
     match download.status {
         Status::Pending => "Starting…".to_owned(),
+        Status::Downloading if download.retrying => "Connection lost · retrying…".to_owned(),
         Status::Downloading => match download.total_bytes {
             Some(total) => format!(
                 "{} of {}",
@@ -230,12 +271,20 @@ fn status_text(download: &Download) -> String {
             download.error.as_deref().unwrap_or("unknown error")
         ),
         Status::Cancelled => "Cancelled".to_owned(),
+        Status::Paused => match download.total_bytes {
+            Some(total) => format!(
+                "Paused · {} of {}",
+                format_bytes(download.bytes_downloaded),
+                format_bytes(total)
+            ),
+            None => format!("Paused · {}", format_bytes(download.bytes_downloaded)),
+        },
         _ => "Download status unavailable".to_owned(),
     }
 }
 
 fn progress(download: &Download) -> Option<f32> {
-    if !matches!(download.status, Status::Pending | Status::Downloading) {
+    if !download.status.is_active() {
         return None;
     }
     let total = download.total_bytes.filter(|total| *total > 0)?;

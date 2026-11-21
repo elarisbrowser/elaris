@@ -124,14 +124,7 @@ pub(crate) enum Command {
     /// Destroys the tab's view. Nothing more is reported for it.
     Close(TabId),
     PreflightClose(TabId),
-    /// Starts a browser-owned transfer through Ladybird.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "The direct Rust start path complements page initiated downloads from Ladybird."
-        )
-    )]
+    /// Starts a browser-owned transfer through Ladybird (a retry, Save Link As).
     StartDownload(DownloadId, DownloadRequest),
     /// Applies a browser-owned download action on the engine thread.
     DownloadAction(DownloadId, DownloadAction),
@@ -162,8 +155,12 @@ pub(crate) enum Command {
 #[derive(Debug, PartialEq)]
 pub(crate) enum DownloadAction {
     Cancel,
-    Open,
-    Reveal,
+    Pause,
+    Resume,
+    /// Opens the completed file at this path with the system's default handler.
+    Open(std::path::PathBuf),
+    /// Shows the completed file at this path in the system file manager.
+    Reveal(std::path::PathBuf),
 }
 
 /// What one tab's view is asked to do.
@@ -330,14 +327,20 @@ impl Thumbnail {
 #[derive(Debug)]
 #[cfg_attr(not(feature = "ladybird-bridge"), allow(dead_code))]
 pub(crate) enum TabUpdate {
-    FindResult { request_id: u64, result: FindResult },
+    FindResult {
+        request_id: u64,
+        result: FindResult,
+    },
     Navigation(String),
     NavigationCommitted(String),
     ImeCaret(Option<[i32; 4]>),
     Title(String),
     Loading(bool),
     Favicon(Option<Favicon>),
-    History { back: bool, forward: bool },
+    History {
+        back: bool,
+        forward: bool,
+    },
     NavigationItems(Vec<elaris::ladybird::NavigationItem>),
     LoadError(String),
     HoveredLink(String),

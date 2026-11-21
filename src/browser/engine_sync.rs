@@ -231,6 +231,7 @@ impl Browser {
         if self.last_download_snapshot != downloads {
             self.last_download_snapshot = downloads;
             polled.changed = true;
+            polled.downloads_changed = true;
         }
         polled
     }

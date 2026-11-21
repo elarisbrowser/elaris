@@ -13,6 +13,7 @@
 #include <mutex>
 #include <netinet/in.h>
 #include <string>
+#include <string_view>
 #include <sys/socket.h>
 #include <thread>
 #include <unistd.h>
@@ -33,6 +34,7 @@ struct DownloadState {
     std::string filename;
     std::string destination;
     std::string error;
+    bool can_resume{};
 };
 
 struct Events {
@@ -68,9 +70,10 @@ static void on_event(void* context, ElarisLadybirdEvent const* event) {
         .filename = event->selection ? event->selection : "",
         .destination = event->destination ? event->destination : "",
         .error = event->error ? event->error : "",
+        .can_resume = (event->value & 2) != 0,
     };
     events.saw_unknown_length |= state.status == ELARIS_LADYBIRD_DOWNLOAD_IN_PROGRESS && !state.has_total;
-    auto& store = event->value ? events.private_downloads : events.downloads;
+    auto& store = (event->value & 1) ? events.private_downloads : events.downloads;
     store[state.id] = std::move(state);
 }
 
@@ -234,6 +237,11 @@ class HttpFixture {
             return;
         }
 
+        if (path == "/resumable") {
+            serve_ranged(socket, request);
+            return;
+        }
+
         auto const is_unknown = path == "/unknown";
         auto const is_slow = path == "/slow" || path == "/slow-attachment";
         auto const is_attachment = path == "/attachment" || path == "/slow-attachment";
@@ -258,6 +266,46 @@ class HttpFixture {
             remaining -= count;
             if (is_slow || path == "/large")
                 std::this_thread::sleep_for(1ms);
+        }
+        shutdown(socket, SHUT_RDWR);
+        close(socket);
+    }
+
+    // A slow file that honours one `Range: bytes=a-b` request, so a download can pause and resume.
+    static void serve_ranged(int socket, std::string const& request) {
+        constexpr uint64_t size = 8U * 1024U * 1024U;
+        uint64_t first = 0;
+        uint64_t last = size - 1;
+        auto headers = request.substr(0, request.find("\r\n\r\n"));
+        std::transform(headers.begin(), headers.end(), headers.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        constexpr std::string_view range_prefix = "\r\nrange: bytes=";
+        auto range = headers.find(range_prefix);
+        if (range != std::string::npos) {
+            auto start = range + range_prefix.size();
+            auto spec = headers.substr(start, headers.find("\r\n", start) - start);
+            auto dash = spec.find('-');
+            first = std::stoull(spec.substr(0, dash));
+            if (dash + 1 < spec.size())
+                last = std::min<uint64_t>(std::stoull(spec.substr(dash + 1)), size - 1);
+        }
+        std::string response = range == std::string::npos ? "HTTP/1.1 200 OK\r\n" : "HTTP/1.1 206 Partial Content\r\n";
+        response += "Connection: close\r\nContent-Type: application/octet-stream\r\nAccept-Ranges: bytes\r\n"
+                    "ETag: \"resumable-v1\"\r\nCache-Control: no-store\r\n";
+        response += "Content-Length: " + std::to_string(last - first + 1) + "\r\n";
+        if (range != std::string::npos)
+            response += "Content-Range: bytes " + std::to_string(first) + "-" + std::to_string(last) + "/" +
+                        std::to_string(size) + "\r\n";
+        response += "\r\n";
+        if (send_all(socket, response.data(), response.size())) {
+            std::string chunk(16U * 1024U, 'r');
+            for (auto remaining = last - first + 1; remaining > 0;) {
+                auto count = std::min<uint64_t>(remaining, chunk.size());
+                if (!send_all(socket, chunk.data(), count))
+                    break;
+                remaining -= count;
+                std::this_thread::sleep_for(1ms);
+            }
         }
         shutdown(socket, SHUT_RDWR);
         close(socket);
@@ -592,6 +640,29 @@ int main(int argc, char** argv) {
         }
     } else if (view) {
         elaris_ladybird_destroy_view(view);
+    }
+
+    uint64_t ranged_id{};
+    passed = passed && start(bridge, fixture.url("/resumable"), "ranged.bin", ranged_id) && pump_until(bridge, [&] {
+                 auto it = events.downloads.find(ranged_id);
+                 return it != events.downloads.end() && it->second.can_resume && it->second.bytes > 0;
+             });
+    passed = passed && check(elaris_ladybird_pause_download(bridge, ranged_id, 1), "pause download") &&
+             pump_until(bridge, [&] { return finished(events, ranged_id, ELARIS_LADYBIRD_DOWNLOAD_PAUSED); });
+    passed = passed && check(elaris_ladybird_pause_download(bridge, ranged_id, 0), "resume download") &&
+             pump_until(bridge, [&] { return finished(events, ranged_id, ELARIS_LADYBIRD_DOWNLOAD_COMPLETED); });
+    if (passed) {
+        auto const& ranged = events.downloads[ranged_id];
+        std::error_code error;
+        auto size = std::filesystem::file_size(ranged.destination, error);
+        if (error || size != 8U * 1024U * 1024U) {
+            std::cerr << "a paused and resumed download did not finish whole: " << size << " bytes\n";
+            passed = false;
+        }
+    } else {
+        auto const& ranged = events.downloads[ranged_id];
+        std::cerr << "a resumable download did not pause and resume: status " << ranged.status << ", can resume "
+                  << ranged.can_resume << ", " << ranged.bytes << " bytes, error '" << ranged.error << "'\n";
     }
 
     uint64_t shutdown_id{};
