@@ -23,6 +23,15 @@ namespace Elaris {
 
 using namespace WebView;
 
+// AppKit's spell checker asserts that it runs on the main queue, and the owner thread is not the main thread. Every
+// call that touches it goes through here, so the main thread does the work and the owner thread waits for the answer.
+static void run_on_main(void (^work)(void)) {
+    if ([NSThread isMainThread])
+        work();
+    else
+        dispatch_sync(dispatch_get_main_queue(), work);
+}
+
 // The private text checking type that asks for a single completion of the word at the caret.
 static constexpr NSTextCheckingTypes text_checking_type_single_completion = 1ULL << 29;
 
@@ -41,11 +50,17 @@ struct PendingSuggestions : public AtomicRefCounted<PendingSuggestions> {
 class MacSpellChecker final : public WebView::SpellChecker {
   public:
     virtual DocumentTag create_document_tag() override {
-        return [NSSpellChecker uniqueSpellDocumentTag];
+        __block DocumentTag tag = 0;
+        run_on_main(^{
+            tag = [NSSpellChecker uniqueSpellDocumentTag];
+        });
+        return tag;
     }
 
     virtual void close_document_tag(DocumentTag tag) override {
-        [[NSSpellChecker sharedSpellChecker] closeSpellDocumentWithTag:tag];
+        run_on_main(^{
+            [[NSSpellChecker sharedSpellChecker] closeSpellDocumentWithTag:tag];
+        });
     }
 
     virtual void check(DocumentTag tag, Utf16String const& text, Function<void(Vector<Web::SpellingError>)> on_complete) override {
@@ -69,20 +84,25 @@ class MacSpellChecker final : public WebView::SpellChecker {
                     (*callback)(move(errors));
             });
         };
-        [[NSSpellChecker sharedSpellChecker] requestCheckingOfString:string
-                                                               range:NSMakeRange(0, string.length)
-                                                               types:NSTextCheckingTypeSpelling
-                                                             options:nil
-                                              inSpellDocumentWithTag:tag
-                                                   completionHandler:handler];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [[NSSpellChecker sharedSpellChecker] requestCheckingOfString:string
+                                                                   range:NSMakeRange(0, string.length)
+                                                                   types:NSTextCheckingTypeSpelling
+                                                                 options:nil
+                                                  inSpellDocumentWithTag:tag
+                                                       completionHandler:handler];
+        });
     }
 
     virtual void guesses(DocumentTag tag, Utf16String const& word, Function<void(Vector<Utf16String>)> on_complete) override {
         auto* string = utf16_string_to_ns_string(word);
-        NSArray<NSString*>* guesses = [[NSSpellChecker sharedSpellChecker] guessesForWordRange:NSMakeRange(0, string.length)
-                                                                                      inString:string
-                                                                                      language:nil
-                                                                        inSpellDocumentWithTag:tag];
+        __block NSArray<NSString*>* guesses = nil;
+        run_on_main(^{
+            guesses = [[NSSpellChecker sharedSpellChecker] guessesForWordRange:NSMakeRange(0, string.length)
+                                                                      inString:string
+                                                                      language:nil
+                                                        inSpellDocumentWithTag:tag];
+        });
         Vector<Utf16String> result;
         for (NSString* guess in guesses)
             result.append(ns_string_to_utf16_string(guess));
@@ -90,22 +110,36 @@ class MacSpellChecker final : public WebView::SpellChecker {
     }
 
     virtual void ignore(DocumentTag tag, Utf16String const& word) override {
-        [[NSSpellChecker sharedSpellChecker] ignoreWord:utf16_string_to_ns_string(word) inSpellDocumentWithTag:tag];
+        auto* string = utf16_string_to_ns_string(word);
+        run_on_main(^{
+            [[NSSpellChecker sharedSpellChecker] ignoreWord:string inSpellDocumentWithTag:tag];
+        });
     }
 
     // NB: The system dictionary learns the word for every app, so the tab's tag plays no part.
     virtual void learn(DocumentTag, Utf16String const& word) override {
-        [[NSSpellChecker sharedSpellChecker] learnWord:utf16_string_to_ns_string(word)];
+        auto* string = utf16_string_to_ns_string(word);
+        run_on_main(^{
+            [[NSSpellChecker sharedSpellChecker] learnWord:string];
+        });
     }
 
     virtual bool can_suggest() const override {
-        return [NSSpellChecker respondsToSelector:@selector(isAutomaticInlineCompletionEnabled)]
-            && [[NSSpellChecker sharedSpellChecker] respondsToSelector:@selector(completionCandidateFromCandidates:)];
+        __block BOOL available = NO;
+        run_on_main(^{
+            available = [NSSpellChecker respondsToSelector:@selector(isAutomaticInlineCompletionEnabled)]
+                && [[NSSpellChecker sharedSpellChecker] respondsToSelector:@selector(completionCandidateFromCandidates:)];
+        });
+        return available;
     }
 
     virtual void suggest(DocumentTag tag, Utf16String const& text, u32 caret_offset, Function<void(Optional<Web::WritingSuggestion>)> on_complete) override {
         // The user's "Show inline predictive text" setting, which can change at any time.
-        if (!can_suggest() || !NSSpellChecker.isAutomaticInlineCompletionEnabled) {
+        __block BOOL enabled = NO;
+        run_on_main(^{
+            enabled = NSSpellChecker.isAutomaticInlineCompletionEnabled;
+        });
+        if (!can_suggest() || !enabled) {
             on_complete({});
             return;
         }
@@ -122,7 +156,10 @@ class MacSpellChecker final : public WebView::SpellChecker {
             // The candidates arrive on an arbitrary queue, and the spellchecker picks among them on the owner thread.
             strong_event_loop->deferred_invoke([pending_suggestions, id, candidates]() mutable {
                 Optional<Web::WritingSuggestion> suggestion;
-                NSTextCheckingResult* candidate = [[NSSpellChecker sharedSpellChecker] completionCandidateFromCandidates:candidates];
+                __block NSTextCheckingResult* candidate = nil;
+                run_on_main(^{
+                    candidate = [[NSSpellChecker sharedSpellChecker] completionCandidateFromCandidates:candidates];
+                });
                 if (candidate && candidate.replacementString && candidate.range.location != NSNotFound) {
                     suggestion = Web::WritingSuggestion {
                         static_cast<u32>(candidate.range.location),
@@ -136,12 +173,14 @@ class MacSpellChecker final : public WebView::SpellChecker {
         };
         // The platform's own candidate types go along with the completion type, which is how the system asks.
         NSTextCheckingTypes types = NSTextCheckingTypeSpelling | NSTextCheckingTypeReplacement | NSTextCheckingTypeCorrection | text_checking_type_single_completion;
-        [[NSSpellChecker sharedSpellChecker] requestCandidatesForSelectedRange:NSMakeRange(caret_offset, 0)
-                                                                      inString:string
-                                                                         types:types
-                                                                       options:nil
-                                                        inSpellDocumentWithTag:tag
-                                                             completionHandler:handler];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [[NSSpellChecker sharedSpellChecker] requestCandidatesForSelectedRange:NSMakeRange(caret_offset, 0)
+                                                                          inString:string
+                                                                             types:types
+                                                                           options:nil
+                                                            inSpellDocumentWithTag:tag
+                                                                 completionHandler:handler];
+        });
     }
 
   private:
