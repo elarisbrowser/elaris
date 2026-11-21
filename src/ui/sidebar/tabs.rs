@@ -7,16 +7,18 @@ use rune::{El, GrowthSpec, ScrollSpec, Spring, col, el, icon, row, text};
 
 use super::drag::{PreviewItem, favourite_columns, favourite_row_ranges, favourite_tile_width};
 use crate::app::{self, AppState};
-
-mod context_menu;
-mod split;
-use crate::internal::{InternalPage, InternalRoute};
 use crate::tab::{Tab, TabId, TabSection};
 use crate::ui::TabDragMoveResult;
 use crate::ui::controls::{icon_button_style, row_button};
 use crate::ui::icons;
 use crate::ui::theme::{self, Theme};
+
+mod context_menu;
+mod icon;
+mod split;
+
 pub(crate) use context_menu::context_menu;
+pub(in crate::ui) use icon::tab_icon;
 use split::{TabRowStyle, members as split_group_members, view as split_tab_group};
 
 pub(super) fn view(
@@ -160,7 +162,7 @@ pub(in crate::ui) fn drag_overlay(
             let active = visual.settling;
             overlays.push(single_drag_visual(
                 tab.label(),
-                tab_icon(tab, active, icon_size, theme),
+                tab_icon(state, tab, active, icon_size, theme),
                 active,
                 visual,
                 theme,
@@ -169,6 +171,7 @@ pub(in crate::ui) fn drag_overlay(
             ));
         } else {
             overlays.push(tab_drag_visual(
+                state,
                 tab,
                 peer,
                 active,
@@ -395,7 +398,7 @@ fn favourite_tile(
         .press_scale(theme::PRESS_SCALE)
         .label(label)
         .child(
-            tab_icon(tab, active, theme::FAVOURITE_ICON, theme)
+            tab_icon(state, tab, active, theme::FAVOURITE_ICON, theme)
                 .key(format!("favourite-icon-{}", id.raw())),
         )
         .position_in_set(index + 1, count)
@@ -449,7 +452,7 @@ fn tab_row(
     let label = tab.label();
     let hidden = state.tab_drag.is_hidden(id);
     let color = if active { theme.text } else { theme.text_muted };
-    let leading = tab_icon(tab, active, theme::ICON, theme);
+    let leading = tab_icon(state, tab, active, theme::ICON, theme);
     let close = icon_button_style(
         &format!("close-{}", id.raw()),
         "Close tab",
@@ -519,22 +522,6 @@ fn tab_row(
         }
     });
     super::hover::attach(row, id)
-}
-
-pub(in crate::ui) fn tab_icon(tab: &Tab, active: bool, size: f32, theme: &Theme) -> El {
-    let color = if active { theme.text } else { theme.text_muted };
-    if let Some(favicon) = &tab.favicon {
-        el().size(size, size).center().pixels(favicon)
-    } else if tab.loading {
-        icon(&icons::LOADING, size)
-            .color(color)
-            .label("Loading")
-            .looping(rune::LoopSpec::rotation(theme::LOADING_PERIOD))
-    } else if tab.internal == Some(InternalRoute::Page(InternalPage::History)) {
-        icon(&icons::HISTORY, size).color(color)
-    } else {
-        icon(&icons::PAGE, size).color(color)
-    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -746,6 +733,7 @@ pub(in crate::ui) fn tab_drag_handler(row: El, id: TabId, members: Vec<TabId>) -
 }
 
 fn tab_drag_visual(
+    state: &AppState,
     tab: &Tab,
     peer: Option<&Tab>,
     active_tab: Option<TabId>,
@@ -787,7 +775,7 @@ fn tab_drag_visual(
                     .center_y()
                     .radius(theme::ROW_RADIUS - 3.0)
                     .fill(theme.address_field)
-                    .child(tab_icon(member, member_active, icon_size, theme))
+                    .child(tab_icon(state, member, member_active, icon_size, theme))
                     .child(
                         text(member.label())
                             .font(type_::BODY)
@@ -816,7 +804,7 @@ fn tab_drag_visual(
     let active = active_tab == Some(tab.id());
     single_drag_visual(
         tab.label(),
-        tab_icon(tab, active, icon_size, theme),
+        tab_icon(state, tab, active, icon_size, theme),
         active,
         visual,
         theme,

@@ -31,7 +31,7 @@ pub(crate) fn view(
         .gap(theme::ROW_GAP + 4.0)
         .center_y()
         .child(search_engine_selector(state, theme, overlays))
-        .child(editor(state, &suggestions, theme, reduced_motion));
+        .child(editor(state, &suggestions, theme));
 
     let available = (height - 2.0 * theme::FIELD_PADDING).min(theme::OMNIBOX_MAX_HEIGHT);
     let results_limit = available - theme::OMNIBOX_INPUT_HEIGHT - theme::OMNIBOX_FOOTER_HEIGHT;
@@ -97,7 +97,7 @@ pub(crate) fn view(
     )
 }
 
-fn editor(state: &AppState, suggestions: &[Suggestion], theme: &Theme, reduced: bool) -> El {
+fn editor(state: &AppState, suggestions: &[Suggestion], theme: &Theme) -> El {
     let style = if state.horizontal_tabs() {
         type_::BODY
     } else {
@@ -121,12 +121,8 @@ fn editor(state: &AppState, suggestions: &[Suggestion], theme: &Theme, reduced: 
         .label("Search or type a URL")
         .autofocus()
         .on_edit(|state: &mut AppState| &mut state.omnibox.input)
-        .on_input_change(move |state: &mut AppState, tx| {
-            if reduced {
-                tx.instant();
-            } else {
-                tx.animated();
-            }
+        .on_input_change(|state: &mut AppState, tx| {
+            tx.instant();
             state.omnibox.selected = 0;
             state.omnibox.selection_moved = false;
             state.request_history_search();
@@ -241,7 +237,7 @@ pub(super) fn address_bar(
         let mut engine_menu = Vec::new();
         bar = bar
             .child(search_engine_selector(state, theme, &mut engine_menu))
-            .child(editor(state, &suggestions, theme, reduced));
+            .child(editor(state, &suggestions, theme));
         if let Some([x, y, width, height]) = cx.window_layout("horizontal-address-bar") {
             let top = y + height + theme::NAV_GAP;
             overlays.push(

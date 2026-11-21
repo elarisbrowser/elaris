@@ -16,9 +16,10 @@ use crate::tab::TabId;
 use super::{page_status, theme};
 use crate::ui::viewport;
 
-const INITIAL_SCALE: f32 = 0.035;
-const OPEN_MOTION: Spring = Spring::new(0.40, 0.18);
-const OPEN_SETTLE: f32 = 0.46;
+/// The card stays nearly full size. The move from the link explains where it came from.
+const REST_SCALE: f32 = 0.96;
+const OPEN_MOTION: Spring = Spring::new(0.32, 0.0);
+const OPEN_SETTLE: f32 = 0.45;
 const DISMISS_TIME: f64 = 0.20;
 const PROMOTE_TIME: f64 = 0.24;
 
@@ -85,7 +86,7 @@ impl PeekAnimation {
     pub(super) fn rect(&self, state: &AppState) -> [f32; 4] {
         let [_, _, width, height] = state.split_rect;
         let (target, t) = match self.kind {
-            AnimationKind::Dismiss { target, .. } => (target, self.progress.powi(2)),
+            AnimationKind::Dismiss { target, .. } => (target, ease_out(self.progress)),
             AnimationKind::Promote(destination) => {
                 let viewport = [0.0, theme::VIEWPORT_INSET, width, height];
                 let bounds = match destination {
@@ -107,7 +108,7 @@ impl PeekAnimation {
                         }
                     }
                 };
-                (bounds, 1.0 - (1.0 - self.progress).powi(3))
+                (bounds, ease_out(self.progress))
             }
         };
         std::array::from_fn(|i| self.from[i] + (target[i] - self.from[i]) * t)
@@ -118,6 +119,7 @@ pub(super) struct CardPose {
     pub(super) rect: [f32; 4],
     pub(super) scale: f32,
     pub(super) offset: [f32; 2],
+    pub(super) opacity: f32,
 }
 
 impl CardPose {
@@ -150,13 +152,20 @@ pub(super) fn opening_pose(
         OPEN_MOTION.sample(0.0, 0.0, 1.0, elapsed).0
     };
     let max_scale = (height + 2.0 * theme::VIEWPORT_INSET) / panel.height;
-    let scale = (INITIAL_SCALE + (1.0 - INITIAL_SCALE) * progress).min(max_scale);
+    let scale = (REST_SCALE + (1.0 - REST_SCALE) * progress).min(max_scale);
     let travel = 1.0 - progress.min(1.0);
     CardPose {
         rect: [panel.x, y, panel.width, panel.height],
         scale,
         offset: [dx * travel, dy * travel],
+        opacity: if reduced { 1.0 } else { progress.min(1.0) },
     }
+}
+
+/// Starts fast and settles. `t³` would do the opposite, holding still while the eye is watching.
+pub(super) fn ease_out(progress: f32) -> f32 {
+    let remaining = 1.0 - progress.clamp(0.0, 1.0);
+    1.0 - remaining * remaining * remaining
 }
 
 /// Advance Peek on Rune's frame clock without resizing the Ladybird view during motion.
@@ -247,7 +256,7 @@ pub(crate) fn dismiss(state: &mut AppState, tx: &mut Tx) -> bool {
             .map_or_else(|| pose.drawn_rect(), |animation| animation.rect(state));
         let [x, y] = peek.origin;
         let [_, _, width, height] = pose.rect;
-        let [w, h] = [width * INITIAL_SCALE, height * INITIAL_SCALE];
+        let [w, h] = [width * REST_SCALE, height * REST_SCALE];
         let target = [x - w / 2.0, y + theme::VIEWPORT_INSET - h / 2.0, w, h];
         PeekAnimation::new(
             peek.page.id(),

@@ -16,7 +16,7 @@ use crate::tab::{Tab, TabId};
 
 use super::{controls, icons, theme};
 
-use animation::{AnimationKind, PeekAnimation, opening_pose, promote};
+use animation::{AnimationKind, PeekAnimation, ease_out, opening_pose, promote};
 pub(crate) use animation::{Presentation, advance, dismiss};
 pub(super) use input::backdrop;
 
@@ -54,20 +54,19 @@ fn card(state: &AppState, theme: &theme::Theme, reduced: bool, peek: &peek::Peek
         state.peek_presentation.opening_time(),
         reduced,
     );
-    let motion = if reduced {
-        Transition::opacity().springs(SpringPair::new(CLOSE_MOTION, CLOSE_MOTION))
-    } else {
-        Transition::none()
-    };
-    panel(id, pose.rect, theme, 1.0)
+    let mut card = panel(id, pose.rect, theme, 1.0)
         .scale(pose.scale)
         .scale_motion(Anim::INSTANT)
         .offset(pose.offset[0], pose.offset[1])
-        .offset_motion(Anim::INSTANT)
-        .transition(motion)
-        .role("dialog")
-        .label("Peek")
-        .child(content)
+        .offset_motion(Anim::INSTANT);
+    card = if reduced {
+        card.transition(Transition::opacity().springs(SpringPair::new(CLOSE_MOTION, CLOSE_MOTION)))
+    } else {
+        card.opacity(pose.opacity)
+            .opacity_motion(Anim::INSTANT)
+            .transition(Transition::none())
+    };
+    card.role("dialog").label("Peek").child(content)
 }
 
 pub(super) fn page_point(state: &AppState, point: [f32; 2], reduced: bool) -> Option<[f32; 2]> {
@@ -129,7 +128,7 @@ fn transition_card(
         AnimationKind::Dismiss { frame, status, .. } => (
             frame,
             status.as_deref(),
-            1.0 - animation.progress.powi(3),
+            1.0 - ease_out(animation.progress),
             1.0,
         ),
         AnimationKind::Promote(_) => {

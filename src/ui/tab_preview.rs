@@ -188,7 +188,7 @@ pub(super) fn view(
                     .opacity_motion(if reduced {
                         Anim::INSTANT
                     } else {
-                        Anim::new(Curve::ease_in_out(FADE_DURATION))
+                        Anim::new(Curve::tween(FADE_DURATION, rune::Easing::EASE_OUT))
                     })
                     .transition(reveal(reduced))
                     .child(

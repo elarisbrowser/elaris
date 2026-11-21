@@ -46,8 +46,9 @@ fn panel_tracks_content_and_escape_restores_page_focus() {
         .into_iter()
         .find(|el| el.key.as_deref() == Some(key.as_str()))
         .unwrap();
-    assert!(opening.rect[2] < 0.05 * opening.target[2]);
-    assert!(opening.rect[3] < 0.05 * opening.target[3]);
+    assert!(opening.rect[2] > 0.9 * opening.target[2]);
+    assert!(opening.rect[3] > 0.9 * opening.target[3]);
+    assert!(opening.opacity < 0.5);
     window.update_if(|state, tx| crate::app::poll(state, 0.09, tx));
     window.frame(0.016);
     let expanding = window
@@ -73,7 +74,7 @@ fn panel_tracks_content_and_escape_restores_page_focus() {
     assert!((settled.rect[0] + settled.rect[2] / 2.0 - (x + w / 2.0)).abs() < 0.05);
     assert!(expanding.rect[2] > opening.rect[2] && expanding.rect[2] < settled.rect[2]);
     assert!(expanding.rect[3] > opening.rect[3] && expanding.rect[3] < settled.rect[3]);
-    assert!(rebound.rect[2] > settled.rect[2]);
+    assert!(rebound.rect[2] <= settled.rect[2] + 0.05);
     assert!(settled.rect[1] < y);
     assert!(settled.rect[2] < w);
     assert!(settled.rect[3] > h);
@@ -105,7 +106,8 @@ fn panel_tracks_content_and_escape_restores_page_focus() {
         .into_iter()
         .find(|el| el.key.as_deref() == Some(key.as_str()))
         .unwrap();
-    assert!(shrinking.rect[2] < settled.rect[2] / 3.0);
+    assert!(shrinking.rect[2] > settled.rect[2] * 0.9);
+    assert!(shrinking.opacity < 0.25);
     let [sx, sy, sw, sh] = shrinking.rect;
     assert!((sx + sw / 2.0 - (x + origin[0])).abs() < 80.0);
     assert!((sy + sh / 2.0 - (y + origin[1])).abs() < 60.0);

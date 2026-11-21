@@ -251,7 +251,7 @@ pub(crate) const ICON_BUTTON: f32 = 28.0;
 pub(crate) const ICON_BUTTON_RADIUS: f32 = radius::MD;
 pub(crate) const LOADING_PERIOD: f64 = 1.0;
 pub(crate) const ICON: f32 = 16.0;
-pub(crate) const CLOSE_BUTTON: f32 = 22.0;
+pub(crate) const CLOSE_BUTTON: f32 = 24.0;
 /// The space between the navigation buttons, and between them and the sidebar toggle while the
 /// sidebar is hidden.
 pub(crate) const NAV_GAP: f32 = space::S1;
@@ -277,6 +277,8 @@ pub(crate) const SWIPE_INDICATOR_SETTLE: Anim = Anim::new(Curve::tween(0.14, Eas
 pub(super) const HIGHLIGHT_MOTION: Spring = Spring::new(0.10, 0.0);
 pub(super) const HOVER_ENTER: Anim = Anim::new(Curve::tween(0.08, Easing::EASE_OUT));
 pub(super) const HOVER_EXIT: Anim = Anim::new(Curve::tween(0.15, Easing::EASE_OUT));
+/// Crossfade for a status glyph that swaps in place, such as reload and stop.
+pub(crate) const STATUS_GLYPH: Anim = Anim::new(Curve::tween(0.15, Easing::EASE_OUT));
 
 /// Compact overlays settle into place on entry and fade in place on dismissal.
 pub(super) fn overlay_reveal(reduced_motion: bool) -> Transition {

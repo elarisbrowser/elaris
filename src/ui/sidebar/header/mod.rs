@@ -7,20 +7,26 @@
 use rune::Chrome;
 #[cfg(target_os = "linux")]
 use rune::Spring;
+#[cfg(target_os = "linux")]
 use rune::Transition;
 #[cfg(target_os = "linux")]
 use rune::tok::motion;
-use rune::{Cx, El, Icon, el, icon, row, spacer, text};
-use rune_kit::{Menu, MenuItem, context_menu};
+use rune::{Cx, El, Icon, el, row, spacer, text};
+use rune_kit::{MenuItem, context_menu};
 
 use crate::app::AppState;
 use crate::browser::Browser;
 use crate::engine::ViewCommand;
 use crate::tab::TabId;
-use crate::ui::controls::{self, icon_button};
-use crate::ui::hover_highlight;
+use crate::ui::controls::icon_button;
 use crate::ui::icons;
 use crate::ui::theme::{self, Theme};
+
+mod reload;
+mod zoom;
+
+pub(crate) use zoom::settle_zoom_chip;
+pub(in crate::ui) use zoom::zoom_indicator;
 
 /// What a navigation button does to the active tab.
 type Navigate = fn(&mut Browser, TabId);
@@ -164,8 +170,7 @@ pub(in crate::ui) fn navigation(state: &AppState, theme: &Theme) -> impl Iterato
             Browser::go_forward,
         ),
     ];
-    let loading = tab.is_some_and(|tab| tab.loading);
-    let reload = reload_button(loading, tab.is_some_and(|tab| !tab.is_internal()), theme);
+    let reload = reload::button(state, theme);
     buttons
         .into_iter()
         .enumerate()
@@ -199,124 +204,6 @@ pub(in crate::ui) fn navigation(state: &AppState, theme: &Theme) -> impl Iterato
                 })
         })
         .chain(std::iter::once(reload))
-}
-
-/// The reload button, which morphs into a stop cross while the page loads and back once it stops.
-fn reload_button(loading: bool, enabled: bool, theme: &Theme) -> El {
-    let (label, navigate): (&str, Navigate) = if loading {
-        ("Stop loading", Browser::stop_loading)
-    } else {
-        ("Reload", Browser::reload)
-    };
-    let frame = controls::icon_button_frame("reload", label, theme::ICON_BUTTON, theme);
-    let button = if enabled {
-        hover_highlight::attach(frame, "reload", hover_highlight::Group::Controls)
-            .on_press(move |state: &mut AppState| state.with_active_tab(navigate))
-    } else {
-        frame.disabled(true).opacity(theme.disabled_opacity)
-    };
-    // The arrow turns away as the cross turns in, in opposite directions. Both stay mounted, so
-    // each spring runs from where the other left off.
-    let quarter = std::f32::consts::FRAC_PI_2;
-    button
-        .child(morph_glyph(
-            &icons::RELOAD,
-            "reload-arrow",
-            !loading,
-            quarter,
-            theme,
-        ))
-        .child(morph_glyph(
-            &icons::CLOSE,
-            "reload-stop-cross",
-            loading,
-            -quarter,
-            theme,
-        ))
-}
-
-/// A glyph centred in its button that shows when `shown`, and otherwise shrinks and turns by
-/// `hidden_turn` radians out of sight.
-fn morph_glyph(
-    glyph: &'static Icon,
-    key: &str,
-    shown: bool,
-    hidden_turn: f32,
-    theme: &Theme,
-) -> El {
-    let inset = (theme::ICON_BUTTON - theme::ICON) / 2.0;
-    icon(glyph, theme::ICON)
-        .key(key)
-        .color(theme.icon)
-        .absolute(inset, inset)
-        .scale(if shown { 1.0 } else { 0.0 })
-        .rotate(if shown { 0.0 } else { hidden_turn })
-}
-
-/// Hides the zoom chip once its time is up.
-pub(crate) fn settle_zoom_chip(state: &mut AppState, clock: f64) -> bool {
-    match state.zoom_chip {
-        Some((_, until)) if clock >= until => {
-            state.zoom_chip = None;
-            true
-        }
-        _ => false,
-    }
-}
-
-/// The page-zoom chip with its menu. It shows for a moment after the active page's zoom changes,
-/// and stays while its menu is open.
-pub(in crate::ui) fn zoom_indicator(
-    state: &AppState,
-    theme: &Theme,
-    overlays: &mut Vec<El>,
-) -> Option<El> {
-    let tab = state
-        .browser
-        .active_tab()
-        .filter(|tab| !tab.is_internal())?;
-    let id = tab.id();
-    let flashing = state.zoom_chip.is_some_and(|(shown, _)| shown == id);
-    if !flashing && state.zoom_menu != Some(id) {
-        return None;
-    }
-    let caption = format!("{}%", state.browser.page_zoom(tab));
-    let trigger = el()
-        .key("zoom-indicator")
-        .w(theme::ZOOM_CHIP_WIDTH)
-        .h(theme::ICON_BUTTON)
-        .transition(Transition::scale(0.9).combined(Transition::opacity()))
-        .center()
-        .radius(theme::ICON_BUTTON_RADIUS)
-        .press(theme.press)
-        .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
-        .label(format!("Page zoom {caption}"))
-        .help("Page zoom")
-        .child(
-            text(caption)
-                .font(rune::tok::type_::BODY)
-                .color(theme.text)
-                .single_line(),
-        )
-        .on_press(move |state: &mut AppState| {
-            state.dismiss_context_menu();
-            state.navigation_menu = None;
-            state.page_menu = Default::default();
-            state.zoom_menu = (state.zoom_menu != Some(id)).then_some(id);
-        });
-    let mut menu = Menu::new("page-zoom")
-        .trigger(trigger)
-        .open(state.zoom_menu == Some(id))
-        .on_close(|state: &mut AppState| state.zoom_menu = None);
-    for (label, delta) in [("Zoom In", 10), ("Zoom Out", -10), ("Reset Page Zoom", 0)] {
-        menu = menu.item(MenuItem::new(label).on_select(move |state: &mut AppState| {
-            state.zoom_menu = None;
-            if state.browser.active_tab().is_some_and(|tab| tab.id() == id) {
-                state.browser.change_zoom(id, delta);
-            }
-        }));
-    }
-    Some(menu.build(&theme.kit(theme.overlay_panel), overlays))
 }
 
 pub(in crate::ui) fn history_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {

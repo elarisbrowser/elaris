@@ -182,7 +182,11 @@ fn search_field(state: &AppState, theme: &Theme, reduced: bool, marks: Vec<El>) 
         },
         theme,
     )
-    .token_motion(theme::OMNIBOX_MOTION)
+    .token_motion(if reduced {
+        rune::Spring::NONE
+    } else {
+        theme::OMNIBOX_MOTION
+    })
     .h(theme::FIELD_HEIGHT)
     .radius(theme::FIELD_RADIUS)
     .continuous_corners()

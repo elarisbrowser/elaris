@@ -242,8 +242,9 @@ fn search(state: &AppState, theme: &Theme) -> El {
 }
 
 fn entries(state: &AppState, theme: &Theme, kit: &Kit, reduced_motion: bool) -> El {
+    let quiet = reduced_motion || !state.history_page.input.text.trim().is_empty();
     let motion = |list: El| {
-        if reduced_motion {
+        if quiet {
             list.child_exit(Transition::none()).instant_changes()
         } else {
             list.growth(GrowthSpec::default())
@@ -257,17 +258,21 @@ fn entries(state: &AppState, theme: &Theme, kit: &Kit, reduced_motion: bool) -> 
         let date = &day[0].date;
         let mut rows = motion(super::group(theme));
         for (index, entry) in day.iter().enumerate() {
-            rows = rows.child(entry_row(state, entry, index == 0, theme, kit));
+            rows = rows.child(entry_row(state, entry, index == 0, theme, kit, quiet));
         }
-        list = list.child(
-            super::section(
+        list = list.child({
+            let section = super::section(
                 format!("history-date-{date}"),
                 &date_label(date, page),
                 theme,
                 rows,
-            )
-            .arrives_whole(),
-        );
+            );
+            if quiet {
+                section
+            } else {
+                section.arrives_whole()
+            }
+        });
     }
     list
 }
@@ -381,7 +386,14 @@ fn navigate_entries(state: &mut AppState, url: &str, key: &Key, tx: &mut rune::T
     true
 }
 
-fn entry_row(state: &AppState, row_entry: &PageEntry, first: bool, theme: &Theme, kit: &Kit) -> El {
+fn entry_row(
+    state: &AppState,
+    row_entry: &PageEntry,
+    first: bool,
+    theme: &Theme,
+    kit: &Kit,
+    quiet: bool,
+) -> El {
     let entry = &row_entry.entry;
     let title = if entry.title.trim().is_empty() {
         &entry.url
@@ -505,7 +517,7 @@ fn entry_row(state: &AppState, row_entry: &PageEntry, first: bool, theme: &Theme
         .child(check)
         .child(open)
         .child(remove);
-    col()
+    let row = col()
         .key(format!("history-entry:{}", entry.url))
         .w_full()
         .fill(if selected {
@@ -513,9 +525,17 @@ fn entry_row(state: &AppState, row_entry: &PageEntry, first: bool, theme: &Theme
         } else {
             rune::Color::TRANSPARENT
         })
-        .arrives_whole()
-        .transition(Transition::opacity())
-        .children((!first).then(|| super::separator(theme)))
+        .transition(if quiet {
+            Transition::none()
+        } else {
+            Transition::opacity()
+        });
+    let row = if quiet {
+        row.instant_changes()
+    } else {
+        row.arrives_whole()
+    };
+    row.children((!first).then(|| super::separator(theme)))
         .child(content)
 }
 

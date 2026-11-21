@@ -285,7 +285,7 @@ fn overflow_menu(state: &AppState, cx: &Cx<AppState>, theme: &Theme, overlays: &
             }
             menu = menu.item(
                 MenuItem::new(tab.label())
-                    .lead(tab_icon(tab, active == Some(id), theme::ICON, theme))
+                    .lead(tab_icon(state, tab, active == Some(id), theme::ICON, theme))
                     .checked(active == Some(id))
                     .on_select_tx(move |state: &mut AppState, tx| {
                         state.sidebar.overflow_menu_open = false;
@@ -458,7 +458,7 @@ fn tab_view(state: &AppState, tab: &Tab, theme: &Theme) -> El {
     let active = state.browser.active_tab().is_some_and(|tab| tab.id() == id);
     let section = tab.section();
     let label = tab.label();
-    let icon = tab_icon(tab, active, theme::ICON, theme);
+    let icon = tab_icon(state, tab, active, theme::ICON, theme);
     let mut tile = if section == TabSection::Regular {
         let close = icon_button_style(
             &format!("close-{}", id.raw()),

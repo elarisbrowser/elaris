@@ -2,17 +2,13 @@
 
 use rune::tok::{radius, space, type_};
 use rune::{
-    El, Key, KeyEvent, PhysicalInput, ScrollSpec, Spring, SpringPair, Transition, Tx, col, el,
-    icon, row, text,
+    El, Key, KeyEvent, PhysicalInput, ScrollSpec, Spring, Transition, Tx, col, el, icon, row, text,
 };
 
 use crate::app::AppState;
 use crate::internal::{InternalPage, InternalRoute};
 use crate::tab::{Tab, TabId};
-use crate::ui::{
-    VIEWPORT, icons,
-    theme::{self, Theme},
-};
+use crate::ui::{VIEWPORT, icons, theme::Theme};
 
 const PANEL: &str = "quick-tab-switcher";
 const LIST: &str = "quick-tab-list";
@@ -86,8 +82,7 @@ pub(crate) fn cycle_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> 
 }
 
 fn animate(tx: &mut Tx) {
-    tx.animated();
-    tx.motion(theme::HIGHLIGHT_MOTION);
+    tx.instant();
 }
 
 pub(crate) fn finish(state: &mut AppState, target: Option<TabId>, tx: &mut Tx) {
@@ -171,17 +166,13 @@ fn entry_key(id: TabId) -> String {
     format!("quick-tab-{}", id.raw())
 }
 
-pub(crate) fn view(state: &AppState, theme: &Theme, height: f32, reduced: bool) -> Option<El> {
+pub(crate) fn view(state: &AppState, theme: &Theme, height: f32, _reduced: bool) -> Option<El> {
     let switcher = state.tab_switcher.as_ref()?;
     let index = switcher
         .candidates
         .iter()
         .position(|&id| id == switcher.selected)?;
-    let motion = if reduced {
-        Spring::NONE
-    } else {
-        theme::HIGHLIGHT_MOTION
-    };
+    let motion = Spring::NONE;
     let mut items = col()
         .key("quick-tab-items")
         .w_full()
@@ -191,7 +182,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32, reduced: bool) 
             ROW,
             radius::MD,
             theme,
-            reduced,
+            true,
         ));
     for &id in &switcher.candidates {
         if let Some(tab) = state.browser.tab(id) {
@@ -213,14 +204,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32, reduced: bool) 
         .preserve_focus_on_press(true)
         .on_physical_input(physical)
         .on_key(key)
-        .transition(if reduced {
-            Transition::none()
-        } else {
-            Transition::scale(0.97).springs(SpringPair::new(
-                theme::HIGHLIGHT_MOTION,
-                Spring::new(0.11, 0.0),
-            ))
-        })
+        .transition(Transition::none())
         .token_motion(motion)
         .child(
             col()
@@ -582,10 +566,10 @@ mod tests {
         );
     }
     #[test]
-    fn highlight_moves_without_moving_entries_and_panel_animates_out() {
+    fn highlight_jumps_without_moving_entries_and_panel_closes_at_once() {
         let (mut runtime, ids) = runtime();
         cycle(&mut runtime, false);
-        runtime.frame(1.0);
+        runtime.frame(0.0);
         let before = runtime.elements();
         runtime.key(KeyEvent {
             key: Key::Tab,
@@ -594,7 +578,7 @@ mod tests {
                 ..Mods::default()
             },
         });
-        runtime.frame(0.01);
+        runtime.frame(0.0);
         let after = runtime.elements();
         let find = |nodes: &[rune::ElementInfo], key: &str| {
             let node = nodes
@@ -605,18 +589,18 @@ mod tests {
         };
         let highlight = find(&after, "quick-tab-highlight");
         let start = find(&before, "quick-tab-highlight").1[1];
-        assert!(highlight.1[1] >= start && highlight.1[1] < start + ROW);
+        assert!((highlight.1[1] - start).abs() >= ROW - 1.0);
         assert_eq!(
             find(&after, &entry_key(ids[1])),
             find(&before, &entry_key(ids[1]))
         );
         runtime.physical_input(PhysicalInput::Modifiers(Mods::default()));
-        runtime.frame(0.01);
+        runtime.frame(0.0);
         assert!(
-            runtime
+            !runtime
                 .elements()
                 .iter()
-                .any(|node| node.key.as_deref() == Some(PANEL) && node.exiting)
+                .any(|node| node.key.as_deref() == Some(PANEL))
         );
     }
 }

@@ -45,7 +45,7 @@ pub(crate) fn trigger(state: &AppState, theme: &Theme, layer: &mut Vec<El>) -> E
                 .center()
                 .radius(7.0)
                 .fill(theme.icon)
-                .child(text(count).font(type_::LABEL).color(theme.window)),
+                .child(text(count).font(type_::LABEL).color(theme.page)),
         );
     }
     let kit = theme.kit(theme.overlay_panel);
