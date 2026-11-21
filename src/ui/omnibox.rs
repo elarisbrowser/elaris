@@ -234,7 +234,7 @@ pub(super) fn address_bar(
             theme::OMNIBOX_MOTION
         });
     if !editing && state.browser.active_tab().is_some() {
-        bar = bar.child(super::sidebar::site_controls(theme).press_scale(1.0));
+        bar = bar.child(super::sidebar::site_controls(theme, theme::CLOSE_BUTTON).press_scale(1.0));
     }
     if editing {
         let suggestions = state.suggestions();

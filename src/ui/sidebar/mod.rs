@@ -210,13 +210,13 @@ fn search_field(state: &AppState, theme: &Theme, reduced: bool) -> El {
     if let Some(url) = address {
         buttons = buttons.child(copy_link(state, url, theme, reduced));
     }
-    launcher.child(buttons.child(site_controls(theme)))
+    launcher.child(buttons.child(site_controls(theme, theme::ICON_BUTTON)))
 }
 
 /// Copies the page's address, then morphs its chain into a tick that draws itself on.
 fn copy_link(state: &AppState, url: &str, theme: &Theme, reduced: bool) -> El {
     let copied = state.sidebar.link_copied_until.is_some();
-    let size = theme::CLOSE_BUTTON;
+    let size = theme::ICON_BUTTON;
     let inset = (size - theme::ICON) / 2.0;
     let swap = |enter: Transition| if reduced { Transition::none() } else { enter };
     let glyph = if copied {
@@ -272,12 +272,12 @@ pub(crate) fn settle_copy_link(state: &mut AppState, clock: f64) -> bool {
     }
 }
 
-pub(super) fn site_controls(theme: &Theme) -> El {
+pub(super) fn site_controls(theme: &Theme, size: f32) -> El {
     super::controls::icon_button(
         "site-controls",
         "Site permissions and page information",
         &icons::SITE_CONTROLS,
-        theme::CLOSE_BUTTON,
+        size,
         theme,
     )
     .on_layout_tx(|state: &mut AppState, rect, tx| {
