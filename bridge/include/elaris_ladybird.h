@@ -156,9 +156,9 @@ typedef struct {
  * which stays unchanged until elaris_ladybird_release_frames() reports a newer frame drawn.
  *
  * Linux: dmabuf_fd is a descriptor the host owns for the frame's single-plane dmabuf (DRM format dmabuf_format, at
- * dmabuf_offset with rows of dmabuf_stride bytes, laid out by dmabuf_modifier). bitmap_id names the backing store, whose
- * dmabuf the same descriptor refers to every time it shows a frame. Ladybird does not paint into the store again until
- * elaris_ladybird_release_frames() reports this frame, or a newer one, read. */
+ * dmabuf_offset with rows of dmabuf_stride bytes, laid out by dmabuf_modifier). bitmap_id names the backing store,
+ * whose dmabuf the same descriptor refers to every time it shows a frame. Ladybird does not paint into the store again
+ * until elaris_ladybird_release_frames() reports this frame, or a newer one, read. */
 typedef struct {
     void* io_surface;
     int32_t dmabuf_fd;

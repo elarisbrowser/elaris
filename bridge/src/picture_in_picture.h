@@ -7,7 +7,9 @@
 #include <AK/Function.h>
 #include <AK/NonnullOwnPtr.h>
 #include <AK/kmalloc.h>
+
 #include <LibGfx/Size.h>
+
 #include <vector>
 
 namespace Elaris {
@@ -16,7 +18,7 @@ namespace Elaris {
 // configuring and destroying it block until the main thread has run the work, so the main thread must never wait on
 // the owner thread. Mouse and resize callbacks run on the main thread.
 class PictureInPicturePanel {
-public:
+  public:
     AK_ALLOC_WITH_KMALLOC;
 
     struct Handlers {
@@ -39,10 +41,10 @@ public:
     void show_frame(std::vector<uint8_t> rgba, int width, int height);
     void hide();
 
-private:
+  private:
     explicit PictureInPicturePanel(void* implementation);
 
     void* m_implementation;
 };
 
-}
+} // namespace Elaris

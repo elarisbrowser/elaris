@@ -5,8 +5,8 @@
 #include <iostream>
 #include <map>
 #include <optional>
-#include <string_view>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -163,7 +163,9 @@ static bool page_dialogs(ElarisLadybird* bridge, ElarisLadybirdView* view, Event
     };
     auto reply = [&](bool accepted, std::string const& response = {}) {
         return check(elaris_ladybird_reply_to_dialog(view, events.dialog_id, accepted,
-                         reinterpret_cast<uint8_t const*>(response.data()), response.size()), "reply to page dialog");
+                                                     reinterpret_cast<uint8_t const*>(response.data()),
+                                                     response.size()),
+                     "reply to page dialog");
     };
     // Script continues only when each individual reply has been delivered back to the page.
     auto url = "data:text/html,<script>alert('Hello');"
@@ -180,7 +182,8 @@ static bool page_dialogs(ElarisLadybird* bridge, ElarisLadybirdView* view, Event
 }
 
 static bool page_before_unload(ElarisLadybird* bridge, ElarisLadybirdView* view, Events& events) {
-    auto page = R"HTML(data:text/html,<title>Unsaved page</title><button style="width:100px;height:36px" onclick="document.title='Unsaved edits'; onbeforeunload=(event)=>event.preventDefault()">Edit</button>)HTML";
+    auto page =
+        R"HTML(data:text/html,<title>Unsaved page</title><button style="width:100px;height:36px" onclick="document.title='Unsaved edits'; onbeforeunload=(event)=>event.preventDefault()">Edit</button>)HTML";
     auto next = "data:text/html,<title>Next page</title>";
     if (!check(elaris_ladybird_load(view, page), "load beforeunload page") ||
         !pump_until(bridge, [&] { return events.last_title == "Unsaved page"; }))
@@ -213,7 +216,8 @@ static bool page_before_unload(ElarisLadybird* bridge, ElarisLadybirdView* view,
         events.close_decision = -1;
         if (!check(elaris_ladybird_preflight_close(view), "preflight closing an edited page") ||
             !pump_until(bridge, [&] { return events.dialog_kind == ELARIS_LADYBIRD_DIALOG_BEFORE_UNLOAD; }) ||
-            !check(elaris_ladybird_reply_to_dialog(view, events.dialog_id, accept, nullptr, 0), "answer close preflight") ||
+            !check(elaris_ladybird_reply_to_dialog(view, events.dialog_id, accept, nullptr, 0),
+                   "answer close preflight") ||
             !pump_until(bridge, [&] { return events.close_decision == accept; }))
             return false;
     }
@@ -275,19 +279,16 @@ static bool page_form_pickers(ElarisLadybird* bridge, ElarisLadybirdView* view, 
     auto multiple_paths = upload.string();
     multiple_paths.push_back('\0');
     multiple_paths += (upload.parent_path() / "download_smoke.cpp").string();
-    if (!(open(18, "file", "html") && reply({}, "upload canceled:empty") &&
-           open(18, "file", "html") && reply(upload.string(), upload.filename().string()) &&
-           open(18, "file", "html") && reply({}, "upload canceled:" + upload.filename().string()) &&
-           open(54, "color", "#123456") && reply({}, "upload canceled:" + upload.filename().string()) &&
-           open(54, "color", "#123456") && reply("#abcdef", "#abcdef") &&
-           open(90, "date", "2026-12-31") && reply({}, "#abcdef") &&
-           open(90, "date", "2026-12-31") && reply("2026-03-04", "2026-03-04") &&
-           open(126, "select", "Group") && reply({}, "2026-03-04") &&
-           open(126, "select", "Group") &&
-           elaris_ladybird_reply_to_picker(view, events.picker_id, reinterpret_cast<uint8_t const*>("2"), 1) != 0 &&
-           reply("3", "Second") &&
-           open(162, "file", "\"multiple\":true") && reply(multiple_paths, "2") &&
-           open(18, "file", "html")))
+    if (!(open(18, "file", "html") && reply({}, "upload canceled:empty") && open(18, "file", "html") &&
+          reply(upload.string(), upload.filename().string()) && open(18, "file", "html") &&
+          reply({}, "upload canceled:" + upload.filename().string()) && open(54, "color", "#123456") &&
+          reply({}, "upload canceled:" + upload.filename().string()) && open(54, "color", "#123456") &&
+          reply("#abcdef", "#abcdef") && open(90, "date", "2026-12-31") && reply({}, "#abcdef") &&
+          open(90, "date", "2026-12-31") && reply("2026-03-04", "2026-03-04") && open(126, "select", "Group") &&
+          reply({}, "2026-03-04") && open(126, "select", "Group") &&
+          elaris_ladybird_reply_to_picker(view, events.picker_id, reinterpret_cast<uint8_t const*>("2"), 1) != 0 &&
+          reply("3", "Second") && open(162, "file", "\"multiple\":true") && reply(multiple_paths, "2") &&
+          open(18, "file", "html")))
         return false;
 
     auto stale_request = events.picker_id;
@@ -297,8 +298,9 @@ static bool page_form_pickers(ElarisLadybird* bridge, ElarisLadybirdView* view, 
         return false;
     auto current_request = events.picker_id;
     auto file_path = upload.string();
-    if (!check(elaris_ladybird_reply_to_picker(view, stale_request,
-                   reinterpret_cast<uint8_t const*>(file_path.data()), file_path.size()), "ignore stale file selection") ||
+    if (!check(elaris_ladybird_reply_to_picker(view, stale_request, reinterpret_cast<uint8_t const*>(file_path.data()),
+                                               file_path.size()),
+               "ignore stale file selection") ||
         events.picker_id != current_request || !reply({}, "upload canceled:empty"))
         return false;
 
@@ -404,9 +406,12 @@ static bool page_input(ElarisLadybird* bridge, ElarisLadybirdView* view, uint64_
     hover.x = 30;
     hover.y = 20;
     if (!check(elaris_ladybird_mouse_event(view, &hover), "hover link") ||
-        !expect([&] { return events.hovered_link.ends_with("smoke.html#target") &&
-                            events.tooltip == "Local link tooltip" && events.cursor == "Hand"; },
-                "link destination, tooltip and cursor"))
+        !expect(
+            [&] {
+                return events.hovered_link.ends_with("smoke.html#target") && events.tooltip == "Local link tooltip" &&
+                       events.cursor == "Hand";
+            },
+            "link destination, tooltip and cursor"))
         return false;
     hover.y = 50;
     if (!check(elaris_ladybird_mouse_event(view, &hover), "hover input") ||
@@ -532,7 +537,8 @@ static bool two_views(ElarisLadybird* bridge, EventsByView& events, std::string 
              check(elaris_ladybird_reload_bypassing_cache(second), "reload without cache") &&
              check(elaris_ladybird_stop_loading(second), "stop reload") &&
              check(elaris_ladybird_set_visible(first, 1), "show first view");
-    if (passed && (!events[10].navigation_items.empty() || events[10].history != 0 || events[10].last_title != "Elaris Bridge Smoke")) {
+    if (passed && (!events[10].navigation_items.empty() || events[10].history != 0 ||
+                   events[10].last_title != "Elaris Bridge Smoke")) {
         std::cerr << "the second view's history reached the first\n";
         passed = false;
     }

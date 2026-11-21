@@ -62,12 +62,12 @@
 #include <cstring>
 #include <deque>
 #include <map>
-#include <unistd.h>
 #include <memory>
 #include <set>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <unistd.h>
 #include <utility>
 #include <vector>
 
@@ -150,7 +150,9 @@ class ElarisApplication final : public WebView::Application {
 #endif
     }
     // The host process is Elaris, not a Ladybird browser, so its own crashes are never captured or reported.
-    bool captures_browser_crashes() const override { return false; }
+    bool captures_browser_crashes() const override {
+        return false;
+    }
     NonnullOwnPtr<WebView::NotificationBackend> create_notification_backend() override {
 #if defined(AK_OS_MACOS)
         return Elaris::make_notification_backend_macos();
@@ -177,9 +179,9 @@ class ElarisApplication final : public WebView::Application {
         return false;
 #endif
     }
-    AK::OwnPtr<WebView::PictureInPictureWindow> create_picture_in_picture_window(WebView::WebContentPage& requesting_page,
-                                                                                 WebView::CanonicalTraversable& traversable,
-                                                                                 Gfx::IntSize video_size) override;
+    AK::OwnPtr<WebView::PictureInPictureWindow>
+    create_picture_in_picture_window(WebView::WebContentPage& requesting_page,
+                                     WebView::CanonicalTraversable& traversable, Gfx::IntSize video_size) override;
 
   private:
 #if defined(AK_OS_MACOS)
@@ -1328,9 +1330,10 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
 #if defined(AK_OS_MACOS)
     auto* bridge = *out_bridge;
     bridge->media_link = std::make_shared<OwnerLink>();
-    bridge->media_controls = Elaris::MediaControls::create([link = bridge->media_link, bridge](Elaris::MediaCommand command) {
-        post_to_owner(link, [bridge, command] { media_command(*bridge, command); });
-    });
+    bridge->media_controls =
+        Elaris::MediaControls::create([link = bridge->media_link, bridge](Elaris::MediaCommand command) {
+            post_to_owner(link, [bridge, command] { media_command(*bridge, command); });
+        });
 #endif
     (*out_bridge)->download_observer = std::make_unique<ElarisDownloadObserver>(**out_bridge);
     return succeed();
@@ -1695,10 +1698,8 @@ class ElarisPictureInPictureWindow final : public WebView::PictureInPictureWindo
     AK_ALLOC_WITH_KMALLOC;
 
     ElarisPictureInPictureWindow(ElarisLadybirdView& handle, Gfx::IntSize video_size)
-        : m_handle(&handle)
-        , m_screen(Elaris::PictureInPicturePanel::screen_size())
-        , m_size(initial_size(video_size, m_screen))
-        , m_link(std::make_shared<OwnerLink>()) {
+        : m_handle(&handle), m_screen(Elaris::PictureInPicturePanel::screen_size()),
+          m_size(initial_size(video_size, m_screen)), m_link(std::make_shared<OwnerLink>()) {
         report_page_close_of(*m_handle->view);
 
         Elaris::PictureInPicturePanel::Handlers handlers;
@@ -1729,9 +1730,15 @@ class ElarisPictureInPictureWindow final : public WebView::PictureInPictureWindo
         elaris_ladybird_destroy_view(m_handle);
     }
 
-    Gfx::IntSize size() const override { return m_size; }
-    String handle() const override { return m_handle->view->handle(); }
-    void hide() override { m_panel->hide(); }
+    Gfx::IntSize size() const override {
+        return m_size;
+    }
+    String handle() const override {
+        return m_handle->view->handle();
+    }
+    void hide() override {
+        m_panel->hide();
+    }
 
     void set_video_size(Gfx::IntSize video_size) override {
         auto size = size_for_video_size(m_size, video_size, m_screen);
@@ -1786,8 +1793,9 @@ AK::OwnPtr<WebView::PictureInPictureWindow> ElarisApplication::create_picture_in
     return AK::make<ElarisPictureInPictureWindow>(*handle, video_size);
 }
 #else
-AK::OwnPtr<WebView::PictureInPictureWindow> ElarisApplication::create_picture_in_picture_window(
-    WebView::WebContentPage&, WebView::CanonicalTraversable&, Gfx::IntSize) {
+AK::OwnPtr<WebView::PictureInPictureWindow>
+ElarisApplication::create_picture_in_picture_window(WebView::WebContentPage&, WebView::CanonicalTraversable&,
+                                                    Gfx::IntSize) {
     return {};
 }
 #endif
@@ -2354,9 +2362,16 @@ extern "C" int32_t elaris_ladybird_frame(ElarisLadybirdView* handle, ElarisLadyb
         // A frame shared with the host's GPU may have no CPU bitmap at all.
         auto displayed = handle->view->backing_stores().displayed_frame();
         if (handle->view->gpu_frames() && displayed.has_value() && !displayed->size.is_empty()) {
-            *out_frame = {displayed->size.width(),       displayed->size.height(), displayed->size.width() * 4,
-                          ELARIS_LADYBIRD_PIXEL_FORMAT_RGBA8, displayed->device_pixel_ratio, 0, 0,
-                          displayed->size.width(),       displayed->size.height(), handle->view->serial()};
+            *out_frame = {displayed->size.width(),
+                          displayed->size.height(),
+                          displayed->size.width() * 4,
+                          ELARIS_LADYBIRD_PIXEL_FORMAT_RGBA8,
+                          displayed->device_pixel_ratio,
+                          0,
+                          0,
+                          displayed->size.width(),
+                          displayed->size.height(),
+                          handle->view->serial()};
             return succeed();
         }
 #endif
