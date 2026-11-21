@@ -678,6 +678,7 @@ fn page(
                 state
                     .browser
                     .hover_page(id, MouseKind::Move, [pointer.x, pointer.y], tx.mods());
+                tx.live_only();
             }
         })
         .on_hover_change(move |state: &mut AppState, inside, tx| {
