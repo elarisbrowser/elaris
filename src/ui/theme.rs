@@ -196,6 +196,11 @@ pub(crate) const SIDEBAR_TOGGLE: Spring = Spring::new(0.25, 0.0);
 /// The header's narrowest: room for the window controls, the sidebar toggle and the navigation
 /// buttons.
 pub(crate) const HEADER_MIN_WIDTH: f32 = 220.0;
+/// A new browser window's size.
+pub(crate) const WINDOW_SIZE: (f32, f32) = (960.0, 640.0);
+/// A mini window opens tall and narrow, like a phone-sized reader, and shrinks to a sliver of one.
+pub(crate) const MINI_WINDOW_SIZE: (f32, f32) = (480.0, 640.0);
+pub(crate) const MINI_WINDOW_MIN_SIZE: (f32, f32) = (320.0, 240.0);
 /// The window's smallest size: the widest sidebar beside a page still worth reading.
 pub(crate) const WINDOW_MIN_SIZE: (f32, f32) = (SIDEBAR_MAX_WIDTH + 320.0, 360.0);
 /// The invisible strip over the sidebar's edge that drags it.

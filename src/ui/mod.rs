@@ -11,6 +11,7 @@ pub(crate) mod horizontal_tabs;
 pub(crate) mod hover_highlight;
 mod icons;
 pub(crate) mod internal;
+mod mini;
 mod omnibox;
 mod page_dialog;
 pub(crate) mod peek;
@@ -54,6 +55,9 @@ pub(crate) use theme::FIND_MOTION;
 pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     #[cfg(target_os = "macos")]
     crate::menu_macos::refresh(state);
+    if state.is_mini() {
+        return mini::view(state, cx);
+    }
     let dark = state.settings.appearance.is_dark(cx.system_dark());
     let theme = theme::palette(
         dark,
@@ -78,25 +82,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     } else {
         theme::HEADER_HEIGHT
     }));
-    let mut window = if horizontal || cfg!(target_os = "linux") {
-        col()
-    } else {
-        row()
-    }
-    .key("window")
-    .w_full()
-    .h_full()
-    .fill(theme.window);
-    if state.settings.glass_enabled {
-        window = window.system_material(SystemMaterial::Glass).child(
-            rune::el()
-                .key("window-tint")
-                .absolute(0.0, 0.0)
-                .w_full()
-                .h_full()
-                .fill(theme.window),
-        );
-    }
+    let mut window = window_surface(state, &theme, horizontal || cfg!(target_os = "linux"));
     if fullscreen {
         window = window.child(viewport::view(state, &theme, &mut overlays, reduced_motion));
     } else if horizontal {
@@ -200,4 +186,24 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         window.hover_motion_within(hover_enter, hover_exit),
         overlays,
     )
+}
+
+/// The window's background, glass included, laid out as a column or a row.
+fn window_surface(state: &AppState, theme: &theme::Theme, vertical: bool) -> El {
+    let mut window = if vertical { col() } else { row() }
+        .key("window")
+        .w_full()
+        .h_full()
+        .fill(theme.window);
+    if state.settings.glass_enabled {
+        window = window.system_material(SystemMaterial::Glass).child(
+            rune::el()
+                .key("window-tint")
+                .absolute(0.0, 0.0)
+                .w_full()
+                .h_full()
+                .fill(theme.window),
+        );
+    }
+    window
 }

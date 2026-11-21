@@ -68,7 +68,7 @@ impl Default for SidebarState {
 
 /// Shows or hides the sidebar, springing the page to its new width.
 pub(crate) fn toggle(state: &mut AppState, tx: &mut Tx) {
-    if state.horizontal_tabs() {
+    if state.horizontal_tabs() || state.is_mini() {
         return;
     }
     state.site_permissions_open = false;

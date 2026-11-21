@@ -43,6 +43,8 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     }
     let previous_peek = state.browser.peek.as_ref().map(|peek| peek.page.id());
     let mut polled = state.browser.poll();
+    let mini_changed = super::super::mini::poll(state, tx);
+    open_popups(state, &mut polled);
     state.poll_tab_close(&polled, tx);
     crate::ui::form_picker::poll(state, &mut polled, tx);
     let peek_changed = update_peek(state, previous_peek, clock, tx);
@@ -84,6 +86,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         || crate::ui::displayed_tab_preview(state)
             .is_some_and(|id| polled.thumbnails_ready.contains(&id));
     deactivated_drag
+        || mini_changed
         || native_preview_changed
         || incoming_drag
         || transferred
@@ -105,6 +108,22 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         || context_menu_changed
         || switcher_changed
         || tab_drag_changed
+}
+
+/// Gives each popup a mini window. Headless tooling opens no windows, so a popup is a tab there.
+fn open_popups(state: &mut AppState, polled: &mut crate::browser::Polled) {
+    for (source, request, activate) in std::mem::take(&mut polled.popups) {
+        if rune::is_headless() {
+            state.browser.insert_popup(source, request, activate);
+            polled.changed = true;
+        } else {
+            crate::open_mini_window(super::super::MiniStart::Popup {
+                source,
+                request,
+                private: state.browser.private,
+            });
+        }
+    }
 }
 
 fn update_peek(state: &mut AppState, previous: Option<TabId>, clock: f64, tx: &mut Tx) -> bool {

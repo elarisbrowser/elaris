@@ -25,6 +25,10 @@ impl super::AppState {
     }
 
     pub(crate) fn open_omnibox(&mut self, mode: omnibox::Mode) {
+        // A mini window has no address bar to type into.
+        if self.mini {
+            return;
+        }
         self.dismiss_find();
         self.page_menu = Default::default();
         self.omnibox.mode = mode;

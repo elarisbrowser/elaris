@@ -28,6 +28,7 @@ use crate::tab::{Tab, TabId, TabSection};
 use crate::ui::SidebarState;
 #[cfg(test)]
 use crate::ui::VIEWPORT;
+pub(crate) use mini::{MiniStart, is_mini_window, open_external_url, open_in_browser};
 
 /// How the Linux toolbar stays visible while browsing.
 #[cfg(target_os = "linux")]
@@ -216,6 +217,10 @@ pub(crate) struct AppState {
     workers_started: bool,
     pending_detach: bool,
     merged_away: bool,
+    /// Whether this is a compact single-page window rather than a full browser window.
+    mini: bool,
+    /// What a mini window opens as soon as it can.
+    mini_start: Option<MiniStart>,
     #[cfg(feature = "ladybird-bridge")]
     profile_dir: Option<PathBuf>,
     config_file: Option<PathBuf>,
@@ -397,6 +402,8 @@ impl AppState {
             workers_started: false,
             pending_detach: false,
             merged_away: false,
+            mini: false,
+            mini_start: None,
             #[cfg(feature = "ladybird-bridge")]
             profile_dir: _profile_dir,
             config_file,
@@ -437,6 +444,17 @@ impl AppState {
     pub(crate) fn new_window() -> Self {
         let mut state = Self::build(None, false);
         state.open_omnibox(omnibox::Mode::New);
+        state
+    }
+
+    /// A full browser window that opens `url` in its first tab.
+    pub(crate) fn new_window_with_url(url: &str) -> Self {
+        let mut state = Self::build(None, false);
+        state.omnibox.close();
+        if let Err(error) = state.browser.open_tab(url) {
+            state.open_omnibox(omnibox::Mode::New);
+            state.address_error = Some(error.to_string());
+        }
         state
     }
 
@@ -671,6 +689,7 @@ pub(crate) fn is_private_window(id: u64) -> bool {
 }
 
 pub(crate) fn unregister_window(id: u64) {
+    mini::forget(id);
     if let Some(windows) = PRIVATE_WINDOWS.get() {
         windows
             .lock()
@@ -690,9 +709,15 @@ pub(crate) fn activate_window(id: u64) {
     ACTIVE_WINDOW.store(id, Ordering::Relaxed);
 }
 
+/// How many full browser windows are open. Mini windows are not part of the saved layout.
 pub(crate) fn open_window_count() -> usize {
     WINDOW_REGISTRY.get().map_or(0, |registry| {
-        registry.lock().expect("window registry poisoned").len()
+        registry
+            .lock()
+            .expect("window registry poisoned")
+            .keys()
+            .filter(|&&id| !is_mini_window(id))
+            .count()
     })
 }
 
@@ -701,9 +726,9 @@ pub(crate) fn reopen_or_create_window() {
         registry
             .lock()
             .expect("window registry poisoned")
-            .values()
-            .next()
-            .cloned()
+            .iter()
+            .find(|&(&id, _)| !is_mini_window(id))
+            .map(|(_, handle)| handle.clone())
     });
     if let Some(handle) = existing {
         handle.open();
@@ -787,6 +812,7 @@ pub(crate) mod cross_window_drag;
 pub(crate) mod detach;
 mod find;
 mod lifecycle;
+mod mini;
 mod omnibox_actions;
 mod session;
 mod settings_actions;

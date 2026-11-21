@@ -250,7 +250,8 @@ mod tests {
 
     fn pending(source: &AppState, destination: AppState, deadline: Instant) -> u64 {
         let id = destination.window_id;
-        let app = rune::App::new(crate::app_spec(AppState::new_window)).init(move || destination);
+        let app =
+            rune::App::new(crate::app_spec(AppState::new_window, false)).init(move || destination);
         let handle = app.handle();
         let window =
             rune::open_window(rune::WindowSpec::from_app(format!("detach-test-{id}"), app));

@@ -98,6 +98,8 @@ pub(crate) struct Polled {
     pub(crate) find_selections: Vec<(TabId, u64, String)>,
     /// The engine could not apply the selected download directory.
     pub(crate) download_directory_error: Option<String>,
+    /// Popups pages opened, as (opener, request, activate), for the app to give a window.
+    pub(crate) popups: Vec<(TabId, u64, bool)>,
 }
 
 pub(crate) struct Browser {
@@ -186,6 +188,11 @@ impl Browser {
         if let Some(engine) = &self.engine {
             engine.send(command);
         }
+    }
+
+    /// Whether pages can open yet: the engine has started and this browser is connected to it.
+    pub(crate) fn engine_ready(&self) -> bool {
+        self.engine.is_some()
     }
 
     /// Gives the browser the engine that shows its tabs, opening a view for each.
@@ -430,7 +437,7 @@ impl Browser {
         TabId::next()
     }
 
-    pub(super) fn insert_popup(&mut self, source: TabId, request: u64, activate: bool) {
+    pub(crate) fn insert_popup(&mut self, source: TabId, request: u64, activate: bool) {
         let tab = self.insert_tab_with_state(
             "about:blank".into(),
             String::new(),

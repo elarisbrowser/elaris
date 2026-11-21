@@ -43,7 +43,7 @@ use rune::raw_window_handle::RawWindowHandle;
 use rune::{App, AppSpec, Chrome, WindowOptions, WindowSpec};
 
 fn main() {
-    let app = configure_app(App::new(app_spec(app::AppState::default)));
+    let app = configure_app(App::new(app_spec(app::AppState::default, false)));
     #[cfg(target_os = "macos")]
     let app = {
         let mut app = app.keep_running().release_gpu_when_closed();
@@ -59,14 +59,19 @@ fn main() {
     app.run();
 }
 
-fn app_spec(init: fn() -> app::AppState) -> AppSpec<app::AppState> {
+fn app_spec(init: fn() -> app::AppState, mini: bool) -> AppSpec<app::AppState> {
+    let (size, min_size) = if mini {
+        (ui::theme::MINI_WINDOW_SIZE, ui::theme::MINI_WINDOW_MIN_SIZE)
+    } else {
+        (ui::theme::WINDOW_SIZE, ui::WINDOW_MIN_SIZE)
+    };
     AppSpec {
         // Headless tooling has no native `on_ready`; connect workers there.
         setup: Some(app::setup_headless),
         poll: Some(app::poll),
         on_key: Some(shortcuts::on_key),
-        min_size: Some(ui::WINDOW_MIN_SIZE),
-        ..AppSpec::new(app::APP_NAME, (960.0, 640.0), init, ui::view)
+        min_size: Some(min_size),
+        ..AppSpec::new(app::APP_NAME, size, init, ui::view)
     }
 }
 
@@ -134,6 +139,7 @@ fn configure_app(app: App<app::AppState>) -> App<app::AppState> {
         .on_close(app::window_closed)
         .on_quit(app::shut_down)
         .on_reopen(app::on_reopen)
+        .on_open_url(app::open_external_url)
 }
 
 fn start_window_workers(handle: rune::AppHandle<app::AppState>) {
@@ -162,6 +168,16 @@ pub(crate) fn open_private_browser_window() {
     queue_browser_window(app::AppState::new_private_window(), None);
 }
 
+/// Queues a full browser window showing `url`.
+pub(crate) fn open_browser_window_with_url(url: String) {
+    queue_browser_window(app::AppState::new_window_with_url(&url), None);
+}
+
+/// Queues a compact window for a link from another app or a page's popup.
+pub(crate) fn open_mini_window(start: app::MiniStart) {
+    queue_browser_window(app::AppState::new_mini_window(start), None);
+}
+
 fn open_browser_window_with_session(session: storage::Session) {
     queue_browser_window(app::AppState::new_window_from_session(session), None);
 }
@@ -172,7 +188,9 @@ fn queue_browser_window(
 ) -> (rune::WindowHandle, rune::AppHandle<app::AppState>) {
     let key = format!("elaris-window-{}", state.window_id);
     let window_id = state.window_id;
-    let app = configure_app(App::new(app_spec(app::AppState::new_window)).init(move || state));
+    let mini = state.is_mini();
+    let app =
+        configure_app(App::new(app_spec(app::AppState::new_window, mini)).init(move || state));
     #[cfg(target_os = "macos")]
     let app = app.keep_running().release_gpu_when_closed();
     let handle = app.handle();

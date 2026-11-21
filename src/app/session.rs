@@ -95,6 +95,7 @@ impl super::AppState {
 
     pub(crate) fn persist_session_if_changed(&mut self) {
         if self.browser.private
+            || self.mini
             || self.pending_detach
             || self.merged_away
             || self.tab_transfer_blocks_session()
@@ -109,6 +110,7 @@ impl super::AppState {
 
     pub(super) fn persist_session(&mut self) {
         if self.browser.private
+            || self.mini
             || self.pending_detach
             || self.merged_away
             || self.tab_transfer_blocks_session()

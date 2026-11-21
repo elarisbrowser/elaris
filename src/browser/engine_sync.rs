@@ -155,8 +155,7 @@ impl Browser {
                 }
                 Update::Popup(source, request, activate) => {
                     if self.page(source).is_some_and(|tab| !tab.is_internal()) {
-                        self.insert_popup(source, request, activate);
-                        polled.changed = true;
+                        polled.popups.push((source, request, activate));
                     }
                 }
                 Update::PopupClosed(id) => {
