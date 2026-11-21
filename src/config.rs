@@ -11,7 +11,7 @@ use toml_edit::{DocumentMut, Item, Table, Value};
 
 use crate::address::SearchEngine;
 use crate::appearance::{AccentColor, Appearance};
-use crate::permissions::{PermissionKind, PermissionState, PermissionStore};
+use crate::permissions::{AutoplayPolicy, PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{DownloadDirectory, Settings, SettingsChange, StartupMode, TabLayout};
 
 const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\naccent = \"blue\"\nglass = true\ntint_opacity = 100\ntab_layout = \"vertical\"\n\n[split_view]\nmax_panes = 2\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n\n[pages]\nzoom = 100\n\n[performance]\nreduce_motion = false\n";
@@ -111,6 +111,14 @@ pub(crate) fn parse(contents: &str) -> Result<ConfigLoad, String> {
             ));
         }
     }
+    if let Some(value) = string_value(&document, "pages", "autoplay", &mut issues) {
+        settings.autoplay = AutoplayPolicy::from_key(&value).unwrap_or_else(|| {
+            issues.push(format!(
+                "Invalid value for [pages].autoplay: {value:?}; expected allow, block-audio or block"
+            ));
+            defaults.autoplay
+        });
+    }
     if let Some(value) = bool_value(&document, "performance", "reduce_motion", &mut issues) {
         settings.reduce_motion = value;
     }
@@ -192,6 +200,15 @@ fn parse_permissions(document: &DocumentMut, issues: &mut Vec<String>) -> Permis
             continue;
         };
         for (name, value) in values {
+            if name == AUTOPLAY_KEY {
+                match value.as_str().and_then(AutoplayPolicy::from_key) {
+                    Some(policy) => store.set_autoplay(&normalized, Some(policy)),
+                    None => issues.push(format!(
+                        "[permissions.{origin:?}].autoplay must be allow, block-audio or block"
+                    )),
+                }
+                continue;
+            }
             let Some(kind) = PermissionKind::from_key(name) else {
                 issues.push(format!("Ignoring unknown permission {name:?} for {origin}"));
                 continue;
@@ -208,12 +225,33 @@ fn parse_permissions(document: &DocumentMut, issues: &mut Vec<String>) -> Permis
     store
 }
 
+const AUTOPLAY_KEY: &str = "autoplay";
+
 /// Saves or removes one site's permission override while preserving other config values.
 pub(crate) fn write_permission(
     path: &Path,
     origin: &str,
     kind: PermissionKind,
     state: PermissionState,
+) -> Result<(), String> {
+    let value = (state != PermissionState::Ask).then(|| state.key());
+    write_site_setting(path, origin, kind.key(), value)
+}
+
+/// Saves or removes one site's autoplay exception while preserving other config values.
+pub(crate) fn write_autoplay(
+    path: &Path,
+    origin: &str,
+    policy: Option<AutoplayPolicy>,
+) -> Result<(), String> {
+    write_site_setting(path, origin, AUTOPLAY_KEY, policy.map(AutoplayPolicy::key))
+}
+
+fn write_site_setting(
+    path: &Path,
+    origin: &str,
+    key: &str,
+    value: Option<&str>,
 ) -> Result<(), String> {
     let origin = PermissionStore::origin(origin)
         .ok_or_else(|| "website permissions require an HTTP or HTTPS origin".to_owned())?;
@@ -232,14 +270,7 @@ pub(crate) fn write_permission(
     let sites = document["permissions"]
         .as_table_mut()
         .ok_or_else(|| "[permissions] must be a TOML table".to_owned())?;
-    if state == PermissionState::Ask {
-        if let Some(site) = sites.get_mut(&origin).and_then(Item::as_table_mut) {
-            site.remove(kind.key());
-            if site.is_empty() {
-                sites.remove(&origin);
-            }
-        }
-    } else {
+    if let Some(value) = value {
         if sites.get(&origin).is_none() {
             sites.insert(&origin, Item::Table(Table::new()));
         }
@@ -247,7 +278,14 @@ pub(crate) fn write_permission(
             .get_mut(&origin)
             .and_then(Item::as_table_mut)
             .ok_or_else(|| format!("[permissions.{origin:?}] must be a TOML table"))?;
-        site.insert(kind.key(), Value::from(state.key()).into());
+        site.insert(key, Value::from(value).into());
+    } else {
+        if let Some(site) = sites.get_mut(&origin).and_then(Item::as_table_mut) {
+            site.remove(key);
+            if site.is_empty() {
+                sites.remove(&origin);
+            }
+        }
     }
     if sites.is_empty() {
         document.as_table_mut().remove("permissions");
@@ -336,6 +374,7 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
     };
     let (section, key, value) = match change {
         SettingsChange::PageZoom(value) => ("pages", "zoom", value.to_string()),
+        SettingsChange::Autoplay(value) => ("pages", "autoplay", value.key().to_owned()),
         SettingsChange::TabLayout(value) => {
             ("appearance", "tab_layout", value.config_key().to_owned())
         }
@@ -528,6 +567,30 @@ mod tests {
     #[test]
     fn malformed_toml_is_an_error_and_not_a_default_file() {
         assert!(parse("[appearance\ntheme = \"dark\"").is_err());
+    }
+
+    #[test]
+    fn autoplay_default_and_site_exceptions_round_trip() {
+        let path = std::env::temp_dir().join(format!(
+            "elaris-autoplay-{}-{}.toml",
+            std::process::id(),
+            NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed)
+        ));
+        write_change(&path, &SettingsChange::Autoplay(AutoplayPolicy::Block))
+            .expect("save the autoplay default");
+        write_autoplay(&path, "https://Example.com/", Some(AutoplayPolicy::Allow))
+            .expect("save a site autoplay exception");
+        let loaded = load_or_create(&path).expect("load autoplay settings");
+        assert_eq!(loaded.settings.autoplay, AutoplayPolicy::Block);
+        assert_eq!(
+            loaded.permissions.autoplay("https://example.com"),
+            Some(AutoplayPolicy::Allow)
+        );
+        assert!(loaded.issues.is_empty());
+        write_autoplay(&path, "https://example.com", None).expect("remove the exception");
+        let loaded = load_or_create(&path).expect("load cleared autoplay exception");
+        assert_eq!(loaded.permissions, PermissionStore::default());
+        fs::remove_file(path).expect("remove autoplay test config");
     }
 
     #[test]

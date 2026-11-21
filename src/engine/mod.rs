@@ -139,6 +139,11 @@ pub(crate) enum Command {
     ColorScheme(bool),
     /// Changes the native destination for subsequent downloads.
     SetDownloadDirectory(Option<std::path::PathBuf>),
+    /// Replaces the autoplay default and its site exceptions.
+    SetAutoplay(
+        crate::permissions::AutoplayPolicy,
+        Vec<(String, crate::permissions::AutoplayPolicy)>,
+    ),
     /// Clears engine data last used at or after the Unix millisecond time, or for all time.
     ClearBrowsingData(Option<i64>, elaris::ladybird::BrowsingData),
     #[cfg(feature = "ladybird-bridge")]

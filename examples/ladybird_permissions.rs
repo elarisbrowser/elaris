@@ -169,6 +169,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             |event| matches!(event, Event::ExternalUrl(None)).then_some(()),
         )?;
         view.reply_to_external_url(stale.request_id, true)?;
+        wait_for_title(&mut browser, &events, "Permission test")?;
     }
     println!("Passed external link notice, prompt, cancel and navigation dismissal");
 
@@ -198,6 +199,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     view.reload()?;
     wait_for_title(&mut browser, &events, "Fresh")?;
     println!("Passed clearing site data");
+
+    browser.set_autoplay(2, &[(origin.as_str(), 0)])?;
+    assert!(browser.set_autoplay(3, &[]).is_err());
+    browser.set_autoplay(1, &[])?;
+    println!("Passed autoplay settings");
     Ok(())
 }
 

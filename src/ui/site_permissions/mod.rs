@@ -51,6 +51,7 @@ pub(crate) fn view(
             .on_press(|state: &mut AppState| {
                 state.site_permissions_open = false;
                 state.permission_menu = None;
+                state.autoplay_menu_open = false;
                 state.site_overflow_open = false;
             }),
     );
@@ -70,6 +71,7 @@ pub(crate) fn view(
     );
     layer.push(content::popover(state, theme, &presentation, reduced_motion).absolute(x, y));
     menus::permission_menu(state, theme, layer);
+    menus::autoplay_menu(state, theme, layer, &presentation);
     menus::overflow_menu(state, theme, layer, &presentation);
 }
 

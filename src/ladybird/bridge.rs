@@ -157,6 +157,11 @@ unsafe extern "C" {
         view: *mut *mut RawView,
     ) -> i32;
     fn elaris_ladybird_reset_private_session(bridge: *mut RawBridge) -> i32;
+    fn elaris_ladybird_set_autoplay(
+        bridge: *mut RawBridge,
+        default_policy: i32,
+        json: *const c_char,
+    ) -> i32;
     fn elaris_ladybird_clear_browsing_data(
         bridge: *mut RawBridge,
         since_ms: i64,
@@ -589,6 +594,21 @@ impl Ladybird {
             elaris_ladybird_set_display_refresh_rate(view.raw.as_ptr(), refresh_rate)
         })?;
         Ok(Some(view))
+    }
+
+    /// Replaces the autoplay default and site exceptions. Policies are 0 allow, 1 block audio,
+    /// 2 block all.
+    pub fn set_autoplay(
+        &mut self,
+        default_policy: i32,
+        sites: &[(&str, i32)],
+    ) -> Result<(), String> {
+        let json = serde_json::to_string(sites).map_err(|error| error.to_string())?;
+        let json = CString::new(json).map_err(|error| error.to_string())?;
+        // SAFETY: The bridge is live on its owner thread and borrows the string for this call.
+        status_result(unsafe {
+            elaris_ladybird_set_autoplay(self.owner.raw.as_ptr(), default_policy, json.as_ptr())
+        })
     }
 
     /// Clears engine data last used at or after `since` (Unix milliseconds), or for all time.

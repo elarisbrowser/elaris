@@ -244,6 +244,9 @@ enum {
 /* Clears the selected engine data last used at or after since_ms (Unix milliseconds; negative clears all
  * time). Completion arrives as BROWSING_DATA_CLEARED with the same request id. */
 int32_t elaris_ladybird_clear_browsing_data(ElarisLadybird*, int64_t since_ms, int32_t flags, uint64_t request_id);
+/* Replaces the autoplay default and site exceptions. Policies are 0 allow, 1 block audio, 2 block all;
+ * json is an array of [origin, policy] rows. */
+int32_t elaris_ladybird_set_autoplay(ElarisLadybird*, int32_t default_policy, char const* json);
 /* Starts a fresh private session. Fails while any private view is open. */
 int32_t elaris_ladybird_reset_private_session(ElarisLadybird*);
 /* Sets the maximum frame rate reported to pages and used by Ladybird's compositor. */

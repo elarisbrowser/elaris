@@ -125,6 +125,16 @@ impl Runtime {
                 .download_action(id, action)
                 .err()
                 .map(|error| Update::DownloadActionFailed(id, error)),
+            Command::SetAutoplay(default, sites) => {
+                let sites = sites
+                    .iter()
+                    .map(|(origin, policy)| (origin.as_str(), policy.engine_value()))
+                    .collect::<Vec<_>>();
+                self.ladybird
+                    .set_autoplay(default.engine_value(), &sites)
+                    .err()
+                    .map(Update::Failed)
+            }
             Command::ClearBrowsingData(since, data) => self
                 .ladybird
                 .clear_browsing_data(since, data, 0)
@@ -285,6 +295,7 @@ impl Runtime {
             | Command::DownloadAction(..)
             | Command::SetDownloadDirectory(_)
             | Command::ClearBrowsingData(..)
+            | Command::SetAutoplay(..)
             | Command::SetPermissionDefault(..)
             | Command::SetPermissions(_)
             | Command::SetPermission(..) => {

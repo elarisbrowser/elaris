@@ -4,7 +4,7 @@ use rune::tok::type_;
 use rune::{El, PointerPress, Spring, Transition, Tx, el, icon, row, text};
 
 use crate::app::{self, AppState};
-use crate::permissions::{PermissionKind, PermissionState};
+use crate::permissions::{AutoplayPolicy, PermissionKind, PermissionState};
 use crate::site_controls::{SiteControlAction, SiteControlPresentation, SiteControlsPage};
 use crate::ui::icons;
 use crate::ui::site_control_style as design;
@@ -72,6 +72,7 @@ pub(super) fn popover(
         for (kind, permission) in presentation.permissions {
             main = main.child(permission_row(theme, kind, permission).mt(design::ROW_GAP));
         }
+        main = main.child(autoplay_row(theme, presentation).mt(design::ROW_GAP));
         main = main
             .child(separator(theme).mt(10.0))
             .child(footer(theme, presentation).mt(8.0));
@@ -255,7 +256,55 @@ fn permission_row(theme: &Theme, kind: PermissionKind, permission: PermissionSta
         PermissionKind::Location => &icons::LOCATION,
         PermissionKind::Notifications => &icons::NOTIFICATIONS,
     };
-    let active = permission == PermissionState::Allow;
+    setting_row(
+        theme,
+        format!("site-permission-{}", kind.key()),
+        glyph,
+        kind.label(),
+        permission_label(permission),
+        permission == PermissionState::Allow,
+    )
+    .help("Choose Ask, Allow or Block")
+    .on_press(move |state: &mut AppState| state.permission_menu = Some(kind))
+    .on_layout_tx(move |state: &mut AppState, rect, tx| {
+        state.permission_row_anchors[kind.index()] = Some(rect);
+        tx.live_only();
+    })
+}
+
+fn autoplay_row(theme: &Theme, presentation: &SiteControlPresentation) -> El {
+    let policy = presentation
+        .autoplay
+        .unwrap_or(presentation.autoplay_default);
+    let label = match presentation.autoplay {
+        Some(policy) => policy.label().to_owned(),
+        None => format!("{} (default)", presentation.autoplay_default.label()),
+    };
+    setting_row(
+        theme,
+        "site-autoplay".to_owned(),
+        &icons::AUTOPLAY,
+        "Autoplay",
+        &label,
+        policy == AutoplayPolicy::Allow,
+    )
+    .help("Choose whether this site may start media on its own")
+    .on_press(|state: &mut AppState| state.autoplay_menu_open = true)
+    .on_layout_tx(|state: &mut AppState, rect, tx| {
+        state.autoplay_row_anchor = Some(rect);
+        tx.live_only();
+    })
+}
+
+/// A site setting row: a glyph that fills when the site is allowed, its name and current value.
+fn setting_row(
+    theme: &Theme,
+    key: String,
+    glyph: &'static rune::Icon,
+    title: &str,
+    label: &str,
+    active: bool,
+) -> El {
     let circle = if active {
         theme.text
     } else {
@@ -266,9 +315,8 @@ fn permission_row(theme: &Theme, kind: PermissionKind, permission: PermissionSta
     } else {
         theme.text_muted
     };
-    let label = permission_label(permission);
     row()
-        .key(format!("site-permission-{}", kind.key()))
+        .key(key)
         .w_full()
         .h(design::ROW_HEIGHT)
         .px(6.0)
@@ -289,25 +337,19 @@ fn permission_row(theme: &Theme, kind: PermissionKind, permission: PermissionSta
                 .grow(1.0)
                 .gap(1.0)
                 .child(
-                    text(kind.label())
+                    text(title.to_owned())
                         .font(rune::TextStyle::new(12.5, 500.0))
                         .color(theme.text),
                 )
                 .child(
-                    text(label)
+                    text(label.to_owned())
                         .font(rune::TextStyle::new(11.5, 400.0))
                         .color(theme.text_muted),
                 ),
         )
         .role("button")
-        .label(format!("{}, {label}", kind.label()))
-        .help("Choose Ask, Allow or Block")
+        .label(format!("{title}, {label}"))
         .focusable(true)
-        .on_press(move |state: &mut AppState| state.permission_menu = Some(kind))
-        .on_layout_tx(move |state: &mut AppState, rect, tx| {
-            state.permission_row_anchors[kind.index()] = Some(rect);
-            tx.live_only();
-        })
 }
 
 fn footer(theme: &Theme, presentation: &SiteControlPresentation) -> El {

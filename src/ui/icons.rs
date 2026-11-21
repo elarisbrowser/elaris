@@ -98,6 +98,10 @@ pub(crate) static MICROPHONE: Icon = icon(
     "microphone",
     r#"<rect x="6" y="2.25" width="4" height="7.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4 7.5A4 4 0 0 0 12 7.5M8 11.5V14M5.5 14H10.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>"#,
 );
+pub(crate) static AUTOPLAY: Icon = icon(
+    "autoplay",
+    r#"<path d="M2.75 6.25H5L8.25 3.5V12.5L5 9.75H2.75Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M10.5 6A2.75 2.75 0 0 1 10.5 10M12.25 4.25A5.25 5.25 0 0 1 12.25 11.75" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>"#,
+);
 pub(crate) static CAMERA: Icon = icon(
     "camera",
     r#"<path d="M2.75 5.25H5L6.1 3.75H9.9L11 5.25H13.25V12.5H2.75Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="8" cy="8.75" r="2.25" fill="none" stroke="currentColor" stroke-width="1.3"/>"#,

@@ -3,7 +3,9 @@
 //! The presentation data shared by native and Rune site controls.
 
 use crate::app::AppState;
-use crate::permissions::{PermissionDecision, PermissionKind, PermissionState, PermissionStore};
+use crate::permissions::{
+    AutoplayPolicy, PermissionDecision, PermissionKind, PermissionState, PermissionStore,
+};
 use crate::tab::TabId;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -49,6 +51,9 @@ pub(crate) struct SiteControlPresentation {
     /// The URL uses HTTPS. This does not represent certificate validation status.
     pub(crate) https_scheme: bool,
     pub(crate) permissions: [(PermissionKind, PermissionState); 4],
+    /// The site's autoplay exception, or `None` when it follows the browser default.
+    pub(crate) autoplay: Option<AutoplayPolicy>,
+    pub(crate) autoplay_default: AutoplayPolicy,
 }
 
 impl SiteControlPresentation {
@@ -72,7 +77,12 @@ impl SiteControlPresentation {
             });
             (kind, permission)
         });
+        let autoplay = origin
+            .as_deref()
+            .and_then(|origin| state.permission_store.autoplay(origin));
         Self {
+            autoplay,
+            autoplay_default: state.settings.autoplay,
             tab: state.browser.active_tab().map(|tab| tab.id()),
             url,
             origin,

@@ -11,6 +11,7 @@ use rune_kit::{Button, ButtonVariant, Dialog, Kit, SegmentedControl, Select, Sel
 use crate::address::SearchEngine;
 use crate::app::{AppState, ClearRange};
 use crate::appearance::{AccentColor, Appearance};
+use crate::permissions::AutoplayPolicy;
 use crate::settings::{DownloadDirectory, StartupMode, TabLayout};
 use crate::ui::theme::{self, Theme};
 
@@ -77,17 +78,38 @@ fn page_zoom_section(state: &AppState, theme: &Theme, kit: &Kit, compact: bool) 
         .label("Default page zoom")
         .on_pick(|state: &mut AppState, index, _| state.set_page_zoom(ZOOM_OPTIONS[index]))
         .build(kit);
+    let autoplay = SegmentedControl::new(
+        &AutoplayPolicy::ALL.map(AutoplayPolicy::label),
+        AutoplayPolicy::ALL
+            .iter()
+            .position(|policy| *policy == state.settings.autoplay),
+    )
+    .width(Some(CONTROL_WIDTH))
+    .label("Autoplay")
+    .on_pick(|state: &mut AppState, index, _| {
+        state.set_autoplay_default(AutoplayPolicy::ALL[index]);
+    })
+    .build(kit);
     section(
         "Pages",
         theme,
         settings_group(
-            setting_row(
-                "Default page zoom",
-                &format!("Current default is {current}%."),
-                theme,
-                control,
-                compact,
-            ),
+            col()
+                .gap(12.0)
+                .child(setting_row(
+                    "Default page zoom",
+                    &format!("Current default is {current}%."),
+                    theme,
+                    control,
+                    compact,
+                ))
+                .child(setting_row(
+                    "Autoplay",
+                    "Whether pages may start media on their own. Site controls can override it.",
+                    theme,
+                    autoplay,
+                    compact,
+                )),
             theme,
         ),
     )

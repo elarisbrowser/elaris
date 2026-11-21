@@ -1371,6 +1371,43 @@ extern "C" int32_t elaris_ladybird_clear_browsing_data(ElarisLadybird* bridge, i
     return succeed();
 }
 
+static Optional<Web::HTML::AutoplayPolicy> autoplay_policy(Optional<i32> value) {
+    switch (value.value_or(-1)) {
+    case 0:
+        return Web::HTML::AutoplayPolicy::AllowAudioAndVideo;
+    case 1:
+        return Web::HTML::AutoplayPolicy::BlockAudio;
+    case 2:
+        return Web::HTML::AutoplayPolicy::BlockAudioAndVideo;
+    default:
+        return {};
+    }
+}
+
+extern "C" int32_t elaris_ladybird_set_autoplay(ElarisLadybird* bridge, int32_t default_policy, char const* json) {
+    if (!bridge || !s_application || !on_owner_thread(bridge) || !json)
+        return fail("autoplay settings require the bridge owner thread");
+    auto policy = autoplay_policy(default_policy);
+    auto rows = JsonValue::from_string(AK::StringView{json, strlen(json)});
+    if (!policy.has_value() || rows.is_error() || !rows.value().is_array())
+        return fail("invalid autoplay settings");
+    OrderedHashMap<String, Web::HTML::AutoplayPolicy> sites;
+    for (auto const& row : rows.value().as_array().values()) {
+        if (!row.is_array() || row.as_array().size() != 2 || !row.as_array().at(0).is_string())
+            return fail("invalid autoplay site row");
+        auto site_policy = autoplay_policy(row.as_array().at(1).get_i32());
+        if (!site_policy.has_value())
+            return fail("invalid autoplay site policy");
+        sites.set(row.as_array().at(0).as_string(), *site_policy);
+    }
+    auto& settings = WebView::Application::settings();
+    settings.remove_all_autoplay_site_filters();
+    for (auto const& [site, site_policy] : sites)
+        settings.add_autoplay_site_filter(site, site_policy);
+    settings.set_autoplay_policy(*policy);
+    return succeed();
+}
+
 extern "C" int32_t elaris_ladybird_create_private_view(ElarisLadybird* bridge, uint64_t view_id,
                                                        ElarisLadybirdView** out_view) {
     return create_view(bridge, view_id, WebView::IsPrivate::Yes, out_view);

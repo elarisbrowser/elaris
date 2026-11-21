@@ -98,14 +98,78 @@ pub(crate) enum PermissionDecision {
     Block,
 }
 
+/// Whether pages may start media playback on their own.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum AutoplayPolicy {
+    Allow,
+    /// Silent or muted media may still play, matching Ladybird's default.
+    #[default]
+    BlockAudio,
+    Block,
+}
+
+impl AutoplayPolicy {
+    pub(crate) const ALL: [Self; 3] = [Self::Allow, Self::BlockAudio, Self::Block];
+
+    pub(crate) fn key(self) -> &'static str {
+        match self {
+            Self::Allow => "allow",
+            Self::BlockAudio => "block-audio",
+            Self::Block => "block",
+        }
+    }
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Allow => "Allow",
+            Self::BlockAudio => "Block audio",
+            Self::Block => "Block all",
+        }
+    }
+
+    pub(crate) fn from_key(key: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|policy| policy.key() == key)
+    }
+
+    /// The bridge's policy number, in Ladybird's order.
+    #[cfg(feature = "ladybird-bridge")]
+    pub(crate) fn engine_value(self) -> i32 {
+        match self {
+            Self::Allow => 0,
+            Self::BlockAudio => 1,
+            Self::Block => 2,
+        }
+    }
+}
+
 /// Persistent site permission overrides keyed by normalized HTTP(S) origin.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct PermissionStore {
     sites: BTreeMap<String, BTreeMap<PermissionKind, PermissionState>>,
     blocked_by_default: std::collections::BTreeSet<PermissionKind>,
+    /// Sites whose autoplay differs from the browser default.
+    autoplay: BTreeMap<String, AutoplayPolicy>,
 }
 
 impl PermissionStore {
+    pub(crate) fn autoplay(&self, origin: &str) -> Option<AutoplayPolicy> {
+        self.autoplay.get(origin).copied()
+    }
+
+    /// Sets a site's autoplay exception; `None` returns it to the browser default.
+    pub(crate) fn set_autoplay(&mut self, origin: &str, policy: Option<AutoplayPolicy>) {
+        match policy {
+            Some(policy) => self.autoplay.insert(origin.to_owned(), policy),
+            None => self.autoplay.remove(origin),
+        };
+    }
+
+    pub(crate) fn autoplay_entries(&self) -> impl Iterator<Item = (&str, AutoplayPolicy)> {
+        self.autoplay
+            .iter()
+            .map(|(origin, &policy)| (origin.as_str(), policy))
+    }
+
     pub(crate) fn default_blocked(&self, kind: PermissionKind) -> bool {
         self.blocked_by_default.contains(&kind)
     }
@@ -180,6 +244,7 @@ impl PermissionStore {
 
     pub(crate) fn reset(&mut self, origin: &str) {
         self.sites.remove(origin);
+        self.autoplay.remove(origin);
     }
 }
 

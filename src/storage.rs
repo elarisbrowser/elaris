@@ -410,6 +410,16 @@ impl Storage {
             .map_err(|_| "configuration storage worker has stopped".to_owned())
     }
 
+    pub(crate) fn save_autoplay(
+        &self,
+        origin: String,
+        policy: Option<crate::permissions::AutoplayPolicy>,
+    ) -> Result<(), String> {
+        self.metrics
+            .enqueue(&self.commands, Command::SaveAutoplay(origin, policy))
+            .map_err(|_| "configuration storage worker has stopped".to_owned())
+    }
+
     pub(crate) fn reload_configuration(&self) -> Result<(), String> {
         self.metrics
             .enqueue(&self.commands, Command::ReloadConfig)
@@ -514,6 +524,7 @@ enum Command {
     ),
     SaveSetting(SettingsChange),
     SavePermission(String, PermissionKind, PermissionState),
+    SaveAutoplay(String, Option<crate::permissions::AutoplayPolicy>),
     ReloadConfig,
     Flush(Sender<()>),
     Shutdown,
@@ -711,6 +722,14 @@ fn run_worker(
             }
             Command::SaveSetting(change) => {
                 let result = config::write_change(&config_file, &change);
+                config_events
+                    .lock()
+                    .expect("configuration event lock poisoned")
+                    .push(ConfigEvent::Saved(result));
+                notify(&shared);
+            }
+            Command::SaveAutoplay(origin, policy) => {
+                let result = config::write_autoplay(&config_file, &origin, policy);
                 config_events
                     .lock()
                     .expect("configuration event lock poisoned")

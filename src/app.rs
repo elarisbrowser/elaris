@@ -187,6 +187,9 @@ pub(crate) struct AppState {
     pub(crate) permission_row_anchors: [Option<[f32; 4]>; 4],
     /// The open permission choice menu, if any.
     pub(crate) permission_menu: Option<PermissionKind>,
+    /// Whether the site controls autoplay menu is open, and where its row sits.
+    pub(crate) autoplay_menu_open: bool,
+    pub(crate) autoplay_row_anchor: Option<[f32; 4]>,
     /// Whether the compact site overflow menu is open.
     pub(crate) site_overflow_open: bool,
     /// The site footer's overflow-button position for the Rune menu host.
@@ -362,6 +365,8 @@ impl AppState {
             site_controls_page: crate::site_controls::SiteControlsPage::Main,
             permission_row_anchors: [None; 4],
             permission_menu: None,
+            autoplay_menu_open: false,
+            autoplay_row_anchor: None,
             site_overflow_open: false,
             site_overflow_anchor: None,
             permission_store,

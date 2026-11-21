@@ -53,6 +53,7 @@ fn start_engine(state: &mut AppState) {
                 }
             }
             state.browser.connect(engine);
+            state.sync_engine_autoplay();
         }
         Err(error) => state.browser.fail(error),
     }

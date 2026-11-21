@@ -72,6 +72,7 @@ impl DownloadDirectory {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Settings {
     pub(crate) page_zoom: u16,
+    pub(crate) autoplay: crate::permissions::AutoplayPolicy,
     pub(crate) tab_layout: TabLayout,
     pub(crate) split_view_limit: usize,
     pub(crate) appearance: Appearance,
@@ -88,6 +89,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             page_zoom: 100,
+            autoplay: crate::permissions::AutoplayPolicy::default(),
             tab_layout: TabLayout::default(),
             split_view_limit: 2,
             appearance: Appearance::System,
@@ -146,6 +148,7 @@ impl Settings {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum SettingsChange {
     PageZoom(u16),
+    Autoplay(crate::permissions::AutoplayPolicy),
     TabLayout(TabLayout),
     Appearance(Appearance),
     AccentColor(AccentColor),

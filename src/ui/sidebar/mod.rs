@@ -198,6 +198,7 @@ pub(super) fn site_controls(theme: &Theme) -> El {
         state.site_permissions_open = open;
         state.site_controls_page = crate::site_controls::SiteControlsPage::Main;
         state.permission_menu = None;
+        state.autoplay_menu_open = false;
         state.site_overflow_open = false;
     })
 }

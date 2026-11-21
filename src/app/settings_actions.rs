@@ -6,7 +6,9 @@ use crate::address::SearchEngine;
 use crate::appearance::{AccentColor, Appearance};
 use crate::config::ConfigLoad;
 use crate::internal::InternalPage;
-use crate::permissions::{PermissionDecision, PermissionKind, PermissionState, PermissionStore};
+use crate::permissions::{
+    AutoplayPolicy, PermissionDecision, PermissionKind, PermissionState, PermissionStore,
+};
 use crate::settings::{DownloadDirectory, SettingsChange, StartupMode, TabLayout};
 use crate::tab::TabId;
 
@@ -134,6 +136,43 @@ impl super::AppState {
         }
     }
 
+    pub(crate) fn set_autoplay_default(&mut self, policy: AutoplayPolicy) {
+        if self.settings.autoplay != policy {
+            self.settings.autoplay = policy;
+            self.sync_engine_autoplay();
+            self.save_setting(SettingsChange::Autoplay(policy));
+        }
+    }
+
+    /// Sets the current site's autoplay exception; `None` follows the browser default.
+    pub(crate) fn set_site_autoplay(&mut self, policy: Option<AutoplayPolicy>) {
+        let Some(origin) = self.current_permission_origin() else {
+            return;
+        };
+        self.permission_store.set_autoplay(&origin, policy);
+        super::publish_permissions(&self.permission_store);
+        self.sync_engine_autoplay();
+        if let Some(storage) = &self.storage
+            && let Err(error) = storage.save_autoplay(origin, policy)
+        {
+            self.configuration_issue = Some(error);
+        }
+    }
+
+    /// Sends the engine the autoplay default and every site exception.
+    pub(crate) fn sync_engine_autoplay(&self) {
+        let sites = self
+            .permission_store
+            .autoplay_entries()
+            .map(|(origin, policy)| (origin.to_owned(), policy))
+            .collect();
+        self.browser
+            .send_engine(crate::engine::Command::SetAutoplay(
+                self.settings.autoplay,
+                sites,
+            ));
+    }
+
     pub(crate) fn set_split_view_limit(&mut self, limit: usize) {
         let limit = limit.clamp(2, 4);
         if self.settings.split_view_limit == limit {
@@ -193,6 +232,7 @@ impl super::AppState {
         self.sync_engine_permissions(&load.permissions);
         self.permission_store = load.permissions;
         super::publish_permissions(&self.permission_store);
+        self.sync_engine_autoplay();
         let download_directory = self.engine_download_directory();
         if previous_download_directory != download_directory {
             self.browser.set_download_directory(download_directory);
@@ -277,8 +317,17 @@ impl super::AppState {
         let Some(origin) = self.current_permission_origin() else {
             return;
         };
+        let had_autoplay = self.permission_store.autoplay(&origin).is_some();
         self.permission_store.reset(&origin);
         super::publish_permissions(&self.permission_store);
+        if had_autoplay {
+            self.sync_engine_autoplay();
+            if let Some(storage) = &self.storage
+                && let Err(error) = storage.save_autoplay(origin.clone(), None)
+            {
+                self.configuration_issue = Some(error);
+            }
+        }
         for kind in PermissionKind::ALL {
             self.browser
                 .send_engine(crate::engine::Command::SetPermission(

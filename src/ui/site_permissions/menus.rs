@@ -4,7 +4,7 @@ use rune::{El, Key, KeyEvent, PointerPress, Tx, el};
 use rune_kit::{MenuItem, context_menu};
 
 use crate::app::AppState;
-use crate::permissions::PermissionState;
+use crate::permissions::{AutoplayPolicy, PermissionState};
 use crate::site_controls::SiteControlPresentation;
 use crate::site_controls::SiteControlsPage;
 use crate::ui::theme::Theme;
@@ -48,6 +48,41 @@ pub(super) fn permission_menu(state: &AppState, theme: &Theme, layer: &mut Vec<E
     menu.build(&theme.kit(theme.overlay_panel), layer);
 }
 
+pub(super) fn autoplay_menu(
+    state: &AppState,
+    theme: &Theme,
+    layer: &mut Vec<El>,
+    presentation: &SiteControlPresentation,
+) {
+    let (true, Some(rect)) = (state.autoplay_menu_open, state.autoplay_row_anchor) else {
+        return;
+    };
+    let point = PointerPress {
+        x: rect[0] + rect[2] - 8.0,
+        y: rect[1] + rect[3] / 2.0,
+    };
+    let menu = context_menu("site-autoplay-menu", el(), Some(point))
+        .on_close(|state: &mut AppState| state.autoplay_menu_open = false);
+    let default = format!("Default ({})", presentation.autoplay_default.label());
+    let options = std::iter::once((None, default)).chain(
+        AutoplayPolicy::ALL
+            .into_iter()
+            .map(|policy| (Some(policy), policy.label().to_owned())),
+    );
+    let menu = options.fold(menu, |menu, (policy, label)| {
+        let label = if policy == presentation.autoplay {
+            format!("{label}  ✓")
+        } else {
+            label
+        };
+        menu.item(MenuItem::new(label).on_select(move |state: &mut AppState| {
+            state.set_site_autoplay(policy);
+            state.autoplay_menu_open = false;
+        }))
+    });
+    menu.build(&theme.kit(theme.overlay_panel), layer);
+}
+
 pub(super) fn overflow_menu(
     state: &AppState,
     theme: &Theme,
@@ -60,12 +95,12 @@ pub(super) fn overflow_menu(
     let url = presentation.url.clone();
     let menu = context_menu("site-controls-overflow-menu", el(), Some(point))
         .on_close(|state: &mut AppState| state.site_overflow_open = false)
-        .item(MenuItem::new("Reset permissions for this site").on_select(
-            |state: &mut AppState| {
+        .item(
+            MenuItem::new("Reset settings for this site").on_select(|state: &mut AppState| {
                 state.reset_site_permissions();
                 state.site_overflow_open = false;
-            },
-        ));
+            }),
+        );
     let menu = if let Some(url) = url {
         menu.item(MenuItem::new("Copy page address").on_select_tx(
             move |state: &mut AppState, tx: &mut Tx| {
@@ -91,8 +126,9 @@ pub(super) fn escape(state: &mut AppState, event: &KeyEvent) -> bool {
     if event.key != Key::Escape {
         return false;
     }
-    if state.permission_menu.is_some() {
+    if state.permission_menu.is_some() || state.autoplay_menu_open {
         state.permission_menu = None;
+        state.autoplay_menu_open = false;
         return true;
     }
     if state.site_overflow_open {

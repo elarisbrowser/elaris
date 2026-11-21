@@ -106,6 +106,9 @@ authorization still apply, and `navigator.permissions.query` reports `prompt`
 for blocked-by-default sites.
 
 ```toml
+[pages]
+autoplay = "block-audio"   # allow, block-audio or block
+
 [permission_defaults]
 location = "ask"
 microphone = "ask"
@@ -113,4 +116,8 @@ notifications = "block"
 
 [permissions."https://example.com"]
 notifications = "allow"
+autoplay = "allow"
 ```
+
+The same fixture server also serves `external.html` (external link prompts and the missing-handler
+notice) and `storage.html` (site data clearing); the example exercises both.
