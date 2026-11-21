@@ -116,6 +116,7 @@ pub(crate) enum Command {
     View(TabId, ViewCommand),
     /// Destroys the tab's view. Nothing more is reported for it.
     Close(TabId),
+    PreflightClose(TabId),
     /// Starts a browser-owned transfer through Ladybird.
     #[cfg_attr(
         not(test),
@@ -223,6 +224,7 @@ pub(crate) enum Update {
     Peek(TabId, String, u64),
     ContextMenu(TabId, elaris::ladybird::PageMenu),
     Clipboard(TabId, String),
+    CloseDecision(TabId, bool),
     Download(DownloadId, DownloadUpdate),
     DownloadStartFailed(DownloadId, String),
     DownloadActionFailed(DownloadId, String),
@@ -407,7 +409,8 @@ fn update_tab(update: &Update) -> Option<TabId> {
         | Update::NewTab(id, _, _, _)
         | Update::Peek(id, _, _)
         | Update::ContextMenu(id, _)
-        | Update::Clipboard(id, _) => Some(*id),
+        | Update::Clipboard(id, _)
+        | Update::CloseDecision(id, _) => Some(*id),
         _ => None,
     }
 }

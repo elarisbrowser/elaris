@@ -85,7 +85,17 @@ impl Browser {
                     {
                         continue;
                     }
+                    if matches!(&update, crate::engine::TabUpdate::PageDialog(Some(dialog))
+                        if dialog.kind == elaris::ladybird::PageDialogKind::BeforeUnload)
+                        && self.tab(id).is_some_and(|tab| tab.awaiting_close)
+                    {
+                        self.dismiss_peek();
+                        self.activate_tab(id);
+                    }
                     if let Some(tab) = self.tab_mut(id) {
+                        if matches!(update, crate::engine::TabUpdate::LoadError(_)) {
+                            tab.awaiting_close = false;
+                        }
                         let committed = match &update {
                             crate::engine::TabUpdate::NavigationCommitted(url) => Some(url.clone()),
                             _ => None,
@@ -103,6 +113,14 @@ impl Browser {
                                 .titles
                                 .push((tab.committed_url.clone(), tab.title.clone()));
                         }
+                        polled.changed = true;
+                    }
+                }
+                Update::CloseDecision(id, approved) => {
+                    if let Some(tab) = self.tab_mut(id)
+                        && std::mem::take(&mut tab.awaiting_close)
+                    {
+                        polled.close_decisions.push((id, approved));
                         polled.changed = true;
                     }
                 }

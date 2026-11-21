@@ -146,6 +146,7 @@ unsafe extern "C" {
         response: *const u8,
         response_size: usize,
     ) -> i32;
+    fn elaris_ladybird_preflight_close(view: *mut RawView) -> i32;
     fn elaris_ladybird_find_end(view: *mut RawView) -> i32;
     fn elaris_ladybird_selected_text(view: *mut RawView, request_id: u64) -> i32;
     fn elaris_ladybird_edit(view: *mut RawView, command: i32, bytes: *const u8, len: usize) -> i32;
@@ -223,6 +224,7 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
                 request: raw.request_id,
             },
             16 => Event::LoadError(text),
+            21 => Event::CloseDecision(raw.value != 0),
             17 => Event::HoveredLink(text),
             18 => Event::Tooltip(text),
             19 => Event::Cursor(text),
@@ -595,6 +597,12 @@ impl WebView {
                 text.len(),
             )
         })
+    }
+
+    /// Asks the live page whether the tab can close, including its beforeunload handler.
+    pub fn preflight_close(&mut self) -> Result<(), String> {
+        // SAFETY: The handle belongs to this live view on its owner thread.
+        status_result(unsafe { elaris_ladybird_preflight_close(self.raw.as_ptr()) })
     }
 
     pub fn find_end(&mut self) -> Result<(), String> {

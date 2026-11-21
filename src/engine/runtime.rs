@@ -164,6 +164,16 @@ impl Runtime {
     fn apply_tab_command(&mut self, command: Command) -> Option<Update> {
         let (tab, result) = match command {
             Command::Open(tab, surface) => (tab, self.open(tab, surface)),
+            Command::PreflightClose(tab) => {
+                return match self.views.get_mut(&tab) {
+                    Some(view) => view
+                        .view
+                        .preflight_close()
+                        .err()
+                        .map(|_| Update::CloseDecision(tab, false)),
+                    None => Some(Update::CloseDecision(tab, true)),
+                };
+            }
             Command::Close(tab) => {
                 self.views.remove(&tab);
                 if let Some(order) = &mut self.hidden_order {
@@ -315,6 +325,10 @@ impl Runtime {
                 Event::Tooltip(text) => TabUpdate::Tooltip(text),
                 Event::Cursor(name) => TabUpdate::Cursor(name),
                 Event::PageDialog(dialog) => TabUpdate::PageDialog(dialog),
+                Event::CloseDecision(approved) => {
+                    updates.push(Update::CloseDecision(tab, approved));
+                    continue;
+                }
                 Event::ContextMenu(menu) => {
                     updates.push(Update::ContextMenu(tab, menu));
                     continue;

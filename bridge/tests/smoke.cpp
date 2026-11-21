@@ -29,6 +29,7 @@ struct Events {
     std::string tooltip;
     std::string cursor;
     int32_t dialog_kind{};
+    int close_decision{-1};
     uint64_t dialog_id{};
     std::string dialog_message;
     std::string dialog_default;
@@ -67,6 +68,9 @@ static void on_event(void* context, ElarisLadybirdEvent const* event) {
         break;
     case ELARIS_LADYBIRD_LOAD_ERROR:
         ++events.load_errors;
+        break;
+    case ELARIS_LADYBIRD_CLOSE_DECISION:
+        events.close_decision = event->value;
         break;
     case ELARIS_LADYBIRD_PAGE_DIALOG:
         events.dialog_kind = event->value;
@@ -188,8 +192,17 @@ static bool page_before_unload(ElarisLadybird* bridge, ElarisLadybirdView* view,
     };
     if (!navigate() || !check(elaris_ladybird_reply_to_dialog(view, events.dialog_id, 0, nullptr, 0), "stay on page") ||
         !pump_until(bridge, [&] { return events.dialog_kind == ELARIS_LADYBIRD_DIALOG_CLOSED; }) ||
-        events.last_title != "Unsaved edits" || !navigate() ||
-        !check(elaris_ladybird_reply_to_dialog(view, events.dialog_id, 1, nullptr, 0), "leave page"))
+        events.last_title != "Unsaved edits")
+        return false;
+    for (bool accept : {false, true}) {
+        events.close_decision = -1;
+        if (!check(elaris_ladybird_preflight_close(view), "preflight closing an edited page") ||
+            !pump_until(bridge, [&] { return events.dialog_kind == ELARIS_LADYBIRD_DIALOG_BEFORE_UNLOAD; }) ||
+            !check(elaris_ladybird_reply_to_dialog(view, events.dialog_id, accept, nullptr, 0), "answer close preflight") ||
+            !pump_until(bridge, [&] { return events.close_decision == accept; }))
+            return false;
+    }
+    if (!navigate() || !check(elaris_ladybird_reply_to_dialog(view, events.dialog_id, 1, nullptr, 0), "leave page"))
         return false;
     return pump_until(bridge, [&] { return events.last_title == "Next page"; });
 }

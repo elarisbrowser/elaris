@@ -70,6 +70,7 @@ pub enum Event {
     /// Ladybird's standard cursor name.
     Cursor(String),
     PageDialog(Option<PageDialog>),
+    CloseDecision(bool),
     ContextMenu(PageMenu),
     Clipboard(String),
     ImeCaret(Option<[i32; 4]>),

@@ -57,6 +57,12 @@ impl super::AppState {
 
     /// Closes the tab and opens the omnibox when the window becomes empty.
     pub(crate) fn close(&mut self, tab: TabId) {
+        if !self.browser.preflight_close(tab) {
+            self.finish_close(tab);
+        }
+    }
+
+    pub(super) fn finish_close(&mut self, tab: TabId) {
         self.cancel_tab_drag();
         self.site_permissions_open = false;
         self.page_menu = Default::default();

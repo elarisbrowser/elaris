@@ -846,6 +846,19 @@ extern "C" int32_t elaris_ladybird_reply_to_dialog(ElarisLadybirdView* handle, u
     return succeed();
 }
 
+extern "C" int32_t elaris_ladybird_preflight_close(ElarisLadybirdView* handle) {
+    if (!handle || !on_owner_thread(handle->bridge))
+        return fail("close preflight requires the view owner thread");
+    auto report = [handle](bool approved) { emit(handle, ELARIS_LADYBIRD_CLOSE_DECISION, {}, approved); };
+    if (handle->view->needs_beforeunload_check()) {
+        finish_page_dialog(*handle, false);
+        handle->view->request_close_preflight(AK::move(report));
+    } else {
+        report(true);
+    }
+    return succeed();
+}
+
 extern "C" int32_t elaris_ladybird_find_end(ElarisLadybirdView* handle) {
     if (!handle)
         return fail("view is required");

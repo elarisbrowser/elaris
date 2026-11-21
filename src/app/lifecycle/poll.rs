@@ -26,6 +26,23 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     let settling = crate::ui::settle_sidebar(state, tx);
     let previous_peek = state.browser.peek.as_ref().map(|peek| peek.page.id());
     let mut polled = state.browser.poll();
+    for (tab, approved) in polled.close_decisions.drain(..) {
+        if approved {
+            let active = state
+                .browser
+                .active_tab()
+                .is_some_and(|active| active.id() == tab);
+            state.finish_close(tab);
+            if active {
+                let focus = if state.omnibox.open {
+                    "omnibox-input"
+                } else {
+                    crate::ui::viewport::focus_key(&state.browser)
+                };
+                tx.focus(focus, false);
+            }
+        }
+    }
     let peek_changed = update_peek(state, previous_peek, clock, tx);
     close_site_controls_after_navigation(state, &polled);
 

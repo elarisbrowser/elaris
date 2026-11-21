@@ -74,6 +74,7 @@ pub(crate) struct Polled {
     /// Some tab's state changed, so the interface needs building again.
     pub(crate) changed: bool,
     pub(crate) clipboard: Option<String>,
+    pub(crate) close_decisions: Vec<(TabId, bool)>,
     pub(crate) menu: Option<(TabId, elaris::ladybird::PageMenu)>,
     /// A visible tab showed a frame since the last poll, so it is likely animating.
     pub(crate) animating: bool,
@@ -188,6 +189,8 @@ impl Browser {
     pub(crate) fn fail(&mut self, error: String) {
         for tab in &mut self.tabs {
             tab.error = Some(error.clone());
+            tab.awaiting_close = false;
+            tab.page_dialog = None;
         }
         if let Some(peek) = &mut self.peek {
             peek.page.error = Some(error.clone());
@@ -622,8 +625,26 @@ impl Browser {
         }
     }
 
-    /// Closes the tab and its page. Closing the active tab activates the one after it, or the
-    /// one before when it was last.
+    /// Returns whether the tab needs an asynchronous close decision from the live view.
+    pub(crate) fn preflight_close(&mut self, id: TabId) -> bool {
+        if self.engine.is_none() || self.engine_error.is_some() {
+            return false;
+        }
+        let Some(tab) = self
+            .tab_mut(id)
+            .filter(|tab| !tab.is_internal() && tab.engine.pending_load.is_none())
+        else {
+            return false;
+        };
+        if !std::mem::replace(&mut tab.awaiting_close, true)
+            && let Some(engine) = &self.engine
+        {
+            engine.send(Command::PreflightClose(id));
+        }
+        true
+    }
+
+    /// Closes the tab and activates its neighbor if it was active.
     pub(crate) fn close_tab(&mut self, id: TabId) {
         let Some(index) = self.tabs.iter().position(|tab| tab.id() == id) else {
             return;
