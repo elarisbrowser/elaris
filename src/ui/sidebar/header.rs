@@ -10,14 +10,15 @@ use rune::Spring;
 use rune::Transition;
 #[cfg(target_os = "linux")]
 use rune::tok::motion;
-use rune::{Cx, El, Icon, el, row, spacer, text};
+use rune::{Cx, El, Icon, el, icon, row, spacer, text};
 use rune_kit::{Menu, MenuItem, context_menu};
 
 use crate::app::AppState;
 use crate::browser::Browser;
 use crate::engine::ViewCommand;
 use crate::tab::TabId;
-use crate::ui::controls::icon_button;
+use crate::ui::controls::{self, icon_button};
+use crate::ui::hover_highlight;
 use crate::ui::icons;
 use crate::ui::theme::{self, Theme};
 
@@ -149,7 +150,7 @@ fn header_content(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>, in_fl
 
 pub(in crate::ui) fn navigation(state: &AppState, theme: &Theme) -> impl Iterator<Item = El> {
     let tab = state.browser.active_tab();
-    let buttons: [(&str, &'static Icon, bool, Navigate); 3] = [
+    let buttons: [(&str, &'static Icon, bool, Navigate); 2] = [
         (
             "Back",
             &icons::BACK,
@@ -162,23 +163,15 @@ pub(in crate::ui) fn navigation(state: &AppState, theme: &Theme) -> impl Iterato
             tab.is_some_and(|t| t.can_go_forward),
             Browser::go_forward,
         ),
-        if tab.is_some_and(|tab| tab.loading) {
-            ("Stop loading", &icons::CLOSE, true, Browser::stop_loading)
-        } else {
-            (
-                "Reload",
-                &icons::RELOAD,
-                tab.is_some_and(|tab| !tab.is_internal()),
-                Browser::reload,
-            )
-        },
     ];
+    let loading = tab.is_some_and(|tab| tab.loading);
+    let reload = reload_button(loading, tab.is_some_and(|tab| !tab.is_internal()), theme);
     buttons
         .into_iter()
         .enumerate()
         .map(|(index, (label, glyph, enabled, navigate))| {
             let button = nav_button(label, glyph, enabled, navigate, theme);
-            if !enabled || index > 1 {
+            if !enabled {
                 return button;
             }
             let direction = if index == 0 { -1 } else { 1 };
@@ -205,6 +198,59 @@ pub(in crate::ui) fn navigation(state: &AppState, theme: &Theme) -> impl Iterato
                         .send(id, ViewCommand::NavigationItems(direction));
                 })
         })
+        .chain(std::iter::once(reload))
+}
+
+/// The reload button, which morphs into a stop cross while the page loads and back once it stops.
+fn reload_button(loading: bool, enabled: bool, theme: &Theme) -> El {
+    let (label, navigate): (&str, Navigate) = if loading {
+        ("Stop loading", Browser::stop_loading)
+    } else {
+        ("Reload", Browser::reload)
+    };
+    let frame = controls::icon_button_frame("reload", label, theme::ICON_BUTTON, theme);
+    let button = if enabled {
+        hover_highlight::attach(frame, "reload", hover_highlight::Group::Controls)
+            .on_press(move |state: &mut AppState| state.with_active_tab(navigate))
+    } else {
+        frame.disabled(true).opacity(theme.disabled_opacity)
+    };
+    // The arrow turns away as the cross turns in, in opposite directions. Both stay mounted, so
+    // each spring runs from where the other left off.
+    let quarter = std::f32::consts::FRAC_PI_2;
+    button
+        .child(morph_glyph(
+            &icons::RELOAD,
+            "reload-arrow",
+            !loading,
+            quarter,
+            theme,
+        ))
+        .child(morph_glyph(
+            &icons::CLOSE,
+            "reload-stop-cross",
+            loading,
+            -quarter,
+            theme,
+        ))
+}
+
+/// A glyph centred in its button that shows when `shown`, and otherwise shrinks and turns by
+/// `hidden_turn` radians out of sight.
+fn morph_glyph(
+    glyph: &'static Icon,
+    key: &str,
+    shown: bool,
+    hidden_turn: f32,
+    theme: &Theme,
+) -> El {
+    let inset = (theme::ICON_BUTTON - theme::ICON) / 2.0;
+    icon(glyph, theme::ICON)
+        .key(key)
+        .color(theme.icon)
+        .absolute(inset, inset)
+        .scale(if shown { 1.0 } else { 0.0 })
+        .rotate(if shown { 0.0 } else { hidden_turn })
 }
 
 /// Hides the zoom chip once its time is up.
