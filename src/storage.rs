@@ -128,6 +128,8 @@ pub(crate) enum HistoryEvent {
 pub(crate) enum HistoryMutation {
     Remove(String),
     Clear,
+    /// Removes entries last visited at or after this many microseconds since the Unix epoch.
+    ClearSince(i64),
 }
 
 pub(crate) struct HistoryHandle {
@@ -649,6 +651,7 @@ fn run_worker(
                     let result = match &mutation {
                         HistoryMutation::Remove(url) => history.remove(url).map(|_| ()),
                         HistoryMutation::Clear => history.clear(),
+                        HistoryMutation::ClearSince(since) => history.clear_since(*since),
                     };
                     if result.is_ok() {
                         refresh_history(history, &shared);
@@ -657,7 +660,9 @@ fn run_worker(
                 });
                 let message = match mutation {
                     HistoryMutation::Remove(_) => "Could not remove this address from history.",
-                    HistoryMutation::Clear => "Could not clear browsing history.",
+                    HistoryMutation::Clear | HistoryMutation::ClearSince(_) => {
+                        "Could not clear browsing history."
+                    }
                 };
                 let active = shared
                     .active_windows

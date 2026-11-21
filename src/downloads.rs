@@ -99,6 +99,8 @@ pub struct Download {
     pub total_bytes: Option<u64>,
     /// A transfer, file-system, open, or reveal error, if one has occurred.
     pub error: Option<String>,
+    /// When this browser first learned of the download, for time-ranged clearing.
+    pub started_at: std::time::SystemTime,
 }
 
 impl Download {
@@ -119,6 +121,7 @@ impl Download {
             bytes_downloaded: 0,
             total_bytes: None,
             error: None,
+            started_at: std::time::SystemTime::now(),
         }
     }
 }
@@ -160,6 +163,7 @@ impl Update {
             bytes_downloaded: self.bytes_downloaded,
             total_bytes: self.total_bytes,
             error: self.error,
+            started_at: std::time::SystemTime::now(),
         }
     }
 }

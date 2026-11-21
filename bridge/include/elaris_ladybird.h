@@ -45,6 +45,8 @@ typedef enum {
     /* URL in text, initiator origin in destination, application in selection. Value 1 asks to open the
      * link, 2 reports that it cannot be opened, and 0 clears the notice. */
     ELARIS_LADYBIRD_EXTERNAL_URL = 30,
+    /* Browser-level, so view_id is 0. request_id echoes clear_browsing_data; value 0 reports a failure. */
+    ELARIS_LADYBIRD_BROWSING_DATA_CLEARED = 31,
 } ElarisLadybirdEventKind;
 
 /* Permission event text is the origin and selection is the permission key.
@@ -234,6 +236,14 @@ int32_t elaris_ladybird_cancel_active_downloads(ElarisLadybird* bridge);
 int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t view_id, ElarisLadybirdView** out_view);
 /* Creates a view in the shared private session. Its cookies, storage and cache never reach disk. */
 int32_t elaris_ladybird_create_private_view(ElarisLadybird*, uint64_t view_id, ElarisLadybirdView** out_view);
+enum {
+    ELARIS_LADYBIRD_CLEAR_CACHE = 1,
+    ELARIS_LADYBIRD_CLEAR_SITE_DATA = 2,
+    ELARIS_LADYBIRD_CLEAR_DOWNLOAD_HISTORY = 4,
+};
+/* Clears the selected engine data last used at or after since_ms (Unix milliseconds; negative clears all
+ * time). Completion arrives as BROWSING_DATA_CLEARED with the same request id. */
+int32_t elaris_ladybird_clear_browsing_data(ElarisLadybird*, int64_t since_ms, int32_t flags, uint64_t request_id);
 /* Starts a fresh private session. Fails while any private view is open. */
 int32_t elaris_ladybird_reset_private_session(ElarisLadybird*);
 /* Sets the maximum frame rate reported to pages and used by Ladybird's compositor. */

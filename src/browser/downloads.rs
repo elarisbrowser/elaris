@@ -123,7 +123,42 @@ impl Browser {
             downloads.push(update.into_download(id));
             return;
         };
+        let started_at = download.started_at;
         *download = update.into_download(id);
+        download.started_at = started_at;
+    }
+
+    /// Forgets finished downloads that started at or after `since`, or all of them.
+    pub(crate) fn remove_finished_downloads(&self, since: Option<std::time::SystemTime>) {
+        self.downloads
+            .lock()
+            .expect("download list poisoned")
+            .retain(|download| {
+                matches!(
+                    download.status,
+                    DownloadStatus::Pending | DownloadStatus::Downloading
+                ) || since.is_some_and(|since| download.started_at < since)
+            });
+    }
+
+    pub(crate) fn clear_browsing_data(
+        &self,
+        since: Option<std::time::SystemTime>,
+        data: elaris::ladybird::BrowsingData,
+    ) {
+        if data.download_history {
+            self.remove_finished_downloads(since);
+        }
+        let since_ms = since.map(|since| {
+            since
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis()
+                .min(i64::MAX as u128) as i64
+        });
+        if let Some(engine) = &self.engine {
+            engine.send(Command::ClearBrowsingData(since_ms, data));
+        }
     }
 
     pub(super) fn fail_download_start(&mut self, id: DownloadId, error: String) {

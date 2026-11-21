@@ -37,6 +37,14 @@ pub struct PermissionPrompt {
     pub os_denied: bool,
 }
 
+/// Engine-held browsing data that can be cleared.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct BrowsingData {
+    pub cache: bool,
+    pub site_data: bool,
+    pub download_history: bool,
+}
+
 /// A request to open a link in another application, or a notice that it could not be opened.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExternalUrl {
@@ -141,6 +149,11 @@ pub enum Event {
     PageDialog(Option<PageDialog>),
     PermissionPrompt(Option<PermissionPrompt>),
     ExternalUrl(Option<ExternalUrl>),
+    /// Browser-level completion of [`Ladybird::clear_browsing_data`].
+    BrowsingDataCleared {
+        request: u64,
+        cleared: bool,
+    },
     WebFullscreen(bool),
     Popup {
         request: u64,

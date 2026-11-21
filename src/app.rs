@@ -156,6 +156,10 @@ pub(crate) struct AppState {
     #[cfg(any(target_os = "macos", feature = "ladybird-bridge"))]
     display_refresh_rate: f64,
     pub(crate) omnibox: omnibox::State,
+    /// The open Clear Browsing Data dialog.
+    pub(crate) clear_data: Option<clear_data::ClearDataDialog>,
+    /// The result of the last Clear Browsing Data request.
+    pub(crate) clear_data_status: Option<String>,
     /// Clock guards for website permission prompts and fullscreen.
     pub(crate) page_guards: crate::ui::permission_prompt::Guards,
     /// Whether the floating Find in Page bar is mounted.
@@ -342,6 +346,8 @@ impl AppState {
             display_refresh_rate: 60.0,
             omnibox: omnibox::State::default(),
             page_guards: Default::default(),
+            clear_data: None,
+            clear_data_status: None,
             find_open: false,
             tab_switcher: None,
             find_input: TextEdit::default(),
@@ -722,6 +728,8 @@ pub(crate) fn save_closed_final_session(storage: &Storage) {
     save_registered_sessions(storage, false);
 }
 
+mod clear_data;
+pub(crate) use clear_data::{ClearDataDialog, ClearRange};
 pub(crate) mod cross_window_drag;
 pub(crate) mod detach;
 mod find;

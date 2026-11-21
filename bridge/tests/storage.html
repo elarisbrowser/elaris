@@ -1,0 +1,8 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Storage test</title>
+<script>
+  // Reports whether site data from an earlier load survived, then stores a marker.
+  document.title = localStorage.getItem("marker") ? "Stored" : "Fresh";
+  localStorage.setItem("marker", "1");
+</script>

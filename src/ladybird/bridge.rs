@@ -157,6 +157,12 @@ unsafe extern "C" {
         view: *mut *mut RawView,
     ) -> i32;
     fn elaris_ladybird_reset_private_session(bridge: *mut RawBridge) -> i32;
+    fn elaris_ladybird_clear_browsing_data(
+        bridge: *mut RawBridge,
+        since_ms: i64,
+        flags: i32,
+        request_id: u64,
+    ) -> i32;
     fn elaris_ladybird_reply_to_external_url(view: *mut RawView, request_id: u64, open: i32)
     -> i32;
     fn elaris_ladybird_reply_to_permission(view: *mut RawView, request_id: u64, choice: i32)
@@ -345,6 +351,10 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
                 activate: raw.value != 0,
             },
             29 => Event::PopupClosed,
+            31 => Event::BrowsingDataCleared {
+                request: raw.request_id,
+                cleared: raw.value != 0,
+            },
             30 => Event::ExternalUrl((raw.value != 0).then(|| super::ExternalUrl {
                 request_id: raw.request_id,
                 url: text,
@@ -579,6 +589,27 @@ impl Ladybird {
             elaris_ladybird_set_display_refresh_rate(view.raw.as_ptr(), refresh_rate)
         })?;
         Ok(Some(view))
+    }
+
+    /// Clears engine data last used at or after `since` (Unix milliseconds), or for all time.
+    pub fn clear_browsing_data(
+        &mut self,
+        since_ms: Option<i64>,
+        data: super::BrowsingData,
+        request_id: u64,
+    ) -> Result<(), String> {
+        let flags = i32::from(data.cache)
+            | i32::from(data.site_data) << 1
+            | i32::from(data.download_history) << 2;
+        // SAFETY: The bridge is live on its owner thread.
+        status_result(unsafe {
+            elaris_ladybird_clear_browsing_data(
+                self.owner.raw.as_ptr(),
+                since_ms.unwrap_or(-1),
+                flags,
+                request_id,
+            )
+        })
     }
 
     /// Discards the private session once no private view remains, so the next one starts empty.

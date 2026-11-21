@@ -175,7 +175,7 @@ impl AppState {
                     changed = true;
                     self.history_page.writing = false;
                     match result {
-                        Ok(HistoryMutation::Clear) => {
+                        Ok(HistoryMutation::Clear | HistoryMutation::ClearSince(_)) => {
                             self.history_page.previous.clear();
                             self.history_page.page = None;
                             self.request_history_page();

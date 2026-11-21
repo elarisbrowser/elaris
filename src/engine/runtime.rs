@@ -125,6 +125,11 @@ impl Runtime {
                 .download_action(id, action)
                 .err()
                 .map(|error| Update::DownloadActionFailed(id, error)),
+            Command::ClearBrowsingData(since, data) => self
+                .ladybird
+                .clear_browsing_data(since, data, 0)
+                .err()
+                .map(Update::Failed),
             Command::SetPermissionDefault(kind, blocked) => self
                 .ladybird
                 .set_permission_default(kind.key(), blocked)
@@ -279,6 +284,7 @@ impl Runtime {
             | Command::StartDownload(..)
             | Command::DownloadAction(..)
             | Command::SetDownloadDirectory(_)
+            | Command::ClearBrowsingData(..)
             | Command::SetPermissionDefault(..)
             | Command::SetPermissions(_)
             | Command::SetPermission(..) => {
@@ -365,6 +371,12 @@ impl Runtime {
                 self.native_ids_by_download.insert(id, native_id);
                 self.downloads.insert(id, update.clone().into_download(id));
                 updates.push(Update::Download(id, update));
+                continue;
+            }
+            if let Event::BrowsingDataCleared { cleared, .. } = event {
+                if !cleared {
+                    eprintln!("Elaris: Ladybird could not clear the selected browsing data");
+                }
                 continue;
             }
             if let Event::PermissionSaved {
@@ -480,8 +492,8 @@ impl Runtime {
                 Event::NavigationItems(items) => TabUpdate::NavigationItems(items),
                 Event::History { back, forward } => TabUpdate::History { back, forward },
                 Event::Download(_) => unreachable!("download events are handled above"),
-                Event::PermissionSaved { .. } => {
-                    unreachable!("saved permissions are handled above")
+                Event::PermissionSaved { .. } | Event::BrowsingDataCleared { .. } => {
+                    unreachable!("browser-level events are handled above")
                 }
                 Event::ReadyToPaint => {
                     if let Some((_, sample)) = painted.iter_mut().find(|(id, _)| *id == tab) {

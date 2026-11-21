@@ -1344,6 +1344,33 @@ extern "C" int32_t elaris_ladybird_create_view(ElarisLadybird* bridge, uint64_t 
     return create_view(bridge, view_id, WebView::IsPrivate::No, out_view);
 }
 
+extern "C" int32_t elaris_ladybird_clear_browsing_data(ElarisLadybird* bridge, int64_t since_ms, int32_t flags,
+                                                       uint64_t request_id) {
+    if (!bridge || !s_application || !on_owner_thread(bridge))
+        return fail("clearing browsing data requires the bridge owner thread");
+    using Options = WebView::Application::ClearBrowsingDataOptions;
+    auto selected = [flags](int32_t flag) { return flags & flag ? Options::Delete::Yes : Options::Delete::No; };
+    Options options;
+    if (since_ms >= 0)
+        options.since = UnixDateTime::from_milliseconds_since_epoch(since_ms);
+    options.delete_cached_files = selected(ELARIS_LADYBIRD_CLEAR_CACHE);
+    options.delete_site_data = selected(ELARIS_LADYBIRD_CLEAR_SITE_DATA);
+    options.delete_download_history = selected(ELARIS_LADYBIRD_CLEAR_DOWNLOAD_HISTORY);
+    auto report = [bridge, request_id](bool cleared) {
+        if (!bridge->callback)
+            return;
+        ElarisLadybirdEvent event{};
+        event.kind = ELARIS_LADYBIRD_BROWSING_DATA_CLEARED;
+        event.request_id = request_id;
+        event.value = cleared;
+        bridge->callback(bridge->context, &event);
+    };
+    s_application->clear_browsing_data(options)
+        ->when_resolved([report](Empty) { report(true); })
+        .when_rejected([report](Error const&) { report(false); });
+    return succeed();
+}
+
 extern "C" int32_t elaris_ladybird_create_private_view(ElarisLadybird* bridge, uint64_t view_id,
                                                        ElarisLadybirdView** out_view) {
     return create_view(bridge, view_id, WebView::IsPrivate::Yes, out_view);

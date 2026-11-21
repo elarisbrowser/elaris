@@ -7,7 +7,8 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use elaris::ladybird::{
-    Event, Ladybird, MouseEvent, MouseKind, PermissionPrompt, WebView, WheelPhase, button,
+    BrowsingData, Event, Ladybird, MouseEvent, MouseKind, PermissionPrompt, WebView, WheelPhase,
+    button,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -32,6 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 | Event::PermissionSaved { .. }
                 | Event::Title(_)
                 | Event::ExternalUrl(_)
+                | Event::BrowsingDataCleared { .. }
         ) {
             sink.borrow_mut().push_back(event);
         }
@@ -169,6 +171,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         view.reply_to_external_url(stale.request_id, true)?;
     }
     println!("Passed external link notice, prompt, cancel and navigation dismissal");
+
+    let storage = page.replace("permissions.html", "storage.html");
+    view.load(&storage)?;
+    wait_for_title(&mut browser, &events, "Fresh")?;
+    view.reload()?;
+    wait_for_title(&mut browser, &events, "Stored")?;
+    let site_data = BrowsingData {
+        site_data: true,
+        ..BrowsingData::default()
+    };
+    browser.clear_browsing_data(None, site_data, 7)?;
+    let cleared = wait_for(
+        &mut browser,
+        &events,
+        "site data to clear",
+        |event| match event {
+            Event::BrowsingDataCleared {
+                request: 7,
+                cleared,
+            } => Some(cleared),
+            _ => None,
+        },
+    )?;
+    assert!(cleared);
+    view.reload()?;
+    wait_for_title(&mut browser, &events, "Fresh")?;
+    println!("Passed clearing site data");
     Ok(())
 }
 

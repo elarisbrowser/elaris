@@ -219,6 +219,13 @@ impl History {
         Ok(())
     }
 
+    /// Removes entries last visited at or after `since` microseconds since the Unix epoch.
+    pub fn clear_since(&self, since: i64) -> rusqlite::Result<()> {
+        self.connection
+            .execute("DELETE FROM history WHERE last_visited >= ?1", [since])?;
+        Ok(())
+    }
+
     fn query(&self, sql: &str, limit: usize) -> rusqlite::Result<Vec<Entry>> {
         let mut statement = self.connection.prepare(sql)?;
         let rows = statement.query_map([limit as i64], entry_from_row)?;
@@ -320,6 +327,26 @@ mod tests {
             .expect("entry exists");
         assert_eq!(entry.title, "Example");
         assert_eq!(entry.visit_count, 2);
+    }
+
+    #[test]
+    fn clearing_since_a_time_keeps_older_visits() {
+        let temp = TempDir::new();
+        let history = History::open(&temp.file()).expect("open history");
+        history
+            .record_visit_at("https://older.example/", "Older", 10)
+            .unwrap();
+        history
+            .record_visit_at("https://newer.example/", "Newer", 20)
+            .unwrap();
+        history.clear_since(20).unwrap();
+        let urls: Vec<_> = history
+            .recent(10)
+            .unwrap()
+            .into_iter()
+            .map(|entry| entry.url)
+            .collect();
+        assert_eq!(urls, ["https://older.example/"]);
     }
 
     #[test]
