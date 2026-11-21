@@ -50,6 +50,7 @@ pub(super) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> E
         .child(split_view_section(state, theme, &kit, compact))
         .child(performance_section(state, theme, &kit, compact))
         .child(startup_section(state, theme, &kit, overlays, compact))
+        .child(default_browser_section(state, theme, &kit, compact))
         .child(configuration_section(state, theme, &kit, compact));
 
     col()
@@ -490,6 +491,33 @@ fn startup_section(
                     .border(1.0, theme.control_border),
                 compact,
             ),
+            theme,
+        ),
+    )
+}
+
+fn default_browser_section(state: &AppState, theme: &Theme, kit: &Kit, compact: bool) -> El {
+    let is_default = state.default_browser == Some(true);
+    let description = match (&state.default_browser_error, state.default_browser) {
+        (Some(error), _) => error.clone(),
+        (None, Some(true)) => "Elaris opens web links from other apps.".into(),
+        (None, _) => "Open web links from other apps in Elaris.".into(),
+    };
+    let control = if is_default {
+        text("Current default")
+            .font(type_::LABEL)
+            .color(theme.text_muted)
+    } else {
+        Button::new("Make Default")
+            .variant(ButtonVariant::Neutral)
+            .on_press(|state: &mut AppState| state.make_default_browser())
+            .build(kit)
+    };
+    section(
+        "Default Browser",
+        theme,
+        settings_group(
+            setting_row("Default web browser", &description, theme, control, compact),
             theme,
         ),
     )

@@ -57,12 +57,22 @@ impl super::AppState {
     }
 
     pub(crate) fn settings_tab(&mut self) -> TabId {
+        self.refresh_default_browser();
         if let Some(tab) = self.browser.internal_tab(InternalPage::Settings) {
             return tab;
         }
         self.browser
             .open_tab(InternalPage::Settings.address())
             .expect("the built-in settings route is valid")
+    }
+
+    pub(crate) fn refresh_default_browser(&mut self) {
+        self.default_browser = crate::default_browser::is_default();
+    }
+
+    pub(crate) fn make_default_browser(&mut self) {
+        self.default_browser_error = crate::default_browser::make_default().err();
+        self.refresh_default_browser();
     }
 
     pub(crate) fn set_search_engine(&mut self, search_engine: SearchEngine) {

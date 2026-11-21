@@ -5,6 +5,11 @@ mod app;
 mod appearance;
 mod browser;
 mod config;
+mod default_browser;
+#[cfg(target_os = "linux")]
+mod default_browser_linux;
+#[cfg(target_os = "macos")]
+mod default_browser_macos;
 mod download_history;
 #[cfg(target_os = "macos")]
 mod drag_overlay_macos;

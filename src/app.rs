@@ -222,6 +222,10 @@ pub(crate) struct AppState {
     default_download_directory: PathBuf,
     download_directory_override: Option<PathBuf>,
     pub(crate) configuration_issue: Option<String>,
+    /// Whether Elaris is the default web browser, as last read from the system.
+    pub(crate) default_browser: Option<bool>,
+    /// Why the last request to become the default browser failed, until the next request.
+    pub(crate) default_browser_error: Option<String>,
     #[cfg(feature = "ladybird-bridge")]
     storage_error: Option<String>,
     last_saved_session: Option<Session>,
@@ -399,6 +403,8 @@ impl AppState {
             default_download_directory,
             download_directory_override,
             configuration_issue,
+            default_browser: None,
+            default_browser_error: None,
             #[cfg(feature = "ladybird-bridge")]
             storage_error: _storage_error,
             last_saved_session: initial_session.clone(),
