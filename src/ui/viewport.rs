@@ -104,9 +104,6 @@ pub(crate) fn view(
         {
             // The surface stays on the tab's keyed container when the input region changes sides.
             pane = pane.pixels(&tab.surface.pixels);
-            if let Some(indicators) = super::permission_prompt::indicators(tab, theme) {
-                pane = pane.child(indicators);
-            }
         }
         pane = pane.child(child);
         if !horizontal

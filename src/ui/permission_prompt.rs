@@ -245,43 +245,30 @@ fn panel(
         .child(actions)
 }
 
-pub(super) fn indicators(tab: &crate::tab::Tab, theme: &Theme) -> Option<El> {
-    let mut indicators = row().gap(space::S2);
-    let mut visible = false;
-    for (kind, symbol, label) in [
+/// Icon-only marks in the address bar for permissions the active page is using now.
+pub(super) fn address_indicators(tab: &crate::tab::Tab, theme: &Theme) -> Vec<El> {
+    [
         (
             PermissionKind::Microphone,
-            &super::icons::MICROPHONE,
+            &icons::MICROPHONE,
             "Microphone in use",
         ),
         (
             PermissionKind::Location,
-            &super::icons::LOCATION,
+            &icons::LOCATION,
             "Location in use",
         ),
-    ] {
-        if tab.permissions_in_use[kind.index()] {
-            visible = true;
-            indicators = indicators.child(
-                row()
-                    .center_y()
-                    .gap(space::S1)
-                    .label(label)
-                    .child(rune::icon(symbol, theme::ICON).color(theme.text))
-                    .child(text(label).font(type_::LABEL).color(theme.text)),
-            );
-        }
-    }
-    visible.then(|| {
-        indicators
-            .key("site-activity")
-            .absolute(theme::FIND_INSET, theme::FIND_INSET)
-            .px(space::S2)
-            .py(space::S1)
-            .radius(theme::FIND_RADIUS)
-            .fill(theme.overlay_panel)
-            .border(theme::OMNIBOX_BORDER_WIDTH, theme.overlay_border)
+    ]
+    .into_iter()
+    .filter(|(kind, _, _)| tab.permissions_in_use[kind.index()])
+    .map(|(_, glyph, label)| {
+        row()
+            .center_y()
+            .label(label)
+            .help(label)
+            .child(rune::icon(glyph, theme::ICON).color(theme.text_muted))
     })
+    .collect()
 }
 
 /// Names the site that took the screen while its fullscreen notice is up.
