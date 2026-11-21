@@ -25,9 +25,18 @@ from .common import (
 BRIDGE_LIB_DIRS = (CPP_BUILD_DIR / "lib", ROOT / "build" / "ladybird-integrated" / "lib")
 
 
-def _run_artifacts_are_current(ui_only: bool) -> bool:
+def _profile(args: argparse.Namespace) -> str:
+    """The Cargo profile directory the command builds into."""
+    return "release" if getattr(args, "release", False) else "debug"
+
+
+def _executable(profile: str) -> Path:
+    return ROOT / "target" / profile / ("elaris.exe" if os.name == "nt" else "elaris")
+
+
+def _run_artifacts_are_current(ui_only: bool, profile: str = "debug") -> bool:
     """Return whether a previous run's executable and (when enabled) bridge are current."""
-    executable = ROOT / "target" / "debug" / ("elaris.exe" if os.name == "nt" else "elaris")
+    executable = _executable(profile)
     if not executable.is_file():
         return False
 
@@ -65,12 +74,13 @@ def setup(args: argparse.Namespace) -> None:
 
 
 def build(args: argparse.Namespace) -> None:
+    release = ["--release"] if _profile(args) == "release" else []
     if args.ui:
-        run("cargo", "+stable", "build", "--locked")
+        run("cargo", "+stable", "build", "--locked", *release)
         return
     engine.build_for_elaris(args.jobs)
     _configure_bridge_environment(bridge_lib_dir())
-    run("cargo", "+stable", "build", "--locked", "--features", "ladybird-bridge")
+    run("cargo", "+stable", "build", "--locked", *release, "--features", "ladybird-bridge")
 
 
 def format_sources(_args: argparse.Namespace) -> None:
@@ -106,8 +116,8 @@ def _configure_bridge_environment(bridge_dir: str) -> None:
     os.environ[loader_variable] = os.pathsep.join(directories)
 
 
-def _macos_browser_bundle(executable: Path) -> Path:
-    contents = ROOT / "build" / "Elaris.app" / "Contents"
+def _macos_browser_bundle(executable: Path, name: str = "Elaris") -> Path:
+    contents = ROOT / "build" / f"{name}.app" / "Contents"
     bundled_executable = contents / "MacOS" / executable.name
     bundled_executable.parent.mkdir(parents=True, exist_ok=True)
     for source, destination in (
@@ -120,22 +130,25 @@ def _macos_browser_bundle(executable: Path) -> Path:
 
 
 def launch(args: argparse.Namespace) -> None:
+    profile = _profile(args)
+    release = ["--release"] if profile == "release" else []
     if sys.platform == "darwin" and not args.ui:
-        if not _run_artifacts_are_current(ui_only=False):
+        if not _run_artifacts_are_current(ui_only=False, profile=profile):
             build(args)
         _configure_bridge_environment(bridge_lib_dir())
-        executable = _macos_browser_bundle(ROOT / "target" / "debug" / "elaris")
+        bundle = "ElarisRelease" if release else "Elaris"
+        executable = _macos_browser_bundle(_executable(profile), bundle)
         run(str(executable), *([args.url] if args.url else []), *args.rune_args)
         return
-    if _run_artifacts_are_current(args.ui):
-        executable = ROOT / "target" / "debug" / "elaris"
+    if _run_artifacts_are_current(args.ui, profile):
+        executable = _executable(profile)
         command = [str(executable)]
         if args.url:
             command.append(args.url)
         command.extend(args.rune_args)
         run(*command)
         return
-    command = ["cargo", "+stable", "run", "--locked"]
+    command = ["cargo", "+stable", "run", "--locked", *release]
     if not args.ui:
         engine.build_for_elaris(args.jobs)
         _configure_bridge_environment(bridge_lib_dir())
@@ -324,11 +337,13 @@ def register_commands(commands) -> None:
             )
         elif handler is build:
             subcommand.add_argument("--ui", action="store_true", help="Build only the interface, without Ladybird")
+            subcommand.add_argument("--release", action="store_true", help="Build Elaris optimised (cargo --release)")
             subcommand.add_argument("--jobs", help="Parallel build jobs (default: ELARIS_JOBS or 4)")
         if handler is launch:
             subcommand.add_argument(
                 "--ui", action="store_true", help="Run the interface alone, without the Ladybird engine"
             )
+            subcommand.add_argument("--release", action="store_true", help="Run Elaris optimised (cargo --release)")
             subcommand.add_argument("--jobs", help="Parallel build jobs (default: ELARIS_JOBS or 4)")
             subcommand.add_argument("url", nargs="?", help="Address to open, such as example.com")
             subcommand.add_argument(

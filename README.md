@@ -38,7 +38,7 @@ You need Python 3.9+ and Git. macOS also needs [Homebrew](https://brew.sh/) and 
 
 `setup` installs system packages and Rust toolchains. On Linux it supports apt, dnf, pacman, and zypper, and may ask for your password through `sudo`.
 
-For UI work without building the engine, use `./elaris run --ui`.
+For UI work without building the engine, use `./elaris run --ui`. Add `--release` to `build` or `run` for an optimised build (`./elaris run --release`), which launches from `build/ElarisRelease.app` on macOS.
 
 ### Shortcuts
 
