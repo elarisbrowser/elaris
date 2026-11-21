@@ -1,0 +1,28 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>File picker verification</title>
+<style>
+  body { font: 17px system-ui; margin: 32px; }
+  label { display: block; margin: 20px 0; }
+  input { display: block; margin-top: 6px; }
+  pre { white-space: pre-wrap; }
+</style>
+<h1>File picker verification</h1>
+<label>Single file <input id="single" type="file"></label>
+<label>Multiple files <input id="multiple" type="file" multiple></label>
+<label>Directory <input id="directory" type="file" webkitdirectory></label>
+<pre id="results" aria-live="polite">No selection yet</pre>
+<script>
+const output = document.querySelector("#results");
+for (const input of document.querySelectorAll("input")) {
+  for (const event of ["change", "cancel"]) {
+    input.addEventListener(event, async () => {
+      const files = await Promise.all([...input.files].map(async file => {
+        const name = file.webkitRelativePath || file.name;
+        return name + " (" + file.size + " bytes): " + await file.slice(0, 80).text();
+      }));
+      output.textContent = input.id + " " + event + "\n" + files.join("\n");
+    });
+  }
+}
+</script>

@@ -157,6 +157,7 @@ struct ElarisLadybird {
     std::thread::id owner_thread;
     std::vector<ElarisLadybirdView*> views;
     std::unique_ptr<ElarisDownloadObserver> download_observer;
+    uint64_t next_picker_request{};
 };
 
 struct PendingPageDialog {
@@ -183,6 +184,7 @@ struct ElarisLadybirdView {
     PendingPageDialog dialog;
     FormPicker picker{FormPicker::None};
     uint64_t picker_id{};
+    Optional<Web::HTML::CrossProcessId> picker_document;
     std::vector<uint32_t> picker_options;
     bool picker_allows_multiple{};
 };
@@ -419,6 +421,7 @@ static void cancel_form_picker(ElarisLadybirdView& handle, bool notify_page) {
     auto picker = handle.picker;
     handle.picker = FormPicker::None;
     handle.picker_id = 0;
+    handle.picker_document.clear();
     handle.picker_options.clear();
     handle.picker_allows_multiple = false;
     if (picker == FormPicker::None)
@@ -446,7 +449,8 @@ static void cancel_form_picker(ElarisLadybirdView& handle, bool notify_page) {
 
 static void show_form_picker(ElarisLadybirdView& handle, FormPicker picker, AK::JsonObject const& payload) {
     handle.picker = picker;
-    handle.picker_id = ++handle.next_request;
+    handle.picker_id = ++handle.bridge->next_picker_request;
+    handle.picker_document = handle.view->traversable().active_document().id();
     if (!handle.bridge->callback) {
         cancel_form_picker(handle, true);
         return;
@@ -604,6 +608,7 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
         .owner_thread = std::this_thread::get_id(),
         .views = {},
         .download_observer = nullptr,
+        .next_picker_request = 0,
     };
     s_application->host = *out_bridge;
     (*out_bridge)->download_observer = std::make_unique<ElarisDownloadObserver>(**out_bridge);
@@ -693,7 +698,7 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
     apply_selection_colors(*theme_buffer.data<Gfx::SystemTheme>());
 
     auto view = ElarisWebView::create(AK::move(theme_buffer), {1024, 768}, mode);
-    auto* handle = new ElarisLadybirdView{bridge, view_id, AK::move(view), {}, 0, 0, {}, {}, {}, {}, FormPicker::None, 0, {}, false};
+    auto* handle = new ElarisLadybirdView{bridge, view_id, AK::move(view), {}, 0, 0, {}, {}, {}, {}, FormPicker::None, 0, {}, {}, false};
     bridge->views.push_back(handle);
     // The callbacks live in the view, which the handle owns, so they never outlive it.
     install_form_pickers(*handle);
@@ -766,6 +771,7 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
         emit(handle, ELARIS_LADYBIRD_LOAD_ERROR, "This page stopped responding.");
     };
     handle->view->on_browser_history_traversal_complete = [handle] {
+        cancel_form_picker(*handle, true);
         emit(handle, ELARIS_LADYBIRD_NAVIGATION_COMMITTED, to_utf8(handle->view->url()));
     };
     handle->view->on_find_in_page = [handle](size_t current_match_index, Optional<size_t> const& total_match_count) {
@@ -992,7 +998,7 @@ extern "C" int32_t elaris_ladybird_reply_to_picker(ElarisLadybirdView* handle, u
         return fail("invalid form picker response");
     if (!request_id || handle->picker_id != request_id)
         return succeed();
-    if (!response) {
+    if (!response || handle->picker_document != handle->view->traversable().active_document().id()) {
         cancel_form_picker(*handle, true);
         return succeed();
     }

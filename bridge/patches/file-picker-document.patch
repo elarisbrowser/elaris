@@ -1,0 +1,20 @@
+--- a/Libraries/LibWeb/Page/Page.cpp
++++ b/Libraries/LibWeb/Page/Page.cpp
+@@ -1497,11 +1497,13 @@
+     if (m_pending_non_blocking_dialog == PendingNonBlockingDialog::FilePicker) {
+         m_pending_non_blocking_dialog = PendingNonBlockingDialog::None;
+
+-        if (m_pending_non_blocking_dialog_target) {
+-            auto& input_element = as<HTML::HTMLInputElement>(*m_pending_non_blocking_dialog_target);
++        if (auto target = GC::Ptr { m_pending_non_blocking_dialog_target.ptr() }) {
++            m_pending_non_blocking_dialog_target = nullptr;
++            auto& input_element = as<HTML::HTMLInputElement>(*target);
++            if (!input_element.is_connected() || !input_element.document().is_fully_active()
++                || input_element.type_state() != HTML::HTMLInputElement::TypeAttributeState::FileUpload)
++                return;
+             input_element.did_select_files(selected_files);
+-
+-            m_pending_non_blocking_dialog_target = nullptr;
+         }
+     }
+ }

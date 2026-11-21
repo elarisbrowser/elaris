@@ -141,6 +141,8 @@ static void on_event(void* context, ElarisLadybirdEvent const* event) {
         events.selected_text_request = event->request_id;
         events.selected_text = event->text;
         break;
+    default:
+        break;
     }
 }
 
@@ -226,7 +228,7 @@ static bool page_form_pickers(ElarisLadybird* bridge, ElarisLadybirdView* view, 
 <option>First</option><optgroup label="Group"><option disabled>Disabled</option><option>Second</option></optgroup>
 </select>
 <button onclick="m.showPicker()">Upload multiple</button>
-<input hidden id=f type=file accept=".html" onchange="this.files[0].text().then(value=>document.title=value.includes('Ladybird bridge integration test')?this.files[0].name:'bad content')" oncancel="document.title='upload canceled'">
+<input hidden id=f type=file accept=".html" onchange="this.files[0].text().then(value=>document.title=value.includes('Ladybird bridge integration test')?this.files[0].name:'bad content')" oncancel="document.title='upload canceled:'+(this.files[0]?.name||'empty')">
 <input hidden id=m type=file multiple onchange="document.title=String(this.files.length)">
 <input hidden id=c type=color value="%23123456" onchange="document.title=this.value">
 <input hidden id=d type=date value="2026-01-02" min="2026-01-01" max="2026-12-31" onchange="document.title=this.value">)HTML";
@@ -268,9 +270,10 @@ static bool page_form_pickers(ElarisLadybird* bridge, ElarisLadybirdView* view, 
     auto multiple_paths = upload.string();
     multiple_paths.push_back('\0');
     multiple_paths += (upload.parent_path() / "download_smoke.cpp").string();
-    return open(18, "file", "html") && reply({}, "upload canceled") &&
+    if (!(open(18, "file", "html") && reply({}, "upload canceled:empty") &&
            open(18, "file", "html") && reply(upload.string(), upload.filename().string()) &&
-           open(54, "color", "#123456") && reply({}, upload.filename().string()) &&
+           open(18, "file", "html") && reply({}, "upload canceled:" + upload.filename().string()) &&
+           open(54, "color", "#123456") && reply({}, "upload canceled:" + upload.filename().string()) &&
            open(54, "color", "#123456") && reply("#abcdef", "#abcdef") &&
            open(90, "date", "2026-12-31") && reply({}, "#abcdef") &&
            open(90, "date", "2026-12-31") && reply("2026-03-04", "2026-03-04") &&
@@ -278,7 +281,24 @@ static bool page_form_pickers(ElarisLadybird* bridge, ElarisLadybirdView* view, 
            open(126, "select", "Group") &&
            elaris_ladybird_reply_to_picker(view, events.picker_id, reinterpret_cast<uint8_t const*>("2"), 1) != 0 &&
            reply("3", "Second") &&
-           open(162, "file", "\"multiple\":true") && reply(multiple_paths, "2");
+           open(162, "file", "\"multiple\":true") && reply(multiple_paths, "2") &&
+           open(18, "file", "html")))
+        return false;
+
+    auto stale_request = events.picker_id;
+    if (!check(elaris_ladybird_load(view, page), "replace page with its picker open") ||
+        !pump_until(bridge, [&] { return !events.picker_id && events.last_title == "Form pickers"; }) ||
+        !open(18, "file", "html"))
+        return false;
+    auto current_request = events.picker_id;
+    auto file_path = upload.string();
+    if (!check(elaris_ladybird_reply_to_picker(view, stale_request,
+                   reinterpret_cast<uint8_t const*>(file_path.data()), file_path.size()), "ignore stale file selection") ||
+        events.picker_id != current_request || !reply({}, "upload canceled:empty"))
+        return false;
+
+    // The caller destroys this view with a file picker still pending.
+    return open(18, "file", "html");
 }
 
 static bool page_find(ElarisLadybird* bridge, ElarisLadybirdView* view, Events& events) {
