@@ -204,6 +204,10 @@ pub(crate) enum ViewCommand {
     /// Clears Ladybird's active match and highlights.
     FindEnd,
     ExitWebFullscreen,
+    ReplyToExternalUrl {
+        request_id: u64,
+        open: bool,
+    },
     ReplyToPermission {
         request_id: u64,
         choice: Option<bool>,
@@ -320,6 +324,7 @@ pub(crate) enum TabUpdate {
     Cursor(String),
     PageDialog(Option<elaris::ladybird::PageDialog>),
     PermissionPrompt(Option<elaris::ladybird::PermissionPrompt>),
+    ExternalUrl(Option<elaris::ladybird::ExternalUrl>),
     WebFullscreen(bool),
     PermissionUse(crate::permissions::PermissionKind, bool),
     Error(String),

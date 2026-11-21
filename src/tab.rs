@@ -86,6 +86,7 @@ pub(crate) struct Tab {
     pub(crate) page_cursor: rune::Cursor,
     pub(crate) page_dialog: Option<PageDialog>,
     pub(crate) permission_prompt: Option<elaris::ladybird::PermissionPrompt>,
+    pub(crate) external_url: Option<elaris::ladybird::ExternalUrl>,
     pub(crate) web_fullscreen: bool,
     pub(crate) permissions_in_use: [bool; PermissionKind::ALL.len()],
     pub(crate) awaiting_close: bool,
@@ -142,6 +143,7 @@ impl Tab {
             page_cursor: rune::Cursor::Default,
             page_dialog: None,
             permission_prompt: None,
+            external_url: None,
             web_fullscreen: false,
             permissions_in_use: [false; PermissionKind::ALL.len()],
             awaiting_close: false,
@@ -181,6 +183,7 @@ impl Tab {
             page_cursor: rune::Cursor::Default,
             page_dialog: None,
             permission_prompt: None,
+            external_url: None,
             web_fullscreen: false,
             permissions_in_use: [false; PermissionKind::ALL.len()],
             awaiting_close: false,
@@ -235,6 +238,7 @@ impl Tab {
             TabUpdate::ImeCaret(rect) => self.ime_caret = rect,
             TabUpdate::WebFullscreen(active) => self.web_fullscreen = active,
             TabUpdate::PermissionPrompt(prompt) => self.permission_prompt = prompt,
+            TabUpdate::ExternalUrl(request) => self.external_url = request,
             TabUpdate::PermissionUse(kind, visible) => {
                 self.permissions_in_use[kind.index()] = visible
             }

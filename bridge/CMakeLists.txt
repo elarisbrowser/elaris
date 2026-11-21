@@ -12,6 +12,7 @@ function(elaris_add_ladybird_bridge)
         Libraries/LibWebView/ViewImplementation.h)
     elaris_patch_ladybird(color-picker-cancel Libraries/LibWeb/HTML/HTMLInputElement.cpp)
     elaris_patch_ladybird(file-picker-document Libraries/LibWeb/Page/Page.cpp)
+    elaris_patch_ladybird(external-url-host Libraries/LibWebView/ViewImplementation.cpp)
     target_include_directories(LibWebView PRIVATE "${ELARIS_BRIDGE_DIR}/src")
     elaris_patch_ladybird(private-request-servers
         Libraries/LibWebView/Application.cpp
@@ -37,11 +38,17 @@ function(elaris_add_ladybird_bridge)
     if(APPLE)
         set(objc_sources
             "${ELARIS_BRIDGE_DIR}/src/notification_backend_macos.mm"
+            "${ELARIS_BRIDGE_DIR}/src/external_url_handler_macos.mm"
             "${LADYBIRD_SOURCE_DIR}/UI/Qt/MicrophoneAuthorizerMacOS.mm")
         target_sources(elaris_ladybird PRIVATE ${objc_sources})
         set_source_files_properties(${objc_sources} PROPERTIES COMPILE_FLAGS "-fobjc-arc")
         target_link_libraries(elaris_ladybird PRIVATE
-            "-framework AVFoundation" "-framework CoreServices" "-framework UserNotifications")
+            "-framework AVFoundation" "-framework CoreServices" "-framework UserNotifications" "-framework Cocoa")
+    elseif(LINUX)
+        find_package(PkgConfig REQUIRED)
+        pkg_check_modules(ELARIS_GIO REQUIRED IMPORTED_TARGET gio-2.0)
+        target_sources(elaris_ladybird PRIVATE "${ELARIS_BRIDGE_DIR}/src/external_url_handler_linux.cpp")
+        target_link_libraries(elaris_ladybird PRIVATE PkgConfig::ELARIS_GIO)
     endif()
     target_compile_features(elaris_ladybird PRIVATE cxx_std_20)
     target_include_directories(elaris_ladybird PUBLIC "${ELARIS_BRIDGE_DIR}/include")

@@ -37,6 +37,17 @@ pub struct PermissionPrompt {
     pub os_denied: bool,
 }
 
+/// A request to open a link in another application, or a notice that it could not be opened.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExternalUrl {
+    pub request_id: u64,
+    /// The link, or the error message for a notice.
+    pub url: String,
+    pub origin: String,
+    pub application: String,
+    pub unavailable: bool,
+}
+
 /// A page-owned dialog awaiting a response from the browser.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PageDialog {
@@ -129,6 +140,7 @@ pub enum Event {
     Cursor(String),
     PageDialog(Option<PageDialog>),
     PermissionPrompt(Option<PermissionPrompt>),
+    ExternalUrl(Option<ExternalUrl>),
     WebFullscreen(bool),
     Popup {
         request: u64,

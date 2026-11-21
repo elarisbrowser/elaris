@@ -67,6 +67,7 @@
 #include <utility>
 #include <vector>
 
+#include "external_url_handler.h"
 #include "peek_disposition.h"
 
 static Core::EventLoop* s_event_loop;
@@ -133,6 +134,13 @@ class ElarisApplication final : public WebView::Application {
     }
 
     ErrorOr<AK::LexicalPath> default_path_for_downloaded_file(AK::ByteString const& file) const override;
+#if defined(AK_OS_MACOS) || defined(AK_OS_LINUX)
+    void resolve_external_url_handler(URL::URL const& url,
+                                      WebView::ExternalURLHandlerCallback callback) const override {
+        Elaris::resolve_external_url_handler(url, AK::move(callback));
+    }
+#endif
+    void display_error_dialog(AK::StringView message) const override;
 
   private:
 #if defined(AK_OS_MACOS)
@@ -234,6 +242,8 @@ struct ElarisLadybird {
     // Elaris's browser defaults. Ladybird only prompts when a site has no decision, so a blocked default
     // turns that prompt into a silent refusal and leaves explicit site exceptions in charge.
     std::set<Web::Permissions::PermissionName> blocked_by_default;
+    // The view with system focus, which receives application-level error notices.
+    ElarisLadybirdView* focused_view{};
 };
 
 struct PendingPageDialog {
@@ -278,6 +288,15 @@ struct ElarisLadybirdView {
     ElarisLadybirdView* popup_source{};
     uint64_t popup_request{};
     bool popup_closed{};
+    // Ladybird asks about one external link at a time per view and waits for this reply.
+    struct {
+        uint64_t id{};
+        int32_t kind{};
+        std::string url;
+        std::string origin;
+        std::string application;
+        AK::Function<void(bool)> reply;
+    } external_url{};
 };
 
 static AK::OwnPtr<ElarisApplication> s_application;
@@ -425,6 +444,65 @@ extern "C" int32_t elaris_ladybird_exit_web_fullscreen(ElarisLadybirdView* handl
     if (handle->web_fullscreen)
         handle->view->exit_fullscreen();
     return succeed();
+}
+
+static void emit_external_url(ElarisLadybirdView const& handle) {
+    if (!handle.bridge->callback)
+        return;
+    auto const& pending = handle.external_url;
+    ElarisLadybirdEvent event{};
+    event.kind = ELARIS_LADYBIRD_EXTERNAL_URL;
+    event.view_id = handle.id;
+    event.request_id = pending.id;
+    event.value = pending.kind;
+    event.text = pending.url.c_str();
+    event.destination = pending.origin.c_str();
+    event.selection = pending.application.c_str();
+    handle.bridge->callback(handle.bridge->context, &event);
+}
+
+static void show_external_url(ElarisLadybirdView& handle, int32_t kind, std::string url, std::string origin,
+                              std::string application, AK::Function<void(bool)> reply) {
+    if (auto previous = std::exchange(handle.external_url.reply, {}))
+        previous(false);
+    handle.external_url = {++handle.next_request, kind,           AK::move(url), AK::move(origin),
+                           AK::move(application), AK::move(reply)};
+    emit_external_url(handle);
+}
+
+// A navigation, crash or close declines the open request and removes any notice.
+static void cancel_external_url(ElarisLadybirdView& handle) {
+    if (!handle.external_url.kind)
+        return;
+    auto reply = std::exchange(handle.external_url.reply, {});
+    handle.external_url = {};
+    if (reply)
+        reply(false);
+    emit_external_url(handle);
+}
+
+extern "C" int32_t elaris_ladybird_reply_to_external_url(ElarisLadybirdView* handle, uint64_t request_id,
+                                                         int32_t open) {
+    if (!handle || !on_owner_thread(handle->bridge))
+        return fail("external link replies require the view owner thread");
+    if (!request_id || handle->external_url.id != request_id)
+        return succeed();
+    auto reply = std::exchange(handle->external_url.reply, {});
+    handle->external_url = {};
+    emit_external_url(*handle);
+    if (reply)
+        reply(open == 1);
+    return succeed();
+}
+
+void ElarisApplication::display_error_dialog(AK::StringView message) const {
+    auto* view = host ? host->focused_view : nullptr;
+    if (!view || !view->id) {
+        warnln("{}", message);
+        return;
+    }
+    show_external_url(*view, 2, std::string{message.characters_without_null_termination(), message.length()}, {}, {},
+                      {});
 }
 
 static void emit_permission(ElarisLadybirdView const& handle, PendingPermission const* pending,
@@ -904,6 +982,7 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
         .next_picker_request = 0,
         .permissions_initialized = false,
         .blocked_by_default = {},
+        .focused_view = nullptr,
     };
     s_application->host = *out_bridge;
     (*out_bridge)->download_observer = std::make_unique<ElarisDownloadObserver>(**out_bridge);
@@ -1031,6 +1110,15 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
         if (permissions.empty() || permissions.front().id != first)
             emit_permission_prompt(*handle);
     };
+    handle->view->on_request_external_url_confirmation = [handle](auto const& url, auto const& origin,
+                                                                  auto const& application, auto reply) {
+        if (!handle->id) {
+            reply(false);
+            return;
+        }
+        show_external_url(*handle, 1, to_utf8(url), origin.serialize().to_byte_string().characters(),
+                          application.application_name().to_byte_string().characters(), AK::move(reply));
+    };
     handle->view->on_tab_indicator_change = [handle](WebView::TabIndicator indicator, bool visible) {
         switch (indicator) {
         case WebView::TabIndicator::UsingLocation:
@@ -1065,6 +1153,7 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
         handle->view->on_close = [handle] {
             handle->popup_closed = true;
             cancel_permissions(*handle);
+            cancel_external_url(*handle);
             emit(handle, ELARIS_LADYBIRD_POPUP_CLOSED);
         };
     }
@@ -1127,6 +1216,7 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
                  (view.can_navigate_forward() ? ELARIS_LADYBIRD_HISTORY_FORWARD : 0));
     };
     handle->view->on_top_level_navigation_commit = [handle] {
+        cancel_external_url(*handle);
         set_web_fullscreen(*handle, false);
         if (handle->view->zoom_level() != handle->page_zoom)
             handle->view->set_zoom(handle->page_zoom);
@@ -1138,6 +1228,7 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
     handle->view->on_web_content_crashed = [handle](auto) {
         set_web_fullscreen(*handle, false);
         cancel_permissions(*handle);
+        cancel_external_url(*handle);
         emit(handle, ELARIS_LADYBIRD_PERMISSION_USE, "location", false);
         emit(handle, ELARIS_LADYBIRD_PERMISSION_USE, "microphone", false);
         cancel_form_picker(*handle, false);
@@ -1903,6 +1994,10 @@ extern "C" int32_t elaris_ladybird_set_focus(ElarisLadybirdView* handle, int32_t
     if (!on_owner_thread(handle->bridge))
         return fail("focus must change on the initialization thread");
     handle->view->set_has_system_focus(focused != 0);
+    if (focused)
+        handle->bridge->focused_view = handle;
+    else if (handle->bridge->focused_view == handle)
+        handle->bridge->focused_view = nullptr;
     return succeed();
 }
 
@@ -1984,6 +2079,9 @@ extern "C" void elaris_ladybird_destroy_view(ElarisLadybirdView* handle) {
     // The host has already committed to removing this view. Keep its page alive just long
     // enough to run Ladybird's close path without raising a dialog for a removed tab.
     cancel_permissions(*handle);
+    cancel_external_url(*handle);
+    if (handle->bridge->focused_view == handle)
+        handle->bridge->focused_view = nullptr;
     auto& views = handle->bridge->views;
     auto pending_child = [&] {
         return std::find_if(views.begin(), views.end(),

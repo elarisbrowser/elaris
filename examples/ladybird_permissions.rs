@@ -6,7 +6,9 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use elaris::ladybird::{Event, Ladybird, PermissionPrompt};
+use elaris::ladybird::{
+    Event, Ladybird, MouseEvent, MouseKind, PermissionPrompt, WebView, WheelPhase, button,
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
@@ -26,7 +28,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut browser = Ladybird::new(&resources, &profile, move |_, event| {
         if matches!(
             event,
-            Event::PermissionPrompt(_) | Event::PermissionSaved { .. } | Event::Title(_)
+            Event::PermissionPrompt(_)
+                | Event::PermissionSaved { .. }
+                | Event::Title(_)
+                | Event::ExternalUrl(_)
         ) {
             sink.borrow_mut().push_back(event);
         }
@@ -132,7 +137,68 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         view.reply_to_permission(request_id, None)?;
         println!("Distinguished browser microphone block from OS microphone denial");
     }
+
+    let external = page.replace("permissions.html", "external.html");
+    view.resize(800, 600, 1.0)?;
+    view.set_focus(true)?;
+    view.load(&format!("{external}?missing"))?;
+    wait_for_title(&mut browser, &events, "External link test")?;
+    click(&mut view)?;
+    let notice = wait_for_external(&mut browser, &events, "a missing handler notice")?;
+    assert!(notice.unavailable && notice.url.contains("elaris-test-missing-handler"));
+    view.reply_to_external_url(notice.request_id, false)?;
+
+    if cfg!(target_os = "macos") {
+        view.load(&format!("{external}?known"))?;
+        wait_for_title(&mut browser, &events, "External link test")?;
+        click(&mut view)?;
+        let request = wait_for_external(&mut browser, &events, "an external link prompt")?;
+        assert!(!request.unavailable && request.origin == origin);
+        assert!(!request.application.is_empty());
+        view.reply_to_external_url(request.request_id, false)?;
+
+        click(&mut view)?;
+        let stale = wait_for_external(&mut browser, &events, "a second external link prompt")?;
+        view.load(&page)?;
+        wait_for(
+            &mut browser,
+            &events,
+            "navigation to dismiss the link prompt",
+            |event| matches!(event, Event::ExternalUrl(None)).then_some(()),
+        )?;
+        view.reply_to_external_url(stale.request_id, true)?;
+    }
+    println!("Passed external link notice, prompt, cancel and navigation dismissal");
     Ok(())
+}
+
+fn click(view: &mut WebView) -> TestResult<()> {
+    for (kind, buttons) in [(MouseKind::Down, button::PRIMARY), (MouseKind::Up, 0)] {
+        view.mouse_event(MouseEvent {
+            kind,
+            x: 100,
+            y: 100,
+            button: button::PRIMARY,
+            buttons,
+            modifiers: 0,
+            wheel: (0.0, 0.0),
+            precise: false,
+            phase: WheelPhase::None,
+            clicks: 1,
+        })?;
+    }
+    Ok(())
+}
+
+fn wait_for_external(
+    browser: &mut Ladybird,
+    events: &Events,
+    description: &str,
+) -> TestResult<elaris::ladybird::ExternalUrl> {
+    wait_for(browser, events, description, |event| match event {
+        Event::ExternalUrl(Some(request)) => Some(request),
+        _ => None,
+    })
 }
 
 type Events = RefCell<VecDeque<Event>>;

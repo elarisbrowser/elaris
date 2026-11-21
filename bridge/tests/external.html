@@ -1,0 +1,15 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>External link test</title>
+<style>
+  a { position: fixed; inset: 0; display: block; font: 24px sans-serif; }
+</style>
+<!-- The link fills the page so a click anywhere follows it. -->
+<a id="link">Open external link</a>
+<script>
+  const targets = {
+    "?missing": "elaris-test-missing-handler:hello",
+    "?known": "x-apple.systempreferences:",
+  };
+  document.querySelector("#link").href = targets[location.search] ?? "mailto:test@example.com";
+</script>

@@ -37,13 +37,20 @@ fn prompt_tab(state: &AppState) -> Option<&Tab> {
         .as_ref()
         .map(|peek| &peek.page)
         .or_else(|| state.browser.active_tab())
-        .filter(|tab| tab.permission_prompt.is_some())
+        .filter(|tab| shown_request(tab).is_some())
+}
+
+/// The request id of the prompt the tab shows: a permission question first, then an external link.
+fn shown_request(tab: &Tab) -> Option<u64> {
+    tab.permission_prompt
+        .as_ref()
+        .map(|prompt| prompt.request_id)
+        .or_else(|| tab.external_url.as_ref().map(|request| request.request_id))
 }
 
 /// Advances the guards on Rune's frame clock; returns whether the interface must rebuild.
 pub(crate) fn poll(state: &mut AppState, clock: f64) -> bool {
-    let prompt = prompt_tab(state)
-        .and_then(|tab| Some((tab.id(), tab.permission_prompt.as_ref()?.request_id)));
+    let prompt = prompt_tab(state).and_then(|tab| Some((tab.id(), shown_request(tab)?)));
     let fullscreen = state.browser.fullscreen_tab().map(Tab::id);
     let guards = &mut state.page_guards;
     let mut changed = false;
@@ -74,7 +81,9 @@ pub(crate) fn poll(state: &mut AppState, clock: f64) -> bool {
 
 pub(super) fn view(state: &AppState, theme: &Theme, origin: [f32; 2]) -> Option<El> {
     let tab = prompt_tab(state)?;
-    let prompt = tab.permission_prompt.as_ref()?;
+    let Some(prompt) = tab.permission_prompt.as_ref() else {
+        return external_url(state, tab, theme, origin);
+    };
     let kind = PermissionKind::from_key(&prompt.key)?;
     let id = tab.id();
     let request_id = prompt.request_id;
@@ -116,23 +125,101 @@ pub(super) fn view(state: &AppState, theme: &Theme, origin: [f32; 2]) -> Option<
     } else {
         format!("{} embedded on {}", prompt.requesting_origin, prompt.origin)
     };
-    Some(
-        col()
-            .key("website-permission")
-            .absolute(origin[0] + theme::FIND_INSET, origin[1] + theme::FIND_INSET)
-            .max_w(theme::FIND_WIDTH)
-            .px(space::S3)
-            .py(space::S3)
-            .gap(space::S2)
-            .radius(theme::FIND_RADIUS)
-            .fill(theme.overlay_panel)
-            .border(theme::OMNIBOX_BORDER_WIDTH, theme.overlay_border)
-            .role("group")
-            .label("Website permission")
-            .child(text(title).font(type_::BODY).color(theme.text).wrap())
-            .child(text(site).font(type_::LABEL).color(theme.text_muted).wrap())
-            .child(actions),
-    )
+    Some(panel(
+        "website-permission",
+        "Website permission",
+        title,
+        site,
+        actions,
+        theme,
+        origin,
+    ))
+}
+
+fn external_url(state: &AppState, tab: &Tab, theme: &Theme, origin: [f32; 2]) -> Option<El> {
+    let request = tab.external_url.as_ref()?;
+    let id = tab.id();
+    let request_id = request.request_id;
+    let armed = state.page_guards.armed(id, request_id);
+    let answer = move |state: &mut AppState, open| {
+        state
+            .browser
+            .send(id, ViewCommand::ReplyToExternalUrl { request_id, open });
+    };
+    let kit = theme.kit(theme.overlay_panel);
+    let mut actions = row().w_full().justify_end().gap(space::S2);
+    let (title, detail) = if request.unavailable {
+        actions = actions.child(
+            Button::new("OK")
+                .on_press(move |state| answer(state, false))
+                .build(&kit),
+        );
+        ("Can't open this link".to_owned(), request.url.clone())
+    } else {
+        actions = actions
+            .child(
+                Button::new("Cancel")
+                    .disabled(!armed)
+                    .on_press(move |state| answer(state, false))
+                    .build(&kit),
+            )
+            .child(
+                Button::new("Open")
+                    .variant(ButtonVariant::Submit)
+                    .disabled(!armed)
+                    .on_press(move |state| answer(state, true))
+                    .build(&kit),
+            );
+        let site = if request.origin.is_empty() || request.origin == "null" {
+            "This page".to_owned()
+        } else {
+            request.origin.clone()
+        };
+        (
+            format!("Open {}?", request.application),
+            format!("{site} wants to open {}", request.url),
+        )
+    };
+    Some(panel(
+        "external-link",
+        "Open in another application",
+        title,
+        detail,
+        actions,
+        theme,
+        origin,
+    ))
+}
+
+fn panel(
+    key: &'static str,
+    label: &'static str,
+    title: String,
+    detail: String,
+    actions: El,
+    theme: &Theme,
+    origin: [f32; 2],
+) -> El {
+    col()
+        .key(key)
+        .absolute(origin[0] + theme::FIND_INSET, origin[1] + theme::FIND_INSET)
+        .max_w(theme::FIND_WIDTH)
+        .px(space::S3)
+        .py(space::S3)
+        .gap(space::S2)
+        .radius(theme::FIND_RADIUS)
+        .fill(theme.overlay_panel)
+        .border(theme::OMNIBOX_BORDER_WIDTH, theme.overlay_border)
+        .role("group")
+        .label(label)
+        .child(text(title).font(type_::BODY).color(theme.text).wrap())
+        .child(
+            text(detail)
+                .font(type_::LABEL)
+                .color(theme.text_muted)
+                .wrap(),
+        )
+        .child(actions)
 }
 
 pub(super) fn indicators(tab: &crate::tab::Tab, theme: &Theme) -> Option<El> {

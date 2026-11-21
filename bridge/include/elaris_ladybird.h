@@ -42,6 +42,9 @@ typedef enum {
     ELARIS_LADYBIRD_WEB_FULLSCREEN = 27, /* Whether the page entered element fullscreen. */
     ELARIS_LADYBIRD_POPUP = 28,          /* Pending popup handle in request_id, activation in value. */
     ELARIS_LADYBIRD_POPUP_CLOSED = 29,
+    /* URL in text, initiator origin in destination, application in selection. Value 1 asks to open the
+     * link, 2 reports that it cannot be opened, and 0 clears the notice. */
+    ELARIS_LADYBIRD_EXTERNAL_URL = 30,
 } ElarisLadybirdEventKind;
 
 /* Permission event text is the origin and selection is the permission key.
@@ -55,6 +58,8 @@ int32_t elaris_ladybird_set_permission_default(ElarisLadybird*, char const* key,
 int32_t elaris_ladybird_adopt_popup(ElarisLadybird*, uint64_t source, uint64_t request_id, uint64_t view_id,
                                     ElarisLadybirdView**);
 int32_t elaris_ladybird_exit_web_fullscreen(ElarisLadybirdView*);
+/* Answers the view's current EXTERNAL_URL event; stale request ids are ignored. */
+int32_t elaris_ladybird_reply_to_external_url(ElarisLadybirdView*, uint64_t request_id, int32_t open);
 /* Choice 0 resets a permission, 1 allows it, and 2 blocks it. */
 int32_t elaris_ladybird_set_permission(ElarisLadybird*, char const* origin, char const* key, int32_t choice);
 

@@ -210,6 +210,7 @@ impl Browser {
             tab.awaiting_close = false;
             tab.page_dialog = None;
             tab.permission_prompt = None;
+            tab.external_url = None;
             tab.permissions_in_use.fill(false);
             tab.web_fullscreen = false;
         }

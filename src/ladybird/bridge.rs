@@ -151,6 +151,8 @@ unsafe extern "C" {
         view: *mut *mut RawView,
     ) -> i32;
     fn elaris_ladybird_exit_web_fullscreen(view: *mut RawView) -> i32;
+    fn elaris_ladybird_reply_to_external_url(view: *mut RawView, request_id: u64, open: i32)
+    -> i32;
     fn elaris_ladybird_reply_to_permission(view: *mut RawView, request_id: u64, choice: i32)
     -> i32;
     fn elaris_ladybird_set_permission_default(
@@ -337,6 +339,14 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
                 activate: raw.value != 0,
             },
             29 => Event::PopupClosed,
+            30 => Event::ExternalUrl((raw.value != 0).then(|| super::ExternalUrl {
+                request_id: raw.request_id,
+                url: text,
+                // SAFETY: The bridge lends these NUL-terminated strings through callback return.
+                origin: unsafe { borrowed_text(raw.destination) },
+                application: unsafe { borrowed_text(raw.selection) },
+                unavailable: raw.value == 2,
+            })),
             12 => {
                 let status = match raw.download_status {
                     1 | 2 => DownloadStatus::Downloading,
@@ -741,6 +751,14 @@ impl WebView {
         status_result(unsafe { elaris_ladybird_exit_web_fullscreen(self.raw.as_ptr()) })
     }
 
+    /// Answers the view's current external link request; stale ids are ignored.
+    pub fn reply_to_external_url(&mut self, request_id: u64, open: bool) -> Result<(), String> {
+        // SAFETY: The view is live on its owner thread.
+        status_result(unsafe {
+            elaris_ladybird_reply_to_external_url(self.raw.as_ptr(), request_id, i32::from(open))
+        })
+    }
+
     /// Replies to the active permission prompt if its document still owns it.
     pub fn reply_to_permission(
         &mut self,
@@ -1038,6 +1056,20 @@ fn last_error() -> String {
             .to_string_lossy()
             .into_owned()
     }
+}
+
+/// Copies a string the bridge lends for the duration of a callback.
+///
+/// # Safety
+/// `text` must be null or a NUL-terminated string valid for this call.
+unsafe fn borrowed_text(text: *const c_char) -> String {
+    if text.is_null() {
+        return String::new();
+    }
+    // SAFETY: The caller guarantees a live NUL-terminated string.
+    unsafe { CStr::from_ptr(text) }
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn permission_choice(choice: Option<bool>) -> i32 {

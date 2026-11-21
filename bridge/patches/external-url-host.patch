@@ -1,0 +1,12 @@
+--- a/Libraries/LibWebView/ViewImplementation.cpp
++++ b/Libraries/LibWebView/ViewImplementation.cpp
+@@ -1216,7 +1216,8 @@
+     if (action == ExternalURLAction::Block)
+         return;
+ 
+-    auto const headless_mode = Application::browser_options().headless_mode.has_value();
++    // An embedding host that answers confirmations can open external URLs even in manual headless mode.
++    auto const headless_mode = Application::browser_options().headless_mode.has_value() && !on_request_external_url_confirmation;
+     if (!headless_mode && action == ExternalURLAction::Prompt && !on_request_external_url_confirmation)
+         return;
+ 
