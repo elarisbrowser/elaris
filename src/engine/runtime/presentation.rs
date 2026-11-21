@@ -3,6 +3,8 @@
 use std::ffi::OsStr;
 use std::time::{Duration, Instant};
 
+use elaris::ladybird::GpuPoll;
+
 use super::Verdict;
 use super::View;
 use super::thumbnails::{self, Sample};
@@ -98,18 +100,19 @@ pub(super) fn show_frame(
     Ok(thumbnail)
 }
 
-/// Shows the view's newest frame by handing Rune its GPU surface, without copying the pixels.
-/// Only the thumbnail sample, at most once a second, reads them back.
+/// Shows the view's newest frame by handing Rune a GPU copy of it; no pixel reaches the CPU. Only
+/// the thumbnail sample, at most once a second, reads them back.
 #[cfg(target_os = "macos")]
 fn show_gpu_frame(
     view: &mut View,
     timing: &mut Timing,
     sample: bool,
 ) -> Result<Option<Sample>, String> {
-    let Some(frame) = view.view.gpu_frame()? else {
+    // Whether the frame is new comes before the copy, which takes one of few surfaces.
+    let Some(cpu) = view.view.frame()? else {
         return Ok(None);
     };
-    let skipped = match view.gate.check(frame.serial, frame.scale) {
+    let skipped = match view.gate.check(cpu.serial, cpu.scale) {
         Verdict::Show { skipped } => skipped,
         Verdict::Duplicate => {
             perf::count(Count::Duplicate, 1);
@@ -120,6 +123,16 @@ fn show_gpu_frame(
             return Ok(None);
         }
     };
+    let frame = match perf::time(Stage::Copy, || view.view.gpu_frame())? {
+        GpuPoll::Frame(frame) => frame,
+        GpuPoll::NoFrame => return Ok(None),
+        GpuPoll::Busy => {
+            // Rune's GPU still holds every surface; the engine tries again as it finishes one.
+            view.gpu_waiting = true;
+            return Ok(None);
+        }
+    };
+    view.gpu_waiting = false;
     let thumbnail = if sample
         && view.visible
         && view.surface.preview_source.revision() == view.preview_revision
@@ -128,13 +141,8 @@ fn show_gpu_frame(
             .is_none_or(|last| last.elapsed() >= THUMBNAIL_INTERVAL)
     {
         view.last_thumbnail = Some(Instant::now());
-        match view.view.frame()? {
-            Some(cpu) => {
-                let rgba = view.view.copy_frame(&cpu)?;
-                thumbnails::sample(cpu.width, cpu.height, &rgba)
-            }
-            None => None,
-        }
+        let rgba = view.view.copy_frame(&cpu)?;
+        thumbnails::sample(cpu.width, cpu.height, &rgba)
     } else {
         None
     };

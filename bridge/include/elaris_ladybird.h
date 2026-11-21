@@ -126,6 +126,9 @@ typedef void (*ElarisLadybirdEventCallback)(void* context, const ElarisLadybirdE
 
 /* Returned by elaris_ladybird_frame() while the view has not presented a frame yet. */
 #define ELARIS_LADYBIRD_NO_FRAME 1
+/* Returned by elaris_ladybird_gpu_frame() while every GPU surface is still in the host's hands. Ask again after
+ * elaris_ladybird_release_frames(). */
+#define ELARIS_LADYBIRD_BUSY 2
 
 typedef enum {
     /* Four bytes per pixel in R, G, B, A order; alpha is always opaque (255). */
@@ -147,14 +150,13 @@ typedef struct {
     uint64_t serial; /* Increases with every frame the view presents. */
 } ElarisLadybirdFrame;
 
-/* The frame on display as a GPU surface. io_surface is a borrowed IOSurfaceRef (macOS), valid until the view accepts
- * its next frame; retain it to keep it. The surface can be larger than the frame, which is its top-left corner. */
+/* The frame on display as a GPU surface of the bridge's own, which the host can sample for as long as it has not
+ * reported the frame replaced and drawn (elaris_ladybird_release_frames). io_surface is a borrowed IOSurfaceRef
+ * (macOS) of exactly width x height pixels. */
 typedef struct {
     void* io_surface;
     int32_t width;
     int32_t height;
-    int32_t surface_width;
-    int32_t surface_height;
     double device_pixel_ratio;
     uint64_t serial; /* As in ElarisLadybirdFrame. */
 } ElarisLadybirdGpuFrame;
@@ -304,13 +306,12 @@ int32_t elaris_ladybird_frame(ElarisLadybirdView* view, ElarisLadybirdFrame* out
  * elaris_ladybird_frame() last described, and clears its damage. The copy is the caller's; no Ladybird memory
  * outlives this call. */
 int32_t elaris_ladybird_copy_frame(ElarisLadybirdView* view, uint8_t* rgba, size_t length);
-/* Presents the view's frames in GPU memory (macOS only) for the host to sample directly. Call before the first
- * frame. The Compositor then keeps a replaced frame's backing store unpainted until the host calls
- * elaris_ladybird_release_frames() with a serial at or after the frame that replaced it. */
+/* Makes elaris_ladybird_gpu_frame() available for the view (macOS only): frames are copied on the GPU into surfaces
+ * the host samples in place, with no CPU copy. */
 int32_t elaris_ladybird_set_gpu_frames(ElarisLadybirdView* view, int32_t enabled);
-/* Describes the frame on display as a GPU surface, or returns ELARIS_LADYBIRD_NO_FRAME. */
+/* Copies the frame on display into a GPU surface, or returns ELARIS_LADYBIRD_NO_FRAME or ELARIS_LADYBIRD_BUSY. */
 int32_t elaris_ladybird_gpu_frame(ElarisLadybirdView* view, ElarisLadybirdGpuFrame* out_frame);
-/* Reports that the host's GPU has finished drawing every frame up to completed_serial. */
+/* Reports the newest frame serial the host's GPU has finished drawing; the surfaces of older frames are free. */
 int32_t elaris_ladybird_release_frames(ElarisLadybirdView* view, uint64_t completed_serial);
 int32_t elaris_ladybird_mouse_event(ElarisLadybirdView* view, const ElarisLadybirdMouseEvent* event);
 typedef enum {

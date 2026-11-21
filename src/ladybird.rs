@@ -235,14 +235,24 @@ pub struct Frame {
 /// The frame a view displays as a GPU surface ([`WebView::gpu_frame`]).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GpuFrame {
-    /// A borrowed `IOSurfaceRef`, valid until the view accepts its next frame. Retain it to keep it.
+    /// A borrowed `IOSurfaceRef` of exactly `width` x `height` pixels, the bridge's own copy of the
+    /// frame. It stays unchanged until [`WebView::release_frames`] reports a newer frame drawn.
     pub io_surface: *mut std::ffi::c_void,
-    /// The frame's size in device pixels: the top-left corner of the surface.
+    /// The frame's size in device pixels.
     pub width: u32,
     pub height: u32,
-    pub surface_size: [u32; 2],
     pub scale: f64,
     pub serial: u64,
+}
+
+/// What asking for the frame as a GPU surface found.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum GpuPoll {
+    /// The view has not presented a frame yet.
+    NoFrame,
+    /// Every surface is still with the host's GPU; ask again after releasing frames.
+    Busy,
+    Frame(GpuFrame),
 }
 
 /// Mouse button bit flags, as the C ABI defines them.

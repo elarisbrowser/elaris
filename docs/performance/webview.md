@@ -26,25 +26,27 @@ never waits on it.
 
 The view is not rebuilt for a new frame unless its size changed, so animation costs no layout.
 
-## GPU frames (macOS)
+## GPU frames (macOS, opt-in)
 
-On macOS a frame is never copied. The bridge turns off `presents_from_cpu_memory`, so Ladybird's
-Compositor renders into IOSurface-backed backing stores without a CPU readback, and
-`elaris_ladybird_gpu_frame` hands out the displayed frame's `IOSurfaceRef`. The engine thread
-wraps it in a `PixelBuffer` and pushes it into the tab's Rune `NativeSurface` (`src/engine/gpu.rs`);
-the viewport draws that at one texel per device pixel. No RGBA conversion, `Pixels::set` or atlas
-upload remains, and the CPU reads pixels back only for the once-a-second tab thumbnail.
+With `ELARIS_GPU_FRAMES=1` no frame reaches the CPU. The bridge copies the displayed frame on the
+GPU (`FrameBlitter`, a Metal blit) into one of three IOSurfaces of its own and returns that
+surface; the engine thread wraps it in a `PixelBuffer` and pushes it into the tab's Rune
+`NativeSurface` (`src/engine/gpu.rs`), which the viewport draws at one texel per device pixel. No
+RGBA conversion, `Pixels::set` or atlas upload remains; the CPU reads pixels back only for the
+once-a-second tab thumbnail. Each push wakes the windows, as `Pixels::set` does: without it the
+page redraws only when something else, such as the pointer, does.
 
-Ladybird recycles a backing store as soon as the next frame replaces it, which would let it paint
-into a texture Rune is still sampling. The bridge therefore holds each replaced store
-(`ElarisWebView::release_backing_store`) until the host reports, through
-`elaris_ladybird_release_frames`, that its GPU finished a frame at least as new as the one that
-replaced it. Rune reports that per drawn frame through the `NativeSurface` observer
-(`FrameTiming::completed_at`, keyed by the frame serial), which also wakes the engine thread. A
-frame Rune never draws is covered by any later one, and a hidden tab paints nothing, so nothing
-waits on it.
+Why a copy: Ladybird's Compositor will not repaint a backing store whose IOSurface is still in use
+by another process, and Rune keeps every surface it has drawn pinned (its bind-group cache holds
+eight older ones). Handing Rune Ladybird's own surfaces starved the Compositor after about ten
+frames, the number of distinct backing stores. Rune is given the bridge's three surfaces instead,
+and Ladybird's go back at once. A surface is reused once Rune reports, through the `NativeSurface`
+observer (`FrameTiming::completed_at`, keyed by frame serial), that it drew a newer frame. If all
+three are busy the frame waits, and the engine shows it when one is released.
 
-The path is opt-in (`ELARIS_GPU_FRAMES=1`) until verified; otherwise frames take the copying path described below, which Linux always uses.
+Frames keep their alpha as the Compositor wrote it; the CPU path forced it opaque.
+
+Without the variable, and always on Linux, frames take the copying path described below.
 
 ## Measuring
 
@@ -156,11 +158,9 @@ processes left, five runs out of five.
 
 ## Not verified
 
-- The GPU frame path (macOS) is untested at runtime. Check that pages draw with the right colours
-  and no tearing, that tabs keep painting while scrolling, and compare `ELARIS_PERF=1` frame
-  intervals with and without `ELARIS_GPU_FRAMES=1`. If a page freezes after a few frames, the backing
-  stores are not being released.
-- Frames' alpha is assumed opaque; the CPU path forced it, the GPU path samples what Ladybird wrote.
+- The GPU frame path is measured at 60 frames/s on `css-animation.html` and `scroll.html`, but
+  colours, tearing, resizing and real trackpad feel have not been checked by eye, and it has not
+  been compared against the CPU path on a heavy page.
 
 - Visual smoothness of real trackpad scrolling beyond the user's report on slaterlabs.dev; the
   test pages are driven by script and were measured, not watched.

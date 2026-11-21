@@ -40,9 +40,12 @@ struct View {
     last_thumbnail: Option<Instant>,
     /// Whether the view belongs to the shared private session.
     private: bool,
-    /// The newest GPU frame serial Ladybird was told Rune finished drawing.
+    /// The newest GPU frame serial the bridge was told Rune finished drawing.
     #[cfg(target_os = "macos")]
     released_serial: u64,
+    /// A new frame is waiting for Rune's GPU to finish with a surface.
+    #[cfg(target_os = "macos")]
+    gpu_waiting: bool,
 }
 
 pub(super) struct Runtime {
@@ -365,15 +368,18 @@ impl Runtime {
                 private,
                 #[cfg(target_os = "macos")]
                 released_serial: 0,
+                #[cfg(target_os = "macos")]
+                gpu_waiting: false,
             },
         );
         Ok(())
     }
 
-    /// Lets Ladybird paint into the backing stores of frames Rune's GPU has finished with.
+    /// Frees the surfaces Rune's GPU has finished with, and shows the frames that waited for one.
     #[cfg(target_os = "macos")]
-    fn release_gpu_frames(&mut self) {
-        for view in self.views.values_mut() {
+    fn release_gpu_frames(&mut self) -> Vec<Update> {
+        let mut updates = Vec::new();
+        for (&tab, view) in &mut self.views {
             let Some(gpu) = &view.surface.gpu else {
                 continue;
             };
@@ -382,7 +388,13 @@ impl Runtime {
                 view.released_serial = completed;
                 let _ = view.view.release_frames(completed);
             }
+            if view.gpu_waiting
+                && let Err(error) = show_frame(view, &mut self.timing, false)
+            {
+                updates.push(Update::Tab(tab, TabUpdate::Error(error)));
+            }
         }
+        updates
     }
 
     /// Keeps full frames for the newest hidden views that have painted.
@@ -418,9 +430,10 @@ impl Runtime {
     /// one. Events from views that have closed since are dropped.
     pub(super) fn handle_events(&mut self) -> Vec<Update> {
         #[cfg(target_os = "macos")]
-        self.release_gpu_frames();
-        let events = std::mem::take(&mut *self.events.borrow_mut());
+        let mut updates = self.release_gpu_frames();
+        #[cfg(not(target_os = "macos"))]
         let mut updates = Vec::new();
+        let events = std::mem::take(&mut *self.events.borrow_mut());
         let mut painted: Vec<(TabId, bool)> = Vec::new();
         for (id, event) in events {
             if let Event::Download(update) = event {

@@ -48,6 +48,7 @@ function(elaris_add_ladybird_bridge)
             "${ELARIS_BRIDGE_DIR}/src/notification_backend_macos.mm"
             "${ELARIS_BRIDGE_DIR}/src/external_url_handler_macos.mm"
             "${ELARIS_BRIDGE_DIR}/src/spell_checker_macos.mm"
+            "${ELARIS_BRIDGE_DIR}/src/frame_blitter_macos.mm"
             "${ELARIS_BRIDGE_DIR}/src/picture_in_picture_macos.mm"
             "${ELARIS_BRIDGE_DIR}/src/media_controls_macos.mm"
             "${LADYBIRD_SOURCE_DIR}/UI/Qt/MicrophoneAuthorizerMacOS.mm")
@@ -55,7 +56,7 @@ function(elaris_add_ladybird_bridge)
         set_source_files_properties(${objc_sources} PROPERTIES COMPILE_FLAGS "-fobjc-arc")
         target_link_libraries(elaris_ladybird PRIVATE
             "-framework AVFoundation" "-framework CoreServices" "-framework UserNotifications" "-framework Cocoa"
-            "-framework MediaPlayer" "-framework QuartzCore")
+            "-framework MediaPlayer" "-framework QuartzCore" "-framework Metal" "-framework IOSurface")
     elseif(LINUX)
         find_package(PkgConfig REQUIRED)
         pkg_check_modules(ELARIS_GIO REQUIRED IMPORTED_TARGET gio-2.0)

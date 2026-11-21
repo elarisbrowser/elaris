@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Page frames Rune's GPU samples in place (macOS): Ladybird presents each frame in an IOSurface,
-//! the surface is wrapped without a copy, and Rune draws it as a texture. Ladybird may paint into a
-//! frame's backing store again only once Rune's GPU has finished drawing the frame after it, which
-//! Rune reports for each frame it draws.
+//! Page frames Rune's GPU samples in place (macOS): the bridge copies each frame on the GPU into an
+//! IOSurface of its own, the surface is wrapped without a further copy, and Rune draws it as a
+//! texture. Rune keeps every surface it has drawn pinned, so it never gets Ladybird's own backing
+//! stores, which the Compositor does not repaint while another process holds them. The bridge
+//! reuses a surface once Rune reports it has drawn a newer frame.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
@@ -13,13 +14,13 @@ use rune::NativeSurface;
 use rune::native_surface::macos::PixelBuffer;
 use rune::native_surface::{ColorInfo, FrameTiming};
 
-/// Set to anything but `0` to copy frames through the CPU instead, as other platforms do.
-const CPU_FRAMES_VARIABLE: &str = "ELARIS_CPU_FRAMES";
+/// Set to anything but `0` to show frames through the GPU. Off until the path is verified.
+const GPU_FRAMES_VARIABLE: &str = "ELARIS_GPU_FRAMES";
 
 /// Whether new tabs show their frames through the GPU.
 pub(super) fn enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
-    *ENABLED.get_or_init(|| std::env::var_os(CPU_FRAMES_VARIABLE).is_none_or(|value| value == "0"))
+    *ENABLED.get_or_init(|| std::env::var_os(GPU_FRAMES_VARIABLE).is_some_and(|value| value != "0"))
 }
 
 /// Where the engine shows a tab's GPU frames, shared with the window that draws them.
@@ -66,10 +67,14 @@ impl GpuSurface {
     /// Shows `frame` once Rune next draws, replacing any frame it has not drawn yet.
     #[cfg_attr(not(feature = "ladybird-bridge"), allow(dead_code))]
     pub(super) fn show(&self, frame: &GpuFrame) -> Result<(), String> {
-        // SAFETY: Ladybird presented the surface complete, and does not paint into its backing
-        // store again until `completed` reaches a frame newer than this one.
+        // SAFETY: The bridge finished its copy before returning the surface, and does not write
+        // it again until Rune reports a frame newer than this one drawn.
         let buffer =
             unsafe { PixelBuffer::from_iosurface(frame.io_surface, ColorInfo::default())? };
-        self.native.push(buffer, frame.serial)
+        self.native.push(buffer, frame.serial)?;
+        // `Pixels::set` wakes the window for a new frame; pushing a surface frame does not, and
+        // without it the page only redraws when something else, such as the pointer, does.
+        super::wake_all_windows();
+        Ok(())
     }
 }
