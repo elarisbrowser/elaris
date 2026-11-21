@@ -2,11 +2,11 @@
 
 //! Two-finger horizontal trackpad swipes over a page that go back or forward in its history.
 //!
-//! A touchpad scroll goes to the page first. Ladybird reports for each wheel event whether
-//! anything used it: a scroller moved, or the page cancelled it. Once the page has used part of a
-//! gesture it stays a scroll. A sideways gesture the page has not used — nothing scrolls that way,
-//! or a scroller is already at its edge — becomes a swipe the page no longer sees, once history
-//! allows that way. Releasing a swipe past the commit distance navigates.
+//! A touchpad scroll goes to the page first. Ladybird reports for each wheel event whether the page
+//! cancelled it. Once the page has been sent part of a gesture and cancelled it, the gesture stays a
+//! scroll. Otherwise a sideways gesture becomes a swipe the page no longer sees, once history allows
+//! that way, whether or not the page would have scrolled sideways. Releasing a swipe past the commit
+//! distance navigates.
 
 use std::collections::VecDeque;
 
@@ -77,6 +77,8 @@ struct Gesture {
     /// The travel up to each event sent to the page and not yet finished, oldest first.
     unanswered: VecDeque<[f32; 2]>,
     lock: Lock,
+    /// The fingers lifted; the gesture is only kept until the page answers its last event.
+    ended: bool,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -121,6 +123,7 @@ impl Swipes {
                 dy: 0.0,
                 unanswered: VecDeque::new(),
                 lock: Lock::Undecided,
+                ended: false,
             });
         }
         let Some(gesture) = self.gesture.as_mut().filter(|gesture| gesture.tab == tab) else {
@@ -131,9 +134,7 @@ impl Swipes {
             gesture.dx += if natural { wheel.dx } else { -wheel.dx };
             gesture.dy += wheel.dy;
             gesture.unanswered.push_back([gesture.dx, gesture.dy]);
-            if ended {
-                self.gesture = None;
-            }
+            gesture.ended = ended;
             return self.send_to_page(tab);
         };
         let before = gesture.progress(direction) >= 1.0;
@@ -151,14 +152,25 @@ impl Swipes {
         }
     }
 
-    /// Ladybird finished a wheel event for `tab`. `can_go` says whether history has a page that
-    /// way. Returns whether a swipe began.
+    /// Ladybird finished a wheel event for `tab`. `cancelled` says the page cancelled it; `can_go`
+    /// says whether history has a page that way. Returns whether a swipe began.
     pub(crate) fn page_result(
         &mut self,
         tab: TabId,
-        used: bool,
+        cancelled: bool,
         can_go: impl Fn(Direction) -> bool,
     ) -> bool {
+        let swiped = self.judge(tab, cancelled, can_go);
+        // An ended gesture can no longer change once it is a scroll or has no answers left.
+        if self.gesture.as_ref().is_some_and(|gesture| {
+            gesture.ended && (gesture.lock != Lock::Undecided || gesture.unanswered.is_empty())
+        }) {
+            self.gesture = None;
+        }
+        swiped
+    }
+
+    fn judge(&mut self, tab: TabId, cancelled: bool, can_go: impl Fn(Direction) -> bool) -> bool {
         if self.sent.tab != Some(tab) {
             return false;
         }
@@ -176,7 +188,7 @@ impl Swipes {
         let Some([dx, dy]) = gesture.unanswered.pop_front() else {
             return false;
         };
-        if used {
+        if cancelled {
             gesture.lock = Lock::Scroll;
             return false;
         }
@@ -188,7 +200,8 @@ impl Swipes {
         } else {
             Direction::Forward
         };
-        if dx.abs() < dy.abs() * LOCK_RATIO || !can_go(direction) {
+        // A swipe decided after the fingers lifted would have nothing left to release, so it stays a scroll.
+        if gesture.ended || dx.abs() < dy.abs() * LOCK_RATIO || !can_go(direction) {
             gesture.lock = Lock::Scroll;
             return false;
         }
@@ -306,6 +319,18 @@ mod tests {
             assert!(!swipes.page_result(tab(), false, |_| true));
         }
         assert!(swipes.page_result(tab(), false, |_| true));
+    }
+
+    #[test]
+    fn a_gesture_that_lifts_before_its_answers_never_swipes() {
+        let mut swipes = Swipes::default();
+        send(&mut swipes, 0.0, 0.0, GesturePhase::Began);
+        send(&mut swipes, 30.0, 0.0, GesturePhase::Moved);
+        send(&mut swipes, 0.0, 0.0, GesturePhase::Ended);
+        assert!(!swipes.page_result(tab(), false, |_| true));
+        assert!(!swipes.page_result(tab(), false, |_| true));
+        assert!(swipes.view().is_none());
+        assert!(!swipes.page_result(tab(), false, |_| true));
     }
 
     #[test]
