@@ -854,13 +854,13 @@ extern "C" int32_t elaris_ladybird_test_reset_private_session(ElarisLadybird* br
     s_application->reset_private_browsing_session();
     return succeed();
 }
-extern "C" int32_t elaris_ladybird_test_start_private_download(ElarisLadybirdView* view, char const* url) {
-    if (!view || !url || !on_owner_thread(view->bridge) || view->view->is_private() != WebView::IsPrivate::Yes)
+extern "C" int32_t elaris_ladybird_test_start_private_download(ElarisLadybirdView* view, char const* url, char const* filename) {
+    if (!view || !url || !filename || !on_owner_thread(view->bridge) || view->view->is_private() != WebView::IsPrivate::Yes)
         return fail("private download probe requires a private view");
     auto parsed = URL::Parser::basic_parse(AK::StringView(url, std::char_traits<char>::length(url)));
     if (!parsed.has_value())
         return fail("invalid test URL");
-    auto destination = s_application->default_path_for_downloaded_file("private-probe.bin");
+    auto destination = s_application->default_path_for_downloaded_file(filename);
     if (destination.is_error())
         return fail("could not create private download destination");
     s_application->file_downloader().download_file(WebView::IsPrivate::Yes, *parsed, destination.release_value(),

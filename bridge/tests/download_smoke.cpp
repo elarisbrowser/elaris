@@ -39,11 +39,13 @@ struct Events {
     std::map<uint64_t, DownloadState> downloads;
     std::map<uint64_t, std::string> titles;
     std::map<uint64_t, uint64_t> frames;
+    std::map<uint64_t, uint64_t> callbacks;
     bool saw_unknown_length{};
 };
 
 static void on_event(void* context, ElarisLadybirdEvent const* event) {
     auto& events = *static_cast<Events*>(context);
+    ++events.callbacks[event->view_id];
     if (event->kind == ELARIS_LADYBIRD_TITLE) {
         events.titles[event->view_id] = event->text ? event->text : "";
         return;
@@ -349,7 +351,7 @@ static bool test_private_session(ElarisLadybird* bridge, HttpFixture const& fixt
         return false;
     auto private_download = downloads_dir / "private-probe.bin";
     auto download_url = fixture.url("/small");
-    if (!check(elaris_ladybird_test_start_private_download(second.get(), download_url.c_str()),
+    if (!check(elaris_ladybird_test_start_private_download(second.get(), download_url.c_str(), "private-probe.bin"),
                "start private download") ||
         !pump_until(bridge, [&] { return std::filesystem::exists(private_download); }) || !events.downloads.empty()) {
         std::cerr << "Private download failed or escaped into the ordinary download observer\n";
@@ -359,7 +361,16 @@ static bool test_private_session(ElarisLadybird* bridge, HttpFixture const& fixt
         std::cerr << "Privacy probe did not create a private RequestServer\n";
         return false;
     }
+    auto active_path = downloads_dir / "private-active.bin";
+    if (!check(elaris_ladybird_test_start_private_download(second.get(), fixture.url("/slow").c_str(), "private-active.bin"),
+               "start active private download") ||
+        !pump_until(bridge, [&] { return has_temporary_download(downloads_dir); }) ||
+        std::filesystem::exists(active_path)) {
+        std::cerr << "Expected a private download with unfinished staging data\n";
+        return false;
+    }
     second.reset();
+    auto closed_callbacks = events.callbacks[203];
     if (!check(elaris_ladybird_test_reset_private_session(bridge), "reset private browsing session"))
         return false;
 
@@ -384,7 +395,14 @@ static bool test_private_session(ElarisLadybird* bridge, HttpFixture const& fixt
             return false;
         }
     }
-    return load(normal, 201, "/privacy/read", "normal:normal:normal") && events.downloads.empty();
+    if (!load(normal, 201, "/privacy/read", "normal:normal:normal"))
+        return false;
+    if (std::filesystem::exists(active_path) || has_temporary_download(downloads_dir) ||
+        events.callbacks[203] != closed_callbacks || !events.downloads.empty()) {
+        std::cerr << "Private reset left download data or delivered callbacks from the closed session\n";
+        return false;
+    }
+    return true;
 }
 
 int main(int argc, char** argv) {
