@@ -83,9 +83,20 @@ impl super::AppState {
         }
     }
 
-    /// Closes the window once every page has agreed to unload.
+    /// Elaris's own Linux close button: closes the window once every page has agreed to unload.
+    #[cfg(target_os = "linux")]
     pub(crate) fn request_window_close(&mut self, tx: &mut Tx) {
         self.request_window_unload(false, tx);
+    }
+
+    /// Rune's close request (the close button, the system's Close): closes now when no page
+    /// objects, otherwise once every page has agreed to unload.
+    pub(crate) fn close_requested(&mut self, _: &mut Tx) -> bool {
+        if self.closing_tabs.is_some() {
+            return false;
+        }
+        let targets = self.browser.tabs().iter().map(Tab::id).collect();
+        self.begin_close(targets, CloseAction::Window { quit: false })
     }
 
     /// Asks this window's pages to unload as part of quitting the app.
