@@ -62,7 +62,7 @@ pub(super) fn start(
     notify: Notify,
     profile: std::path::PathBuf,
     download_directory: Option<std::path::PathBuf>,
-    display_refresh_rate: f64,
+    display: elaris::ladybird::DisplayMetadata,
 ) -> Result<Engine, String> {
     let (commands, received) = channel();
     let (sender, updates) = channel();
@@ -79,7 +79,7 @@ pub(super) fn start(
                     &*notify,
                     profile,
                     download_directory,
-                    display_refresh_rate,
+                    display,
                 )
             })
             .map_err(|e| format!("cannot start the engine thread: {e}"))?
@@ -113,7 +113,7 @@ fn run(
     notify: &(dyn Fn() + Send + Sync),
     profile: std::path::PathBuf,
     download_directory: Option<std::path::PathBuf>,
-    display_refresh_rate: f64,
+    display: elaris::ladybird::DisplayMetadata,
 ) {
     let report = |update| {
         if updates.send(update).is_ok() {
@@ -121,7 +121,7 @@ fn run(
         }
     };
     let (mut runtime, download_directory_error) =
-        match Runtime::start(profile, download_directory, display_refresh_rate) {
+        match Runtime::start(profile, download_directory, display) {
             Ok(runtime) => runtime,
             Err(error) => return report(Update::Failed(error)),
         };

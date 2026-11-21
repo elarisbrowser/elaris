@@ -409,16 +409,16 @@ impl Engine {
         notify: Notify,
         profile: std::path::PathBuf,
         download_directory: Option<std::path::PathBuf>,
-        display_refresh_rate: f64,
+        display: elaris::ladybird::DisplayMetadata,
     ) -> Result<Self, String> {
         #[cfg(feature = "ladybird-bridge")]
-        return thread::start(notify, profile, download_directory, display_refresh_rate);
+        return thread::start(notify, profile, download_directory, display);
         #[cfg(not(feature = "ladybird-bridge"))]
         {
             let _ = notify;
             let _ = profile;
             let _ = download_directory;
-            let _ = display_refresh_rate;
+            let _ = display;
             Err("This build has no web engine. Rebuild with --features ladybird-bridge.".to_owned())
         }
     }
@@ -429,11 +429,11 @@ impl Engine {
         notify: Notify,
         profile: std::path::PathBuf,
         download_directory: Option<std::path::PathBuf>,
-        display_refresh_rate: f64,
+        display: elaris::ladybird::DisplayMetadata,
     ) -> Result<Self, String> {
         static ENGINE: OnceLock<Result<Engine, String>> = OnceLock::new();
         ENGINE
-            .get_or_init(|| Self::start(notify, profile, download_directory, display_refresh_rate))
+            .get_or_init(|| Self::start(notify, profile, download_directory, display))
             .clone()
     }
 

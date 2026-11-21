@@ -101,8 +101,10 @@ pub(crate) fn install(window: &RuneWindowHandle) {
     });
 }
 
-/// Reads the refresh rate of the screen currently displaying Rune's native window.
-pub(crate) fn refresh_rate(window: &RuneWindowHandle) -> Option<f64> {
+/// Reads the hardware display and refresh rate for Rune's native window.
+pub(crate) fn display_metadata(
+    window: &RuneWindowHandle,
+) -> Option<elaris::ladybird::DisplayMetadata> {
     window
         .with_raw_handle(|handle| {
             let RawWindowHandle::AppKit(handle) = handle.as_raw() else {
@@ -115,7 +117,18 @@ pub(crate) fn refresh_rate(window: &RuneWindowHandle) -> Option<f64> {
             let screen = content.window()?.screen()?;
             // SAFETY: `maximumFramesPerSecond` is queried on AppKit's main thread.
             let hz = unsafe { screen.maximumFramesPerSecond() };
-            (hz > 0).then_some(hz as f64)
+            let key = objc2_foundation_02::NSString::from_str("NSScreenNumber");
+            // SAFETY: AppKit provides a dictionary containing the screen number as an NSNumber.
+            // A missing entry produces zero when messaged through Objective-C.
+            let id: u32 = unsafe {
+                let description: *mut AnyObject = msg_send![&*screen, deviceDescription];
+                let number: *mut AnyObject = msg_send![description, objectForKey: &*key];
+                msg_send![number, unsignedIntValue]
+            };
+            Some(elaris::ladybird::DisplayMetadata {
+                id: (id != 0).then_some(id),
+                refresh_rate: if hz > 0 { hz as f64 } else { 60.0 },
+            })
         })
         .ok()
         .flatten()

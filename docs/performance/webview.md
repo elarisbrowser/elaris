@@ -150,6 +150,10 @@ processes left, five runs out of five.
 - **Rune pacing.** A `Pixels::set` alone wakes Rune, but in debug builds that drew only every
   other refresh (30 frames/s). Asking for the next frame (`Tx::wake_after(ZERO)`) while the
   engine's frame count rises keeps Rune on the display link, as the old per-frame pump did.
+- **macOS compositor pacing.** Elaris passes the display ID and refresh rate from the
+  startup window to Ladybird. The ID lets Ladybird use that display's hardware display link.
+  A refresh rate alone selects Ladybird's timer scheduler, which produced recurring 33 ms
+  gaps while scrolling elarisbrowser.com on a 60 Hz display.
 
 **Rejected:**
 

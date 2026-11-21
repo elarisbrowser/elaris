@@ -299,6 +299,8 @@ int32_t elaris_ladybird_set_content_blocking(ElarisLadybird*, int32_t enabled, c
 int32_t elaris_ladybird_reset_private_session(ElarisLadybird*);
 /* Sets the maximum frame rate reported to pages and used by Ladybird's compositor. */
 int32_t elaris_ladybird_set_display_refresh_rate(ElarisLadybirdView* view, double refresh_rate);
+/* A display ID of zero uses timer-based pacing. */
+int32_t elaris_ladybird_set_display_metadata(ElarisLadybirdView* view, uint32_t display_id, double refresh_rate);
 int32_t elaris_ladybird_load(ElarisLadybirdView* view, const char* url);
 int32_t elaris_ladybird_navigation_items(ElarisLadybirdView* view, int32_t direction);
 int32_t elaris_ladybird_traverse_to_step(ElarisLadybirdView* view, int32_t step);

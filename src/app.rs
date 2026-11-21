@@ -155,7 +155,7 @@ pub(crate) struct AppState {
     pub(crate) window_id: u64,
     /// Maximum page frame rate reported by the window's current display.
     #[cfg(any(target_os = "macos", feature = "ladybird-bridge"))]
-    display_refresh_rate: f64,
+    display: elaris::ladybird::DisplayMetadata,
     pub(crate) omnibox: omnibox::State,
     /// The open Clear Browsing Data dialog.
     pub(crate) clear_data: Option<clear_data::ClearDataDialog>,
@@ -257,10 +257,8 @@ impl Default for AppState {
 
 impl AppState {
     #[cfg(target_os = "macos")]
-    pub(crate) fn set_display_refresh_rate(&mut self, refresh_rate: f64) {
-        if refresh_rate.is_finite() && refresh_rate > 0.0 {
-            self.display_refresh_rate = refresh_rate;
-        }
+    pub(crate) fn set_display(&mut self, display: elaris::ladybird::DisplayMetadata) {
+        self.display = display;
     }
 
     /// Opens the supplied page, or shows the omnibox in an empty window.
@@ -359,7 +357,7 @@ impl AppState {
         let mut state = Self {
             window_id: NEXT_WINDOW_ID.fetch_add(1, Ordering::Relaxed),
             #[cfg(any(target_os = "macos", feature = "ladybird-bridge"))]
-            display_refresh_rate: 60.0,
+            display: 60.0.into(),
             omnibox: omnibox::State::default(),
             page_guards: Default::default(),
             clear_data: None,

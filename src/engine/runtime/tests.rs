@@ -9,7 +9,7 @@ use super::*;
 fn hidden_frames_keep_two_recent_views_and_restore_idle_tabs() {
     let profile =
         std::env::temp_dir().join(format!("elaris-frame-eviction-{}", std::process::id()));
-    let (mut runtime, _) = Runtime::start(profile.clone(), None, 60.0).unwrap();
+    let (mut runtime, _) = Runtime::start(profile.clone(), None, 60.0.into()).unwrap();
     runtime.hidden_order = Some(Vec::new());
     let url = format!("file://{}/benchmarks/idle.html", env!("CARGO_MANIFEST_DIR"));
     let tabs: Vec<_> = (1..=5)
@@ -77,7 +77,7 @@ fn hidden_frames_keep_two_recent_views_and_restore_idle_tabs() {
 #[ignore = "requires a built Ladybird bridge and helper processes"]
 fn visible_views_sample_their_own_ladybird_frames() {
     let profile = std::env::temp_dir().join(format!("elaris-thumbnails-{}", std::process::id()));
-    let (mut runtime, _) = Runtime::start(profile.clone(), None, 60.0).unwrap();
+    let (mut runtime, _) = Runtime::start(profile.clone(), None, 60.0.into()).unwrap();
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("bridge/tests/smoke.html");
     let url = format!("file://{}", path.display());
     let left = TabId::from_raw(1);

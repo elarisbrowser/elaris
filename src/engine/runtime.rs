@@ -61,7 +61,7 @@ pub(super) struct Runtime {
     downloads: HashMap<DownloadId, Download>,
     timing: Timing,
     thumbnails: thumbnails::Cache,
-    display_refresh_rate: f64,
+    display: elaris::ladybird::DisplayMetadata,
     // Oldest hidden view first. Absent when the experiment is disabled.
     hidden_order: Option<Vec<TabId>>,
     hidden_frames_dirty: bool,
@@ -74,7 +74,7 @@ impl Runtime {
     pub(super) fn start(
         profile: PathBuf,
         download_directory: Option<PathBuf>,
-        display_refresh_rate: f64,
+        display: elaris::ladybird::DisplayMetadata,
     ) -> Result<(Self, Option<String>), String> {
         let resources = directory("ELARIS_LADYBIRD_RESOURCE_DIR", "vendor/ladybird/Base/res");
         std::fs::create_dir_all(&profile)
@@ -96,7 +96,7 @@ impl Runtime {
                 downloads: HashMap::new(),
                 timing: Timing::default(),
                 thumbnails: thumbnails::Cache::default(),
-                display_refresh_rate,
+                display,
                 hidden_order: eviction_enabled(
                     std::env::var_os("ELARIS_EVICT_HIDDEN_FRAMES").as_deref(),
                 )
@@ -229,12 +229,10 @@ impl Runtime {
                 tab,
                 surface,
             } => {
-                match self.ladybird.adopt_popup(
-                    source.raw(),
-                    request,
-                    tab.raw(),
-                    self.display_refresh_rate,
-                ) {
+                match self
+                    .ladybird
+                    .adopt_popup(source.raw(), request, tab.raw(), self.display)
+                {
                     Ok(Some(view)) => {
                         // Ladybird opens a popup in its opener's session.
                         let private = self.views.get(&source).is_some_and(|view| view.private);
@@ -329,7 +327,7 @@ impl Runtime {
     fn open(&mut self, tab: TabId, surface: Surface, private: bool) -> Result<(), String> {
         let view = self
             .ladybird
-            .create_view_in(tab.raw(), self.display_refresh_rate, private)?;
+            .create_view_in(tab.raw(), self.display, private)?;
         self.insert_view(tab, view, surface, private)
     }
 

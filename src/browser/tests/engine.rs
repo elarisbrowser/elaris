@@ -243,7 +243,7 @@ fn live_document_survives_a_browser_transfer() {
         std::sync::Arc::new(|| {}),
         fixture.join("profile"),
         None,
-        60.0,
+        60.0.into(),
     )
     .unwrap();
     let mut source = Browser::default();

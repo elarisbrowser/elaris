@@ -126,8 +126,8 @@ fn configure_app(app: App<app::AppState>) -> App<app::AppState> {
             });
             window_macos::install(window);
             titlebar_controls::install(window);
-            if let Some(refresh_rate) = titlebar_controls::refresh_rate(window) {
-                app_handle.update(move |state, _| state.set_display_refresh_rate(refresh_rate));
+            if let Some(display) = titlebar_controls::display_metadata(window) {
+                app_handle.update(move |state, _| state.set_display(display));
             }
         })
     };

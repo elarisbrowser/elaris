@@ -1989,11 +1989,19 @@ extern "C" uint64_t elaris_ladybird_test_private_request_servers(ElarisLadybird*
 #endif
 
 extern "C" int32_t elaris_ladybird_set_display_refresh_rate(ElarisLadybirdView* view, double refresh_rate) {
+    return elaris_ladybird_set_display_metadata(view, 0, refresh_rate);
+}
+
+extern "C" int32_t elaris_ladybird_set_display_metadata(ElarisLadybirdView* view, uint32_t display_id,
+                                                        double refresh_rate) {
     if (!view || !(refresh_rate > 0.0) || !std::isfinite(refresh_rate))
         return fail("a view and positive finite display refresh rate are required");
     if (!on_owner_thread(view->bridge))
         return fail("display refresh rate must be set on the initialization thread");
-    view->view->set_display_metadata({}, refresh_rate, false);
+    Optional<u64> hardware_display;
+    if (display_id != 0)
+        hardware_display = display_id;
+    view->view->set_display_metadata(hardware_display, refresh_rate, false);
     return succeed();
 }
 

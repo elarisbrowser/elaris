@@ -41,7 +41,7 @@ fn start_engine(state: &mut AppState) {
         std::sync::Arc::new(crate::engine::wake_all_windows),
         profile_dir,
         state.engine_download_directory(),
-        state.display_refresh_rate,
+        state.display,
     ) {
         Ok(engine) => {
             engine.send(crate::engine::Command::SetPermissions(

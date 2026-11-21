@@ -9,6 +9,22 @@ pub use accessibility::{AccessibilityEvent, AccessibilityNode};
 #[cfg(feature = "ladybird-bridge")]
 pub use bridge::{Ladybird, Waker, WebView, gpu_frames_supported};
 
+/// Display timing for Ladybird's compositor. An absent ID uses timer-based pacing.
+#[derive(Clone, Copy)]
+pub struct DisplayMetadata {
+    pub id: Option<u32>,
+    pub refresh_rate: f64,
+}
+
+impl From<f64> for DisplayMetadata {
+    fn from(refresh_rate: f64) -> Self {
+        Self {
+            id: None,
+            refresh_rate,
+        }
+    }
+}
+
 /// Ladybird's hit-tested target. Opening it uses the retained navigation descriptor.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PageMenu {

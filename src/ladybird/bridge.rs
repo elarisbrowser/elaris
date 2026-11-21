@@ -10,7 +10,7 @@ use std::ptr::NonNull;
 use std::rc::Rc;
 use std::time::Duration;
 
-use super::{Event, Favicon, Frame, GpuFrame, GpuPoll, Key, KeyEvent, MouseEvent};
+use super::{DisplayMetadata, Event, Favicon, Frame, GpuFrame, GpuPoll, Key, KeyEvent, MouseEvent};
 use crate::downloads::{Status as DownloadStatus, Update as DownloadUpdate};
 
 #[repr(C)]
@@ -161,7 +161,11 @@ unsafe extern "C" {
         view_id: u64,
         out_view: *mut *mut RawView,
     ) -> i32;
-    fn elaris_ladybird_set_display_refresh_rate(view: *mut RawView, refresh_rate: f64) -> i32;
+    fn elaris_ladybird_set_display_metadata(
+        view: *mut RawView,
+        display_id: u32,
+        refresh_rate: f64,
+    ) -> i32;
     fn elaris_ladybird_load(view: *mut RawView, url: *const c_char) -> i32;
     fn elaris_ladybird_navigation_items(view: *mut RawView, direction: i32) -> i32;
     fn elaris_ladybird_traverse_to_step(view: *mut RawView, step: i32) -> i32;
@@ -629,7 +633,7 @@ impl Ladybird {
     pub fn create_view_in(
         &mut self,
         id: u64,
-        display_refresh_rate: f64,
+        display: impl Into<DisplayMetadata>,
         private: bool,
     ) -> Result<WebView, String> {
         let mut raw = std::ptr::null_mut();
@@ -642,14 +646,12 @@ impl Ladybird {
         let status = unsafe { create(self.owner.raw.as_ptr(), id, &mut raw) };
         status_result(status)?;
         let raw = NonNull::new(raw).ok_or_else(|| "Ladybird returned a null view".to_owned())?;
-        // SAFETY: the view was just created and is still owned by this thread.
-        status_result(unsafe {
-            elaris_ladybird_set_display_refresh_rate(raw.as_ptr(), display_refresh_rate)
-        })?;
-        Ok(WebView {
+        let view = WebView {
             raw,
             _owner: Rc::clone(&self.owner),
-        })
+        };
+        view.set_display_metadata(display.into())?;
+        Ok(view)
     }
 
     /// Takes ownership of a popup opened by `source` and gives it the host's view id.
@@ -658,7 +660,7 @@ impl Ladybird {
         source: u64,
         request_id: u64,
         id: u64,
-        refresh_rate: f64,
+        display: impl Into<DisplayMetadata>,
     ) -> Result<Option<WebView>, String> {
         let mut raw = std::ptr::null_mut();
         // SAFETY: The bridge is live on this thread and the output pointer is writable.
@@ -672,10 +674,7 @@ impl Ladybird {
             raw,
             _owner: Rc::clone(&self.owner),
         };
-        // SAFETY: The adopted view is live on this thread.
-        status_result(unsafe {
-            elaris_ladybird_set_display_refresh_rate(view.raw.as_ptr(), refresh_rate)
-        })?;
+        view.set_display_metadata(display.into())?;
         Ok(Some(view))
     }
 
@@ -913,6 +912,17 @@ pub struct WebView {
 }
 
 impl WebView {
+    fn set_display_metadata(&self, display: DisplayMetadata) -> Result<(), String> {
+        // SAFETY: The view is live and owned by this thread.
+        status_result(unsafe {
+            elaris_ladybird_set_display_metadata(
+                self.raw.as_ptr(),
+                display.id.unwrap_or(0),
+                display.refresh_rate,
+            )
+        })
+    }
+
     /// Searches the page case-insensitively and highlights all matches.
     pub fn find(&mut self, query: &str, request_id: u64) -> Result<(), String> {
         let query = CString::new(query)
