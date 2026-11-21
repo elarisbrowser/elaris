@@ -271,6 +271,9 @@ pub(crate) enum TabUpdate {
     Favicon(Option<Favicon>),
     History { back: bool, forward: bool },
     LoadError(String),
+    HoveredLink(String),
+    Tooltip(String),
+    Cursor(String),
     Error(String),
 }
 

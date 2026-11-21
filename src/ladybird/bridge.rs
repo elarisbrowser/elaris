@@ -216,6 +216,9 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
                 request: raw.request_id,
             },
             16 => Event::LoadError(text),
+            17 => Event::HoveredLink(text),
+            18 => Event::Tooltip(text),
+            19 => Event::Cursor(text),
             12 => {
                 let status = match raw.download_status {
                     1 | 2 => DownloadStatus::Downloading,

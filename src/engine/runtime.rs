@@ -311,6 +311,9 @@ impl Runtime {
                     continue;
                 }
                 Event::LoadError(error) => TabUpdate::LoadError(error),
+                Event::HoveredLink(url) => TabUpdate::HoveredLink(url),
+                Event::Tooltip(text) => TabUpdate::Tooltip(text),
+                Event::Cursor(name) => TabUpdate::Cursor(name),
                 Event::ContextMenu(menu) => {
                     updates.push(Update::ContextMenu(tab, menu));
                     continue;

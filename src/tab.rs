@@ -80,6 +80,9 @@ pub(crate) struct Tab {
     pub(crate) title: String,
     pub(crate) loading: bool,
     pub(crate) ime_caret: Option<[i32; 4]>,
+    pub(crate) hovered_link: String,
+    pub(crate) tooltip: String,
+    pub(crate) page_cursor: rune::Cursor,
     pub(crate) favicon: Option<Pixels>,
     pub(crate) favicon_data: Option<elaris::ladybird::Favicon>,
     pub(crate) error: Option<String>,
@@ -121,6 +124,9 @@ impl Tab {
             title: String::new(),
             loading: false,
             ime_caret: None,
+            hovered_link: String::new(),
+            tooltip: String::new(),
+            page_cursor: rune::Cursor::Default,
             favicon: None,
             favicon_data: None,
             error: None,
@@ -150,6 +156,9 @@ impl Tab {
             title: route.title().to_owned(),
             loading: false,
             ime_caret: None,
+            hovered_link: String::new(),
+            tooltip: String::new(),
+            page_cursor: rune::Cursor::Default,
             favicon: None,
             favicon_data: None,
             error: None,
@@ -184,6 +193,12 @@ impl Tab {
         }
     }
 
+    pub(crate) fn clear_page_hover(&mut self) {
+        self.hovered_link.clear();
+        self.tooltip.clear();
+        self.page_cursor = rune::Cursor::Default;
+    }
+
     /// Takes in what the engine reported about the tab.
     pub(crate) fn update(&mut self, update: TabUpdate) {
         match update {
@@ -191,13 +206,39 @@ impl Tab {
                 self.find.apply_result(request_id, result);
             }
             TabUpdate::ImeCaret(rect) => self.ime_caret = rect,
+            TabUpdate::HoveredLink(url) => self.hovered_link = url,
+            TabUpdate::Tooltip(text) => {
+                self.tooltip = text
+                    .chars()
+                    .map(|ch| if ch.is_control() { ' ' } else { ch })
+                    .collect();
+            }
+            TabUpdate::Cursor(name) => {
+                use rune::Cursor;
+                self.page_cursor = match name.as_str() {
+                    "Hidden" => Cursor::Hidden,
+                    "Crosshair" | "Eyedropper" => Cursor::Crosshair,
+                    "IBeam" => Cursor::Text,
+                    "ResizeHorizontal" | "ResizeColumn" => Cursor::ResizeColumn,
+                    "ResizeVertical" | "ResizeRow" => Cursor::ResizeRow,
+                    "Hand" => Cursor::Pointer,
+                    "OpenHand" => Cursor::Grab,
+                    "Drag" | "DragCopy" => Cursor::Grabbing,
+                    "Move" => Cursor::Move,
+                    "Disallowed" => Cursor::NotAllowed,
+                    "Zoom" => Cursor::ZoomIn,
+                    _ => Cursor::Default,
+                };
+            }
             TabUpdate::Navigation(url) => {
                 self.thumbnail = None;
+                self.clear_page_hover();
                 self.url = url;
                 self.error = None;
             }
             TabUpdate::NavigationCommitted(url) => {
                 self.thumbnail = None;
+                self.clear_page_hover();
                 self.url.clone_from(&url);
                 self.committed_url = url;
                 self.error = None;

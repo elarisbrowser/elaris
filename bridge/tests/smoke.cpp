@@ -25,6 +25,9 @@ struct Events {
     std::string peek_url;
     bool foreground{};
     std::string link_menu;
+    std::string hovered_link;
+    std::string tooltip;
+    std::string cursor;
     std::string clipboard;
     bool editing{};
     unsigned title{};
@@ -60,6 +63,15 @@ static void on_event(void* context, ElarisLadybirdEvent const* event) {
         break;
     case ELARIS_LADYBIRD_LOAD_ERROR:
         ++events.load_errors;
+        break;
+    case ELARIS_LADYBIRD_HOVERED_LINK:
+        events.hovered_link = event->text;
+        break;
+    case ELARIS_LADYBIRD_TOOLTIP:
+        events.tooltip = event->text;
+        break;
+    case ELARIS_LADYBIRD_CURSOR:
+        events.cursor = event->text;
         break;
     case ELARIS_LADYBIRD_CONTEXT_MENU:
         events.link_menu = event->text;
@@ -203,6 +215,21 @@ static bool page_input(ElarisLadybird* bridge, ElarisLadybirdView* view, uint64_
         std::cerr << "page input failed: " << name << "; title=" << events.last_title << "\n";
         return false;
     };
+    ElarisLadybirdMouseEvent hover{};
+    hover.type = ELARIS_LADYBIRD_MOUSE_MOVE;
+    hover.x = 30;
+    hover.y = 20;
+    if (!check(elaris_ladybird_mouse_event(view, &hover), "hover link") ||
+        !expect([&] { return events.hovered_link.ends_with("smoke.html#target") &&
+                            events.tooltip == "Local link tooltip" && events.cursor == "Hand"; },
+                "link destination, tooltip and cursor"))
+        return false;
+    hover.y = 50;
+    if (!check(elaris_ladybird_mouse_event(view, &hover), "hover input") ||
+        !expect([&] { return events.hovered_link.empty() && events.tooltip.empty() && events.cursor == "IBeam"; },
+                "clear link feedback and show text cursor"))
+        return false;
+
 #ifdef __APPLE__
     constexpr int new_tab_mod = ELARIS_LADYBIRD_MOD_SUPER;
 #else

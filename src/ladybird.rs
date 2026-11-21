@@ -45,6 +45,12 @@ pub enum Event {
     },
     /// The active document is an engine error page or its renderer crashed.
     LoadError(String),
+    /// The absolute destination of the hovered link, or an empty string when it is cleared.
+    HoveredLink(String),
+    /// The hovered element's tooltip, or an empty string when it is cleared.
+    Tooltip(String),
+    /// Ladybird's standard cursor name.
+    Cursor(String),
     ContextMenu(PageMenu),
     Clipboard(String),
     ImeCaret(Option<[i32; 4]>),

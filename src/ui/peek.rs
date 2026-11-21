@@ -32,6 +32,9 @@ fn card(state: &AppState, theme: &theme::Theme, reduced: bool, peek: &peek::Peek
     let mut content = input::webpage(id);
     let status = page_status(page);
     content = paint_page(content, &page.surface.pixels, status, theme);
+    if status.is_none() {
+        content = super::viewport::page_hover(content, page, theme);
+    }
     if status.is_none()
         && state.browser.page_focused()
         && let Some(rect) = page.ime_caret

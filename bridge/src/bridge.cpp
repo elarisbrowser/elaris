@@ -506,6 +506,19 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
     auto* handle = new ElarisLadybirdView{bridge, view_id, AK::move(view), {}, 0, 0, {}, {}, {}};
     bridge->views.push_back(handle);
     // The callbacks live in the view, which the handle owns, so they never outlive it.
+    handle->view->on_link_hover = [handle](auto const& url) {
+        emit(handle, ELARIS_LADYBIRD_HOVERED_LINK, to_utf8(url));
+    };
+    handle->view->on_link_unhover = [handle] { emit(handle, ELARIS_LADYBIRD_HOVERED_LINK); };
+    handle->view->on_enter_tooltip_area = [handle](auto const& tooltip) {
+        emit(handle, ELARIS_LADYBIRD_TOOLTIP, {tooltip.characters(), tooltip.length()});
+    };
+    handle->view->on_leave_tooltip_area = [handle] { emit(handle, ELARIS_LADYBIRD_TOOLTIP); };
+    handle->view->on_cursor_change = [handle](Gfx::Cursor const& cursor) {
+        auto const* standard = cursor.get_pointer<Gfx::StandardCursor>();
+        auto name = Gfx::standard_cursor_to_string(standard ? *standard : Gfx::StandardCursor::Arrow);
+        emit(handle, ELARIS_LADYBIRD_CURSOR, {name.characters_without_null_termination(), name.length()});
+    };
     handle->view->on_url_change = [handle](auto const& url) { emit(handle, ELARIS_LADYBIRD_NAVIGATION, to_utf8(url)); };
     handle->view->on_title_change = [handle](auto const& title) {
         emit(handle, ELARIS_LADYBIRD_TITLE, to_utf8(title));

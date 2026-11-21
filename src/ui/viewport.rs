@@ -495,6 +495,33 @@ pub(crate) fn page_origin(state: &AppState) -> [f32; 2] {
     }
 }
 
+pub(super) fn page_hover(page: El, tab: &crate::tab::Tab, theme: &Theme) -> El {
+    use rune::tok::{radius, space, type_};
+
+    let page = page.cursor(tab.page_cursor).help(tab.tooltip.as_str());
+    if tab.hovered_link.is_empty() {
+        return page;
+    }
+    page.child(
+        rune::row()
+            .key("page-hovered-link")
+            .pin(Some(space::S2), None, Some(space::S2), Some(space::S2))
+            .inert()
+            .a11y_hidden()
+            .child(
+                rune::text(tab.hovered_link.as_str())
+                    .min_w(0.0)
+                    .truncate()
+                    .font(type_::LABEL)
+                    .color(theme.text)
+                    .fill(theme.overlay_panel)
+                    .radius(radius::SM)
+                    .px(space::S2)
+                    .py(space::S1),
+            ),
+    )
+}
+
 /// The page's latest frame fills the viewport over its appearance-aware background. During a live
 /// resize Rune scales a frame to new bounds.
 fn page(
@@ -533,6 +560,9 @@ fn page(
                     .size(w.max(1.0), h.max(1.0))
                     .ime_cursor(),
             );
+        }
+        if !internal {
+            page = page_hover(page, tab, theme);
         }
     }
     let mut page = page.w_full().h_full();

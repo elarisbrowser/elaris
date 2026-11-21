@@ -100,7 +100,14 @@ impl Browser {
         );
     }
 
-    pub(crate) fn hover_page(&self, id: TabId, kind: MouseKind, point: [f32; 2], mods: Mods) {
+    pub(crate) fn hover_page(&mut self, id: TabId, kind: MouseKind, point: [f32; 2], mods: Mods) {
+        if kind == MouseKind::Leave {
+            if let Some(peek) = self.peek.as_mut().filter(|peek| peek.page.id() == id) {
+                peek.page.clear_page_hover();
+            } else if let Some(tab) = self.tab_mut(id) {
+                tab.clear_page_hover();
+            }
+        }
         if self.input.drag.is_none() && self.accepts_pointer(id) {
             self.send(
                 id,
