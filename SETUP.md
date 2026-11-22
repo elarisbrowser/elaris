@@ -52,6 +52,16 @@ Open the repository in a Dev Container to use the same Ladybird CI image as the 
 
 From the host terminal, `./elaris linux-build` runs the same setup and integrated build in Docker and streams its output. Pass `--jobs N` to change parallelism. Docker must be installed and running.
 
+## Lightweight Linux desktop
+
+To see and click through the UI-only Elaris in a Linux container, run:
+
+```sh
+./elaris desktop [URL]
+```
+
+This builds a small Debian image with Rust, Mesa's software Vulkan driver, a virtual X display, and Openbox, then runs `./elaris run --ui` full screen inside it. Open <http://127.0.0.1:6080/vnc.html?autoconnect=1&resize=scale> in a browser to view and interact with it. The container stops when Elaris exits. Docker must be running. The repository is mounted live, so restart the command after editing `src/`. Cargo output lives in a Docker volume and does not touch the host `target/` directory. The viewer is bound to `127.0.0.1` only, but it has no password, so do not expose the port beyond your machine. This container does not build Ladybird, so it shows the UI without web pages.
+
 ## Build and run
 
 After setup:

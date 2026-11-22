@@ -19,7 +19,7 @@ def linux_build(args: argparse.Namespace) -> None:
         raise SystemExit("elaris: linux-build is supported from macOS or Linux hosts")
     jobs = engine._jobs(args.jobs)
     require("docker", "git")
-    _require_docker_daemon()
+    require_docker_daemon()
 
     run("git", "submodule", "update", "--init", "--recursive")
     git_common_dir = _git_common_dir()
@@ -111,7 +111,7 @@ def linux_build(args: argparse.Namespace) -> None:
     run(*container_command)
 
 
-def _require_docker_daemon() -> None:
+def require_docker_daemon() -> None:
     result = subprocess.run(["docker", "info"], capture_output=True, text=True, check=False)
     if result.returncode:
         detail = (result.stderr or result.stdout).strip()
