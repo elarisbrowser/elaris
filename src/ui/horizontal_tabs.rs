@@ -488,7 +488,6 @@ fn tab_view(state: &AppState, tab: &Tab, theme: &Theme) -> El {
             .center()
             .radius(theme::ROW_RADIUS)
             .continuous_corners()
-            .press(theme.press)
             .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
             .child(icon)
     };

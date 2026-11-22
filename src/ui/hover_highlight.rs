@@ -2,7 +2,7 @@
 
 //! The shared highlight that follows the pointer between adjacent browser controls.
 
-use rune::{Cx, El, Spring, Tx, el};
+use rune::{Color, Cx, El, Spring, Tx, el};
 
 use super::theme::{self, Theme};
 use crate::app::AppState;
@@ -20,11 +20,15 @@ pub(crate) struct Target {
     group: Group,
 }
 
+/// The shared highlight is the control's background, so the control drops its own press overlay;
+/// otherwise the overlay shrinks with `press_scale` inside the highlight and reads as a second one.
 pub(super) fn attach(element: El, key: &str, group: Group) -> El {
     let key = key.to_owned();
-    element.on_hover_change(move |state: &mut AppState, inside, tx| {
-        update(state, &key, group, inside, tx);
-    })
+    element
+        .press(Color::TRANSPARENT)
+        .on_hover_change(move |state: &mut AppState, inside, tx| {
+            update(state, &key, group, inside, tx);
+        })
 }
 
 pub(super) fn update(
@@ -197,7 +201,7 @@ pub(in crate::ui) fn build_highlight_menu(
 ) -> El {
     let mut kit = theme.kit(theme.overlay_panel);
     if state.context_menu_highlight.is_some() {
-        kit.c.hover = rune::Color::TRANSPARENT;
+        kit.c.hover = Color::TRANSPARENT;
     }
     let before = layer.len();
     let trigger = menu.build(&kit, layer);

@@ -394,7 +394,6 @@ fn favourite_tile(
         .radius(theme::FAVOURITE_TILE_RADIUS)
         .continuous_corners()
         .motion(motion)
-        .press(theme.press)
         .press_scale(theme::PRESS_SCALE)
         .label(label)
         .child(
