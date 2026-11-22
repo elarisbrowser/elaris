@@ -3,6 +3,7 @@
 //! The window's interface: a sidebar beside the active tab's page. Each part is its own module;
 //! colours and measurements live in `theme`.
 
+pub(crate) mod animated_icon;
 mod controls;
 mod downloads;
 mod find;

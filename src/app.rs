@@ -204,6 +204,8 @@ pub(crate) struct AppState {
     pub(crate) form_picker: Option<crate::ui::form_picker::ActivePicker>,
     pub(crate) sidebar: SidebarState,
     pub(crate) hover_highlight: Option<crate::ui::hover_highlight::Target>,
+    /// The animated icon under the pointer, which plays its motion glyph.
+    pub(crate) animated_icon_hover: Option<&'static str>,
     pub(crate) context_menu_highlight: Option<String>,
     pub(crate) split_rect: [f32; 4],
     pub(crate) peek_presentation: crate::ui::peek::Presentation,
@@ -391,6 +393,7 @@ impl AppState {
             form_picker: None,
             sidebar: SidebarState::default(),
             hover_highlight: None,
+            animated_icon_hover: None,
             context_menu_highlight: None,
             split_rect: [0.0; 4],
             peek_presentation: Default::default(),

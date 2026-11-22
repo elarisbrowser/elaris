@@ -23,11 +23,22 @@ pub(crate) struct Target {
 /// The shared highlight is the control's background, so the control drops its own press overlay;
 /// otherwise the overlay shrinks with `press_scale` inside the highlight and reads as a second one.
 pub(super) fn attach(element: El, key: &str, group: Group) -> El {
+    attach_with(element, key, group, |_, _, _| {})
+}
+
+/// [`attach`], also running `also` on each hover change, for a control with its own hover state.
+pub(super) fn attach_with(
+    element: El,
+    key: &str,
+    group: Group,
+    also: impl Fn(&mut AppState, bool, &mut Tx) + 'static,
+) -> El {
     let key = key.to_owned();
     element
         .press(Color::TRANSPARENT)
         .on_hover_change(move |state: &mut AppState, inside, tx| {
             update(state, &key, group, inside, tx);
+            also(state, inside, tx);
         })
 }
 
