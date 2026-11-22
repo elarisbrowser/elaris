@@ -2,7 +2,7 @@
 
 //! The shared highlight that follows the pointer between adjacent browser controls.
 
-use rune::{Color, Cx, El, Spring, Tx, el};
+use rune::{Color, Cx, El, Phase, Spring, Tx, el};
 
 use super::theme::{self, Theme};
 use crate::app::AppState;
@@ -18,19 +18,37 @@ pub(super) enum Group {
 pub(crate) struct Target {
     key: String,
     group: Group,
+    /// Whether the hovered control is held, so the highlight scales with it.
+    pressed: bool,
 }
 
-/// The shared highlight is the control's background, so the control drops its own press overlay
-/// and scale. The highlight stays full size, so a shrinking control inside it reads as a second
-/// background.
+/// The shared highlight is the control's background, so the control drops its own press overlay.
+/// The control keeps its press scale and the highlight follows it through `track_press`.
 pub(super) fn attach(element: El, key: &str, group: Group) -> El {
     let key = key.to_owned();
     element
         .press(Color::TRANSPARENT)
-        .press_scale(1.0)
         .on_hover_change(move |state: &mut AppState, inside, tx| {
             update(state, &key, group, inside, tx);
         })
+        .on_drag(|state: &mut AppState, drag, tx| track_press(state, drag.phase, tx))
+}
+
+/// Mirrors the hovered control's press onto the highlight. Hover follows the pointer, so the
+/// target is the pressed control; a press leaving the control clears the target and springs back.
+pub(in crate::ui) fn track_press(state: &mut AppState, phase: Phase, tx: &mut Tx) {
+    let pressed = match phase {
+        Phase::Down => true,
+        Phase::Up => false,
+        Phase::Move => return,
+    };
+    let Some(target) = state.hover_highlight.as_mut() else {
+        return;
+    };
+    if target.pressed != pressed {
+        target.pressed = pressed;
+        tx.animated();
+    }
 }
 
 pub(super) fn update(
@@ -44,6 +62,7 @@ pub(super) fn update(
         state.hover_highlight = Some(Target {
             key: key.to_owned(),
             group,
+            pressed: false,
         });
     } else if state
         .hover_highlight
@@ -125,6 +144,11 @@ pub(super) fn view(
     } else {
         theme::HIGHLIGHT_MOTION
     };
+    let scale = if target.pressed && !reduced {
+        theme::PRESS_SCALE
+    } else {
+        1.0
+    };
     Some(
         el().key(key)
             .absolute(0.0, 0.0)
@@ -132,6 +156,8 @@ pub(super) fn view(
             .offset(x, y)
             .offset_motion(motion)
             .motion(motion)
+            .scale(scale)
+            .scale_motion(motion)
             .radius(radius)
             .continuous_corners()
             .fill(theme.hover)
