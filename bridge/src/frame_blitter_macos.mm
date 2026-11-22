@@ -126,10 +126,12 @@ FrameBlitter::Result FrameBlitter::copy(void* source, int width, int height, uin
             destinationOrigin:MTLOriginMake(0, 0, 0)];
         [blit endEncoding];
         [commands commit];
-        // The host draws the copy next, and the source goes back to the Compositor, so finish first. It is a
-        // frame-sized GPU copy on the engine thread, well under a millisecond.
-        [commands waitUntilCompleted];
-        if (commands.status != MTLCommandBufferStatusCompleted)
+        // GPU reads of an IOSurface wait for work already scheduled to write it, so the host may draw the copy once
+        // the copy is scheduled. Waiting for it to finish instead queued the engine thread behind the GPU's other
+        // work, up to 12 ms from idle, and the frame missed the host's next draw. The command buffer keeps the
+        // source in use until the copy is done, so the Compositor does not paint into it before then.
+        [commands waitUntilScheduled];
+        if (commands.status == MTLCommandBufferStatusError)
             return Result::Failed;
     }
     free_slot->serial = serial;
