@@ -20,14 +20,12 @@ pub(crate) struct Target {
     group: Group,
 }
 
-/// The shared highlight is the control's background, so the control drops its own press overlay
-/// and scale. The highlight stays full size, so a shrinking control inside it reads as a second
-/// background.
+/// The shared highlight is the control's background, so the control drops its own press overlay;
+/// otherwise the overlay shrinks with `press_scale` inside the highlight and reads as a second one.
 pub(super) fn attach(element: El, key: &str, group: Group) -> El {
     let key = key.to_owned();
     element
         .press(Color::TRANSPARENT)
-        .press_scale(1.0)
         .on_hover_change(move |state: &mut AppState, inside, tx| {
             update(state, &key, group, inside, tx);
         })
