@@ -7,99 +7,107 @@
 
 use rune::tok::{space, type_};
 use rune::{Align, El, Icon, col, el, icon, row, text};
-use rune_kit::{Button, ButtonVariant, Kit};
+use rune_kit::Kit;
 
 use crate::app::AppState;
 use crate::ui::theme::{self, Theme};
 
 use super::PageContext;
 
-/// A titled run of sections that a page's [`jump_bar`] can scroll to.
-pub(super) struct Category {
-    /// Unique within the page; the heading's key, and the prefix of its jump button's key.
+/// One destination in a page's [`nav`]: a category of sections.
+pub(super) struct NavItem {
+    /// Unique within the page; stored in [`AppState::page_category`] while selected.
     pub(super) key: &'static str,
     pub(super) title: &'static str,
-    pub(super) sections: Vec<El>,
+    pub(super) icon: &'static Icon,
 }
 
-impl Category {
-    pub(super) fn new(key: &'static str, title: &'static str, sections: Vec<El>) -> Self {
-        Self {
-            key,
-            title,
-            sections,
-        }
-    }
-
-    pub(super) fn view(self, theme: &Theme) -> El {
-        col()
-            .w_full()
-            .gap(theme::PAGE_SECTION_GAP)
-            .child(
-                row()
-                    .key(self.key)
-                    .focusable(true)
-                    .tab_index(-1)
-                    .label(self.title)
-                    .w_full()
-                    .px(theme::PAGE_GROUP_PADDING)
-                    .child(
-                        text(self.title)
-                            .font(theme::PAGE_CATEGORY_TITLE)
-                            .color(theme.text)
-                            .wrap()
-                            .role("heading"),
-                    ),
-            )
-            .children(self.sections)
-    }
-}
-
-/// Stacks a page's categories with enough space between them to read as separate groups.
-pub(super) fn categories(key: &'static str, categories: Vec<Category>, theme: &Theme) -> El {
-    col()
-        .key(key)
-        .w_full()
-        .gap(theme::PAGE_CATEGORY_GAP)
-        .children(categories.into_iter().map(|category| category.view(theme)))
-}
-
-/// Buttons that scroll `scroll_key` to each category and move focus to its heading.
-pub(super) fn jump_bar(
-    key: &'static str,
+/// Category navigation for [`PageLayout::nav`](super::layout::PageLayout::nav): a vertical
+/// list beside the content in wide panes and a scrolling row under the title in narrow ones.
+/// Choosing an item shows that category and returns `scroll_key` to the top.
+pub(super) fn nav(
     label: &str,
     scroll_key: &'static str,
-    categories: &[Category],
+    items: impl ExactSizeIterator<Item = &'static NavItem>,
+    selected: &str,
     cx: &PageContext,
 ) -> El {
-    let per_line = if cx.compact {
-        2
+    let count = items.len();
+    let rows = items.enumerate().map(|(index, item)| {
+        let current = item.key == selected;
+        let key = item.key;
+        row()
+            .key(format!("{key}-nav"))
+            .h(theme::PAGE_NAV_ROW_HEIGHT)
+            .px(theme::PAGE_NAV_ROW_PADDING)
+            .gap(space::S2 + space::S1 / 2.0)
+            .center_y()
+            .radius(theme::PAGE_GROUP_RADIUS - space::S1)
+            .role("button")
+            .label(item.title)
+            .checked(current)
+            .position_in_set(index + 1, count)
+            .focusable(true)
+            .focus_ring(theme::FOCUS_WIDTH, 0.0, cx.theme.focus)
+            .fill(if current {
+                cx.theme.settings_surface
+            } else {
+                rune::Color::TRANSPARENT
+            })
+            .hover(cx.theme.hover)
+            .press(cx.theme.press)
+            .on_press_tx(move |state: &mut AppState, tx| {
+                state.page_category = Some(key);
+                tx.scroll_to_instant(scroll_key, 0.0, 0.0);
+            })
+            .child(
+                icon(item.icon, theme::ICON)
+                    .color(if current {
+                        cx.theme.accent
+                    } else {
+                        cx.theme.icon
+                    })
+                    .a11y_hidden(),
+            )
+            .child(
+                text(item.title)
+                    .font(if current {
+                        theme::PAGE_ROW_TITLE
+                    } else {
+                        type_::BODY
+                    })
+                    .color(if current {
+                        cx.theme.text
+                    } else {
+                        cx.theme.text_muted
+                    })
+                    .single_line()
+                    .a11y_hidden(),
+            )
+    });
+    let list = if cx.side_nav {
+        col().w_full().gap(space::S1 / 2.0)
     } else {
-        categories.len().max(1)
+        row().w_full().gap(space::S1).scroll_x()
     };
+    list.key("page-nav").label(label).children(rows)
+}
+
+/// The heading and sections of the category a page's [`nav`] selected.
+pub(super) fn category(key: &'static str, title: &str, sections: Vec<El>, theme: &Theme) -> El {
     col()
         .key(key)
         .w_full()
-        .gap(space::S2)
-        .label(label)
-        .children(categories.chunks(per_line).map(|line| {
-            row()
-                .w_full()
-                .gap(space::S2)
-                .scroll_x()
-                .children(line.iter().map(|category| {
-                    let key = category.key;
-                    let target = format!("{scroll_key}/{key}");
-                    Button::new(category.title)
-                        .variant(ButtonVariant::Neutral)
-                        .on_press_tx(move |_: &mut AppState, tx| {
-                            tx.scroll_key_to(target.clone(), space::S2);
-                            tx.focus(key, true);
-                        })
-                        .build(&cx.kit)
-                        .key(format!("{}-jump", category.key))
-                }))
-        }))
+        .gap(theme::PAGE_SECTION_GAP)
+        .child(
+            text(title)
+                .font(theme::PAGE_CATEGORY_TITLE)
+                .color(theme.text)
+                .wrap()
+                .role("heading")
+                .px(theme::PAGE_GROUP_PADDING),
+        )
+        .children(sections)
 }
 
 /// A titled block of a native page: a muted heading above its grouped content.

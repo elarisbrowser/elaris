@@ -9,19 +9,15 @@ use rune_kit::{Button, ButtonVariant, Dialog, SegmentedControl};
 use crate::app::{AppState, ClearRange};
 use crate::settings::ContentBlockList;
 use crate::ui::internal::PageContext;
-use crate::ui::internal::widgets::{Category, setting, switch_kit};
+use crate::ui::internal::widgets::{setting, switch_kit};
 use crate::ui::theme::{self, Theme};
 
 use super::section;
 
 const DIALOG_WIDTH: f32 = 440.0;
 
-pub(super) fn category(cx: &mut PageContext) -> Category {
-    Category::new(
-        "settings-privacy",
-        "Privacy & security",
-        vec![browsing_data(cx), content_blocking(cx)],
-    )
+pub(super) fn sections(cx: &mut PageContext) -> Vec<El> {
+    vec![browsing_data(cx), content_blocking(cx)]
 }
 
 fn browsing_data(cx: &mut PageContext) -> El {

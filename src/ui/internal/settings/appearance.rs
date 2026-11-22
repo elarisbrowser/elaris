@@ -10,7 +10,7 @@ use crate::app::AppState;
 use crate::appearance::{AccentColor, Appearance};
 use crate::settings::TabLayout;
 use crate::ui::internal::PageContext;
-use crate::ui::internal::widgets::{Category, setting, switch_kit};
+use crate::ui::internal::widgets::{setting, switch_kit};
 use crate::ui::theme::{self, Theme};
 
 use super::section;
@@ -22,12 +22,8 @@ const SLIDER_HEIGHT: f32 = 22.0;
 const SLIDER_TRACK: f32 = 4.0;
 const SLIDER_KNOB: f32 = 16.0;
 
-pub(super) fn category(cx: &mut PageContext) -> Category {
-    Category::new(
-        "settings-look",
-        "Look & layout",
-        vec![appearance(cx), split_view(cx), motion(cx)],
-    )
+pub(super) fn sections(cx: &mut PageContext) -> Vec<El> {
+    vec![appearance(cx), split_view(cx), motion(cx)]
 }
 
 fn appearance(cx: &mut PageContext) -> El {

@@ -13,17 +13,13 @@ use crate::app::AppState;
 use crate::permissions::AutoplayPolicy;
 use crate::settings::DownloadDirectory;
 use crate::ui::internal::PageContext;
-use crate::ui::internal::widgets::{Category, actions, setting, setting_with};
+use crate::ui::internal::widgets::{actions, setting, setting_with};
 use crate::ui::theme;
 
 use super::section;
 
-pub(super) fn category(cx: &mut PageContext) -> Category {
-    Category::new(
-        "settings-browsing",
-        "Browsing",
-        vec![pages(cx), search(cx), downloads(cx)],
-    )
+pub(super) fn sections(cx: &mut PageContext) -> Vec<El> {
+    vec![pages(cx), search(cx), downloads(cx)]
 }
 
 fn pages(cx: &mut PageContext) -> El {

@@ -9,17 +9,13 @@ use rune_kit::{Button, ButtonVariant, Select, SelectAppearance};
 use crate::app::AppState;
 use crate::settings::StartupMode;
 use crate::ui::internal::PageContext;
-use crate::ui::internal::widgets::{Category, actions, row_title, setting};
+use crate::ui::internal::widgets::{actions, row_title, setting};
 use crate::ui::theme;
 
 use super::section;
 
-pub(super) fn category(cx: &mut PageContext) -> Category {
-    Category::new(
-        "settings-system",
-        "Browser setup",
-        vec![startup(cx), default_browser(cx), configuration(cx)],
-    )
+pub(super) fn sections(cx: &mut PageContext) -> Vec<El> {
+    vec![startup(cx), default_browser(cx), configuration(cx)]
 }
 
 fn startup(cx: &mut PageContext) -> El {

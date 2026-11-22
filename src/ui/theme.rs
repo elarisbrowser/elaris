@@ -324,6 +324,13 @@ pub(crate) const PAGE_ROW_PADDING: f32 = space::S3;
 pub(crate) const PAGE_ROW_MIN_HEIGHT: f32 = 52.0;
 pub(crate) const PAGE_ROW_GAP: f32 = space::S3 + space::S1;
 pub(crate) const PAGE_ROW_COPY_GAP: f32 = 3.0;
+/// Side navigation on pages with categories: its width, row height, and the pane width below
+/// which it folds into a horizontal row under the title. Rows inset their icon to line up with
+/// the page's header icon.
+pub(crate) const PAGE_NAV_WIDTH: f32 = 196.0;
+pub(crate) const PAGE_NAV_ROW_HEIGHT: f32 = 32.0;
+pub(crate) const PAGE_NAV_ROW_PADDING: f32 = (PAGE_HEADER_ICON - ICON) / 2.0;
+pub(crate) const PAGE_NAV_BREAKPOINT: f32 = 760.0;
 /// Width shared by field-style controls (selects, segmented controls, sliders) in page rows.
 pub(crate) const PAGE_CONTROL_WIDTH: f32 = 220.0;
 

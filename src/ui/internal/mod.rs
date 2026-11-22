@@ -35,6 +35,8 @@ pub(super) struct PageContext<'a> {
     pub(super) reduced_motion: bool,
     /// The pane is narrow, so rows stack their controls under their copy.
     pub(super) compact: bool,
+    /// The pane is wide enough for category navigation beside the content.
+    pub(super) side_nav: bool,
 }
 
 type Renderer = fn(&mut PageContext) -> PageLayout;
@@ -63,12 +65,14 @@ pub(crate) fn view(
         overlays,
         reduced_motion,
         compact: pane_width > 0.0 && pane_width < theme::PAGE_COMPACT_BREAKPOINT,
+        side_nav: pane_width <= 0.0 || pane_width >= theme::PAGE_NAV_BREAKPOINT,
     };
+    let side_nav = cx.side_nav;
     let page = match route {
         InternalRoute::Page(page) => renderer(*page)(&mut cx),
         InternalRoute::NotFound(address) => not_found(address, theme),
     };
-    page.view(route.title(), theme)
+    page.view(route.title(), theme, side_nav)
 }
 
 fn not_found(address: &str, theme: &Theme) -> PageLayout {
