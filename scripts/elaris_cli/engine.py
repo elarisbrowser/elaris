@@ -23,9 +23,12 @@ BUILD_TARGETS = (
     "MediaServer",
     "VideoDecoderServer",
     "WebRTCClient",
+    "elaris_ladybird_smoke",
+    "elaris_ladybird_download_smoke",
+    "elaris_ladybird_engine_features",
 )
 if sys.platform == "darwin":
-    BUILD_TARGETS += ("ProcessReaper",)
+    BUILD_TARGETS += ("ProcessReaper", "elaris_ladybird_picture_in_picture")
 
 
 def build_for_elaris(jobs: Optional[str] = None) -> None:

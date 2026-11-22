@@ -32,7 +32,7 @@ function(elaris_add_ladybird_bridge)
             "${ELARIS_VCPKG_PREFIX}/include/harfbuzz")
     endif()
 
-    if(APPLE AND ELARIS_VCPKG_PREFIX)
+    if(ELARIS_VCPKG_PREFIX)
         foreach(helper IN LISTS ladybird_helper_processes)
             if(TARGET ${helper})
                 target_link_options(${helper} PRIVATE
@@ -43,6 +43,11 @@ function(elaris_add_ladybird_bridge)
     endif()
 
     add_library(elaris_ladybird SHARED "${ELARIS_BRIDGE_DIR}/src/bridge.cpp")
+    if(TARGET ladybird_build_resource_files)
+        # Ladybird's UI target stages the pages, templates, PDF.js viewer and fonts that the helper processes load. Build
+        # that step with the bridge, so a clean build has the resources it needs.
+        add_dependencies(elaris_ladybird ladybird_build_resource_files)
+    endif()
     if(APPLE)
         set(objc_sources
             "${ELARIS_BRIDGE_DIR}/src/notification_backend_macos.mm"
