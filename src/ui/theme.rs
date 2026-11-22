@@ -289,8 +289,25 @@ pub(crate) const SWIPE_INDICATOR_SETTLE: Anim = Anim::new(Curve::tween(0.14, Eas
 pub(super) const HIGHLIGHT_MOTION: Spring = Spring::new(0.10, 0.0);
 pub(super) const HOVER_ENTER: Anim = Anim::new(Curve::tween(0.08, Easing::EASE_OUT));
 pub(super) const HOVER_EXIT: Anim = Anim::new(Curve::tween(0.15, Easing::EASE_OUT));
-/// Crossfade for a status glyph that swaps in place, such as reload and stop.
-pub(crate) const STATUS_GLYPH: Anim = Anim::new(Curve::tween(0.15, Easing::EASE_OUT));
+/// Morph for a status glyph that swaps in place, such as reload and stop.
+pub(crate) const STATUS_GLYPH: Anim = Anim::new(Curve::tween(0.2, Easing::EASE_OUT));
+/// The scale a swapped-out glyph shrinks to (and a swapped-in one grows from).
+pub(crate) const GLYPH_MORPH_SCALE: f32 = 0.6;
+/// The blur, in points, a swapped-out glyph dissolves into.
+pub(crate) const GLYPH_MORPH_BLUR: f32 = 2.0;
+/// The turn the reload arrow makes as it morphs into the stop mark.
+pub(crate) const RELOAD_SPIN: Anim = Anim::new(Curve::tween(0.4, Easing::EASE_OUT));
+
+/// One glyph replacing another in place: it shrinks, blurs and fades out as its successor
+/// grows and sharpens in.
+pub(crate) fn glyph_morph(reduced_motion: bool) -> Transition {
+    if reduced_motion {
+        return Transition::none();
+    }
+    Transition::scale(GLYPH_MORPH_SCALE)
+        .combined(Transition::blur(GLYPH_MORPH_BLUR))
+        .allow_small_scale()
+}
 
 /// Compact overlays settle into place on entry and fade in place on dismissal.
 pub(super) fn overlay_reveal(reduced_motion: bool) -> Transition {

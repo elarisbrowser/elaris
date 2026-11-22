@@ -49,7 +49,7 @@ pub(super) fn icon_button_frame(key: &str, label: &str, size: f32, theme: &Theme
 }
 
 /// `glyph`, or the confirmation tick once `confirmed`: the tick draws itself on as the glyph
-/// shrinks away. `key` names both so each keeps its own transition.
+/// shrinks and blurs away. `key` names both so each keeps its own transition.
 pub(crate) fn confirm_glyph(
     key: &str,
     glyph: &'static Icon,
@@ -58,7 +58,6 @@ pub(crate) fn confirm_glyph(
     theme: &Theme,
     reduced: bool,
 ) -> El {
-    let swap = |enter: Transition| if reduced { Transition::none() } else { enter };
     if confirmed {
         rune::canvas(
             rune::Shape::new()
@@ -67,15 +66,16 @@ pub(crate) fn confirm_glyph(
         )
         .key(format!("{key}-tick"))
         .size(size, size)
-        .transition(swap(Transition::asymmetric(
-            Transition::draw(),
-            Transition::opacity(),
-        )))
+        .transition(if reduced {
+            Transition::none()
+        } else {
+            Transition::asymmetric(Transition::draw(), theme::glyph_morph(false))
+        })
     } else {
         icon(glyph, size)
             .key(format!("{key}-glyph"))
             .color(theme.icon)
-            .transition(swap(Transition::scale(0.6).allow_small_scale()))
+            .transition(theme::glyph_morph(reduced))
     }
 }
 
