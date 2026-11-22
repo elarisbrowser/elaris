@@ -15,22 +15,22 @@ use crate::ui::{
     theme::{self, Theme},
 };
 
-use super::layout::{self, PageLayout, SECTION_GAP};
+use super::PageContext;
+use super::layout::PageLayout;
+use super::widgets;
+
 const SEARCH_WIDTH: f32 = 520.0;
 const ROW_HEIGHT: f32 = 48.0;
 const TIME_WIDTH: f32 = 72.0;
 
-pub(super) fn view(
-    state: &AppState,
-    theme: &Theme,
-    overlays: &mut Vec<El>,
-    reduced_motion: bool,
-    compact: bool,
-) -> PageLayout {
+const SECTION_GAP: f32 = theme::PAGE_SECTION_GAP;
+const DIALOG_WIDTH: f32 = 400.0;
+
+pub(super) fn view(cx: &mut PageContext) -> PageLayout {
+    let (state, theme, kit) = (cx.state, cx.theme, &cx.kit);
     let history = &state.history_page;
-    let kit = theme.kit(theme.settings_surface);
     if history.confirming {
-        confirmation(theme, overlays);
+        confirmation(theme, cx.overlays);
     }
     let has_entries = history
         .page
@@ -40,8 +40,8 @@ pub(super) fn view(
         .gap(space::S2)
         .center_y()
         .justify_end()
-        .children(actions(state, theme, &kit, has_entries));
-    let toolbar = if compact {
+        .children(actions(state, theme, kit, has_entries));
+    let toolbar = if cx.compact {
         col()
             .w_full()
             .gap(space::S2)
@@ -72,11 +72,11 @@ pub(super) fn view(
     }
     if let Some(error) = &history.load_error {
         results = results.child(
-            empty("History unavailable", error, theme).child(
+            empty(&icons::INFO, "History unavailable", error, theme).child(
                 Button::new("Try Again")
                     .variant(ButtonVariant::Ghost)
                     .on_press(|state: &mut AppState| state.request_history_page())
-                    .build(&kit),
+                    .build(kit),
             ),
         );
     } else if history.page.is_none() || (history.loading && !has_entries) {
@@ -85,37 +85,46 @@ pub(super) fn view(
                 .font(type_::BODY)
                 .color(theme.text_muted)
                 .role("status")
+                .px(theme::PAGE_GROUP_PADDING)
                 .py(SECTION_GAP),
         );
     } else if !has_entries {
         results = results.child(if !history.input.text.trim().is_empty() {
-            empty("No matching history", "Try another search.", theme).child(
+            empty(
+                &icons::SEARCH,
+                "No matching history",
+                "Try another search.",
+                theme,
+            )
+            .child(
                 Button::new("Clear Search")
                     .variant(ButtonVariant::Ghost)
                     .on_press_tx(AppState::clear_history_search)
-                    .build(&kit),
+                    .build(kit),
             )
         } else if !history.previous.is_empty() {
             empty(
+                &icons::HISTORY,
                 "No older entries",
                 "Go back to see more recent history.",
                 theme,
             )
         } else {
             empty(
+                &icons::HISTORY,
                 "No browsing history yet",
                 "Pages you visit will appear here.",
                 theme,
             )
         });
     }
-    results = results.child(entries(state, theme, &kit, reduced_motion));
-    PageLayout {
-        scroll_key: HISTORY_SCROLL,
-        icon: &icons::HISTORY,
-        toolbar: Some(toolbar),
-        content: results.children(pagination(state, &kit)),
-    }
+    results = results.child(entries(state, theme, kit, cx.reduced_motion));
+    PageLayout::new(
+        HISTORY_SCROLL,
+        &icons::HISTORY,
+        results.children(pagination(state, kit)),
+    )
+    .toolbar(toolbar)
 }
 
 /// The header's trailing controls: selection actions while any row is ticked, otherwise Clear.
@@ -233,12 +242,12 @@ fn entries(state: &AppState, theme: &Theme, kit: &Kit, reduced_motion: bool) -> 
     };
     for day in page.entries.chunk_by(|a, b| a.date == b.date) {
         let date = &day[0].date;
-        let mut rows = motion(layout::group(theme));
+        let mut rows = motion(widgets::group(theme));
         for (index, entry) in day.iter().enumerate() {
             rows = rows.child(entry_row(state, entry, index == 0, theme, kit, quiet));
         }
         list = list.child({
-            let section = layout::section(
+            let section = widgets::section(
                 format!("history-date-{date}"),
                 &date_label(date, page),
                 theme,
@@ -512,7 +521,7 @@ fn entry_row(
     } else {
         row.arrives_whole()
     };
-    row.children((!first).then(|| layout::separator(theme)))
+    row.children((!first).then(|| widgets::separator(theme)))
         .child(content)
 }
 
@@ -547,8 +556,8 @@ fn pagination(state: &AppState, kit: &Kit) -> Option<El> {
     })
 }
 
-fn empty(title: &str, detail: &str, theme: &Theme) -> El {
-    layout::message(title, detail, theme).key("history-empty")
+fn empty(glyph: &'static rune::Icon, title: &str, detail: &str, theme: &Theme) -> El {
+    widgets::message(glyph, title, detail, theme).key("history-empty")
 }
 
 fn confirmation(theme: &Theme, overlays: &mut Vec<El>) {
@@ -575,7 +584,7 @@ fn confirmation(theme: &Theme, overlays: &mut Vec<El>) {
     Dialog::new("history-confirm", "Clear browsing history?")
         .open(true)
         .fit()
-        .width(400.0)
+        .width(DIALOG_WIDTH)
         .click_outside(false)
         .on_close(|state: &mut AppState| state.history_page.confirming = false)
         .child(

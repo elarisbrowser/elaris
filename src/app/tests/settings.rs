@@ -31,6 +31,40 @@ fn the_settings_shortcut_reuses_its_existing_native_tab() {
     assert_eq!(state.browser.active_tab().unwrap().id(), settings);
 }
 #[test]
+fn settings_navigation_lands_on_the_category_in_a_narrow_window() {
+    let state = AppState::new(Some("elaris://settings"));
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::ui::view,
+        (700.0, 640.0),
+        rune::Env::new(false, 1.0),
+    );
+    runtime.frame(0.0);
+
+    let element = |runtime: &rune::Runtime<AppState>, key: &str| {
+        runtime
+            .elements()
+            .into_iter()
+            .find(|element| element.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("missing {key}"))
+    };
+    let [x, y, width, height] = element(&runtime, "settings-privacy-jump").rect;
+    runtime.pointer_down(x + width / 2.0, y + height / 2.0);
+    runtime.pointer_up(x + width / 2.0, y + height / 2.0);
+    runtime.frame(0.0);
+
+    let heading = element(&runtime, "settings-privacy");
+    let scroll = element(&runtime, "settings-scroll");
+    assert!(heading.focused);
+    assert!(
+        (0.0..=16.0).contains(&(heading.rect[1] - scroll.rect[1])),
+        "heading {:?}, scroll region {:?}",
+        heading.rect,
+        scroll.rect,
+    );
+}
+
+#[test]
 fn settings_updates_drive_search_download_and_startup_preferences() {
     let mut state = AppState::new(Some("example.com"));
     state.set_appearance(Appearance::Dark);

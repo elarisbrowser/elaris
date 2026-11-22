@@ -1,18 +1,52 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Native Rune pages for routes owned by Elaris.
+//!
+//! To add a page: declare its route in `src/internal.rs`, add a module here whose `view`
+//! takes a [`PageContext`] and returns a [`PageLayout`], and map it in [`renderer`]. The match is
+//! exhaustive, so a route without a renderer fails to compile.
 
 mod history;
 mod layout;
+mod placeholders;
 mod settings;
+mod widgets;
 
-use rune::{El, Icon};
+use rune::El;
+use rune_kit::Kit;
 
 use crate::app::AppState;
 use crate::internal::{InternalPage, InternalRoute};
-use crate::ui::{icons, theme::Theme};
+use crate::ui::{
+    icons,
+    theme::{self, Theme},
+};
 
 use self::layout::PageLayout;
+
+/// Everything a page renderer reads, built once per frame by [`view`].
+pub(super) struct PageContext<'a> {
+    pub(super) state: &'a AppState,
+    pub(super) theme: &'a Theme,
+    /// Rune Kit palette seeded from the page's grouped surface.
+    pub(super) kit: Kit,
+    /// Dialogs and popovers that render above the page.
+    pub(super) overlays: &'a mut Vec<El>,
+    pub(super) reduced_motion: bool,
+    /// The pane is narrow, so rows stack their controls under their copy.
+    pub(super) compact: bool,
+}
+
+type Renderer = fn(&mut PageContext) -> PageLayout;
+
+fn renderer(page: InternalPage) -> Renderer {
+    match page {
+        InternalPage::Settings => settings::view,
+        InternalPage::History => history::view,
+        InternalPage::Downloads => placeholders::downloads,
+        InternalPage::About => placeholders::about,
+    }
+}
 
 pub(crate) fn view(
     state: &AppState,
@@ -22,53 +56,30 @@ pub(crate) fn view(
     reduced_motion: bool,
     pane_width: f32,
 ) -> El {
-    let compact = pane_width > 0.0 && pane_width < layout::COMPACT_BREAKPOINT;
+    let mut cx = PageContext {
+        state,
+        theme,
+        kit: theme.kit(theme.settings_surface),
+        overlays,
+        reduced_motion,
+        compact: pane_width > 0.0 && pane_width < theme::PAGE_COMPACT_BREAKPOINT,
+    };
     let page = match route {
-        InternalRoute::Page(InternalPage::Settings) => {
-            settings::view(state, theme, overlays, compact)
-        }
-        InternalRoute::Page(InternalPage::History) => {
-            history::view(state, theme, overlays, reduced_motion, compact)
-        }
-        InternalRoute::Page(InternalPage::Downloads) => placeholder(
-            "downloads-scroll",
-            &icons::DOWNLOAD,
-            "Manage downloads",
-            "Use the Downloads button at the bottom of the sidebar or next to the address bar.",
-            theme,
-        ),
-        InternalRoute::Page(InternalPage::About) => placeholder(
-            "about-scroll",
-            &icons::INFO,
-            "Coming soon",
-            "This page is reserved for a future release.",
-            theme,
-        ),
-        InternalRoute::NotFound(address) => PageLayout {
-            scroll_key: "internal-not-found-scroll",
-            icon: &icons::INFO,
-            toolbar: None,
-            content: layout::message(
-                "Unknown address",
-                &format!("Elaris does not have an internal page at {address}."),
-                theme,
-            ),
-        },
+        InternalRoute::Page(page) => renderer(*page)(&mut cx),
+        InternalRoute::NotFound(address) => not_found(address, theme),
     };
     page.view(route.title(), theme)
 }
 
-fn placeholder(
-    scroll_key: &'static str,
-    icon: &'static Icon,
-    title: &str,
-    detail: &str,
-    theme: &Theme,
-) -> PageLayout {
-    PageLayout {
-        scroll_key,
-        icon,
-        toolbar: None,
-        content: layout::message(title, detail, theme),
-    }
+fn not_found(address: &str, theme: &Theme) -> PageLayout {
+    PageLayout::new(
+        "internal-not-found-scroll",
+        &icons::INFO,
+        widgets::message(
+            &icons::INFO,
+            "Unknown address",
+            &format!("Elaris does not have an internal page at {address}."),
+            theme,
+        ),
+    )
 }

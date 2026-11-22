@@ -303,9 +303,29 @@ pub(crate) const PAGE_SECTION_TITLE: rune::TextStyle = rune::TextStyle::new(14.0
 /// How far a native page's content sits from the top, and the gap under each section heading.
 pub(crate) const PAGE_TOP_PADDING: f32 = space::S6;
 pub(crate) const PAGE_SECTION_TITLE_GAP: f32 = 9.0;
+/// Headings that open a category of sections, such as a group of Settings.
+pub(crate) const PAGE_CATEGORY_TITLE: rune::TextStyle = rune::TextStyle::new(20.0, 600.0).lh(26.0);
+/// The title of a single row inside a grouped surface.
+pub(crate) const PAGE_ROW_TITLE: rune::TextStyle = rune::TextStyle::new(14.0, 500.0).lh(19.0);
 /// The rounded surface that groups a native page's rows.
 pub(crate) const PAGE_GROUP_RADIUS: f32 = radius::LG;
 pub(crate) const PAGE_GROUP_PADDING: f32 = space::S3 + space::S1;
+/// Native page column width, and the pane width below which rows stack.
+pub(crate) const PAGE_CONTENT_WIDTH: f32 = 760.0;
+pub(crate) const PAGE_COMPACT_BREAKPOINT: f32 = 560.0;
+pub(crate) const PAGE_HEADER_ICON: f32 = 32.0;
+/// Space between sections, and the larger space between categories (twice as wide, so each
+/// category reads as one group).
+pub(crate) const PAGE_SECTION_GAP: f32 = space::S6;
+pub(crate) const PAGE_CATEGORY_GAP: f32 = PAGE_SECTION_GAP * 2.0;
+/// Vertical padding of a grouped row, the gap between its copy and control, and the copy's
+/// line gap.
+pub(crate) const PAGE_ROW_PADDING: f32 = space::S3;
+pub(crate) const PAGE_ROW_MIN_HEIGHT: f32 = 52.0;
+pub(crate) const PAGE_ROW_GAP: f32 = space::S3 + space::S1;
+pub(crate) const PAGE_ROW_COPY_GAP: f32 = 3.0;
+/// Width shared by field-style controls (selects, segmented controls, sliders) in page rows.
+pub(crate) const PAGE_CONTROL_WIDTH: f32 = 220.0;
 
 /// The address field.
 pub(crate) const FOCUS_WIDTH: f32 = 2.0;

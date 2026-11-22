@@ -2,55 +2,52 @@
 
 //! Browsing data and content blocking preferences.
 
-use rune::tok::type_;
+use rune::tok::{space, type_};
 use rune::{El, col, row, text};
-use rune_kit::{Button, ButtonVariant, Dialog, Kit, SegmentedControl};
+use rune_kit::{Button, ButtonVariant, Dialog, SegmentedControl};
 
 use crate::app::{AppState, ClearRange};
 use crate::settings::ContentBlockList;
-use crate::ui::internal::layout::SECTION_GAP;
-use crate::ui::theme::Theme;
+use crate::ui::internal::PageContext;
+use crate::ui::internal::widgets::{Category, setting, switch_kit};
+use crate::ui::theme::{self, Theme};
 
-use super::{ROW_GAP, section, setting_row, settings_group};
+use super::section;
 
-pub(super) fn privacy_section(
-    state: &AppState,
-    theme: &Theme,
-    kit: &Kit,
-    overlays: &mut Vec<El>,
-    compact: bool,
-) -> El {
-    if let Some(dialog) = state.clear_data {
-        clear_data_dialog(dialog, theme, overlays);
+const DIALOG_WIDTH: f32 = 440.0;
+
+pub(super) fn category(cx: &mut PageContext) -> Category {
+    Category::new(
+        "settings-privacy",
+        "Privacy & security",
+        vec![browsing_data(cx), content_blocking(cx)],
+    )
+}
+
+fn browsing_data(cx: &mut PageContext) -> El {
+    if let Some(dialog) = cx.state.clear_data {
+        clear_data_dialog(dialog, cx.theme, cx.overlays);
     }
     let open = Button::new("Clear…")
         .variant(ButtonVariant::Neutral)
         .on_press(AppState::open_clear_data)
-        .build(kit)
+        .build(&cx.kit)
         .key("settings-clear-data");
-    let description = state
+    let description = cx
+        .state
         .clear_data_status
         .as_deref()
         .unwrap_or("Remove history, cookies and site data, cached files and download history.");
     section(
-        "Privacy",
-        theme,
-        settings_group(
-            setting_row("Clear browsing data", description, theme, open, compact),
-            theme,
-        ),
+        "Browsing data",
+        cx.theme,
+        [setting(cx, "Clear browsing data", description, open)],
     )
 }
 
-pub(super) fn content_blocking_section(
-    state: &AppState,
-    theme: &Theme,
-    kit: &Kit,
-    compact: bool,
-) -> El {
-    let mut switch_kit = kit.clone();
-    switch_kit.c.std_icon_strong = kit.c.bg_accent;
-    let blocking = &state.settings.content_blocking;
+fn content_blocking(cx: &mut PageContext) -> El {
+    let switch_kit = switch_kit(&cx.kit);
+    let blocking = &cx.state.settings.content_blocking;
     let master = rune_kit::Switch::new(blocking.enabled)
         .standard()
         .label("Block ads and trackers")
@@ -59,14 +56,7 @@ pub(super) fn content_blocking_section(
             state.set_content_blocking(!state.settings.content_blocking.enabled)
         })
         .build(&switch_kit);
-    let mut rows = col().gap(12.0).child(setting_row(
-        "Block ads and trackers",
-        "Lists download when blocking turns on, then refresh daily.",
-        theme,
-        master,
-        compact,
-    ));
-    for list in ContentBlockList::ALL {
+    let lists = ContentBlockList::ALL.into_iter().map(|list| {
         let control = rune_kit::Switch::new(blocking.lists.contains(&list))
             .standard()
             .label(list.label())
@@ -76,21 +66,22 @@ pub(super) fn content_blocking_section(
                 state.set_content_blocking_list(list, !enabled)
             })
             .build(&switch_kit);
-        rows = rows.child(setting_row(
-            list.label(),
-            list.description(),
-            theme,
-            control,
-            compact,
-        ));
-    }
-    section("Content blocking", theme, settings_group(rows, theme))
+        setting(cx, list.label(), list.description(), control)
+    });
+    let rows: Vec<El> = std::iter::once(setting(
+        cx,
+        "Block ads and trackers",
+        "Lists download when blocking turns on, then refresh daily.",
+        master,
+    ))
+    .chain(lists)
+    .collect();
+    section("Content blocking", cx.theme, rows)
 }
 
 fn clear_data_dialog(dialog: crate::app::ClearDataDialog, theme: &Theme, overlays: &mut Vec<El>) {
     let kit = theme.kit(theme.overlay_panel);
-    let mut switch_kit = kit.clone();
-    switch_kit.c.std_icon_strong = kit.c.bg_accent;
+    let switch_kit = switch_kit(&kit);
     let selected = ClearRange::ALL
         .iter()
         .position(|range| *range == dialog.range);
@@ -115,7 +106,7 @@ fn clear_data_dialog(dialog: crate::app::ClearDataDialog, theme: &Theme, overlay
     };
     let actions = row()
         .w_full()
-        .gap(9.0)
+        .gap(space::S2)
         .justify_end()
         .child(
             Button::new("Cancel")
@@ -134,15 +125,15 @@ fn clear_data_dialog(dialog: crate::app::ClearDataDialog, theme: &Theme, overlay
     Dialog::new("clear-data", "Clear browsing data")
         .open(true)
         .fit()
-        .width(440.0)
+        .width(DIALOG_WIDTH)
         .click_outside(false)
         .on_close(|state: &mut AppState| state.clear_data = None)
         .child(
             col()
                 .w_full()
-                .px(SECTION_GAP)
-                .pb(SECTION_GAP)
-                .gap(ROW_GAP)
+                .px(theme::PAGE_SECTION_GAP)
+                .pb(theme::PAGE_SECTION_GAP)
+                .gap(theme::PAGE_ROW_GAP)
                 .child(range)
                 .child(option("Browsing history", dialog.history, |dialog| {
                     dialog.history = !dialog.history;
