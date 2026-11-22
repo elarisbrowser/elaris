@@ -99,8 +99,11 @@ To work on Rune UI without compiling Ladybird:
 ```sh
 ./elaris build --ui
 ./elaris run --ui
+./elaris run --ui --linux-ui   # preview the Linux window layout on macOS
 ./elaris hot
 ```
+
+`--linux-ui` builds the interface with the Linux layout on any host, such as the borderless window and in-app titlebar, so it can be checked on macOS. It builds into `target/linux-ui/` and does not touch the normal build. It is a layout preview: Linux-only behaviour such as X11 minimize is not available.
 
 `./elaris hot` uses Rune's guarded live-edit launcher and keeps the UI process and app state alive for compatible function-body edits under `src/ui/`. Add `--patch 'src/app.rs'` or another glob to include more source files. It requires Dioxus CLI 0.7.10 (`dx`) and Python 3.11+; if the default `python3` is older, the command selects a versioned interpreter from `PATH`.
 
