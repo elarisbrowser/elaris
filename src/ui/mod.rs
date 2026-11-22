@@ -55,7 +55,7 @@ pub(crate) use sidebar::floating_drag_preview;
 pub(crate) use theme::FIND_MOTION;
 
 pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
-    #[cfg(target_os = "macos")]
+    #[cfg(elaris_ui = "macos")]
     crate::menu_macos::refresh(state);
     if state.is_mini() {
         return mini::view(state, cx);
@@ -78,13 +78,13 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
 
     let fullscreen = state.browser.fullscreen_tab().is_some();
     let horizontal = state.horizontal_tabs();
-    #[cfg(target_os = "macos")]
+    #[cfg(elaris_ui = "macos")]
     cx.set_titlebar(theme::native_titlebar(if horizontal {
         theme::HORIZONTAL_STRIP_HEIGHT
     } else {
         theme::HEADER_HEIGHT
     }));
-    let mut window = window_surface(state, &theme, horizontal || cfg!(target_os = "linux"));
+    let mut window = window_surface(state, &theme, horizontal);
     if fullscreen {
         window = window.child(viewport::view(state, &theme, &mut overlays, reduced_motion));
     } else if horizontal {
@@ -98,35 +98,12 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
             ))
             .child(viewport::view(state, &theme, &mut overlays, reduced_motion));
     } else {
-        #[cfg(target_os = "linux")]
-        {
-            window = window.child(sidebar::header::view(state, &theme, cx));
-        }
-        let sidebar = sidebar::view(state, &theme, &mut overlays, reduced_motion);
-        let page = viewport::view(state, &theme, &mut overlays, reduced_motion);
-        #[cfg(target_os = "linux")]
-        {
-            let mut content = row()
-                .key("window-content")
-                .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .child(sidebar)
-                .child(page);
-            if !state.sidebar.collapsed {
-                content = content.child(sidebar::resize::handle(state.sidebar.width));
-            }
-            window = window.child(content);
-        }
-        #[cfg(not(target_os = "linux"))]
-        {
-            window = window
-                .child(sidebar)
-                .child(page)
-                .child(sidebar::header::view(state, &theme, cx));
-            if !state.sidebar.collapsed {
-                window = window.child(sidebar::resize::handle(state.sidebar.width));
-            }
+        window = window
+            .child(sidebar::view(state, &theme, &mut overlays, reduced_motion))
+            .child(viewport::view(state, &theme, &mut overlays, reduced_motion))
+            .child(sidebar::header::view(state, &theme, cx));
+        if !state.sidebar.collapsed {
+            window = window.child(sidebar::resize::handle(state.sidebar.width));
         }
     }
     if state.browser.peek.is_some() {
@@ -155,7 +132,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     viewport::menu::view(state, &theme, &mut overlays);
     sidebar::context_menu(state, &theme, &mut overlays);
     sidebar::header::history_menu(state, &theme, &mut overlays);
-    #[cfg(target_os = "linux")]
+    #[cfg(elaris_ui = "linux")]
     if !horizontal {
         overlays.push(sidebar::header::hover_zone());
     }

@@ -28,10 +28,7 @@ pub(crate) fn view(
     overlays: &mut Vec<El>,
     reduced_motion: bool,
 ) -> El {
-    #[cfg(target_os = "linux")]
-    let top_padding = theme::VIEWPORT_INSET;
-    #[cfg(not(target_os = "linux"))]
-    let top_padding = if state.sidebar.collapsed {
+    let top_padding = if header_above_page(state) {
         theme::HEADER_HEIGHT
     } else {
         theme::VIEWPORT_INSET
@@ -458,6 +455,16 @@ fn indicator(theme: &Theme, radius: f32) -> El {
         .radius(radius)
 }
 
+/// Whether the header row sits over the page's column, so the page starts below it: with the
+/// sidebar hidden, or on Linux while the row shows its window controls.
+fn header_above_page(state: &AppState) -> bool {
+    #[cfg(elaris_ui = "linux")]
+    let revealed = super::sidebar::header::header_revealed(state);
+    #[cfg(not(elaris_ui = "linux"))]
+    let revealed = false;
+    state.sidebar.collapsed || revealed
+}
+
 /// The webpage's top-left origin in the window, used to anchor its native find overlay.
 pub(crate) fn page_origin(state: &AppState) -> [f32; 2] {
     if state.browser.fullscreen_tab().is_some() {
@@ -468,10 +475,7 @@ pub(crate) fn page_origin(state: &AppState) -> [f32; 2] {
     } else {
         state.sidebar.width
     };
-    #[cfg(target_os = "linux")]
-    let top = theme::HEADER_HEIGHT + theme::VIEWPORT_INSET;
-    #[cfg(not(target_os = "linux"))]
-    let top = if state.sidebar.collapsed {
+    let top = if header_above_page(state) {
         theme::HEADER_HEIGHT
     } else {
         theme::VIEWPORT_INSET
@@ -878,7 +882,7 @@ pub(crate) fn ime(state: &mut AppState, event: &Ime, tx: &mut Tx) -> bool {
 /// Shows the page's frames in `pane`: Rune's GPU samples Ladybird's own surface where it can,
 /// and otherwise the engine copies each frame into pixels.
 pub(super) fn page_surface(pane: El, surface: &crate::engine::Surface) -> El {
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[cfg(any(elaris_ui = "macos", elaris_ui = "linux"))]
     if let Some(gpu) = &surface.gpu {
         // Frames are laid out at the pane's device size. One texel per device pixel, pinned to the
         // corner, keeps the last frame still, not stretched, while a resize waits for the next.

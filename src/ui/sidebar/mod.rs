@@ -74,7 +74,7 @@ pub(crate) fn toggle(state: &mut AppState, tx: &mut Tx) {
         return;
     }
     state.site_permissions_open = false;
-    #[cfg(target_os = "macos")]
+    #[cfg(elaris_ui = "macos")]
     if state.cancel_tab_drag() {
         tx.animated();
         tx.motion(theme::TAB_REORDER_MOTION);
@@ -93,16 +93,12 @@ pub(crate) fn view(
     reduced_motion: bool,
 ) -> El {
     let collapsed = state.sidebar.collapsed;
-    #[cfg(target_os = "linux")]
-    let header_clearance = 0.0;
-    #[cfg(not(target_os = "linux"))]
-    let header_clearance = theme::HEADER_HEIGHT;
     let sidebar = col()
         .key("sidebar")
         .w(if collapsed { 0.0 } else { state.sidebar.width })
         .h_full()
         .clip_soft(0.0)
-        .pt(header_clearance)
+        .pt(theme::HEADER_HEIGHT)
         .on_hover_change(|state: &mut AppState, inside, tx| {
             if state.sidebar.pointer_inside != inside {
                 state.sidebar.pointer_inside = inside;

@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! The toolbar above the sidebar and page: the sidebar toggle, navigation buttons, and platform
-//! window controls. On Linux it slides into the layout from a narrow top-edge hover target.
+//! window controls. On Linux the window controls appear when the pointer reaches the top edge.
 
 use crate::ui::menu::{MenuItem, context_menu};
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(elaris_ui = "linux"))]
 use rune::Chrome;
-#[cfg(target_os = "linux")]
-use rune::Spring;
-#[cfg(target_os = "linux")]
+#[cfg(elaris_ui = "linux")]
 use rune::Transition;
-#[cfg(target_os = "linux")]
+#[cfg(elaris_ui = "linux")]
 use rune::tok::motion;
 use rune::{Cx, El, Icon, el, row, spacer, text};
 
@@ -32,49 +30,36 @@ pub(in crate::ui) use zoom::zoom_indicator;
 type Navigate = fn(&mut Browser, TabId);
 
 pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El {
-    #[cfg(target_os = "linux")]
+    #[cfg(elaris_ui = "linux")]
     {
-        let visible = state.titlebar.is_visible() || state.zoom_menu.is_some();
-        let reduced_motion = cx.system_reduced_motion() || cx.is_reduced_motion();
-        let mut slot = el()
-            .key("linux-titlebar-slot")
-            .w_full()
-            .h(if visible { theme::HEADER_HEIGHT } else { 0.0 })
-            .clip_soft(0.0)
-            .motion(if reduced_motion {
-                Spring::NONE
-            } else {
-                theme::TITLEBAR_REVEAL
-            });
+        // The toggle and navigation always show; revealing the row only adds the window
+        // controls and pushes the page down beneath them.
+        let visible = header_revealed(state);
+        let header = header_content(state, theme, cx, visible);
         if visible {
-            let transition = if reduced_motion {
-                Transition::none()
-            } else {
-                Transition::offset(0.0, -6.0)
-                    .combined(Transition::opacity())
-                    .springs(motion::pair::SNAP)
-            };
-            slot = slot.child(
-                header_content(state, theme, cx, true)
-                    .fill(theme.window)
-                    .on_hover_change(|state: &mut AppState, inside, tx| {
-                        if state.titlebar.set_toolbar_hovered(inside) {
-                            titlebar_visibility_changed(tx);
-                        }
-                    })
-                    .transition(transition),
-            );
+            header.on_hover_change(|state: &mut AppState, inside, tx| {
+                if state.titlebar.set_toolbar_hovered(inside) {
+                    titlebar_visibility_changed(tx);
+                }
+            })
+        } else {
+            header
         }
-        slot
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(elaris_ui = "linux"))]
     {
         header_content(state, theme, cx, false)
     }
 }
 
+/// Whether the Linux row shows its window controls and holds the page below it.
+#[cfg(elaris_ui = "linux")]
+pub(crate) fn header_revealed(state: &AppState) -> bool {
+    state.titlebar.is_visible() || state.zoom_menu.is_some()
+}
+
 /// A passive hit target that sits at the window's top edge while the toolbar is closed.
-#[cfg(target_os = "linux")]
+#[cfg(elaris_ui = "linux")]
 pub(crate) fn hover_zone() -> El {
     el().key("linux-titlebar-hover-zone")
         .absolute(0.0, 0.0)
@@ -87,13 +72,14 @@ pub(crate) fn hover_zone() -> El {
         })
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(elaris_ui = "linux")]
 fn titlebar_visibility_changed(tx: &mut rune::Tx) {
     tx.animated();
     tx.motion(theme::TITLEBAR_REVEAL);
 }
 
-fn header_content(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>, in_flow: bool) -> El {
+/// `revealed` spans the row across the window and adds the Linux window controls.
+fn header_content(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>, revealed: bool) -> El {
     let collapsed = state.sidebar.collapsed;
     let toggle_label = if collapsed {
         "Show sidebar"
@@ -109,20 +95,15 @@ fn header_content(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>, in_fl
     )
     .shortcut_hint("cmd+s")
     .on_press_tx(super::toggle);
-    // Linux draws this row in normal layout and makes its blank area draggable. Other platforms
-    // keep the existing overlay aligned with their native titlebar behavior.
     let mut header = row()
         .key("header")
         .h(theme::HEADER_HEIGHT)
         .pr(theme::SIDEBAR_PADDING)
         .gap(theme::NAV_GAP)
-        .center_y();
-    if in_flow {
-        header = header.w_full().window_drag().raise();
-    } else {
-        header = header.absolute(0.0, 0.0).window_drag();
-    }
-    #[cfg(not(target_os = "linux"))]
+        .center_y()
+        .absolute(0.0, 0.0)
+        .window_drag();
+    #[cfg(not(elaris_ui = "linux"))]
     {
         header = header.child(window_controls(_cx.titlebar_inset(), theme));
     }
@@ -137,19 +118,28 @@ fn header_content(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>, in_fl
         );
     }
 
-    let (mut header, gap) = if collapsed || in_flow {
+    let (mut header, gap) = if collapsed || revealed {
         (header.w_full(), el().w(theme::HEADER_GROUP_GAP))
     } else {
         (header.w(state.sidebar.width), spacer())
     };
     header = header.child(gap);
     header = header.children(navigation(state, theme));
-    if collapsed || in_flow {
+    if collapsed || revealed {
         header = header.child(spacer());
     }
-    #[cfg(target_os = "linux")]
-    if in_flow {
-        header = header.children(linux_window_controls(state, theme));
+    #[cfg(elaris_ui = "linux")]
+    if revealed {
+        let fade = if _cx.system_reduced_motion() || _cx.is_reduced_motion() {
+            Transition::none()
+        } else {
+            Transition::opacity().springs(motion::pair::SNAP)
+        };
+        header = header.children(
+            linux_window_controls(state, theme)
+                .into_iter()
+                .map(|control| control.transition(fade)),
+        );
     }
     header
 }
@@ -232,7 +222,7 @@ pub(in crate::ui) fn history_menu(state: &AppState, theme: &Theme, layer: &mut V
     crate::ui::hover_highlight::build_context_menu(state, menu, theme, layer);
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(elaris_ui = "linux")]
 pub(in crate::ui) fn linux_window_controls(state: &AppState, theme: &Theme) -> Vec<El> {
     let mut controls = Vec::new();
     if state.titlebar.can_minimize() {
@@ -273,7 +263,7 @@ pub(in crate::ui) fn linux_window_controls(state: &AppState, theme: &Theme) -> V
 /// Plain circles under the native window controls, which stay transparent until the pointer
 /// reaches them (`titlebar_controls`). `inset` is where the zoom button ends; with no controls
 /// over the content, as in full screen, it is zero and nothing is drawn.
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(elaris_ui = "linux"))]
 pub(in crate::ui) fn window_controls(inset: f32, theme: &Theme) -> El {
     let size = Chrome::TRAFFIC_LIGHT;
     let gap = Chrome::TRAFFIC_PITCH - size;
