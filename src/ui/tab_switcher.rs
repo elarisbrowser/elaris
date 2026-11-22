@@ -44,7 +44,7 @@ pub(crate) fn cycle_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> 
         || !event.mods.ctrl
         || event.mods.alt
         || event.mods.logo
-        || (cfg!(target_os = "macos") && event.mods.cmd)
+        || (cfg!(elaris_ui = "macos") && event.mods.cmd)
     {
         return false;
     }

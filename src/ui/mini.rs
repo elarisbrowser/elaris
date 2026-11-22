@@ -30,10 +30,10 @@ pub(super) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
 
     let fullscreen = state.browser.fullscreen_tab().is_some();
     let page = viewport::view(state, &theme, &mut overlays, reduced_motion);
-    let mut window = super::window_surface(state, &theme, cfg!(target_os = "linux"));
+    let mut window = super::window_surface(state, &theme, cfg!(elaris_ui = "linux"));
     if fullscreen {
         window = window.child(page);
-    } else if cfg!(target_os = "linux") {
+    } else if cfg!(elaris_ui = "linux") {
         // The header takes its own row above the page.
         window = window.child(toolbar(state, &theme, cx)).child(
             row()
@@ -86,11 +86,11 @@ fn toolbar(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>) -> El {
         .center_y()
         .w_full()
         .window_drag();
-    #[cfg(target_os = "linux")]
+    #[cfg(elaris_ui = "linux")]
     {
         bar = bar.raise();
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(elaris_ui = "linux"))]
     {
         bar = bar
             .absolute(0.0, 0.0)
@@ -115,7 +115,7 @@ fn toolbar(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>) -> El {
     )
     .on_press_tx(open_in_browser);
     bar = bar.child(open);
-    #[cfg(target_os = "linux")]
+    #[cfg(elaris_ui = "linux")]
     {
         bar = bar.children(header::linux_window_controls(state, theme));
     }

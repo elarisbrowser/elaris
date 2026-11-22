@@ -30,7 +30,7 @@ pub(crate) struct Theme {
     /// The selected colour for emphasized controls and indicators.
     pub(crate) accent: Color,
     /// The window controls at rest, before the pointer fades the native ones in on macOS.
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(elaris_ui = "linux"))]
     pub(crate) window_control: Color,
     /// Background of the sidebar address field.
     pub(crate) address_field: Color,
@@ -111,7 +111,7 @@ pub(crate) fn palette(
             text_muted: oklch(0.81, 0.008, HUE),
             icon: oklch(0.82, 0.006, HUE),
             accent,
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(elaris_ui = "linux"))]
             window_control: oklcha(1.0, 0.0, 0.0, 0.16),
             address_field: oklch(0.24, 0.006, HUE).alpha(chrome_alpha),
             control_border: oklch(0.56, 0.015, HUE),
@@ -140,7 +140,7 @@ pub(crate) fn palette(
             text_muted: oklch(0.38, 0.016, HUE),
             icon: oklch(0.32, 0.01, HUE),
             accent,
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(elaris_ui = "linux"))]
             window_control: oklcha(0.2, 0.02, HUE, 0.16),
             address_field: oklch(0.985, 0.004, HUE).alpha(chrome_alpha),
             control_border: oklch(0.55, 0.015, HUE),
@@ -229,10 +229,10 @@ pub(crate) const HORIZONTAL_SPLIT_MARKER_HEIGHT: f32 = 2.0;
 pub(crate) const HORIZONTAL_EMPTY_SECTION: f32 = space::S2;
 pub(crate) const HEADER_HEIGHT: f32 = 38.0;
 /// The top-edge target that reveals the Linux toolbar while it is hidden.
-#[cfg(target_os = "linux")]
+#[cfg(elaris_ui = "linux")]
 pub(crate) const TITLEBAR_HOT_ZONE: f32 = 4.0;
 /// The Linux toolbar and the content beneath it settle with a short, quiet spring.
-#[cfg(target_os = "linux")]
+#[cfg(elaris_ui = "linux")]
 pub(crate) const TITLEBAR_REVEAL: Spring = Spring::new(0.28, 0.0);
 /// Where the window controls sit: centred in the header, as far in from the side as from the top.
 pub(crate) const TRAFFIC_LIGHTS: (f32, f32) = (
@@ -240,7 +240,7 @@ pub(crate) const TRAFFIC_LIGHTS: (f32, f32) = (
     (HEADER_HEIGHT - rune::Chrome::TRAFFIC_LIGHT) / 2.0,
 );
 
-#[cfg(target_os = "macos")]
+#[cfg(elaris_ui = "macos")]
 pub(crate) const fn native_titlebar(height: f32) -> rune::Titlebar {
     rune::Titlebar::new(height).traffic_lights(
         TRAFFIC_LIGHTS.0,

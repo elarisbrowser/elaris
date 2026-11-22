@@ -526,7 +526,7 @@ fn split_markers_follow_the_displayed_pair() {
     assert!(window.presented(&marker(second)).is_none());
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(elaris_ui = "macos")]
 #[test]
 fn traffic_light_placeholders_follow_the_native_titlebar_position() {
     let mut window = runtime(AppState::new(Some("one.example")), 960.0);

@@ -3,6 +3,8 @@
 //! Fade the native macOS traffic lights in only while the pointer is over them. At rest they are
 //! transparent, over the plain circles the sidebar draws in their place.
 
+#![cfg_attr(elaris_ui = "linux", allow(dead_code))]
+
 use objc2_05::runtime::{AnyClass, AnyObject, ClassBuilder, Sel};
 use objc2_05::{ClassType, msg_send, sel};
 use objc2_app_kit_02::{

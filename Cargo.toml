@@ -75,6 +75,8 @@ features = [
 
 [features]
 hot = ["rune/hot"]
+# Shows the Linux window layout on any platform, for previewing it on macOS.
+linux-ui = []
 ladybird-bridge = []
 
 [[example]]

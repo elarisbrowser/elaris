@@ -74,11 +74,11 @@ pub(super) fn view(
                 state.sidebar.revealed_tab = None;
             }
         });
-    #[cfg(target_os = "macos")]
+    #[cfg(elaris_ui = "macos")]
     let inset = cx.titlebar_inset();
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    #[cfg(not(any(elaris_ui = "macos", elaris_ui = "linux")))]
     let inset = 0.0;
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(elaris_ui = "linux"))]
     {
         strip = if inset > 0.0 {
             strip.child(header::window_controls(inset, theme))
@@ -86,23 +86,23 @@ pub(super) fn view(
             strip.pl(theme::SIDEBAR_PADDING)
         };
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(elaris_ui = "linux")]
     let window_controls = {
         strip = strip.pl(theme::SIDEBAR_PADDING);
         header::linux_window_controls(state, theme)
     };
-    #[cfg(target_os = "linux")]
+    #[cfg(elaris_ui = "linux")]
     let inset = (theme::ICON_BUTTON + theme::NAV_GAP) * window_controls.len() as f32;
 
     let strip_width = state.sidebar.horizontal_strip_width.unwrap_or_else(|| {
         cx.layout_size("window")
             .map_or(theme::WINDOW_MIN_SIZE.0, |size| size[0])
     });
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(elaris_ui = "linux"))]
     let leading = inset.max(theme::SIDEBAR_PADDING);
-    #[cfg(target_os = "linux")]
+    #[cfg(elaris_ui = "linux")]
     let leading = inset + theme::SIDEBAR_PADDING;
-    let gaps = if cfg!(target_os = "linux") || inset == 0.0 {
+    let gaps = if cfg!(elaris_ui = "linux") || inset == 0.0 {
         2.0
     } else {
         3.0
@@ -222,7 +222,7 @@ pub(super) fn view(
                 state.open_context_menu(None, press);
             }),
     );
-    #[cfg(target_os = "linux")]
+    #[cfg(elaris_ui = "linux")]
     {
         strip = strip.children(window_controls);
     }

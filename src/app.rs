@@ -32,7 +32,7 @@ use crate::ui::VIEWPORT;
 pub(crate) use mini::{MiniStart, is_mini_window, open_external_url, open_in_browser};
 
 /// How the Linux toolbar stays visible while browsing.
-#[cfg(target_os = "linux")]
+#[cfg(elaris_ui = "linux")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum LinuxTitlebarMode {
     /// Reveal the toolbar while the pointer is in the window's top band.
@@ -42,7 +42,7 @@ pub(crate) enum LinuxTitlebarMode {
     Always,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(elaris_ui = "linux")]
 impl LinuxTitlebarMode {
     fn from_environment() -> Self {
         match std::env::var("ELARIS_LINUX_TITLEBAR") {
@@ -53,7 +53,7 @@ impl LinuxTitlebarMode {
 }
 
 /// Linux titlebar visibility and its current pointer state.
-#[cfg(target_os = "linux")]
+#[cfg(elaris_ui = "linux")]
 pub(crate) struct LinuxTitlebar {
     mode: LinuxTitlebarMode,
     top_hovered: bool,
@@ -61,7 +61,7 @@ pub(crate) struct LinuxTitlebar {
     x11_window: Option<std::ffi::c_ulong>,
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(elaris_ui = "linux")]
 impl Default for LinuxTitlebar {
     fn default() -> Self {
         Self {
@@ -73,7 +73,7 @@ impl Default for LinuxTitlebar {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(elaris_ui = "linux")]
 impl LinuxTitlebar {
     /// Whether the toolbar should be drawn now.
     pub(crate) fn is_visible(&self) -> bool {
@@ -109,6 +109,7 @@ impl LinuxTitlebar {
     }
 
     /// Minimizes an X11 window using a separate, short-lived Xlib connection.
+    #[cfg(target_os = "linux")]
     pub(crate) fn minimize(&self) {
         let Some(window) = self.x11_window else {
             return;
@@ -128,6 +129,10 @@ impl LinuxTitlebar {
             (xlib.XCloseDisplay)(display);
         }
     }
+
+    /// Only X11 windows have a minimize request, so the preview on other platforms has none.
+    #[cfg(not(target_os = "linux"))]
+    pub(crate) fn minimize(&self) {}
 }
 
 /// The window's title when the page has none.
@@ -156,6 +161,7 @@ pub(crate) struct AppState {
     pub(crate) window_id: u64,
     /// Maximum page frame rate reported by the window's current display.
     #[cfg(any(target_os = "macos", feature = "ladybird-bridge"))]
+    #[cfg_attr(elaris_ui = "linux", allow(dead_code))]
     display: elaris::ladybird::DisplayMetadata,
     pub(crate) omnibox: omnibox::State,
     /// The open Clear Browsing Data dialog.
@@ -223,7 +229,7 @@ pub(crate) struct AppState {
     pub(crate) page_nav_hover: Option<usize>,
     pub(crate) settings_picker_open: bool,
     pub(crate) startup_picker_open: bool,
-    #[cfg(target_os = "linux")]
+    #[cfg(elaris_ui = "linux")]
     pub(crate) titlebar: LinuxTitlebar,
     storage: Option<std::sync::Arc<Storage>>,
     workers_started: bool,
@@ -269,6 +275,7 @@ impl Default for AppState {
 
 impl AppState {
     #[cfg(target_os = "macos")]
+    #[cfg_attr(elaris_ui = "linux", allow(dead_code))]
     pub(crate) fn set_display(&mut self, display: elaris::ladybird::DisplayMetadata) {
         self.display = display;
     }
@@ -411,7 +418,7 @@ impl AppState {
             page_nav_hover: None,
             settings_picker_open: false,
             startup_picker_open: false,
-            #[cfg(target_os = "linux")]
+            #[cfg(elaris_ui = "linux")]
             titlebar: LinuxTitlebar::default(),
             storage,
             workers_started: false,

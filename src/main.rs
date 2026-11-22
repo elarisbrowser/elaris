@@ -38,7 +38,7 @@ mod window_macos;
 
 use std::sync::Arc;
 
-#[cfg(target_os = "linux")]
+#[cfg(elaris_ui = "linux")]
 use rune::raw_window_handle::RawWindowHandle;
 use rune::{App, AppSpec, Chrome, WindowOptions, WindowSpec};
 
@@ -86,7 +86,7 @@ fn configure_app(app: App<app::AppState>) -> App<app::AppState> {
     let app = app
         .window_options(WindowOptions {
             transparent: true,
-            #[cfg(target_os = "linux")]
+            #[cfg(elaris_ui = "linux")]
             borderless: true,
             ..WindowOptions::default()
         })
@@ -97,9 +97,9 @@ fn configure_app(app: App<app::AppState>) -> App<app::AppState> {
             drag_regions: true,
             ..Chrome::DEFAULT
         });
-    #[cfg(target_os = "macos")]
+    #[cfg(elaris_ui = "macos")]
     let app = app.titlebar(ui::theme::native_titlebar(ui::theme::HEADER_HEIGHT));
-    #[cfg(target_os = "linux")]
+    #[cfg(elaris_ui = "linux")]
     let app = {
         let app_handle = app.handle();
         app.on_window(move |window| {
@@ -118,7 +118,7 @@ fn configure_app(app: App<app::AppState>) -> App<app::AppState> {
             });
         })
     };
-    #[cfg(target_os = "macos")]
+    #[cfg(elaris_ui = "macos")]
     let app = {
         let app_handle = app.handle();
         app.on_window(move |window| {

@@ -2,6 +2,8 @@
 
 //! Native macOS window restoration owned by AppKit.
 
+#![cfg_attr(elaris_ui = "linux", allow(dead_code))]
+
 use objc2_05::rc::Retained;
 use objc2_app_kit_02::{NSView, NSWindowFrameAutosaveName};
 use objc2_foundation_02::NSString;

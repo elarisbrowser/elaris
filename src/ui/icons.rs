@@ -44,12 +44,12 @@ pub(crate) static SPLIT_VIEW: Icon = icon(
     "split-view",
     r#"<rect x="2.5" y="3.5" width="11" height="9" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 3.75V12.25" stroke="currentColor" stroke-width="1.4"/>"#,
 );
-#[cfg(target_os = "linux")]
+#[cfg(elaris_ui = "linux")]
 pub(crate) static MINIMIZE: Icon = icon(
     "minimize",
     r#"<path d="M3 8H13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>"#,
 );
-#[cfg(target_os = "linux")]
+#[cfg(elaris_ui = "linux")]
 pub(crate) static MAXIMIZE: Icon = icon(
     "maximize",
     r#"<rect x="3.25" y="3.25" width="9.5" height="9.5" rx="1.25" fill="none" stroke="currentColor" stroke-width="1.25"/>"#,

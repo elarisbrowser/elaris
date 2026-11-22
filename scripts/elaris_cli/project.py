@@ -135,7 +135,8 @@ def bundle(_args: argparse.Namespace) -> None:
 def launch(args: argparse.Namespace) -> None:
     profile = _profile(args)
     release = ["--release"] if profile == "release" else []
-    if sys.platform == "darwin" and not args.ui:
+    ui_only = args.ui or args.linux_ui
+    if sys.platform == "darwin" and not ui_only:
         if not _run_artifacts_are_current(ui_only=False, profile=profile):
             build(args)
         _configure_bridge_environment(bridge_lib_dir())
@@ -150,7 +151,7 @@ def launch(args: argparse.Namespace) -> None:
         log = str(ROOT / "build" / "elaris-run.log")
         run("open", "-W", "-a", str(app), "--stdout", log, "--stderr", log, *(["--args", *extra] if extra else []))
         return
-    if _run_artifacts_are_current(args.ui, profile):
+    if not args.linux_ui and _run_artifacts_are_current(ui_only, profile):
         executable = _executable(profile)
         command = [str(executable)]
         if args.url:
@@ -159,7 +160,10 @@ def launch(args: argparse.Namespace) -> None:
         run(*command)
         return
     command = ["cargo", "+stable", "run", "--locked", *release]
-    if not args.ui:
+    if args.linux_ui:
+        # A separate target directory keeps this build's executable apart from the normal interface build.
+        command += ["--features", "linux-ui", "--target-dir", str(ROOT / "target" / "linux-ui")]
+    elif not ui_only:
         engine.build_for_elaris(args.jobs)
         _configure_bridge_environment(bridge_lib_dir())
         command += ["--features", "ladybird-bridge"]
@@ -353,6 +357,11 @@ def register_commands(commands) -> None:
         if handler is launch:
             subcommand.add_argument(
                 "--ui", action="store_true", help="Run the interface alone, without the Ladybird engine"
+            )
+            subcommand.add_argument(
+                "--linux-ui",
+                action="store_true",
+                help="Run the interface with the Linux layout on any host, to preview it on macOS (implies --ui)",
             )
             subcommand.add_argument("--release", action="store_true", help="Run Elaris optimised (cargo --release)")
             subcommand.add_argument("--jobs", help="Parallel build jobs (default: ELARIS_JOBS or 4)")

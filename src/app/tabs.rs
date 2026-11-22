@@ -29,6 +29,7 @@ pub(super) struct ClosingTabs {
 
 impl super::AppState {
     #[cfg(target_os = "macos")]
+    #[cfg_attr(elaris_ui = "linux", allow(dead_code))]
     pub(crate) fn can_reopen_closed_tab(&self) -> bool {
         !self.recently_closed.is_empty()
     }
@@ -85,7 +86,7 @@ impl super::AppState {
     }
 
     /// Elaris's own Linux close button: closes the window once every page has agreed to unload.
-    #[cfg(target_os = "linux")]
+    #[cfg(elaris_ui = "linux")]
     pub(crate) fn request_window_close(&mut self, tx: &mut Tx) {
         self.request_window_unload(false, tx);
     }

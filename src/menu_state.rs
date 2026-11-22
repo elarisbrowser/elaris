@@ -42,6 +42,7 @@ pub(crate) struct MenuState {
 }
 
 impl MenuState {
+    #[cfg_attr(elaris_ui = "linux", allow(dead_code))]
     pub(crate) fn from(state: &AppState) -> Self {
         let tab = state.browser.active_tab();
         let has_tab = tab.is_some();

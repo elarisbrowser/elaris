@@ -439,6 +439,7 @@ pub(crate) fn unregister_window(id: u64) {
 }
 
 /// Refreshes native item availability and labels after Rune builds the current browser state.
+#[cfg_attr(elaris_ui = "linux", allow(dead_code))]
 pub(crate) fn refresh(state: &AppState) {
     if ACTIVE_WINDOW.with(Cell::get) != Some(state.window_id) {
         return;
