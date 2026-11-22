@@ -634,7 +634,7 @@ fn context_menu_highlight_slides_between_items() {
     settle(&mut window);
     let first = rect(&window, "sidebar-context-menu-item0");
     let second = rect(&window, "sidebar-context-menu-item1");
-    let indicator = "context-menu-hover-highlight";
+    let indicator = "sidebar-context-menu-highlight";
 
     let [x, y] = center(first);
     window.pointer_move(x, y);

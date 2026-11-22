@@ -226,8 +226,8 @@ impl MenuItem {
         let reduced = state.settings.reduce_motion;
         let owner = format!("{key}-item{index}");
         let disabled = self.disabled;
-        // With a sliding highlight drawn by the menu, rows leave their own fill transparent.
-        let highlight = if state.context_menu_highlight.is_some() {
+        // While the panel draws its sliding highlight, rows leave their own fill transparent.
+        let highlight = if sliding_row(state, key).is_some() {
             Color::TRANSPARENT
         } else {
             theme.hover
@@ -346,9 +346,22 @@ fn panel(
         .iter()
         .any(|entry| matches!(entry, Entry::Item(item) if item.has_icon()));
     let stagger = Stagger::new(theme::MENU_ROW_STAGGER);
+    let highlighted = sliding_row(state, key);
     let mut rows = Vec::with_capacity(entries.len());
     let mut item_index = 0;
+    // Rows have fixed heights, so the highlight's place comes from the entries themselves rather
+    // than from last frame's layout.
+    let mut top = 0.0;
+    let mut highlight_top = None;
     for (index, entry) in entries.into_iter().enumerate() {
+        let height = match entry {
+            Entry::Separator => 1.0 + 2.0 * theme::MENU_SEPARATOR_GAP,
+            Entry::Item(_) | Entry::Label(_) => theme::MENU_ROW_HEIGHT,
+        };
+        if highlighted.as_deref() == Some(format!("{key}-item{index}").as_str()) {
+            highlight_top = Some(top);
+        }
+        top += height;
         rows.push(match entry {
             Entry::Item(item) => {
                 let delay = stagger.delay(item_index, items);
@@ -383,7 +396,28 @@ fn panel(
         min_width,
         reveal(reduced, origin),
         theme,
-        popover::fit_scroll(col().key("rows").items_stretch().children(rows)),
+        popover::fit_scroll(
+            col()
+                .key("rows")
+                .items_stretch()
+                .children(highlight_top.map(|top| {
+                    el().key(format!("{key}-highlight"))
+                        .pin(Some(0.0), Some(0.0), Some(0.0), None)
+                        .h(theme::MENU_ROW_HEIGHT)
+                        .offset(0.0, top)
+                        .offset_motion(if reduced {
+                            rune::Spring::NONE
+                        } else {
+                            theme::HIGHLIGHT_MOTION
+                        })
+                        .radius(theme::MENU_ITEM_RADIUS)
+                        .continuous_corners()
+                        .fill(theme.hover)
+                        .inert()
+                        .a11y_hidden()
+                }))
+                .children(rows),
+        ),
     )
 }
 
@@ -793,4 +827,13 @@ fn reveal(reduced: bool, origin: Vec2) -> Transition {
         Spring::new(0.2, 0.0),
         Spring::new(0.15, 0.0),
     ))
+}
+
+/// The row of the menu keyed `key` that its sliding highlight sits on, if the highlight is in
+/// this menu.
+fn sliding_row(state: &AppState, key: &str) -> Option<String> {
+    state
+        .context_menu_highlight
+        .clone()
+        .filter(|row| row.starts_with(&format!("{key}-item")))
 }
