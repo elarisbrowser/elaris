@@ -12,7 +12,7 @@ use crate::internal::{InternalPage, InternalRoute};
 use crate::tab::TabId;
 use crate::ui::theme::Theme;
 
-use crate::ui::viewport::menu::{KEY, header};
+use crate::ui::viewport::menu::{KEY, with_header};
 
 /// Internal pages the menu links to, except the one it is on.
 type Open = fn(&mut AppState, &mut Tx);
@@ -45,9 +45,13 @@ pub(crate) fn context_menu(
         InternalRoute::Page(page) => Some(*page),
         InternalRoute::NotFound(_) => None,
     };
-    let mut menu = menu(KEY, el(), Some(point))
-        .on_close(|state: &mut AppState| state.page_menu = Default::default())
-        .header(header(state, tab, theme));
+    let mut menu = with_header(
+        menu(KEY, el(), Some(point))
+            .on_close(|state: &mut AppState| state.page_menu = Default::default()),
+        state,
+        tab,
+        theme,
+    );
 
     let mut sections: Vec<Vec<MenuItem>> = Vec::new();
     if let Some(page) = current {

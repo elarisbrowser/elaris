@@ -50,8 +50,8 @@ pub(crate) struct Menu {
     min_width: f32,
     /// The scrim behind an open menu, and the Escape handler for its panel.
     dismiss: Option<(El, Apply)>,
-    /// Content above the rows, such as the page menu's title and navigation buttons.
-    header: Option<El>,
+    /// The band above the rows, and what leads the rows inside the body card below it.
+    header: Option<(El, El)>,
 }
 
 enum Entry {
@@ -110,9 +110,10 @@ impl Menu {
         self
     }
 
-    /// Content drawn above the rows, outside the sliding highlight.
-    pub(crate) fn header(mut self, header: El) -> Self {
-        self.header = Some(header);
+    /// Puts `band` above the rows on the panel itself, and the rows in a raised card led by
+    /// `lead`, as the page menu's title and navigation buttons are.
+    pub(crate) fn header(mut self, band: El, lead: El) -> Self {
+        self.header = Some((band, lead));
         self
     }
 
@@ -174,7 +175,7 @@ impl Menu {
 /// The rows' panel: a rounded container whose content sits inset inside it.
 fn panel(
     entries: Vec<Entry>,
-    header: Option<El>,
+    header: Option<(El, El)>,
     key: &str,
     min_width: f32,
     state: &AppState,
@@ -234,24 +235,40 @@ fn panel(
                 ),
         });
     }
+    let rows = kit_popover::fit_scroll(
+        col()
+            .key("rows")
+            .items_stretch()
+            .children(highlight_top.map(|top| highlight::view(key, top, reduced, theme)))
+            .children(rows),
+    );
+    let (fill, content) = match header {
+        None => (theme.overlay_panel, rows),
+        Some((band, lead)) => (
+            theme.overlay_header,
+            col().items_stretch().shrink().min_h(0.0).child(band).child(
+                col()
+                    .key("body")
+                    .items_stretch()
+                    .shrink()
+                    .min_h(0.0)
+                    .padding(theme::MENU_INSET)
+                    .radius(theme::MENU_ITEM_RADIUS)
+                    .continuous_corners()
+                    .fill(theme.overlay_panel)
+                    .child(lead)
+                    .child(rows),
+            ),
+        ),
+    };
     surface(
         key,
         "menu",
         min_width,
         reveal(reduced, origin),
+        fill,
         theme,
-        col()
-            .items_stretch()
-            .shrink()
-            .min_h(0.0)
-            .children(header)
-            .child(kit_popover::fit_scroll(
-                col()
-                    .key("rows")
-                    .items_stretch()
-                    .children(highlight_top.map(|top| highlight::view(key, top, reduced, theme)))
-                    .children(rows),
-            )),
+        content,
     )
 }
 

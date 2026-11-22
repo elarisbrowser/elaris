@@ -118,6 +118,7 @@ impl Popover {
                 "dialog",
                 theme::MENU_MIN_WIDTH,
                 reveal(reduced, origin),
+                theme.overlay_panel,
                 theme,
                 content,
             )

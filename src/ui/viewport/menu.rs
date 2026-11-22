@@ -2,7 +2,7 @@
 
 use crate::ui::animated_icon::{self, AnimatedIcon};
 use crate::ui::icons;
-use crate::ui::menu::{MenuItem, context_menu};
+use crate::ui::menu::{Menu, MenuItem, context_menu};
 use crate::ui::tab_switcher::{tab_labels, tab_symbol};
 use crate::ui::theme;
 use elaris::ladybird::{Edit, MediaAction, PageMenu};
@@ -65,9 +65,13 @@ fn item(id: TabId, label: &str, action: impl Fn(&mut AppState, &mut Tx) + 'stati
     MenuItem::new(label).on_select_tx(act(id, action))
 }
 
-/// The page's mark, title and host, above Back, Forward and Reload buttons.
-pub(crate) fn header(state: &AppState, tab: &Tab, theme: &Theme) -> El {
-    let id = tab.id();
+/// Adds the page's mark, title and host above `menu`'s rows, and Back, Forward and Reload
+/// buttons leading them.
+pub(crate) fn with_header(menu: Menu, state: &AppState, tab: &Tab, theme: &Theme) -> Menu {
+    menu.header(identity(tab, theme), navigation(state, tab, theme))
+}
+
+fn identity(tab: &Tab, theme: &Theme) -> El {
     let (title, address) = tab_labels(tab);
     let mut labels = col().min_w(0.0).grow(1.0).child(
         text(title)
@@ -85,10 +89,9 @@ pub(crate) fn header(state: &AppState, tab: &Tab, theme: &Theme) -> El {
                 .truncate(),
         );
     }
-    let identity = row()
+    row()
         .key(format!("{KEY}-identity"))
-        .px(theme::MENU_ROW_PADDING - theme::MENU_INSET)
-        .py(theme::MENU_ROW_PADDING)
+        .padding(theme::MENU_HEADER_PADDING)
         .gap(theme::MENU_ROW_PADDING)
         .center_y()
         .a11y_hidden()
@@ -97,11 +100,15 @@ pub(crate) fn header(state: &AppState, tab: &Tab, theme: &Theme) -> El {
                 .center()
                 .radius(theme::MENU_ITEM_RADIUS)
                 .continuous_corners()
-                .fill(theme.hover)
+                .fill(theme.overlay_control)
                 .child(tab_symbol(tab, theme::MENU_HEADER_ICON, theme)),
         )
-        .child(labels);
-    let buttons = row()
+        .child(labels)
+}
+
+fn navigation(state: &AppState, tab: &Tab, theme: &Theme) -> El {
+    let id = tab.id();
+    row()
         .key(format!("{KEY}-navigation"))
         .gap(theme::MENU_NAV_GAP)
         .pb(theme::MENU_NAV_GAP)
@@ -128,10 +135,10 @@ pub(crate) fn header(state: &AppState, tab: &Tab, theme: &Theme) -> El {
             true,
             theme,
             act(id, move |s, _| s.browser.reload(id)),
-        ));
-    col().items_stretch().child(identity).child(buttons)
+        ))
 }
 
+/// One of the header's equal-width buttons. A disabled one keeps its fill and dims its content.
 fn nav_button(
     state: &AppState,
     label: &'static str,
@@ -142,23 +149,19 @@ fn nav_button(
 ) -> El {
     let reduced = state.settings.reduce_motion;
     let owner = format!("{KEY}-nav-{label}");
-    let ink = if enabled {
-        theme.text
-    } else {
-        theme.text_muted
-    };
+    let content = if enabled { 1.0 } else { theme.disabled_opacity };
     let button = row()
         .key(owner.clone())
         .role("button")
         .label(label)
-        .grow(1.0)
+        .w(theme::MENU_NAV_WIDTH)
         .h(theme::MENU_NAV_HEIGHT)
-        .px(theme::MENU_ROW_PADDING)
         .gap(theme::MENU_ICON_GAP)
         .center()
-        .radius(theme::MENU_ITEM_RADIUS)
+        .radius(theme::MENU_NAV_RADIUS)
         .continuous_corners()
-        .fill(theme.hover)
+        .fill(theme.overlay_control)
+        .border(1.0, theme.separator)
         .disabled(!enabled)
         .focusable(enabled)
         .child(
@@ -168,24 +171,26 @@ fn nav_button(
                 &owner,
                 &format!("{owner}-glyph"),
                 theme::MENU_ICON,
-                ink,
+                theme.icon,
                 reduced,
             )
+            .opacity(content)
             .a11y_hidden(),
         )
         .child(
             text(label)
                 .font(type_::BODY)
-                .color(ink)
+                .color(theme.text)
+                .opacity(content)
                 .single_line()
                 .a11y_hidden(),
         );
     if !enabled {
-        return button.opacity(theme.disabled_opacity);
+        return button;
     }
     button
-        .hover(theme.press)
-        .focus_highlight(theme.press)
+        .hover(theme.overlay_control_hover)
+        .focus_highlight(theme.overlay_control_hover)
         .on_hover_change(animated_icon::hover_change(owner))
         .on_press_tx(press)
 }
@@ -292,12 +297,11 @@ pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
             .icon(&icons::LINK),
         );
     } else if info.media.is_none() {
-        menu = menu.header(header(state, tab, theme)).item(
-            item(id, "Reload Without Cache", move |s, _| {
-                s.browser.reload_bypassing_cache(id);
-            })
-            .icon(&icons::RELOAD),
-        );
+        menu = with_header(menu, state, tab, theme).item(item(
+            id,
+            "Reload Without Cache",
+            move |s, _| s.browser.reload_bypassing_cache(id),
+        ));
     }
     if !info.selection.is_empty() {
         let text = info.selection.clone();

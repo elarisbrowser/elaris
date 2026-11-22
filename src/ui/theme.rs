@@ -53,6 +53,10 @@ pub(crate) struct Theme {
     pub(crate) overlay_border: Color,
     pub(crate) overlay_shadow: Color,
     pub(crate) overlay_selected: Color,
+    /// The band behind a menu's header, and the buttons in the body below it.
+    pub(crate) overlay_header: Color,
+    pub(crate) overlay_control: Color,
+    pub(crate) overlay_control_hover: Color,
     /// How faint a control that can't be used now is.
     pub(crate) disabled_opacity: f32,
 }
@@ -128,6 +132,9 @@ pub(crate) fn palette(
             overlay_border: oklcha(1.0, 0.0, 0.0, 0.11),
             overlay_shadow: oklcha(0.0, 0.0, 0.0, 0.55),
             overlay_selected: oklch(0.33, 0.016, HUE),
+            overlay_header: oklch(0.215, 0.005, HUE),
+            overlay_control: oklcha(1.0, 0.0, 0.0, 0.055),
+            overlay_control_hover: oklcha(1.0, 0.0, 0.0, 0.1),
             disabled_opacity: 0.35,
         }
     } else {
@@ -157,6 +164,9 @@ pub(crate) fn palette(
             overlay_border: oklcha(0.2, 0.02, HUE, 0.12),
             overlay_shadow: oklcha(0.2, 0.02, HUE, 0.2),
             overlay_selected: oklcha(0.2, 0.02, HUE, 0.07),
+            overlay_header: oklch(0.955, 0.005, HUE),
+            overlay_control: oklcha(0.2, 0.02, HUE, 0.05),
+            overlay_control_hover: oklcha(0.2, 0.02, HUE, 0.09),
             disabled_opacity: 0.3,
         }
     }
@@ -410,8 +420,12 @@ pub(crate) const MENU_ROW_STAGGER: f32 = 0.03;
 pub(crate) const MENU_HEADER_TILE: f32 = 32.0;
 pub(crate) const MENU_HEADER_ICON: f32 = 18.0;
 pub(crate) const MENU_HEADER_TITLE: rune::TextStyle = rune::TextStyle::new(14.0, 600.0).lh(19.0);
+pub(crate) const MENU_HEADER_PADDING: f32 = space::S2;
+pub(crate) const MENU_NAV_WIDTH: f32 = 92.0;
 pub(crate) const MENU_NAV_HEIGHT: f32 = 30.0;
 pub(crate) const MENU_NAV_GAP: f32 = space::S1;
+/// Concentric with the body card, which is concentric with the panel.
+pub(crate) const MENU_NAV_RADIUS: f32 = MENU_ITEM_RADIUS - MENU_INSET;
 
 /// Rows in the tab list, and the new-tab and appearance buttons that share their shape.
 pub(crate) const ROW_HEIGHT: f32 = 34.0;

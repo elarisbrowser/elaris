@@ -3,7 +3,9 @@
 //! The panel every menu, popover and dropdown draws, its entrance, where it sits beside its
 //! trigger, and how it is dismissed.
 
-use rune::{Align, El, Key, KeyEvent, Side, Spring, SpringPair, Transition, Tx, Vec2, col, el};
+use rune::{
+    Align, Color, El, Key, KeyEvent, Side, Spring, SpringPair, Transition, Tx, Vec2, col, el,
+};
 
 use super::Apply;
 use crate::ui::theme::{self, MENU_SCALE_FROM, Theme};
@@ -101,6 +103,7 @@ pub(super) fn surface(
     role: &'static str,
     min_width: f32,
     reveal: Transition,
+    fill: Color,
     theme: &Theme,
     content: El,
 ) -> El {
@@ -113,7 +116,7 @@ pub(super) fn surface(
         .padding(theme::MENU_INSET)
         .radius(theme::MENU_RADIUS)
         .continuous_corners()
-        .fill(theme.overlay_panel)
+        .fill(fill)
         .border(1.0, theme.overlay_border)
         .shadow(
             theme::MENU_SHADOW_Y,
