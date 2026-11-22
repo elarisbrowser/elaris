@@ -7,6 +7,7 @@ use rune::{El, GrowthSpec, ScrollSpec, Spring, col, el, icon, row, text};
 
 use super::drag::{PreviewItem, favourite_columns, favourite_row_ranges, favourite_tile_width};
 use crate::app::{self, AppState};
+use crate::settings::NewTabPosition;
 use crate::tab::{Tab, TabId, TabSection};
 use crate::ui::TabDragMoveResult;
 use crate::ui::controls::{icon_button_style, row_button};
@@ -37,29 +38,26 @@ pub(super) fn view(
     } else {
         theme::TAB_REORDER_MOTION
     };
+    let new_tab_top = state.settings.new_tab_position == NewTabPosition::Top;
     let mut scroll_content = col()
         .key("tabs-scroll-content")
         .w_full()
+        .gap(theme::TAB_GAP)
         .growth(GrowthSpec {
             spring: reorder_motion,
             ..GrowthSpec::default()
-        });
+        })
+        .motion(reorder_motion);
     if !has_favourites && !state.browser.tabs().is_empty() {
-        scroll_content = scroll_content.child(
-            col()
-                .key("regular-tabs-divider")
-                .w_full()
-                .px(theme::SIDEBAR_PADDING)
-                .pt(2.0 * theme::SIDEBAR_GAP)
-                .child(el().w_full().h(1.0).fill(theme.overlay_border)),
-        );
+        scroll_content = scroll_content.child(divider("regular-tabs-divider", theme));
     }
-    scroll_content = scroll_content.gap(theme::TAB_GAP).child(regular_rows(
-        state,
-        active,
-        theme,
-        reduced_motion,
-    ));
+    if new_tab_top {
+        scroll_content = scroll_content.child(new_tab_button(theme));
+    }
+    scroll_content = scroll_content.child(regular_rows(state, active, theme, reduced_motion));
+    if !new_tab_top {
+        scroll_content = scroll_content.child(new_tab_button(theme));
+    }
 
     let scroll_live = state.tab_drag.scroll_live();
     let scroll = col()
@@ -95,14 +93,7 @@ pub(super) fn view(
                 theme,
                 reduced_motion,
             ))
-            .child(
-                col()
-                    .key("favourites-divider")
-                    .w_full()
-                    .px(theme::SIDEBAR_PADDING)
-                    .pt(2.0 * theme::SIDEBAR_GAP)
-                    .child(el().w_full().h(1.0).fill(theme.overlay_border)),
-            )
+            .child(divider("favourites-divider", theme))
             .gap(theme::SIDEBAR_GAP);
     }
     sidebar_tabs = sidebar_tabs.child(scroll);
@@ -271,6 +262,28 @@ fn favourites(
         .child(grid)
 }
 
+/// A hairline between sidebar sections. Its spacing comes from `SIDEBAR_DIVIDER_PADDING` alone.
+fn divider(key: &'static str, theme: &Theme) -> El {
+    col()
+        .key(key)
+        .w_full()
+        .px(theme::SIDEBAR_PADDING)
+        .py(theme::SIDEBAR_DIVIDER_PADDING)
+        .child(el().w_full().h(1.0).fill(theme.overlay_border))
+}
+
+/// The button that opens a new tab, at the top or bottom of the tab list.
+fn new_tab_button(theme: &Theme) -> El {
+    row_button(
+        "new-tab",
+        icon(&icons::PLUS, theme::ICON).color(theme.text_muted),
+        "New Tab",
+        theme.text_muted,
+        theme,
+    )
+    .on_press_tx(app::new_tab)
+}
+
 fn regular_rows(
     state: &AppState,
     active: Option<TabId>,
@@ -343,17 +356,6 @@ fn regular_rows(
         };
         rows = rows.child(element);
     }
-    rows = rows.child(
-        row_button(
-            "new-tab",
-            icon(&icons::PLUS, theme::ICON).color(theme.text_muted),
-            "New Tab",
-            theme.text_muted,
-            theme,
-        )
-        .on_press_tx(app::new_tab),
-    );
-
     col()
         .key("regular-section")
         .w_full()

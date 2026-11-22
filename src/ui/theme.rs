@@ -211,6 +211,8 @@ pub(crate) const RUBBER_BAND_REACH: f32 = 44.0;
 pub(crate) const SIDEBAR_SETTLE: Spring = Spring::new(0.32, 0.42);
 pub(crate) const SIDEBAR_PADDING: f32 = space::S2 + space::S1 / 2.0;
 pub(crate) const SIDEBAR_GAP: f32 = space::S2;
+/// Space above and below a sidebar divider, so the divider sits close to the sections it separates.
+pub(crate) const SIDEBAR_DIVIDER_PADDING: f32 = space::S1;
 /// The row level with the window controls, holding the navigation buttons: the height of the
 /// titlebar band macOS drags, since the controls sit centred in it.
 pub(crate) const HORIZONTAL_STRIP_HEIGHT: f32 = HEADER_HEIGHT - 4.0;

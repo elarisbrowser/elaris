@@ -10,7 +10,7 @@ use crate::permissions::{
     AutoplayPolicy, PermissionDecision, PermissionKind, PermissionState, PermissionStore,
 };
 use crate::settings::{
-    ContentBlockList, DownloadDirectory, SettingsChange, StartupMode, TabLayout,
+    ContentBlockList, DownloadDirectory, NewTabPosition, SettingsChange, StartupMode, TabLayout,
 };
 use crate::tab::TabId;
 
@@ -24,6 +24,13 @@ impl super::AppState {
             self.prepare_tab_layout(layout);
             self.settings.tab_layout = layout;
             self.save_setting(SettingsChange::TabLayout(layout));
+        }
+    }
+
+    pub(crate) fn set_new_tab_position(&mut self, position: NewTabPosition) {
+        if self.settings.new_tab_position != position {
+            self.settings.new_tab_position = position;
+            self.save_setting(SettingsChange::NewTabPosition(position));
         }
     }
 

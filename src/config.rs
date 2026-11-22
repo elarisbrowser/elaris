@@ -13,10 +13,11 @@ use crate::address::SearchEngine;
 use crate::appearance::{AccentColor, Appearance};
 use crate::permissions::{AutoplayPolicy, PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{
-    ContentBlockList, DownloadDirectory, Settings, SettingsChange, StartupMode, TabLayout,
+    ContentBlockList, DownloadDirectory, NewTabPosition, Settings, SettingsChange, StartupMode,
+    TabLayout,
 };
 
-const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\naccent = \"blue\"\nglass = true\ntint_opacity = 100\ntab_layout = \"vertical\"\n\n[split_view]\nmax_panes = 2\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n\n[pages]\nzoom = 100\n\n[performance]\nreduce_motion = false\n";
+const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\naccent = \"blue\"\nglass = true\ntint_opacity = 100\ntab_layout = \"vertical\"\nnew_tab_position = \"top\"\n\n[split_view]\nmax_panes = 2\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n\n[pages]\nzoom = 100\n\n[performance]\nreduce_motion = false\n";
 static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -60,6 +61,18 @@ pub(crate) fn parse(contents: &str) -> Result<ConfigLoad, String> {
             settings.tab_layout = layout;
         } else {
             issues.push(format!("Invalid value for [appearance].tab_layout: {value:?}; expected vertical or horizontal"));
+        }
+    }
+    if let Some(value) = string_value(&document, "appearance", "new_tab_position", &mut issues) {
+        if let Some(position) = NewTabPosition::ALL
+            .into_iter()
+            .find(|position| position.config_key() == value)
+        {
+            settings.new_tab_position = position;
+        } else {
+            issues.push(format!(
+                "Invalid value for [appearance].new_tab_position: {value:?}; expected top or bottom"
+            ));
         }
     }
     if let Some(value) = integer_value(&document, "split_view", "max_panes", &mut issues) {
@@ -397,6 +410,11 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
         SettingsChange::TabLayout(value) => {
             ("appearance", "tab_layout", value.config_key().to_owned())
         }
+        SettingsChange::NewTabPosition(value) => (
+            "appearance",
+            "new_tab_position",
+            value.config_key().to_owned(),
+        ),
         SettingsChange::SplitViewLimit(value) => {
             ("split_view", "max_panes", (*value).clamp(2, 64).to_string())
         }
@@ -533,6 +551,34 @@ mod tests {
         }
         let invalid = parse("[appearance]\ntab_layout = 'diagonal'").unwrap();
         assert_eq!(invalid.settings.tab_layout, TabLayout::Vertical);
+        assert_eq!(invalid.issues.len(), 1);
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn new_tab_position_defaults_to_top_and_round_trips() {
+        let directory = std::env::temp_dir().join(format!(
+            "elaris-config-new-tab-{}-{}",
+            std::process::id(),
+            NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed)
+        ));
+        let path = directory.join("config.toml");
+        assert_eq!(
+            parse("").unwrap().settings.new_tab_position,
+            NewTabPosition::Top
+        );
+        for position in [NewTabPosition::Bottom, NewTabPosition::Top] {
+            write_change(&path, &SettingsChange::NewTabPosition(position)).unwrap();
+            assert_eq!(
+                parse(&fs::read_to_string(&path).unwrap())
+                    .unwrap()
+                    .settings
+                    .new_tab_position,
+                position
+            );
+        }
+        let invalid = parse("[appearance]\nnew_tab_position = 'middle'").unwrap();
+        assert_eq!(invalid.settings.new_tab_position, NewTabPosition::Top);
         assert_eq!(invalid.issues.len(), 1);
         fs::remove_dir_all(directory).unwrap();
     }

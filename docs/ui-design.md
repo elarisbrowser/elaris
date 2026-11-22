@@ -23,6 +23,11 @@ as `[appearance].tab_layout` in `config.toml` and defaults to `"vertical"`. Both
 same open tabs and Split View state. The horizontal strip scrolls sideways with a trackpad or
 Shift-wheel and reveals the newly selected tab when switching with the keyboard.
 
+In the vertical sidebar, Settings → Appearance → New Tab button places New Tab above the tabs (the
+default) or below them. The preference is stored as `[appearance].new_tab_position` in `config.toml`
+as `"top"` or `"bottom"`. It sits at the start or end of the scrollable tab list, below any
+favourites.
+
 ## Alignment lines
 
 Gridline review, 21 November 2026:

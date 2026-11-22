@@ -8,7 +8,7 @@ use rune_kit::SegmentedControl;
 
 use crate::app::AppState;
 use crate::appearance::{AccentColor, Appearance};
-use crate::settings::TabLayout;
+use crate::settings::{NewTabPosition, TabLayout};
 use crate::ui::internal::PageContext;
 use crate::ui::internal::widgets::{setting, switch_kit};
 use crate::ui::theme::{self, Theme};
@@ -61,6 +61,20 @@ fn appearance(cx: &mut PageContext) -> El {
         tx.motion(theme::SIDEBAR_TOGGLE);
     })
     .build(&cx.kit);
+    let new_tab_position = SegmentedControl::new(
+        &NewTabPosition::ALL.map(NewTabPosition::label),
+        NewTabPosition::ALL
+            .iter()
+            .position(|position| *position == state.settings.new_tab_position),
+    )
+    .width(Some(theme::PAGE_CONTROL_WIDTH))
+    .label("New Tab Button")
+    .on_pick(|state: &mut AppState, index, tx| {
+        state.set_new_tab_position(NewTabPosition::ALL[index]);
+        tx.animated();
+        tx.motion(theme::TAB_REORDER_MOTION);
+    })
+    .build(&cx.kit);
     let glass = rune_kit::Switch::new(state.settings.glass_enabled)
         .standard()
         .label("Liquid glass background")
@@ -82,6 +96,12 @@ fn appearance(cx: &mut PageContext) -> El {
                 "Tab Layout",
                 "Choose where open tabs appear.",
                 tab_layout,
+            ),
+            setting(
+                cx,
+                "New Tab button",
+                "Choose whether New Tab sits above or below the tabs in the vertical sidebar.",
+                new_tab_position,
             ),
             setting(
                 cx,

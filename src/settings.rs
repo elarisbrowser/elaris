@@ -49,6 +49,32 @@ impl TabLayout {
     }
 }
 
+/// Where the New Tab button sits in the vertical sidebar's tab list.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum NewTabPosition {
+    #[default]
+    Top,
+    Bottom,
+}
+
+impl NewTabPosition {
+    pub(crate) const ALL: [Self; 2] = [Self::Top, Self::Bottom];
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Top => "Top",
+            Self::Bottom => "Bottom",
+        }
+    }
+
+    pub(crate) fn config_key(self) -> &'static str {
+        match self {
+            Self::Top => "top",
+            Self::Bottom => "bottom",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) enum DownloadDirectory {
     #[default]
@@ -145,6 +171,7 @@ pub(crate) struct Settings {
     pub(crate) page_zoom: u16,
     pub(crate) autoplay: crate::permissions::AutoplayPolicy,
     pub(crate) tab_layout: TabLayout,
+    pub(crate) new_tab_position: NewTabPosition,
     pub(crate) split_view_limit: usize,
     pub(crate) appearance: Appearance,
     pub(crate) accent_color: AccentColor,
@@ -163,6 +190,7 @@ impl Default for Settings {
             page_zoom: 100,
             autoplay: crate::permissions::AutoplayPolicy::default(),
             tab_layout: TabLayout::default(),
+            new_tab_position: NewTabPosition::default(),
             split_view_limit: 2,
             appearance: Appearance::System,
             accent_color: AccentColor::Blue,
@@ -223,6 +251,7 @@ pub(crate) enum SettingsChange {
     PageZoom(u16),
     Autoplay(crate::permissions::AutoplayPolicy),
     TabLayout(TabLayout),
+    NewTabPosition(NewTabPosition),
     Appearance(Appearance),
     AccentColor(AccentColor),
     SearchEngine(SearchEngine),
