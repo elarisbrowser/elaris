@@ -8,23 +8,31 @@ use rune::{Cursor, El, Tx, el};
 use crate::app::AppState;
 use crate::ui::theme;
 
-/// The handle over the sidebar's trailing edge, `width` points from the window's leading one.
-/// The window draws it last, so it sits over both the sidebar and the page.
-pub(crate) fn handle(width: f32) -> El {
+/// The handle over the sidebar's inner edge, the one facing the page. The window draws it last,
+/// so it sits over both the sidebar and the page.
+pub(crate) fn handle(state: &AppState, window_width: f32) -> El {
+    let right = state.sidebar_on_right();
+    let edge = if right {
+        window_width - state.sidebar.width
+    } else {
+        state.sidebar.width
+    };
+    // Dragging towards the page widens the sidebar on either side.
+    let grow = if right { -1.0 } else { 1.0 };
     el().key("sidebar-resize")
-        .absolute(width - theme::RESIZE_HANDLE / 2.0, 0.0)
+        .absolute(edge - theme::RESIZE_HANDLE / 2.0, 0.0)
         .w(theme::RESIZE_HANDLE)
         .h_full()
         .cursor(Cursor::ResizeColumn)
         .label("Resize sidebar")
-        .on_drag(|state: &mut AppState, drag, tx| match drag.phase {
+        .on_drag(move |state: &mut AppState, drag, tx| match drag.phase {
             // The width at the press, kept for the gesture.
             rune::Phase::Down => drag.data = state.sidebar.width,
-            rune::Phase::Move => state.sidebar.width = stretched(drag.data + drag.dx),
+            rune::Phase::Move => state.sidebar.width = stretched(drag.data + grow * drag.dx),
             // The spring back waits for the next frame: a drag's commits land at once, and a
             // move in the same frame as the release would land the settle too.
             rune::Phase::Up => {
-                state.sidebar.width = stretched(drag.data + drag.dx);
+                state.sidebar.width = stretched(drag.data + grow * drag.dx);
                 state.sidebar.settling = settled(state.sidebar.width) != state.sidebar.width;
                 if state.sidebar.settling {
                     tx.wake_after(std::time::Duration::ZERO);

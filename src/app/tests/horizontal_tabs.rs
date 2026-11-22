@@ -742,3 +742,26 @@ fn escape_cancels_only_the_extra_split_picker() {
     );
     assert_eq!(window.state.browser.active_tab().unwrap().id(), second);
 }
+
+#[test]
+fn sidebar_moves_to_the_right_edge_and_back() {
+    use crate::settings::SidebarSide;
+
+    let mut window = runtime(AppState::new(Some("one.example")), 960.0);
+    window.update(|state, _| state.set_sidebar_side(SidebarSide::Right));
+    settle(&mut window);
+    let sidebar = rect(&window, "sidebar");
+    let page = rect(&window, "viewport-container");
+    let near = |a: f32, b: f32| (a - b).abs() < 0.5;
+    assert!(near(sidebar[0] + sidebar[2], 960.0));
+    assert!(near(page[0], 0.0));
+    assert!(page[0] + page[2] <= sidebar[0] + 0.5);
+    assert!(near(
+        rect(&window, "sidebar-resize")[0] + theme::RESIZE_HANDLE / 2.0,
+        sidebar[0]
+    ));
+
+    window.update(|state, _| state.set_sidebar_side(SidebarSide::Left));
+    settle(&mut window);
+    assert!(near(rect(&window, "sidebar")[0], 0.0));
+}

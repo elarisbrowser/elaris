@@ -19,8 +19,8 @@ use super::theme::{self, Theme};
 use crate::app::AppState;
 use rune::PointerButton;
 
-/// The container's padding holds the page in from the window's edges, the sidebar being its
-/// left; the page's own element clips to rounded corners and takes input in the page's
+/// The container's padding holds the page in from the window's edges, the sidebar being the
+/// edge it sits against; the page's own element clips to rounded corners and takes input in the page's
 /// coordinates.
 pub(crate) fn view(
     state: &AppState,
@@ -36,6 +36,7 @@ pub(crate) fn view(
     let fullscreen = state.browser.fullscreen_tab().is_some();
     let top_padding = if fullscreen { 0.0 } else { top_padding };
     let horizontal = state.horizontal_tabs();
+    let right = state.sidebar_on_right();
     let inset = if fullscreen {
         0.0
     } else {
@@ -57,12 +58,16 @@ pub(crate) fn view(
         .min_h(0.0)
         // With the sidebar hidden, the page sits below the header and in from the left edge too.
         .pt(if horizontal { inset } else { top_padding })
-        .pl(if horizontal || state.sidebar.collapsed {
+        .pl(if horizontal || state.sidebar.collapsed || right {
             inset
         } else {
             0.0
         })
-        .pr(inset)
+        .pr(if right && !state.sidebar.collapsed {
+            0.0
+        } else {
+            inset
+        })
         .pb(inset);
     let viewport = if horizontal {
         viewport.w_full().h(0.0)
@@ -456,13 +461,13 @@ fn indicator(theme: &Theme, radius: f32) -> El {
 }
 
 /// Whether the header row sits over the page's column, so the page starts below it: with the
-/// sidebar hidden, or on Linux while the row shows its window controls.
+/// sidebar hidden or on the right, or on Linux while the row shows its window controls.
 fn header_above_page(state: &AppState) -> bool {
     #[cfg(elaris_ui = "linux")]
     let revealed = super::sidebar::header::header_revealed(state);
     #[cfg(not(elaris_ui = "linux"))]
     let revealed = false;
-    state.sidebar.collapsed || revealed
+    state.sidebar.collapsed || state.sidebar_on_right() || revealed
 }
 
 /// The webpage's top-left origin in the window, used to anchor its native find overlay.
@@ -470,7 +475,7 @@ pub(crate) fn page_origin(state: &AppState) -> [f32; 2] {
     if state.browser.fullscreen_tab().is_some() {
         return [0.0, 0.0];
     }
-    let left = if state.sidebar.collapsed {
+    let left = if state.sidebar.collapsed || state.sidebar_on_right() {
         theme::VIEWPORT_INSET
     } else {
         state.sidebar.width

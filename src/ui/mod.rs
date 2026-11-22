@@ -98,12 +98,17 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
             ))
             .child(viewport::view(state, &theme, &mut overlays, reduced_motion));
     } else {
-        window = window
-            .child(sidebar::view(state, &theme, &mut overlays, reduced_motion))
-            .child(viewport::view(state, &theme, &mut overlays, reduced_motion))
-            .child(sidebar::header::view(state, &theme, cx));
+        let sidebar = sidebar::view(state, &theme, &mut overlays, reduced_motion);
+        let page = viewport::view(state, &theme, &mut overlays, reduced_motion);
+        window = if state.sidebar_on_right() {
+            window.child(page).child(sidebar)
+        } else {
+            window.child(sidebar).child(page)
+        }
+        .child(sidebar::header::view(state, &theme, cx));
         if !state.sidebar.collapsed {
-            window = window.child(sidebar::resize::handle(state.sidebar.width));
+            let window_width = cx.layout_size("window").map_or(0.0, |size| size[0]);
+            window = window.child(sidebar::resize::handle(state, window_width));
         }
     }
     if state.browser.peek.is_some() {

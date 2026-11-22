@@ -53,10 +53,13 @@ pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
 }
 
 /// Whether the Linux row shows its window controls and holds the page below it: always with
-/// the sidebar closed, since the row then has the page's room anyway.
+/// the sidebar closed or on the right, since the row then has the page's room anyway.
 #[cfg(elaris_ui = "linux")]
 pub(crate) fn header_revealed(state: &AppState) -> bool {
-    state.sidebar.collapsed || state.titlebar.is_visible() || state.zoom_menu.is_some()
+    state.sidebar.collapsed
+        || state.sidebar_on_right()
+        || state.titlebar.is_visible()
+        || state.zoom_menu.is_some()
 }
 
 /// A passive hit target that sits at the window's top edge while the toolbar is closed.
@@ -121,7 +124,10 @@ fn header_content(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>, revea
                 .label("Private window"),
         );
     }
-    lead = if collapsed {
+    // A right-hand sidebar leaves the window controls over the page, so the row spans the window
+    // as it does with the sidebar hidden.
+    let spans_window = collapsed || state.sidebar_on_right();
+    lead = if spans_window {
         lead.child(el().w(theme::HEADER_GROUP_GAP))
     } else {
         lead.w(state.sidebar.width)
@@ -138,7 +144,7 @@ fn header_content(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>, revea
         .absolute(0.0, 0.0)
         .window_drag()
         .child(lead);
-    if collapsed || revealed {
+    if spans_window || revealed {
         header = header.w_full().pr(theme::SIDEBAR_PADDING).child(spacer());
     }
     #[cfg(elaris_ui = "linux")]
