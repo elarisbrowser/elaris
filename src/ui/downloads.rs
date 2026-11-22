@@ -3,15 +3,13 @@
 //! The compact, sidebar-anchored downloads popover.
 
 use rune::tok::type_;
-use rune::{El, LoopSpec, ScrollSpec, col, el, row, text};
-use rune_kit::{Placement, Popover};
+use rune::{Align, El, LoopSpec, ScrollSpec, Side, col, el, row, text};
 
 use crate::app::AppState;
 use crate::ui::controls::icon_button;
+use crate::ui::menu::Popover;
 use crate::ui::theme::{self, Theme};
 use elaris::downloads::{Download, DownloadId, Status};
-
-const PANEL_CONTENT_INSET: f32 = 4.0;
 
 /// Adds the Downloads trigger and its anchored panel to the sidebar.
 pub(crate) fn trigger(state: &AppState, theme: &Theme, layer: &mut Vec<El>) -> El {
@@ -48,42 +46,40 @@ pub(crate) fn trigger(state: &AppState, theme: &Theme, layer: &mut Vec<El>) -> E
                 .child(text(count).font(type_::LABEL).color(theme.page)),
         );
     }
-    let kit = theme.kit(theme.overlay_panel);
     Popover::new("downloads-popover")
         .trigger(button)
         .title("Downloads")
-        .placement(if state.horizontal_tabs() {
-            Placement::BottomEnd
-        } else {
-            Placement::TopStart
-        })
-        .gutter(6.0)
-        .padding(8.0)
+        .placement(
+            if state.horizontal_tabs() {
+                Side::Bottom
+            } else {
+                Side::Top
+            },
+            if state.horizontal_tabs() {
+                Align::End
+            } else {
+                Align::Start
+            },
+        )
         .open(open)
         .on_close(|state: &mut AppState| state.downloads_open = false)
         .child(panel(state, theme))
-        .build(&kit, layer)
+        .build(state, theme, layer)
 }
 
 fn panel(state: &AppState, theme: &Theme) -> El {
     let downloads = state.browser.downloads();
     if downloads.is_empty() {
-        return col()
-            .key("downloads-empty")
-            .w(280.0)
-            .px(PANEL_CONTENT_INSET)
-            .py(12.0)
-            .child(
-                text("Files you download appear here.")
-                    .font(type_::LABEL)
-                    .color(theme.text_muted),
-            );
+        return col().key("downloads-empty").w(280.0).py(12.0).child(
+            text("Files you download appear here.")
+                .font(type_::LABEL)
+                .color(theme.text_muted),
+        );
     }
 
     let mut list = col()
         .key("downloads-list")
         .w(280.0)
-        .px(PANEL_CONTENT_INSET)
         .max_h(360.0)
         .gap(2.0)
         .scroll(ScrollSpec {

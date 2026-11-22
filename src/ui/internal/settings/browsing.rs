@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use rune::tok::type_;
 use rune::{El, text};
-use rune_kit::{Button, ButtonVariant, SegmentedControl, Select, SelectAppearance};
+use rune_kit::{Button, ButtonVariant, SegmentedControl};
 
 use crate::address::SearchEngine;
 use crate::app::AppState;
@@ -14,7 +14,7 @@ use crate::permissions::AutoplayPolicy;
 use crate::settings::DownloadDirectory;
 use crate::ui::internal::PageContext;
 use crate::ui::internal::widgets::{actions, setting, setting_with};
-use crate::ui::theme;
+use crate::ui::menu::Dropdown;
 
 use super::section;
 
@@ -70,24 +70,17 @@ fn search(cx: &mut PageContext) -> El {
         SearchEngine::Bing,
         SearchEngine::Brave,
     ];
-    let select = Select::new("settings-search-engine", &OPTIONS.map(SearchEngine::label))
-        .current(Some(cx.state.settings.search_engine.label()))
-        .label("Search engine")
-        .appearance(SelectAppearance::Field)
-        .width(theme::PAGE_CONTROL_WIDTH)
+    let select = Dropdown::new("settings-search-engine", "Search engine")
+        .options(OPTIONS.map(|option| (option, option.label())))
+        .current(cx.state.settings.search_engine)
         .open(cx.state.settings_picker_open)
-        .on_toggle(|state: &mut AppState| {
-            state.settings_picker_open = !state.settings_picker_open;
-        })
-        .on_close(|state: &mut AppState| state.settings_picker_open = false)
-        .on_choose(|state: &mut AppState, value, _| {
-            if let Some(engine) = OPTIONS.into_iter().find(|option| option.label() == value) {
-                state.set_search_engine(engine);
-            }
+        .on_toggle(|state| state.settings_picker_open = !state.settings_picker_open)
+        .on_close(|state| state.settings_picker_open = false)
+        .on_choose(|state, engine| {
+            state.set_search_engine(engine);
             state.settings_picker_open = false;
         })
-        .build(&cx.kit, cx.overlays)
-        .border(1.0, cx.theme.control_border);
+        .build(cx.state, cx.theme, cx.overlays);
     section(
         "Search",
         cx.theme,

@@ -4,12 +4,13 @@
 
 use rune::tok::type_;
 use rune::{El, col, text};
-use rune_kit::{Button, ButtonVariant, Select, SelectAppearance};
+use rune_kit::{Button, ButtonVariant};
 
 use crate::app::AppState;
 use crate::settings::StartupMode;
 use crate::ui::internal::PageContext;
 use crate::ui::internal::widgets::{actions, row_title, setting};
+use crate::ui::menu::Dropdown;
 use crate::ui::theme;
 
 use super::section;
@@ -20,24 +21,17 @@ pub(super) fn sections(cx: &mut PageContext) -> Vec<El> {
 
 fn startup(cx: &mut PageContext) -> El {
     const OPTIONS: [StartupMode; 2] = [StartupMode::RestoreSession, StartupMode::BlankWindow];
-    let select = Select::new("settings-startup", &OPTIONS.map(StartupMode::label))
-        .current(Some(cx.state.settings.startup.label()))
-        .label("Startup behavior")
-        .appearance(SelectAppearance::Field)
-        .width(theme::PAGE_CONTROL_WIDTH)
+    let select = Dropdown::new("settings-startup", "Startup behavior")
+        .options(OPTIONS.map(|option| (option, option.label())))
+        .current(cx.state.settings.startup)
         .open(cx.state.startup_picker_open)
-        .on_toggle(|state: &mut AppState| {
-            state.startup_picker_open = !state.startup_picker_open;
-        })
-        .on_close(|state: &mut AppState| state.startup_picker_open = false)
-        .on_choose(|state: &mut AppState, value, _| {
-            if let Some(startup) = OPTIONS.into_iter().find(|option| option.label() == value) {
-                state.set_startup(startup);
-            }
+        .on_toggle(|state| state.startup_picker_open = !state.startup_picker_open)
+        .on_close(|state| state.startup_picker_open = false)
+        .on_choose(|state, startup| {
+            state.set_startup(startup);
             state.startup_picker_open = false;
         })
-        .build(&cx.kit, cx.overlays)
-        .border(1.0, cx.theme.control_border);
+        .build(cx.state, cx.theme, cx.overlays);
     section(
         "Startup",
         cx.theme,
