@@ -178,9 +178,9 @@ to SMIL by hand and check each source's licence before copying artwork.
 
 ## Menus
 
-`src/ui/menu.rs` builds every menu, context menu and dropdown: sidebar and page context menus,
-the tab overflow and history menus, zoom, the omnibox search engine, site permission choices and
-`<select>` lists. Its panel is a rounded container with rows inset inside it, as the Settings
+`src/ui/menu.rs` builds every menu, context menu, popover and dropdown: sidebar and page context
+menus, the tab overflow and history menus, zoom, the omnibox search engine, site permission
+choices, `<select>` lists, the Downloads popover and the Settings dropdowns (`Dropdown`). Its panel is a rounded container with rows inset inside it, as the Settings
 category list is. Each highlight is concentric with the panel, so `MENU_ITEM_RADIUS` is
 `MENU_RADIUS - MENU_INSET`. Opening fades the panel in, and rows rise and fade in one after
 another at `MENU_ROW_STAGGER`. Reduced motion keeps the fade and drops the stagger.
@@ -188,6 +188,6 @@ another at `MENU_ROW_STAGGER`. Reduced motion keeps the fade and drops the stagg
 Rows take a `.animated(..)` icon that plays its motion while hovered, such as copy, plus,
 history, back and forward from `animated_icon.rs`. An item with an icon reserves the same icon
 slot as its siblings, so labels stay aligned. Use `.icon(..)` for a static glyph and `.lead(..)`
-for anything else. Rune Kit's Select and Popover are not yet replaced, so Settings dropdowns and
-the Downloads popover keep Rune Kit's look.
+for anything else. Popovers title their content and rise the body in after the title. Dropdowns
+use a field trigger and a menu with the current choice ticked.
 
