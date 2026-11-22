@@ -26,7 +26,8 @@ Shift-wheel and reveals the newly selected tab when switching with the keyboard.
 In the vertical sidebar, Settings → Appearance → New Tab button places New Tab above the tabs (the
 default) or below them. The preference is stored as `[appearance].new_tab_position` in `config.toml`
 as `"top"` or `"bottom"`. It sits at the start or end of the scrollable tab list, below any
-favourites.
+favourites. With New Tab at the top, a tab opened from the omnibox lands directly below the button and
+the tabs under it move down.
 
 ## Alignment lines
 

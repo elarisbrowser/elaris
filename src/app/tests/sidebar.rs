@@ -432,3 +432,76 @@ fn escape_cancels_a_live_tab_preview_without_persisting_an_order_change() {
         "cancellation settles the shared visual back to its source"
     );
 }
+
+#[test]
+fn new_tab_at_top_lands_below_the_button_and_pushes_tabs_down() {
+    use rune::{Env, Key, KeyEvent, Mods, Runtime};
+
+    let mut state = AppState::new(Some("one.example"));
+    state.settings.new_tab_position = crate::settings::NewTabPosition::Top;
+    let first = state.browser.active_tab().unwrap().id();
+    state.browser.open_tab("two.example").unwrap();
+    let mut runtime = Runtime::new(state, crate::ui::view, (960.0, 640.0), Env::new(false, 1.0));
+    for _ in 0..30 {
+        runtime.frame(1.0 / 60.0);
+    }
+    let rect = |runtime: &Runtime<AppState>, key: &str| {
+        runtime
+            .elements()
+            .into_iter()
+            .find(|element| element.key.as_deref() == Some(key))
+            .unwrap()
+            .rect
+    };
+    let first_row = format!("tab-{}", first.raw());
+    let button = rect(&runtime, "new-tab");
+    let start_y = rect(&runtime, &first_row)[1];
+    assert!(
+        start_y >= button[1] + button[3],
+        "tabs start below the button"
+    );
+
+    runtime.update(|state, tx| crate::app::new_tab(state, tx));
+    runtime.frame(0.0);
+    runtime.key(KeyEvent {
+        key: Key::Text("three.example".into()),
+        mods: Mods::default(),
+    });
+    runtime.frame(0.0);
+    runtime.key(KeyEvent {
+        key: Key::Enter,
+        mods: Mods::default(),
+    });
+    runtime.frame(1.0 / 60.0);
+
+    let new_tab = runtime.state.browser.active_tab().unwrap().id();
+    assert_eq!(
+        runtime
+            .state
+            .browser
+            .section_tabs(TabSection::Regular)
+            .next()
+            .map(Tab::id),
+        Some(new_tab),
+        "the new tab leads the regular list"
+    );
+    let moving_y = rect(&runtime, &first_row)[1];
+    assert!(
+        moving_y > start_y,
+        "existing tabs start moving down on the first frame: {start_y} -> {moving_y}"
+    );
+
+    for _ in 0..60 {
+        runtime.frame(1.0 / 60.0);
+    }
+    let button = rect(&runtime, "new-tab");
+    let new_row = rect(&runtime, &format!("tab-{}", new_tab.raw()));
+    assert!(
+        (new_row[1] - (button[1] + button[3] + crate::ui::theme::TAB_GAP)).abs() < 0.5,
+        "the new tab sits directly below the button: {new_row:?} vs {button:?}"
+    );
+    assert!(
+        rect(&runtime, &first_row)[1] > moving_y,
+        "the existing tab settles below the new one"
+    );
+}

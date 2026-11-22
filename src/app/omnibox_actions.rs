@@ -7,7 +7,8 @@ use crate::address::{self, Destination};
 use crate::browser::Browser;
 use crate::internal::InternalRoute;
 use crate::omnibox::{self, Action, Suggestion};
-use crate::tab::Tab;
+use crate::settings::NewTabPosition;
+use crate::tab::{Tab, TabSection};
 use crate::ui::viewport::focus_key;
 
 impl super::AppState {
@@ -143,6 +144,9 @@ impl super::AppState {
             (omnibox::Mode::Current, Some(tab), None) => self.browser.navigate(tab, url)?,
             (_, _, _) => {
                 let tab = self.browser.open_tab(url)?;
+                if self.settings.new_tab_position == NewTabPosition::Top {
+                    self.browser.move_tab_to(tab, TabSection::Regular, 0)?;
+                }
                 self.browser.activate_tab(tab);
             }
         }
