@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
+use crate::ui::menu::{MenuItem, context_menu as menu_at};
 use rune::{El, Tx, el};
-use rune_kit::{MenuItem, context_menu as menu_at};
 
 use crate::app::{self, AppState};
 use crate::tab::{Tab, TabSection};
+use crate::ui::animated_icon;
+use crate::ui::icons;
 use crate::ui::theme::{self, Theme};
 
 pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
@@ -24,16 +26,20 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
         };
         menu = menu
             .item(
-                MenuItem::new("Reload").on_select(move |state: &mut AppState| {
-                    state.dismiss_context_menu();
-                    state.reload(tab);
-                }),
+                MenuItem::new("Reload")
+                    .animated(&animated_icon::RELOAD)
+                    .on_select(move |state: &mut AppState| {
+                        state.dismiss_context_menu();
+                        state.reload(tab);
+                    }),
             )
             .item(
-                MenuItem::new("Duplicate").on_select(move |state: &mut AppState| {
-                    state.dismiss_context_menu();
-                    state.duplicate(tab);
-                }),
+                MenuItem::new("Duplicate")
+                    .animated(&animated_icon::COPY)
+                    .on_select(move |state: &mut AppState| {
+                        state.dismiss_context_menu();
+                        state.duplicate(tab);
+                    }),
             )
             .separator()
             .item(MenuItem::new(section_action.0).on_select_tx(
@@ -102,12 +108,12 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
         }
         menu = menu
             .separator()
-            .item(
-                MenuItem::new("Close Tab").on_select(move |state: &mut AppState| {
+            .item(MenuItem::new("Close Tab").icon(&icons::CLOSE).on_select(
+                move |state: &mut AppState| {
                     state.dismiss_context_menu();
                     state.close(tab);
-                }),
-            )
+                },
+            ))
             .item(
                 MenuItem::new("Close Other Tabs").on_select(move |state: &mut AppState| {
                     state.dismiss_context_menu();
@@ -115,12 +121,14 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
                 }),
             );
     } else {
-        menu = menu.item(MenuItem::new("New Tab").on_select_tx(
-            |state: &mut AppState, tx: &mut Tx| {
-                state.dismiss_context_menu();
-                app::new_tab(state, tx);
-            },
-        ));
+        menu = menu.item(
+            MenuItem::new("New Tab")
+                .animated(&animated_icon::PLUS)
+                .on_select_tx(|state: &mut AppState, tx: &mut Tx| {
+                    state.dismiss_context_menu();
+                    app::new_tab(state, tx);
+                }),
+        );
     }
     menu = menu
         .separator()

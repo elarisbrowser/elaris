@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
+use crate::ui::menu::{MenuItem, context_menu};
 use rune::{El, Key, KeyEvent, PointerPress, Tx, el};
-use rune_kit::{MenuItem, context_menu};
 
 use crate::app::AppState;
 use crate::permissions::{AutoplayPolicy, PermissionState};
@@ -45,7 +45,7 @@ pub(super) fn permission_menu(state: &AppState, theme: &Theme, layer: &mut Vec<E
             }),
         )
     });
-    menu.build(&theme.kit(theme.overlay_panel), layer);
+    menu.build(state, theme, layer);
 }
 
 pub(super) fn autoplay_menu(
@@ -80,7 +80,7 @@ pub(super) fn autoplay_menu(
             state.autoplay_menu_open = false;
         }))
     });
-    menu.build(&theme.kit(theme.overlay_panel), layer);
+    menu.build(state, theme, layer);
 }
 
 pub(super) fn overflow_menu(
@@ -111,7 +111,7 @@ pub(super) fn overflow_menu(
     } else {
         menu
     };
-    menu.build(&theme.kit(theme.overlay_panel), layer);
+    menu.build(state, theme, layer);
 }
 
 pub(super) fn permission_label(permission: PermissionState) -> &'static str {

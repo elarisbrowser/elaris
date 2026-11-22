@@ -2,9 +2,9 @@
 
 //! The shared omnibox editor and results, hosted by the active tab layout.
 
+use crate::ui::menu::{Menu, MenuItem};
 use rune::tok::type_;
 use rune::{Cx, El, ScrollSpec, Transition, Tx, col, el, icon, row, text, text_input};
-use rune_kit::{Menu, MenuItem};
 
 use crate::address::SearchEngine;
 use crate::app::{self, AppState};

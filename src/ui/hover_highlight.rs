@@ -197,7 +197,7 @@ pub(crate) fn poll_context_menu(state: &mut AppState, tx: &mut Tx) -> bool {
 
 pub(in crate::ui) fn build_context_menu(
     state: &AppState,
-    menu: rune_kit::Menu,
+    menu: super::menu::Menu,
     theme: &Theme,
     layer: &mut Vec<El>,
 ) {
@@ -206,17 +206,13 @@ pub(in crate::ui) fn build_context_menu(
 
 pub(in crate::ui) fn build_highlight_menu(
     state: &AppState,
-    menu: rune_kit::Menu,
+    menu: super::menu::Menu,
     surface_key: Option<&str>,
     theme: &Theme,
     layer: &mut Vec<El>,
 ) -> El {
-    let mut kit = theme.kit(theme.overlay_panel);
-    if state.context_menu_highlight.is_some() {
-        kit.c.hover = Color::TRANSPARENT;
-    }
     let before = layer.len();
-    let trigger = menu.build(&kit, layer);
+    let trigger = menu.build(state, theme, layer);
     if layer.len() > before
         && let Some(surface) = layer.pop()
     {
@@ -265,7 +261,7 @@ pub(super) fn context_menu_view(
             } else {
                 theme::HIGHLIGHT_MOTION
             })
-            .radius(rune::tok::radius::SM)
+            .radius(theme::MENU_ITEM_RADIUS)
             .fill(theme.hover)
             .inert()
             .a11y_hidden()

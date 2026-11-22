@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
+use crate::ui::animated_icon;
+use crate::ui::menu::{MenuItem, context_menu};
 use elaris::ladybird::{Edit, MediaAction, PageMenu};
 use rune::{El, PointerPress, Tx, el};
-use rune_kit::{MenuItem, context_menu};
 
 use crate::{app::AppState, engine::ViewCommand, tab::TabId, ui::theme::Theme};
 
@@ -130,20 +131,29 @@ pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
         ));
     } else if info.media.is_none() {
         if tab.can_go_back {
-            menu = menu.item(item(id, "Back", move |s, _| s.browser.go_back(id)));
+            menu = menu.item(
+                item(id, "Back", move |s, _| s.browser.go_back(id)).animated(&animated_icon::BACK),
+            );
         }
         if tab.can_go_forward {
-            menu = menu.item(item(id, "Forward", move |s, _| s.browser.go_forward(id)));
+            menu = menu.item(
+                item(id, "Forward", move |s, _| s.browser.go_forward(id))
+                    .animated(&animated_icon::FORWARD),
+            );
         }
         menu = menu
-            .item(item(id, "Reload", move |s, _| s.browser.reload(id)))
+            .item(
+                item(id, "Reload", move |s, _| s.browser.reload(id))
+                    .animated(&animated_icon::RELOAD),
+            )
             .item(item(id, "Reload Without Cache", move |s, _| {
                 s.browser.reload_bypassing_cache(id);
             }));
     }
     if !info.selection.is_empty() {
         let text = info.selection.clone();
-        menu = menu.item(item(id, "Copy", move |_, tx| tx.copy(&text)));
+        menu =
+            menu.item(item(id, "Copy", move |_, tx| tx.copy(&text)).animated(&animated_icon::COPY));
         if info.editable {
             menu = menu.item(item(id, "Cut", move |s, _| {
                 s.browser.send(id, ViewCommand::Edit(Edit::Cut))

@@ -3,6 +3,7 @@
 //! The toolbar above the sidebar and page: the sidebar toggle, navigation buttons, and platform
 //! window controls. On Linux it slides into the layout from a narrow top-edge hover target.
 
+use crate::ui::menu::{MenuItem, context_menu};
 #[cfg(not(target_os = "linux"))]
 use rune::Chrome;
 #[cfg(target_os = "linux")]
@@ -12,7 +13,6 @@ use rune::Transition;
 #[cfg(target_os = "linux")]
 use rune::tok::motion;
 use rune::{Cx, El, Icon, el, row, spacer, text};
-use rune_kit::{MenuItem, context_menu};
 
 use crate::app::AppState;
 use crate::browser::Browser;

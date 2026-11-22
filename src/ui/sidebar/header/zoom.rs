@@ -2,8 +2,8 @@
 
 //! The page-zoom chip and the menu that changes it.
 
+use crate::ui::menu::{Menu, MenuItem};
 use rune::{El, Transition, el, text};
-use rune_kit::{Menu, MenuItem};
 
 use crate::app::AppState;
 use crate::ui::theme::{self, Theme};
@@ -76,5 +76,5 @@ pub(in crate::ui) fn zoom_indicator(
             }
         }));
     }
-    Some(menu.build(&theme.kit(theme.overlay_panel), overlays))
+    Some(menu.build(state, theme, overlays))
 }

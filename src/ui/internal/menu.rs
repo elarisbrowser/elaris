@@ -3,8 +3,9 @@
 //! The context menu for native pages: navigation, the page's own actions, and shortcuts to the
 //! other internal pages.
 
+use crate::ui::animated_icon::{self, AnimatedIcon};
+use crate::ui::menu::{Menu, MenuItem, context_menu as menu};
 use rune::{El, PointerPress, Tx, el};
-use rune_kit::{Menu, MenuItem, context_menu as menu};
 
 use crate::app::{self, AppState};
 use crate::internal::{InternalPage, InternalRoute};
@@ -17,9 +18,14 @@ const KEY: &str = "page-context-menu";
 /// Internal pages the menu links to, except the one it is on.
 type Open = fn(&mut AppState, &mut Tx);
 
-const SHORTCUTS: [(InternalPage, &str, Open); 2] = [
-    (InternalPage::Settings, "Settings", app::open_settings),
-    (InternalPage::History, "History", app::open_history),
+const SHORTCUTS: [(InternalPage, &str, Open, Option<&AnimatedIcon>); 2] = [
+    (InternalPage::Settings, "Settings", app::open_settings, None),
+    (
+        InternalPage::History,
+        "History",
+        app::open_history,
+        Some(&animated_icon::HISTORY),
+    ),
 ];
 
 /// Builds the menu for the internal page in tab `id`, opened at `point`.
@@ -46,12 +52,16 @@ pub(crate) fn context_menu(
     let mut sections: Vec<Vec<MenuItem>> = Vec::new();
     let mut navigation = Vec::new();
     if tab.can_go_back {
-        navigation.push(item(id, "Back", move |state, _| state.browser.go_back(id)));
+        navigation.push(
+            item(id, "Back", move |state, _| state.browser.go_back(id))
+                .animated(&animated_icon::BACK),
+        );
     }
     if tab.can_go_forward {
-        navigation.push(item(id, "Forward", move |state, _| {
-            state.browser.go_forward(id)
-        }));
+        navigation.push(
+            item(id, "Forward", move |state, _| state.browser.go_forward(id))
+                .animated(&animated_icon::FORWARD),
+        );
     }
     sections.push(navigation);
 
@@ -66,15 +76,22 @@ pub(crate) fn context_menu(
     }
 
     let address = current.map_or_else(|| tab.url.clone(), |page| page.address().to_owned());
-    sections.push(vec![item(id, "Copy Page Address", move |_, tx| {
-        tx.copy(&address)
-    })]);
+    sections.push(vec![
+        item(id, "Copy Page Address", move |_, tx| tx.copy(&address))
+            .animated(&animated_icon::COPY),
+    ]);
 
     sections.push(
         SHORTCUTS
             .into_iter()
             .filter(|(page, ..)| Some(*page) != current)
-            .map(|(_, label, open)| item(id, label, open))
+            .map(|(_, label, open, icon)| {
+                let entry = item(id, label, open);
+                match icon {
+                    Some(icon) => entry.animated(icon),
+                    None => entry,
+                }
+            })
             .collect(),
     );
 

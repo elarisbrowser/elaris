@@ -385,6 +385,25 @@ pub(crate) const FIND_SHADOW_Y: f32 = 3.0;
 pub(crate) const FIND_SHADOW_BLUR: f32 = 12.0;
 pub(crate) const FIND_INPUT_TEXT: rune::TextStyle = rune::TextStyle::new(14.0, 400.0);
 
+/// Menus, context menus and popovers: a rounded panel whose rows sit in an inset container, as the
+/// Settings category list does. Each highlight is concentric with the panel's corners.
+pub(crate) const MENU_RADIUS: f32 = radius::LG;
+pub(crate) const MENU_INSET: f32 = PAGE_NAV_INSET;
+pub(crate) const MENU_ITEM_RADIUS: f32 = MENU_RADIUS - MENU_INSET;
+pub(crate) const MENU_MIN_WIDTH: f32 = 160.0;
+/// The gap between a menu and its trigger, and the rows' height and inner padding.
+pub(crate) const MENU_GAP: f32 = 6.0;
+pub(crate) const MENU_ROW_HEIGHT: f32 = 28.0;
+pub(crate) const MENU_ROW_PADDING: f32 = space::S2 + space::S1 / 2.0;
+pub(crate) const MENU_ICON: f32 = 14.0;
+pub(crate) const MENU_ICON_GAP: f32 = space::S2;
+pub(crate) const MENU_SEPARATOR_GAP: f32 = space::S1;
+pub(crate) const MENU_SHADOW_Y: f32 = 8.0;
+pub(crate) const MENU_SHADOW_BLUR: f32 = 22.0;
+/// How far each row rises as it fades in, and the gap between the first and last row's entrance.
+pub(crate) const MENU_ROW_OFFSET: f32 = 4.0;
+pub(crate) const MENU_ROW_STAGGER: f32 = 0.03;
+
 /// Rows in the tab list, and the new-tab and appearance buttons that share their shape.
 pub(crate) const ROW_HEIGHT: f32 = 34.0;
 pub(crate) const ROW_RADIUS: f32 = radius::LG;

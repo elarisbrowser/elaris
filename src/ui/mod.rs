@@ -12,6 +12,7 @@ pub(crate) mod horizontal_tabs;
 pub(crate) mod hover_highlight;
 mod icons;
 pub(crate) mod internal;
+mod menu;
 mod mini;
 mod omnibox;
 mod page_dialog;

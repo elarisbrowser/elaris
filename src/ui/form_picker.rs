@@ -4,10 +4,11 @@ mod date;
 
 use std::path::PathBuf;
 
+use crate::ui::menu::{MenuItem, context_menu};
 use elaris::ladybird::{FormPicker, SelectRow};
 use rune::tok::{radius, space, type_};
 use rune::{El, FileDialogOptions, TextEdit, Tx, col, el, row, text, text_input};
-use rune_kit::{Button, ButtonVariant, Dialog, MenuItem, context_menu};
+use rune_kit::{Button, ButtonVariant, Dialog};
 
 use crate::app::AppState;
 use crate::browser::Polled;
@@ -191,7 +192,7 @@ pub(super) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>, redu
                 SelectRow::Separator => menu.separator(),
             };
         }
-        menu.build(&kit, overlays);
+        menu.build(state, theme, overlays);
         return;
     }
     if let FormPicker::File {

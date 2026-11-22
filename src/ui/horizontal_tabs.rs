@@ -4,8 +4,8 @@
 
 use std::collections::HashMap;
 
-use rune::{Cx, El, Spring, Transition, Tx, col, el, row};
-use rune_kit::{Menu, MenuItem, Placement};
+use crate::ui::menu::{Menu, MenuItem};
+use rune::{Align, Cx, El, Side, Spring, Transition, Tx, col, el, row};
 
 use super::controls::{icon_button, icon_button_style, row_button};
 use super::sidebar::drag::PreviewItem;
@@ -268,7 +268,7 @@ fn overflow_menu(state: &AppState, cx: &Cx<AppState>, theme: &Theme, overlays: &
     let open = state.sidebar.overflow_menu_open;
     let mut menu = Menu::new("tab-overflow")
         .trigger(trigger)
-        .placement(Placement::BottomEnd)
+        .placement(Side::Bottom, Align::End)
         .min_width(theme::HORIZONTAL_TAB_MAX)
         .open(open)
         .on_close(|state: &mut AppState| state.sidebar.overflow_menu_open = false);
@@ -296,7 +296,7 @@ fn overflow_menu(state: &AppState, cx: &Cx<AppState>, theme: &Theme, overlays: &
             );
         }
     }
-    menu.build(&theme.kit(theme.overlay_panel), overlays)
+    menu.build(state, theme, overlays)
 }
 
 fn section_width(count: usize, tab_width: f32) -> f32 {
