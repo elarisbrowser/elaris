@@ -130,6 +130,7 @@ pub(super) fn view(
             .offset(x, y)
             .offset_motion(motion)
             .motion(motion)
+            .press_scale_of(&target.key)
             .radius(radius)
             .continuous_corners()
             .fill(theme.hover)
