@@ -232,7 +232,7 @@ pub(in crate::ui) fn history_menu(state: &AppState, theme: &Theme, layer: &mut V
             }),
         );
     }
-    crate::ui::hover_highlight::build_context_menu(state, menu, theme, layer);
+    menu.build(state, theme, layer);
 }
 
 #[cfg(elaris_ui = "linux")]
