@@ -38,7 +38,7 @@ You need Python 3.9+ and Git. macOS also needs [Homebrew](https://brew.sh/) and 
 
 `setup` installs system packages and Rust toolchains. On Linux it supports apt, dnf, pacman, and zypper, and may ask for your password through `sudo`.
 
-For UI work without building the engine, use `./elaris run --ui`. Add `--release` to `build` or `run` for an optimised build (`./elaris run --release`), which launches from `build/ElarisRelease.app` on macOS.
+For UI work without building the engine, use `./elaris run --ui`. Add `--release` to `build` or `run` for an optimised build (`./elaris run --release`), which launches from `build/Elaris.app` on macOS (debug runs use `build/ElarisDev.app`).
 
 ### Shortcuts
 
@@ -54,7 +54,7 @@ On Linux, the toolbar slides in when the pointer reaches the top of the window. 
 ./elaris check             # fmt, clippy, and tests
 ./elaris format            # format Rust and bridge C++
 ./elaris linux-build       # build for Linux in Docker
-./elaris bundle            # release build with its icon: build/ElarisRelease.app (macOS) or build/linux/Elaris (Linux)
+./elaris bundle            # release build with its icon: build/Elaris.app (macOS) or build/linux/Elaris (Linux)
 ```
 
 On Linux, copy `build/linux/Elaris` into `~/.local` (or `/usr`) to install the launcher entry and icon.

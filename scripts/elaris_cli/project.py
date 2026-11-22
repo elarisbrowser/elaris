@@ -121,7 +121,7 @@ def bundle(_args: argparse.Namespace) -> None:
     build(argparse.Namespace(ui=False, release=True, jobs=None))
     executable = _executable("release")
     if sys.platform == "darwin":
-        bundled = packaging.macos_app_bundle(executable, "ElarisRelease")
+        bundled = packaging.macos_app_bundle(executable, "Elaris")
         print(f"\nBundled {bundled.parents[2]}")
     elif sys.platform.startswith("linux"):
         prefix = ROOT / "build" / "linux" / "Elaris"
@@ -139,7 +139,7 @@ def launch(args: argparse.Namespace) -> None:
         if not _run_artifacts_are_current(ui_only=False, profile=profile):
             build(args)
         _configure_bridge_environment(bridge_lib_dir())
-        bundle = "ElarisRelease" if release else "Elaris"
+        bundle = "Elaris" if release else "ElarisDev"
         executable = packaging.macos_app_bundle(_executable(profile), bundle)
         run(str(executable), *([args.url] if args.url else []), *args.rune_args)
         return

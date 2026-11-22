@@ -69,6 +69,8 @@ def macos_app_bundle(executable: Path, name: str = "Elaris") -> Path:
     if any(copied):
         # Replacing any file in a signed bundle invalidates its signature, and macOS kills the app for that.
         subprocess.run(["codesign", "--force", "--sign", "-", str(contents.parent)], check=True)
+        # Launch Services also keys its icon cache on the bundle folder's time, so refresh it with the contents.
+        contents.parent.touch()
     return bundled_executable
 
 
