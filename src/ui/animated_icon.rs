@@ -236,13 +236,13 @@ pub(crate) static CLOSE: AnimatedIcon = AnimatedIcon::new(&super::icons::CLOSE, 
 static CLOSE_OTHERS_REST: Icon = Icon {
     name: "close-others",
     view: 16.0,
-    body: r#"<path d="M2.5 9.5V3.75A1.25 1.25 0 0 1 3.75 2.5H9.25" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M4.25 7.25V4.5A1.25 1.25 0 0 1 5.5 3.25H10.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><rect x="5.75" y="5.25" width="7.5" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/>"#,
+    body: r#"<rect x="2.25" y="4.25" width="4.5" height="7.5" rx="1.25" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="6.25" y="4.25" width="3.5" height="7.5" rx="1.25" fill="currentColor"/><path d="M11.25 6L14 8.75M14 6L11.25 8.75" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>"#,
 };
 
 static CLOSE_OTHERS_MOTION: Icon = Icon {
     name: "close-others-motion",
     view: 16.0,
-    body: r#"<g transform="translate(5.75 5.25)"><g><animateTransform attributeName="transform" type="scale" values="1;0.1;1" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" dur="0.5s" additive="replace"/><g transform="translate(-5.75 -5.25)"><path d="M2.5 9.5V3.75A1.25 1.25 0 0 1 3.75 2.5H9.25" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M4.25 7.25V4.5A1.25 1.25 0 0 1 5.5 3.25H10.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></g></g></g><rect x="5.75" y="5.25" width="7.5" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/>"#,
+    body: r#"<rect x="2.25" y="4.25" width="4.5" height="7.5" rx="1.25" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="6.25" y="4.25" width="3.5" height="7.5" rx="1.25" fill="currentColor"/><g><animateTransform attributeName="transform" type="rotate" values="0 12.625 8;90 12.625 8" keyTimes="0;1" calcMode="spline" keySplines="0.4 0 0.2 1" dur="0.3s"/><path d="M11.25 6L14 8.75M14 6L11.25 8.75" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></g>"#,
 };
 
 pub(crate) static CLOSE_OTHERS: AnimatedIcon =
