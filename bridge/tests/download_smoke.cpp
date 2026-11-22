@@ -409,10 +409,15 @@ static bool test_private_session(ElarisLadybird* bridge, HttpFixture const& fixt
     auto private_download = downloads_dir / "private-probe.bin";
     auto download_url = fixture.url("/small");
     if (!check(elaris_ladybird_test_start_private_download(second.get(), download_url.c_str(), "private-probe.bin"),
-               "start private download") ||
-        !pump_until(bridge, [&] { return std::filesystem::exists(private_download); }) || !events.downloads.empty() ||
-        events.private_downloads.empty()) {
-        std::cerr << "Private download failed, went unmarked, or reached the ordinary download list\n";
+               "start private download"))
+        return false;
+    // The file and its private-download event arrive on separate pumps, so wait for both.
+    if (!pump_until(bridge, [&] { return std::filesystem::exists(private_download) && !events.private_downloads.empty(); })) {
+        std::cerr << "Private download did not finish or was not reported as private\n";
+        return false;
+    }
+    if (!events.downloads.empty()) {
+        std::cerr << "Private download reached the ordinary download list\n";
         return false;
     }
     if (!elaris_ladybird_test_private_request_servers(bridge)) {
