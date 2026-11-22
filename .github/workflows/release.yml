@@ -193,7 +193,9 @@ jobs:
           version="${GITHUB_REF_NAME:-dev}"
           mkdir -p dist
           archive="dist/Elaris-${version}-linux-x86_64.tar.gz"
-          tar -C build/linux -czf "$archive" Elaris
+          # Fixed owners, names and times, and no gzip name or time, so the same build always gives the same archive.
+          epoch="$(git log -1 --format=%ct)"
+          tar -C build/linux --sort=name --owner=0 --group=0 --numeric-owner --mtime="@${epoch}" -cf - Elaris | gzip -n > "$archive"
           cat > dist/BUILD-INFO.txt <<EOF
           Elaris ${version} (Linux x86_64)
           Elaris commit: ${GITHUB_SHA}
