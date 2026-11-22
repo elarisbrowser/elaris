@@ -44,6 +44,13 @@ and Ladybird's go back at once. A surface is reused once Rune reports, through t
 observer (`FrameTiming::completed_at`, keyed by frame serial), that it drew a newer frame. If all
 three are busy the frame waits, and the engine shows it when one is released.
 
+Neither process waits for the GPU to finish a frame. GPU reads of an IOSurface wait for work already
+scheduled to write it, the guarantee Ladybird relies on for Core Animation. So the bridge returns the
+copy once it is scheduled, and it tells Ladybird the view does not read frames from CPU memory. The
+Compositor then hands each frame over once its own work is scheduled, instead of polling every
+millisecond until it finishes. The copy's command buffer keeps the source in use until it is done, so
+the Compositor does not paint into it before then.
+
 Frames keep their alpha as the Compositor wrote it; the CPU path forced it opaque.
 
 `ELARIS_CPU_FRAMES=1` selects the copying path described below.
@@ -191,6 +198,22 @@ builds, by logging which page frame Rune drew at each refresh and each frame's c
   and then skips one, 5–20 times in seven seconds of scrolling.
 - An earlier trace with recurring 33 ms gaps inside the Compositor was recorded while
   `sample` profiled the Compositor and WebContent. Those gaps did not reproduce without it.
+
+With a physical trackpad, frames came late on the Elaris side as well. The bridge's GPU copy waited
+for completion, which queued it behind the Compositor's and Rune's GPU work: 0.5 ms typically, but up
+to 12 ms when scrolling started from idle. A frame that missed Rune's next draw showed a refresh late,
+then the next one skipped ahead. Measured on screen with ScreenCaptureKit (text shift between the
+window's displayed frames), over nine blind, interleaved 10 s runs of two-finger reversals on the live
+page, three per mode, per 100 refreshes while the text moved:
+
+| Build | Stalls | Double steps | Step roughness (px) | Rune repeats / skips | Copies over 4 ms |
+|---|---|---|---|---|---|
+| Copy waits for completion | 1.67 | 0.35 | 7.34 | 1.76 / 1.42 | 2.00 |
+| Copy waits for scheduling | 0.72 | 0.33 | 4.36 | 0.33 / 0.08 | 0 |
+| Both stages wait for scheduling | 0.10 | 0.21 | 2.99 | 0.54 / 0.06 | 0 |
+
+Copy time fell to 0.2 ms (p95 0.3 ms). Ladybird's own present gaps over 20 ms, which come from
+WebContent and its display ticks, changed little (0.85 to 0.57 per 100 draws).
 
 ## Remaining limits
 
