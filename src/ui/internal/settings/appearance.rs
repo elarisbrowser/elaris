@@ -75,54 +75,60 @@ fn appearance(cx: &mut PageContext) -> El {
         tx.motion(theme::TAB_REORDER_MOTION);
     })
     .build(&cx.kit);
-    let glass = rune_kit::Switch::new(state.settings.glass_enabled)
-        .standard()
-        .label("Liquid glass background")
-        .hide_label()
-        .on_toggle(|state: &mut AppState| state.set_glass_enabled(!state.settings.glass_enabled))
-        .build(&switch_kit(&cx.kit));
-    section(
-        "Appearance",
-        cx.theme,
-        [
-            setting(
-                cx,
-                "Theme",
-                "Choose how Elaris and webpages look.",
-                theme_control,
-            ),
-            setting(
-                cx,
-                "Tab Layout",
-                "Choose where open tabs appear.",
-                tab_layout,
-            ),
-            setting(
-                cx,
-                "New Tab button",
-                "Choose whether New Tab sits above or below the tabs in the vertical sidebar.",
-                new_tab_position,
-            ),
-            setting(
-                cx,
-                "Accent colour",
-                "Choose the colour used for interactive emphasis.",
-                accent_color_control(state.settings.accent_color, cx.theme),
-            ),
-            setting(
-                cx,
-                "Liquid glass",
-                "Show the tinted glass window background.",
-                glass,
-            ),
-            setting(
+    let mut rows = vec![
+        setting(
+            cx,
+            "Theme",
+            "Choose how Elaris and webpages look.",
+            theme_control,
+        ),
+        setting(
+            cx,
+            "Tab Layout",
+            "Choose where open tabs appear.",
+            tab_layout,
+        ),
+        setting(
+            cx,
+            "New Tab button",
+            "Choose whether New Tab sits above or below the tabs in the vertical sidebar.",
+            new_tab_position,
+        ),
+        setting(
+            cx,
+            "Accent colour",
+            "Choose the colour used for interactive emphasis.",
+            accent_color_control(state.settings.accent_color, cx.theme),
+        ),
+    ];
+    // The glass material is macOS only, so Linux offers neither glass option.
+    if !cfg!(target_os = "linux") {
+        let glass = rune_kit::Switch::new(state.settings.glass_enabled)
+            .standard()
+            .label("Liquid glass background")
+            .hide_label()
+            .on_toggle_tx(|state: &mut AppState, tx| {
+                state.set_glass_enabled(!state.settings.glass_enabled);
+                tx.animated();
+            })
+            .build(&switch_kit(&cx.kit));
+        rows.push(setting(
+            cx,
+            "Liquid glass",
+            "Show the tinted glass window background.",
+            glass,
+        ));
+        // The tint only shows through glass, so its row leaves while glass is off.
+        if state.settings.glass_enabled {
+            rows.push(setting(
                 cx,
                 "Tint opacity",
                 "100% keeps the current opaque tint.",
                 tint_opacity_control(state.settings.tint_opacity, cx.theme),
-            ),
-        ],
-    )
+            ));
+        }
+    }
+    section("Appearance", cx.theme, rows)
 }
 
 fn split_view(cx: &mut PageContext) -> El {

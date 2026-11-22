@@ -6,7 +6,7 @@
 //! edges, spacing and type. All measurements come from the `PAGE_*` tokens in the theme.
 
 use rune::tok::{space, type_};
-use rune::{Align, El, Icon, Spring, col, el, icon, row, text};
+use rune::{Align, El, GrowthSpec, Icon, Spring, col, el, icon, row, text};
 use rune_kit::Kit;
 
 use crate::app::AppState;
@@ -203,9 +203,10 @@ pub(super) fn group(theme: &Theme) -> El {
         .clip_rounded(theme::PAGE_GROUP_RADIUS)
 }
 
-/// A [`group`] of padded rows divided by inset hairlines.
+/// A [`group`] of padded rows divided by inset hairlines. The group's height eases as rows come
+/// and go, so a row that a setting shows or hides resizes the surface around it.
 pub(super) fn rows(theme: &Theme, rows: impl IntoIterator<Item = El>) -> El {
-    let mut group = group(theme);
+    let mut group = group(theme).growth(GrowthSpec::default());
     for (index, content) in rows.into_iter().enumerate() {
         if index > 0 {
             group = group.child(separator(theme));
