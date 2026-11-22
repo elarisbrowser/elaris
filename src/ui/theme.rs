@@ -405,6 +405,13 @@ pub(crate) const MENU_ROW_OFFSET: f32 = 4.0;
 /// The scale a menu panel grows from as it opens.
 pub(crate) const MENU_SCALE_FROM: f32 = 0.97;
 pub(crate) const MENU_ROW_STAGGER: f32 = 0.03;
+/// The page menu's header: the page's mark in a rounded tile beside its title and host, above a
+/// row of navigation buttons.
+pub(crate) const MENU_HEADER_TILE: f32 = 32.0;
+pub(crate) const MENU_HEADER_ICON: f32 = 18.0;
+pub(crate) const MENU_HEADER_TITLE: rune::TextStyle = rune::TextStyle::new(14.0, 600.0).lh(19.0);
+pub(crate) const MENU_NAV_HEIGHT: f32 = 30.0;
+pub(crate) const MENU_NAV_GAP: f32 = space::S1;
 
 /// Rows in the tab list, and the new-tab and appearance buttons that share their shape.
 pub(crate) const ROW_HEIGHT: f32 = 34.0;

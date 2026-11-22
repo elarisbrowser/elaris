@@ -265,31 +265,40 @@ fn entry(tab: &Tab, selected: bool, theme: &Theme) -> El {
         .on_press_tx(move |state: &mut AppState, tx| finish(state, Some(id), tx))
 }
 
-pub(super) fn tab_entry(key: String, tab: &Tab, selected: bool, theme: &Theme) -> El {
+/// A tab's title, falling back to its address, and the address shown beneath it.
+pub(in crate::ui) fn tab_labels(tab: &Tab) -> (&str, &str) {
     let address = if tab.is_internal() {
         &tab.url
     } else {
         crate::address::host_for_address(&tab.url)
     };
-    let title = if tab.title.trim().is_empty() {
-        if address.is_empty() {
-            "Untitled tab"
-        } else {
-            address
-        }
-    } else {
+    let title = if !tab.title.trim().is_empty() {
         &tab.title
+    } else if address.is_empty() {
+        "Untitled tab"
+    } else {
+        address
     };
+    (title, address)
+}
+
+/// A tab's favicon, or the glyph of its internal page.
+pub(in crate::ui) fn tab_symbol(tab: &Tab, size: f32, theme: &Theme) -> El {
     let glyph = match tab.internal {
         Some(InternalRoute::Page(InternalPage::History)) => &icons::HISTORY,
         Some(InternalRoute::Page(InternalPage::Downloads)) => &icons::DOWNLOAD,
         Some(InternalRoute::Page(InternalPage::Settings)) => &icons::SYSTEM,
         _ => &icons::PAGE,
     };
-    let symbol = tab.favicon.as_ref().map_or_else(
-        || icon(glyph, 18.0).color(theme.icon),
-        |pixels| el().size(18.0, 18.0).pixels(pixels),
-    );
+    tab.favicon.as_ref().map_or_else(
+        || icon(glyph, size).color(theme.icon),
+        |pixels| el().size(size, size).pixels(pixels),
+    )
+}
+
+pub(super) fn tab_entry(key: String, tab: &Tab, selected: bool, theme: &Theme) -> El {
+    let (title, address) = tab_labels(tab);
+    let symbol = tab_symbol(tab, 18.0, theme);
     let mut labels = col().min_w(0.0).grow(1.0).child(
         text(title)
             .font(type_::BODY)

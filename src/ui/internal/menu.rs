@@ -12,8 +12,7 @@ use crate::internal::{InternalPage, InternalRoute};
 use crate::tab::TabId;
 use crate::ui::theme::Theme;
 
-/// Shares the web page menu's key, so it gets the same hover highlight and dismissal.
-const KEY: &str = "page-context-menu";
+use crate::ui::viewport::menu::{KEY, header};
 
 /// Internal pages the menu links to, except the one it is on.
 type Open = fn(&mut AppState, &mut Tx);
@@ -47,24 +46,10 @@ pub(crate) fn context_menu(
         InternalRoute::NotFound(_) => None,
     };
     let mut menu = menu(KEY, el(), Some(point))
-        .on_close(|state: &mut AppState| state.page_menu = Default::default());
+        .on_close(|state: &mut AppState| state.page_menu = Default::default())
+        .header(header(state, tab, theme));
 
     let mut sections: Vec<Vec<MenuItem>> = Vec::new();
-    let mut navigation = Vec::new();
-    if tab.can_go_back {
-        navigation.push(
-            item(id, "Back", move |state, _| state.browser.go_back(id))
-                .animated(&animated_icon::BACK),
-        );
-    }
-    if tab.can_go_forward {
-        navigation.push(
-            item(id, "Forward", move |state, _| state.browser.go_forward(id))
-                .animated(&animated_icon::FORWARD),
-        );
-    }
-    sections.push(navigation);
-
     if let Some(page) = current {
         sections.push(
             super::page(page)

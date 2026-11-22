@@ -50,6 +50,8 @@ pub(crate) struct Menu {
     min_width: f32,
     /// The scrim behind an open menu, and the Escape handler for its panel.
     dismiss: Option<(El, Apply)>,
+    /// Content above the rows, such as the page menu's title and navigation buttons.
+    header: Option<El>,
 }
 
 enum Entry {
@@ -84,6 +86,7 @@ impl Menu {
             align: Align::Start,
             min_width: theme::MENU_MIN_WIDTH,
             dismiss: None,
+            header: None,
         }
     }
 
@@ -104,6 +107,12 @@ impl Menu {
 
     pub(crate) fn group_label(mut self, label: impl Into<String>) -> Self {
         self.entries.push(Entry::Label(label.into()));
+        self
+    }
+
+    /// Content drawn above the rows, outside the sliding highlight.
+    pub(crate) fn header(mut self, header: El) -> Self {
+        self.header = Some(header);
         self
     }
 
@@ -141,8 +150,11 @@ impl Menu {
         let entries = std::mem::take(&mut self.entries);
         let key = self.key.clone();
         let min_width = self.min_width;
+        let header = self.header.take();
         self.anchored().attach(layer, |origin| {
-            highlight::track(panel(entries, &key, min_width, state, theme, origin))
+            highlight::track(panel(
+                entries, header, &key, min_width, state, theme, origin,
+            ))
         })
     }
 
@@ -162,6 +174,7 @@ impl Menu {
 /// The rows' panel: a rounded container whose content sits inset inside it.
 fn panel(
     entries: Vec<Entry>,
+    header: Option<El>,
     key: &str,
     min_width: f32,
     state: &AppState,
@@ -227,13 +240,18 @@ fn panel(
         min_width,
         reveal(reduced, origin),
         theme,
-        kit_popover::fit_scroll(
-            col()
-                .key("rows")
-                .items_stretch()
-                .children(highlight_top.map(|top| highlight::view(key, top, reduced, theme)))
-                .children(rows),
-        ),
+        col()
+            .items_stretch()
+            .shrink()
+            .min_h(0.0)
+            .children(header)
+            .child(kit_popover::fit_scroll(
+                col()
+                    .key("rows")
+                    .items_stretch()
+                    .children(highlight_top.map(|top| highlight::view(key, top, reduced, theme)))
+                    .children(rows),
+            )),
     )
 }
 
