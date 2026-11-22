@@ -108,7 +108,7 @@ static COPY_REST: Icon = Icon {
 static COPY_MOTION: Icon = Icon {
     name: "copy-motion",
     view: 24.0,
-    body: r#"<rect x="8" y="8" width="14" height="14" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><g><animateTransform attributeName="transform" type="translate" values="0 0;-1.5 -1.5;0 0" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" dur="0.4s"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>"#,
+    body: r#"<g><animateTransform attributeName="transform" type="translate" values="0 0;-3 -3;0 0" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" dur="0.4s"/><rect x="8" y="8" width="14" height="14" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g><g><animateTransform attributeName="transform" type="translate" values="0 0;3 3;0 0" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" dur="0.4s"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>"#,
 };
 
 pub(crate) static COPY: AnimatedIcon = AnimatedIcon::new(&COPY_REST, &COPY_MOTION);
