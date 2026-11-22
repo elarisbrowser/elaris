@@ -235,14 +235,14 @@ pub(crate) static CLOSE: AnimatedIcon = AnimatedIcon::new(&super::icons::CLOSE, 
 /// stacked tabs slide under the kept one and fade out, one just after the other, then return.
 static CLOSE_OTHERS_REST: Icon = Icon {
     name: "close-others",
-    view: 16.0,
-    body: r#"<rect x="0.8" y="5.8" width="9" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3.4 2.8H13.1V10.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M11.4 1.2L15 4.8M15 1.2L11.4 4.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>"#,
+    view: 24.0,
+    body: r#"<rect x="3" y="8" width="11" height="12" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 5h9a2 2 0 0 1 2 2v7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="m16.5 2.5 4 4m0-4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>"#,
 };
 
 static CLOSE_OTHERS_MOTION: Icon = Icon {
     name: "close-others-motion",
-    view: 16.0,
-    body: r#"<rect x="0.8" y="5.8" width="9" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3.4 2.8H13.1V10.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><g><animateTransform attributeName="transform" type="rotate" values="0 13.2 3.0;90 13.2 3.0" keyTimes="0;1" calcMode="spline" keySplines="0.4 0 0.2 1" dur="0.3s"/><path d="M11.4 1.2L15 4.8M15 1.2L11.4 4.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></g>"#,
+    view: 24.0,
+    body: r#"<rect x="3" y="8" width="11" height="12" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 5h9a2 2 0 0 1 2 2v7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><g><animateTransform attributeName="transform" type="rotate" values="0 18.5 4.5;90 18.5 4.5" keyTimes="0;1" calcMode="spline" keySplines="0.4 0 0.2 1" dur="0.3s"/><path d="m16.5 2.5 4 4m0-4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></g>"#,
 };
 
 pub(crate) static CLOSE_OTHERS: AnimatedIcon =
