@@ -71,11 +71,8 @@ pub(super) fn nav(
             )
             .child(
                 text(item.title)
-                    .font(if current {
-                        theme::PAGE_ROW_TITLE
-                    } else {
-                        type_::BODY
-                    })
+                    // One style for every state, so selecting an item never resizes its label.
+                    .font(type_::BODY)
                     .color(if current {
                         cx.theme.text
                     } else {
