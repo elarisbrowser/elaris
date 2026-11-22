@@ -102,7 +102,7 @@ fn appearance(cx: &mut PageContext) -> El {
         ),
     ];
     // The glass material is macOS only, so Linux offers neither glass option.
-    if !cfg!(target_os = "linux") {
+    if !cfg!(elaris_ui = "linux") {
         let glass = rune_kit::Switch::new(state.settings.glass_enabled)
             .standard()
             .label("Liquid glass background")
