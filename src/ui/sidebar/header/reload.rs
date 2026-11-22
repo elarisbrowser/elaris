@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The reload control. The arrow and the stop mark morph into each other: on press the arrow
-//! spins as it shrinks and blurs away, and the stop mark grows in its place.
+//! The reload control. The arrow and the stop mark morph into each other: each shrinks and blurs
+//! away as the other grows in, and on press the stop mark spins in as it arrives.
 
-use std::f32::consts::TAU;
-
-use rune::{Anim, El, el, icon};
+use rune::{El, Icon, icon};
 
 use crate::app::AppState;
 use crate::browser::Browser;
@@ -35,31 +33,29 @@ pub(super) fn button(state: &AppState, theme: &Theme) -> El {
     };
     let inset = (theme::ICON_BUTTON - theme::ICON) / 2.0;
     let morph = theme::glyph_morph(reduced);
-    // The arrow sits in a turntable that spins as the arrow leaves. A full turn looks the same as
-    // none, so the empty turntable snaps back while loading and spins forwards on the next press.
-    let arrow = (!loading).then(|| {
-        icon(&icons::RELOAD, theme::ICON)
-            .key("reload-arrow")
-            .color(theme.icon)
-            .transition(morph)
-    });
-    let turntable = el()
-        .key("reload-arrow-spin")
-        .size(theme::ICON, theme::ICON)
-        .absolute(inset, inset)
-        .rotate(if loading { TAU } else { 0.0 })
-        .rotate_motion(if loading && !reduced {
-            theme::RELOAD_SPIN
-        } else {
-            Anim::INSTANT
-        })
-        .children(arrow);
-    let cross = loading.then(|| {
-        icon(&icons::CLOSE, theme::ICON)
-            .key("reload-stop-cross")
+    let glyph: &'static Icon = match (loading, reduced) {
+        (false, _) => &icons::RELOAD,
+        (true, false) => &STOP_SPIN,
+        (true, true) => &icons::CLOSE,
+    };
+    let key = if loading {
+        "reload-stop"
+    } else {
+        "reload-arrow"
+    };
+    button.child(
+        icon(glyph, theme::ICON)
+            .key(key)
             .color(theme.icon)
             .absolute(inset, inset)
-            .transition(morph)
-    });
-    button.child(turntable).children(cross)
+            .transition(morph),
+    )
 }
+
+/// The stop mark, spinning in from a half turn as it replaces the reload arrow. The spin is SMIL
+/// so it plays once on mount without a rotated layer.
+static STOP_SPIN: Icon = Icon {
+    name: "reload-stop-spin",
+    view: 16.0,
+    body: r#"<g><animateTransform attributeName="transform" type="rotate" values="-180 8 8;0 8 8" keyTimes="0;1" calcMode="spline" keySplines="0.2 0 0 1" dur="0.4s"/><path d="M5 5L11 11M11 5L5 11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></g>"#,
+};

@@ -293,8 +293,6 @@ pub(super) const HOVER_EXIT: Anim = Anim::new(Curve::tween(0.15, Easing::EASE_OU
 pub(crate) const GLYPH_MORPH_SCALE: f32 = 0.6;
 /// The blur, in points, a swapped-out glyph dissolves into.
 pub(crate) const GLYPH_MORPH_BLUR: f32 = 2.0;
-/// The turn the reload arrow makes as it morphs into the stop mark.
-pub(crate) const RELOAD_SPIN: Anim = Anim::new(Curve::tween(0.4, Easing::EASE_OUT));
 
 /// One glyph replacing another in place: it shrinks, blurs and fades out as its successor
 /// grows and sharpens in.
