@@ -9,74 +9,77 @@
 //! Motion glyphs are hand-written SMIL, ported from the motion of lucide-animated (MIT). Add a
 //! motion glyph with a `static` `Icon` whose body animates only `currentColor` shapes.
 
-use rune::{Color, El, Icon, Tx, icon};
+use rune::{Color, El, Icon, Transition, Tx, icon};
 
 use crate::app::AppState;
 
-/// A glyph that plays `motion` while hovered and shows `rest` otherwise. `name` identifies it in
-/// `AppState::animated_icon_hover`, so it must be unique among the animated icons on screen.
+/// A glyph that plays `motion` while its owner is hovered and shows `rest` otherwise. The owner
+/// is the element that carries the hover handler, so the same icon can appear twice on screen
+/// (a toolbar button and a menu row) and each plays only for its own hover.
 pub(crate) struct AnimatedIcon {
-    name: &'static str,
     rest: &'static Icon,
     motion: &'static Icon,
 }
 
 impl AnimatedIcon {
-    pub(crate) const fn new(
-        name: &'static str,
-        rest: &'static Icon,
-        motion: &'static Icon,
-    ) -> Self {
-        Self { name, rest, motion }
+    pub(crate) const fn new(rest: &'static Icon, motion: &'static Icon) -> Self {
+        Self { rest, motion }
     }
 }
 
-/// Records the hovered animated icon on each pointer change. Leaving clears only the icon that
-/// was hovered, so moving between two animated icons never drops the second one.
+/// Records `owner` as hovered on each pointer change. Leaving clears only the owner that was
+/// hovered, so moving between two animated icons never drops the second one.
 pub(crate) fn hover_change(
-    animated: &'static AnimatedIcon,
+    owner: impl Into<String>,
 ) -> impl Fn(&mut AppState, bool, &mut Tx) + 'static {
+    let owner = owner.into();
     move |state, inside, tx| {
-        if set_hovered(&mut state.animated_icon_hover, animated.name, inside) {
+        if set_hovered(&mut state.animated_icon_hover, &owner, inside) {
             tx.animated();
         }
     }
 }
 
-/// Updates `slot` for a pointer change on `name`, returning whether it changed.
-fn set_hovered(slot: &mut Option<&'static str>, name: &'static str, inside: bool) -> bool {
-    let next = if inside {
-        Some(name)
-    } else if *slot == Some(name) {
-        None
+/// Updates `slot` for a pointer change on `owner`, returning whether it changed.
+fn set_hovered(slot: &mut Option<String>, owner: &str, inside: bool) -> bool {
+    let hovered = slot.as_deref() == Some(owner);
+    if inside {
+        if hovered {
+            return false;
+        }
+        *slot = Some(owner.to_owned());
+        true
+    } else if hovered {
+        *slot = None;
+        true
     } else {
-        return false;
-    };
-    let changed = *slot != next;
-    *slot = next;
-    changed
+        false
+    }
 }
 
-/// `icon` at `size`: its motion glyph while hovered (and not `reduced`), its rest glyph
+/// `icon` at `size`: its motion glyph while `owner` is hovered (and not `reduced`), its rest glyph
 /// otherwise. `key` names the element and is suffixed per variant, so the two keep separate
 /// nodes and the motion glyph replays on each hover.
 pub(crate) fn glyph(
     state: &AppState,
     animated: &'static AnimatedIcon,
+    owner: &str,
     key: &str,
     size: f32,
     color: Color,
     reduced: bool,
 ) -> El {
-    let hovered = !reduced && state.animated_icon_hover == Some(animated.name);
+    let hovered = !reduced && state.animated_icon_hover.as_deref() == Some(owner);
     let (glyph, variant) = if hovered {
         (animated.motion, "motion")
     } else {
         (animated.rest, "rest")
     };
+    // Swapping glyphs remounts the element, so it must not fade in: that flickers on every hover.
     icon(glyph, size)
         .key(format!("{key}-{variant}"))
         .color(color)
+        .transition(Transition::none())
 }
 
 /// The reload arrow turns once around its centre, and settles at the rest pose.
@@ -86,8 +89,7 @@ static RELOAD_MOTION: Icon = Icon {
     body: r#"<g><animateTransform attributeName="transform" type="rotate" values="0 8 8;360 8 8" keyTimes="0;1" calcMode="spline" keySplines="0.4 0 0.2 1" dur="0.6s"/><path d="M12.5 8A4.5 4.5 0 1 1 11.2 4.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M12.5 2.5V5.5H9.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></g>"#,
 };
 
-pub(crate) static RELOAD: AnimatedIcon =
-    AnimatedIcon::new("reload", &super::icons::RELOAD, &RELOAD_MOTION);
+pub(crate) static RELOAD: AnimatedIcon = AnimatedIcon::new(&super::icons::RELOAD, &RELOAD_MOTION);
 
 // The glyphs below are lucide-animated's hover motions (MIT, pqoqubbw), ported to SMIL on the
 // 24-unit lucide grid. Each rest glyph is the lucide icon's static shapes; each motion glyph
@@ -105,7 +107,7 @@ static COPY_MOTION: Icon = Icon {
     body: r#"<g><animateTransform attributeName="transform" type="translate" values="0 0;-3 -3;0 0" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" dur="0.4s"/><rect x="8" y="8" width="14" height="14" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g><g><animateTransform attributeName="transform" type="translate" values="0 0;3 3;0 0" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" dur="0.4s"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>"#,
 };
 
-pub(crate) static COPY: AnimatedIcon = AnimatedIcon::new("copy", &COPY_REST, &COPY_MOTION);
+pub(crate) static COPY: AnimatedIcon = AnimatedIcon::new(&COPY_REST, &COPY_MOTION);
 
 static PLUS_REST: Icon = Icon {
     name: "plus",
@@ -120,7 +122,7 @@ static PLUS_MOTION: Icon = Icon {
     body: r#"<g><animateTransform attributeName="transform" type="rotate" values="0 12 12;180 12 12" keyTimes="0;1" calcMode="spline" keySplines="0.4 0 0.2 1" dur="0.45s"/><path d="M5 12h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 5v14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>"#,
 };
 
-pub(crate) static PLUS: AnimatedIcon = AnimatedIcon::new("plus", &PLUS_REST, &PLUS_MOTION);
+pub(crate) static PLUS: AnimatedIcon = AnimatedIcon::new(&PLUS_REST, &PLUS_MOTION);
 
 static HISTORY_REST: Icon = Icon {
     name: "history",
@@ -135,8 +137,7 @@ static HISTORY_MOTION: Icon = Icon {
     body: r#"<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 3v5h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><g><animateTransform attributeName="transform" type="rotate" values="0 12 12;-360 12 12" keyTimes="0;1" calcMode="spline" keySplines="0.4 0 0.2 1" dur="0.6s"/><line x1="12" y1="12" x2="12" y2="7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></g><g><animateTransform attributeName="transform" type="rotate" values="0 12 12;-45 12 12;0 12 12" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" dur="0.5s"/><line x1="12" y1="12" x2="16" y2="14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></g>"#,
 };
 
-pub(crate) static HISTORY: AnimatedIcon =
-    AnimatedIcon::new("history", &HISTORY_REST, &HISTORY_MOTION);
+pub(crate) static HISTORY: AnimatedIcon = AnimatedIcon::new(&HISTORY_REST, &HISTORY_MOTION);
 
 /// The arrow's shaft shortens and its head nudges toward the direction it points away from.
 static BACK_REST: Icon = Icon {
@@ -151,7 +152,7 @@ static BACK_MOTION: Icon = Icon {
     body: r#"<g><animateTransform attributeName="transform" type="translate" values="0 0;3 0;0 0" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" dur="0.4s"/><path d="m12 19-7-7 7-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g><line x1="19" y1="12" x2="5" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"><animate attributeName="x2" values="5;10;5" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" dur="0.4s"/></line>"#,
 };
 
-pub(crate) static BACK: AnimatedIcon = AnimatedIcon::new("back", &BACK_REST, &BACK_MOTION);
+pub(crate) static BACK: AnimatedIcon = AnimatedIcon::new(&BACK_REST, &BACK_MOTION);
 
 static FORWARD_REST: Icon = Icon {
     name: "forward",
@@ -165,8 +166,7 @@ static FORWARD_MOTION: Icon = Icon {
     body: r#"<line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"><animate attributeName="x2" values="19;14;19" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" dur="0.4s"/></line><g><animateTransform attributeName="transform" type="translate" values="0 0;-3 0;0 0" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" dur="0.4s"/><path d="m12 5 7 7-7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>"#,
 };
 
-pub(crate) static FORWARD: AnimatedIcon =
-    AnimatedIcon::new("forward", &FORWARD_REST, &FORWARD_MOTION);
+pub(crate) static FORWARD: AnimatedIcon = AnimatedIcon::new(&FORWARD_REST, &FORWARD_MOTION);
 
 #[cfg(test)]
 mod tests {
@@ -176,14 +176,25 @@ mod tests {
     fn hover_tracks_one_icon_and_ignores_leaves_of_others() {
         let mut slot = None;
         assert!(set_hovered(&mut slot, "reload", true));
-        assert_eq!(slot, Some("reload"));
-        // Entering the same icon again changes nothing.
+        assert_eq!(slot.as_deref(), Some("reload"));
+        // Entering the same owner again changes nothing.
         assert!(!set_hovered(&mut slot, "reload", true));
-        // Leaving a different icon keeps the hovered one.
+        // Leaving a different owner keeps the hovered one.
         assert!(!set_hovered(&mut slot, "other", false));
-        assert_eq!(slot, Some("reload"));
+        assert_eq!(slot.as_deref(), Some("reload"));
         assert!(set_hovered(&mut slot, "reload", false));
         assert_eq!(slot, None);
+    }
+
+    #[test]
+    fn two_owners_of_one_icon_hover_independently() {
+        // The toolbar reload button and the Reload menu row share RELOAD; hovering one must not
+        // play the other.
+        let mut slot = None;
+        assert!(set_hovered(&mut slot, "reload", true));
+        assert!(set_hovered(&mut slot, "tab-context-item0", true));
+        assert_eq!(slot.as_deref(), Some("tab-context-item0"));
+        assert!(!set_hovered(&mut slot, "reload", false));
     }
 
     #[test]

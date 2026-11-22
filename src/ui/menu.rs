@@ -13,10 +13,11 @@ use rune::{
     Align, Color, El, Icon, Key, KeyEvent, PointerPress, Side, Stagger, Transition, Tx, col, el,
     icon, row, text,
 };
+use rune::{Spring, SpringPair, Vec2};
 use rune_kit::popover;
 
 use super::animated_icon::{self, AnimatedIcon};
-use super::theme::{self, Theme};
+use super::theme::{self, MENU_SCALE_FROM, Theme};
 use crate::app::AppState;
 
 /// Applies a stored handler to a row or panel. Keeps the state type out of [`Menu`] and
@@ -136,8 +137,9 @@ impl Menu {
         let entries = std::mem::take(&mut self.entries);
         let key = self.key.clone();
         let min_width = self.min_width;
-        self.anchored()
-            .attach(layer, || panel(entries, &key, min_width, state, theme))
+        self.anchored().attach(layer, |origin| {
+            panel(entries, &key, min_width, state, theme, origin)
+        })
     }
 
     fn anchored(&mut self) -> Anchored {
@@ -222,6 +224,7 @@ impl MenuItem {
         theme: &Theme,
     ) -> El {
         let reduced = state.settings.reduce_motion;
+        let owner = format!("{key}-item{index}");
         let disabled = self.disabled;
         // With a sliding highlight drawn by the menu, rows leave their own fill transparent.
         let highlight = if state.context_menu_highlight.is_some() {
@@ -230,7 +233,7 @@ impl MenuItem {
             theme.hover
         };
         let mut entry = row()
-            .key(format!("{key}-item{index}"))
+            .key(owner.clone())
             .role(if self.checked.is_some() {
                 "menuitemcheckbox"
             } else {
@@ -253,8 +256,8 @@ impl MenuItem {
         if disabled {
             entry = entry.opacity(theme.disabled_opacity);
         }
-        if let Some(animated) = self.animated {
-            entry = entry.on_hover_change(animated_icon::hover_change(animated));
+        if self.animated.is_some() {
+            entry = entry.on_hover_change(animated_icon::hover_change(owner.clone()));
         }
 
         let ink = if disabled {
@@ -268,6 +271,7 @@ impl MenuItem {
                 (None, Some(animated), _) => Some(animated_icon::glyph(
                     state,
                     animated,
+                    &owner,
                     &format!("{key}-{index}-glyph"),
                     theme::MENU_ICON,
                     theme.icon,
@@ -318,7 +322,14 @@ impl MenuItem {
 }
 
 /// The rows' panel: a rounded container whose content sits inset inside it.
-fn panel(entries: Vec<Entry>, key: &str, min_width: f32, state: &AppState, theme: &Theme) -> El {
+fn panel(
+    entries: Vec<Entry>,
+    key: &str,
+    min_width: f32,
+    state: &AppState,
+    theme: &Theme,
+    origin: Vec2,
+) -> El {
     let reduced = state.settings.reduce_motion;
     let items = entries
         .iter()
@@ -363,7 +374,7 @@ fn panel(entries: Vec<Entry>, key: &str, min_width: f32, state: &AppState, theme
         key,
         "menu",
         min_width,
-        reduced,
+        reveal(reduced, origin),
         theme,
         popover::fit_scroll(col().key("rows").items_stretch().children(rows)),
     )
@@ -392,7 +403,7 @@ struct Anchored {
 
 impl Anchored {
     /// Returns the trigger in place, and adds the scrim and `content` to `layer` when open.
-    fn attach(mut self, layer: &mut Vec<El>, content: impl FnOnce() -> El) -> El {
+    fn attach(mut self, layer: &mut Vec<El>, content: impl FnOnce(Vec2) -> El) -> El {
         let anchor_key = format!("{}-anchor", self.key);
         let pointer = self.at.is_some();
         let trigger = self
@@ -418,7 +429,7 @@ impl Anchored {
         };
         layer.extend(scrim);
 
-        let mut panel = content();
+        let mut panel = content(origin(self.side, self.align));
         if let Some(escape) = escape {
             panel = escape(panel);
         }
@@ -458,7 +469,7 @@ fn surface(
     key: &str,
     role: &'static str,
     min_width: f32,
-    reduced: bool,
+    reveal: Transition,
     theme: &Theme,
     content: El,
 ) -> El {
@@ -478,7 +489,7 @@ fn surface(
             theme::MENU_SHADOW_BLUR,
             theme.overlay_shadow,
         )
-        .transition(theme::overlay_reveal(reduced))
+        .transition(reveal)
         .child(content)
 }
 
@@ -555,7 +566,7 @@ impl Popover {
             align: self.align,
             dismiss: self.dismiss.take(),
         };
-        anchored.attach(layer, || {
+        anchored.attach(layer, |origin| {
             let mut content = col()
                 .key("content")
                 .items_stretch()
@@ -591,7 +602,7 @@ impl Popover {
                 &key,
                 "dialog",
                 theme::MENU_MIN_WIDTH,
-                reduced,
+                reveal(reduced, origin),
                 theme,
                 content,
             )
@@ -743,4 +754,36 @@ pub(crate) fn escape(state: &mut AppState) -> bool {
         return super::form_picker::cancel(state);
     }
     true
+}
+
+/// Where a panel grows from: the edge that touches its trigger, and the side of that edge it
+/// aligns to. Matches Rune's overlay origin so a menu opens from its trigger.
+fn origin(side: Side, align: Align) -> Vec2 {
+    let along = match align {
+        Align::Start => 0.0,
+        Align::Center => 0.5,
+        Align::End => 1.0,
+    };
+    match side {
+        Side::Top => Vec2::new(along, 1.0),
+        Side::Bottom => Vec2::new(along, 0.0),
+        Side::Left => Vec2::new(1.0, along),
+        Side::Right => Vec2::new(0.0, along),
+    }
+}
+
+/// A panel scales in from 0.97 at its trigger edge while it fades in, and fades out in place.
+/// The rows follow it, so the two move the same way.
+fn reveal(reduced: bool, origin: Vec2) -> Transition {
+    if reduced {
+        return Transition::none();
+    }
+    Transition::asymmetric(
+        Transition::scale_anchor(MENU_SCALE_FROM, origin),
+        Transition::opacity(),
+    )
+    .springs(SpringPair::new(
+        Spring::new(0.2, 0.0),
+        Spring::new(0.15, 0.0),
+    ))
 }

@@ -402,6 +402,8 @@ pub(crate) const MENU_SHADOW_Y: f32 = 8.0;
 pub(crate) const MENU_SHADOW_BLUR: f32 = 22.0;
 /// How far each row rises as it fades in, and the gap between the first and last row's entrance.
 pub(crate) const MENU_ROW_OFFSET: f32 = 4.0;
+/// The scale a menu panel grows from as it opens.
+pub(crate) const MENU_SCALE_FROM: f32 = 0.97;
 pub(crate) const MENU_ROW_STAGGER: f32 = 0.03;
 
 /// Rows in the tab list, and the new-tab and appearance buttons that share their shape.

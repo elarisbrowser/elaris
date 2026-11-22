@@ -30,7 +30,7 @@ pub(super) fn button(state: &AppState, theme: &Theme) -> El {
             frame,
             "reload",
             hover_highlight::Group::Controls,
-            animated_icon::hover_change(&animated_icon::RELOAD),
+            animated_icon::hover_change("reload"),
         )
         .on_press(move |state: &mut AppState| state.with_active_tab(navigate))
     } else {
@@ -39,6 +39,7 @@ pub(super) fn button(state: &AppState, theme: &Theme) -> El {
     let arrow = animated_icon::glyph(
         state,
         &animated_icon::RELOAD,
+        "reload",
         "reload-arrow",
         theme::ICON,
         theme.icon,
