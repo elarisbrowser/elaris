@@ -52,10 +52,11 @@ pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
     }
 }
 
-/// Whether the Linux row shows its window controls and holds the page below it.
+/// Whether the Linux row shows its window controls and holds the page below it: always with
+/// the sidebar closed, since the row then has the page's room anyway.
 #[cfg(elaris_ui = "linux")]
 pub(crate) fn header_revealed(state: &AppState) -> bool {
-    state.titlebar.is_visible() || state.zoom_menu.is_some()
+    state.sidebar.collapsed || state.titlebar.is_visible() || state.zoom_menu.is_some()
 }
 
 /// A passive hit target that sits at the window's top edge while the toolbar is closed.
