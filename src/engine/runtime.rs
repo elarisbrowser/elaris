@@ -114,9 +114,12 @@ impl Runtime {
         self.ladybird.waker()
     }
 
-    /// Runs Ladybird work, blocking until there is some or a waker wakes it.
+    /// Runs Ladybird work, blocking until there is some or a waker wakes it. Events a command
+    /// raised synchronously, such as an immediate close decision, are already waiting, so it
+    /// only runs ready work then rather than blocking on unrelated activity.
     pub(super) fn wait(&mut self) -> Result<(), String> {
-        self.ladybird.wait(None)
+        let timeout = (!self.events.borrow().is_empty()).then_some(Duration::ZERO);
+        self.ladybird.wait(timeout)
     }
 
     /// Applies `command`, returning the error to report if it failed. Commands for a tab that
