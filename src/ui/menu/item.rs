@@ -168,13 +168,13 @@ impl MenuItem {
             text(self.label)
                 .font(type_::BODY)
                 .color(ink)
-                .grow(1.0)
-                .min_w(0.0)
                 .single_line()
-                .truncate()
                 .a11y_hidden(),
         );
         if let Some(on) = self.checked {
+            // A growing label measures as no width, so the panel could not widen to it; a spacer
+            // pushes the tick to the trailing edge instead.
+            entry = entry.child(el().grow(1.0));
             entry = entry.child(
                 el().key(format!("{key}-{index}-tick"))
                     .size(theme::MENU_ICON, theme::MENU_ICON)
