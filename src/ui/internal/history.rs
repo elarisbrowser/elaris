@@ -8,13 +8,14 @@ use rune::{El, GrowthSpec, Key, Transition, col, el, icon, row, text, text_input
 use rune_kit::{Button, ButtonVariant, Checkbox, Dialog, Kit};
 
 use crate::address::compact_address;
-use crate::app::AppState;
+use crate::app::{AppState, HistoryConfirm};
 use crate::storage::HistoryMutation;
 use crate::ui::{
     HISTORY_SCROLL, HISTORY_SEARCH, controls, icons,
     theme::{self, Theme},
 };
 
+use super::clear_data;
 use super::layout::PageLayout;
 use super::widgets;
 use super::{PageAction, PageContext};
@@ -35,15 +36,23 @@ pub(super) const ACTIONS: &[PageAction] = &[
     PageAction {
         label: "Clear History…",
         enabled: |state| !state.history_page.writing,
-        run: |state, _| state.history_page.confirming = true,
+        run: |state, _| state.history_page.confirming = Some(HistoryConfirm::Clear),
+    },
+    PageAction {
+        label: "Clear Browsing Data…",
+        enabled: |_| true,
+        run: |state, _| state.open_clear_data(),
     },
 ];
 
 pub(super) fn view(cx: &mut PageContext) -> PageLayout {
     let (state, theme, kit) = (cx.state, cx.theme, &cx.kit);
     let history = &state.history_page;
-    if history.confirming {
-        confirmation(theme, cx.overlays);
+    if let Some(confirm) = history.confirming {
+        confirmation(confirm, theme, cx.overlays);
+    }
+    if let Some(dialog) = state.clear_data {
+        clear_data::dialog(dialog, theme, cx.overlays);
     }
     let has_entries = history
         .page
@@ -81,6 +90,15 @@ pub(super) fn view(cx: &mut PageContext) -> PageLayout {
                 .color(theme.text)
                 .wrap()
                 .role("alert"),
+        );
+    }
+    if let Some(status) = &state.clear_data_status {
+        results = results.child(
+            text(status)
+                .font(type_::BODY)
+                .color(theme.text_muted)
+                .wrap()
+                .role("status"),
         );
     }
     if let Some(error) = &history.load_error {
@@ -153,9 +171,16 @@ fn actions(state: &AppState, theme: &Theme, kit: &Kit, has_entries: bool) -> Vec
                             && history.input.text.trim().is_empty()
                             && history.previous.is_empty()),
                 )
-                .on_press(|state: &mut AppState| state.history_page.confirming = true)
+                .on_press(|state: &mut AppState| {
+                    state.history_page.confirming = Some(HistoryConfirm::Clear)
+                })
                 .build(kit)
                 .key("history-clear"),
+            Button::new("Clear Browsing Data…")
+                .variant(ButtonVariant::GhostMuted)
+                .on_press(AppState::open_clear_data)
+                .build(kit)
+                .key("history-clear-data"),
         ];
     }
     vec![
@@ -172,7 +197,9 @@ fn actions(state: &AppState, theme: &Theme, kit: &Kit, has_entries: bool) -> Vec
         Button::new("Delete")
             .variant(ButtonVariant::Danger)
             .disabled(history.writing)
-            .on_press(AppState::delete_selected_history)
+            .on_press(|state: &mut AppState| {
+                state.history_page.confirming = Some(HistoryConfirm::Delete)
+            })
             .build(kit)
             .key("history-selection-delete"),
     ]
@@ -573,8 +600,22 @@ fn empty(glyph: &'static rune::Icon, title: &str, detail: &str, theme: &Theme) -
     widgets::message(glyph, title, detail, theme).key("history-empty")
 }
 
-fn confirmation(theme: &Theme, overlays: &mut Vec<El>) {
+fn confirmation(confirm: HistoryConfirm, theme: &Theme, overlays: &mut Vec<El>) {
     let kit = theme.kit(theme.overlay_panel);
+    let (title, detail, label, key) = match confirm {
+        HistoryConfirm::Clear => (
+            "Clear browsing history?",
+            "This will remove your saved browsing history from this device.",
+            "Clear History",
+            "history-confirm-clear",
+        ),
+        HistoryConfirm::Delete => (
+            "Delete selected history?",
+            "All visits to the selected addresses will be removed from this device.",
+            "Delete",
+            "history-confirm-delete",
+        ),
+    };
     let actions = row()
         .w_full()
         .gap(space::S2)
@@ -582,24 +623,27 @@ fn confirmation(theme: &Theme, overlays: &mut Vec<El>) {
         .child(
             Button::new("Cancel")
                 .variant(ButtonVariant::Neutral)
-                .on_press(|state: &mut AppState| state.history_page.confirming = false)
+                .on_press(|state: &mut AppState| state.history_page.confirming = None)
                 .build(&kit)
                 .key("history-cancel")
                 .autofocus(),
         )
         .child(
-            Button::new("Clear History")
+            Button::new(label)
                 .variant(ButtonVariant::Danger)
-                .on_press(|state: &mut AppState| state.mutate_history(HistoryMutation::Clear))
+                .on_press(move |state: &mut AppState| match confirm {
+                    HistoryConfirm::Clear => state.mutate_history(HistoryMutation::Clear),
+                    HistoryConfirm::Delete => state.delete_selected_history(),
+                })
                 .build(&kit)
-                .key("history-confirm-clear"),
+                .key(key),
         );
-    Dialog::new("history-confirm", "Clear browsing history?")
+    Dialog::new("history-confirm", title)
         .open(true)
         .fit()
         .width(DIALOG_WIDTH)
         .click_outside(false)
-        .on_close(|state: &mut AppState| state.history_page.confirming = false)
+        .on_close(|state: &mut AppState| state.history_page.confirming = None)
         .child(
             col()
                 .w_full()
@@ -607,7 +651,7 @@ fn confirmation(theme: &Theme, overlays: &mut Vec<El>) {
                 .pb(SECTION_GAP)
                 .gap(SECTION_GAP)
                 .child(
-                    text("This will remove your saved browsing history from this device.")
+                    text(detail)
                         .font(type_::BODY)
                         .color(theme.text_muted)
                         .wrap(),

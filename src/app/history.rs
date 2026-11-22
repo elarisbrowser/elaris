@@ -12,6 +12,13 @@ use crate::internal::{InternalPage, InternalRoute};
 use crate::storage::{HistoryEvent, HistoryMutation};
 use crate::tab::TabId;
 
+/// The destructive action awaiting confirmation in a modal.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum HistoryConfirm {
+    Clear,
+    Delete,
+}
+
 #[derive(Default)]
 pub(crate) struct HistoryPage {
     pub(crate) input: TextEdit,
@@ -19,7 +26,7 @@ pub(crate) struct HistoryPage {
     pub(crate) loading: bool,
     pub(crate) load_error: Option<String>,
     pub(crate) action_error: Option<String>,
-    pub(crate) confirming: bool,
+    pub(crate) confirming: Option<HistoryConfirm>,
     pub(crate) writing: bool,
     pub(crate) active: Option<TabId>,
     pub(crate) previous: Vec<Cursor>,
@@ -124,11 +131,12 @@ impl AppState {
     pub(crate) fn mutate_history(&mut self, mutation: HistoryMutation) {
         if self.active_history_tab().is_none()
             || self.history_page.writing
-            || (matches!(mutation, HistoryMutation::Clear) && !self.history_page.confirming)
+            || (matches!(mutation, HistoryMutation::Clear)
+                && self.history_page.confirming != Some(HistoryConfirm::Clear))
         {
             return;
         }
-        self.history_page.confirming = false;
+        self.history_page.confirming = None;
         self.history_page.action_error = None;
         self.history_page.writing = self
             .storage
@@ -181,7 +189,7 @@ impl AppState {
         let mut changed = active != self.history_page.active;
         if changed {
             self.history_page.active = active;
-            self.history_page.confirming = false;
+            self.history_page.confirming = None;
             self.history_page.selected.clear();
         }
         if active.is_some() && (changed || visits_changed) {

@@ -7,6 +7,7 @@ mod history;
 
 #[cfg(test)]
 use crate::config::ConfigLoad;
+pub(crate) use history::HistoryConfirm;
 use history::HistoryPage;
 #[cfg(test)]
 use rune::{Key, KeyEvent, Tx};

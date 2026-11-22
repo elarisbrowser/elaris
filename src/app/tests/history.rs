@@ -180,7 +180,13 @@ fn history_mutation_preserves_tabs_and_query_on_success_or_failure() {
     assert_eq!(state.history_page.page.as_ref().unwrap().entries.len(), 1);
     assert!(state.history_page.action_error.is_none());
 
-    state.history_page.confirming = true;
+    state.history_page.confirming = Some(HistoryConfirm::Delete);
+    state.mutate_history(HistoryMutation::Clear);
+    pump(&mut state);
+    assert_eq!(state.history_page.page.as_ref().unwrap().entries.len(), 1);
+    assert_eq!(state.history_page.confirming, Some(HistoryConfirm::Delete));
+
+    state.history_page.confirming = Some(HistoryConfirm::Clear);
     state.mutate_history(HistoryMutation::Clear);
     pump(&mut state);
     pump(&mut state);

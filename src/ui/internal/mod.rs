@@ -9,6 +9,7 @@
 
 mod menu;
 
+mod clear_data;
 mod history;
 mod layout;
 mod placeholders;
