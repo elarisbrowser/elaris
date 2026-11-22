@@ -143,7 +143,12 @@ def launch(args: argparse.Namespace) -> None:
             executable = packaging.macos_release_bundle(_executable(profile))
         else:
             executable = packaging.macos_app_bundle(_executable(profile), "ElarisDev")
-        run(str(executable), *([args.url] if args.url else []), *args.rune_args)
+        # Launch Services starts the bundle and brings it forward, and -W waits until it quits, as a direct run does.
+        app = executable.parents[2]
+        extra = [*([args.url] if args.url else []), *args.rune_args]
+        # Launch Services detaches the app's output, so keep it in a log beside the build.
+        log = str(ROOT / "build" / "elaris-run.log")
+        run("open", "-W", "-a", str(app), "--stdout", log, "--stderr", log, *(["--args", *extra] if extra else []))
         return
     if _run_artifacts_are_current(args.ui, profile):
         executable = _executable(profile)
