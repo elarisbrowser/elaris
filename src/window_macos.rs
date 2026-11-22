@@ -50,6 +50,24 @@ pub(crate) fn install(window: &RuneWindowHandle) {
             native_window.setFrameUsingName(name);
             native_window.setFrameAutosaveName(name);
         }
+        activate_at_launch();
+    });
+}
+
+/// Brings Elaris to the front when its first window opens. macOS doesn't activate an app that a
+/// terminal launches, so without this the window opens behind the terminal and looks like it never
+/// appeared. Later windows keep the user's focus where it is.
+fn activate_at_launch() {
+    use objc2_app_kit_02::NSApplication;
+    use objc2_foundation_02::MainThreadMarker;
+    use std::sync::Once;
+
+    static LAUNCH: Once = Once::new();
+    LAUNCH.call_once(|| {
+        if let Some(main) = MainThreadMarker::new() {
+            #[allow(deprecated)]
+            NSApplication::sharedApplication(main).activateIgnoringOtherApps(true);
+        }
     });
 }
 
