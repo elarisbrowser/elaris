@@ -54,7 +54,10 @@ On Linux, the toolbar slides in when the pointer reaches the top of the window. 
 ./elaris check             # fmt, clippy, and tests
 ./elaris format            # format Rust and bridge C++
 ./elaris linux-build       # build for Linux in Docker
+./elaris bundle            # release build with its icon: build/ElarisRelease.app (macOS) or build/linux/Elaris (Linux)
 ```
+
+On Linux, copy `build/linux/Elaris` into `~/.local` (or `/usr`) to install the launcher entry and icon.
 
 Run `./elaris check` before opening a pull request. See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow and [SETUP.md](SETUP.md) for full environment details.
 
