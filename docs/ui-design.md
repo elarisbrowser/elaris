@@ -123,14 +123,18 @@ Each page has one route and one renderer:
 
 `PageContext` carries the app state, theme, a Rune Kit palette for the grouped surface, the
 overlay list for dialogs and pickers, reduced motion and the compact flag. `PageLayout::new`
-takes a stable scroll key, an icon and the content; `.toolbar(..)` pins controls under the title.
+takes a stable scroll key, an icon and the content; `.toolbar(..)` pins controls under the title
+and `.nav(..)` adds category navigation. Navigation sits in a sticky column beside the content
+when the pane is at least `PAGE_NAV_BREAKPOINT` wide and folds into a scrolling row under the
+title otherwise. The selected category is `AppState::page_category`; the page shows one category
+at a time, like System Settings.
 The frame in `layout.rs` handles the title, column width, alignment and scrolling.
 
 Build content from `widgets.rs` rather than styling new surfaces:
 
 | Widget | Use |
 |---|---|
-| `Category`, `categories`, `jump_bar` | Large headings that split a long page, with buttons that scroll to each one |
+| `NavItem`, `nav`, `category` | Icon and label navigation between categories, and the selected category's heading and sections |
 | `section` | A muted heading above one grouped surface |
 | `rows` | A grouped surface of padded rows divided by inset hairlines |
 | `setting`, `setting_with` | A title, description and trailing control; the control drops under the copy in compact panes |
@@ -140,4 +144,5 @@ Build content from `widgets.rs` rather than styling new surfaces:
 | `switch_kit` | Accent-coloured switches |
 
 All page measurements and type styles are the `PAGE_*` tokens in `src/ui/theme.rs`. Settings has
-one module per category under `src/ui/internal/settings/`.
+one module per category under `src/ui/internal/settings/`; add a category by listing its
+`NavItem` and `sections` function in `CATEGORIES`.
