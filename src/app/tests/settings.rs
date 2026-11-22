@@ -228,3 +228,48 @@ fn internal_pages_open_a_native_context_menu_with_page_actions() {
     assert!(history.contains(&"Settings".to_owned()));
     assert!(!history.contains(&"History".to_owned()));
 }
+
+/// The menu highlight lives inside the panel's rows, not in a window overlay placed from last
+/// frame's layout, which a native page such as Settings left hidden while a row was hovered.
+#[test]
+fn menu_highlight_stays_inside_the_panel_over_settings() {
+    let state = AppState::new(Some("elaris://settings"));
+    let tab = state.browser.active_tab().unwrap().id();
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::ui::view,
+        (1280.0, 800.0),
+        rune::Env::new(false, 1.0),
+    );
+    runtime.poll = Some(crate::app::poll);
+    runtime.frame(0.0);
+    runtime
+        .state
+        .open_context_menu(Some(tab), rune::PointerPress { x: 120.0, y: 160.0 });
+    let settle = |runtime: &mut rune::Runtime<AppState>| {
+        for _ in 0..35 {
+            runtime.frame(1.0 / 60.0);
+        }
+    };
+    settle(&mut runtime);
+    let element = |runtime: &rune::Runtime<AppState>, key: &str| {
+        runtime
+            .elements()
+            .into_iter()
+            .find(|element| element.key.as_deref() == Some(key) && !element.exiting)
+            .unwrap_or_else(|| panic!("missing {key}"))
+    };
+    let row = element(&runtime, "sidebar-context-menu-item1").rect;
+    runtime.pointer_move(row[0] + row[2] / 2.0, row[1] + row[3] / 2.0);
+    // Long enough for any poll that reads focus to have taken the highlight away.
+    for _ in 0..4 {
+        settle(&mut runtime);
+    }
+    let highlight = element(&runtime, "sidebar-context-menu-highlight");
+    assert_eq!(highlight.rect[1], row[1]);
+    assert!(
+        highlight.path.contains("sidebar-context-menu-menu"),
+        "the highlight must be drawn inside the menu panel: {}",
+        highlight.path
+    );
+}

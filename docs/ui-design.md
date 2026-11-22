@@ -178,7 +178,7 @@ to SMIL by hand and check each source's licence before copying artwork.
 
 ## Menus
 
-`src/ui/menu.rs` builds every menu, context menu, popover and dropdown: sidebar and page context
+`src/ui/menu/` builds every menu, context menu, popover and dropdown: sidebar and page context
 menus, the tab overflow and history menus, zoom, the omnibox search engine, site permission
 choices, `<select>` lists, the Downloads popover and the Settings dropdowns (`Dropdown`). Its panel is a rounded container with rows inset inside it, as the Settings
 category list is. Each highlight is concentric with the panel, so `MENU_ITEM_RADIUS` is
@@ -191,3 +191,7 @@ slot as its siblings, so labels stay aligned. Use `.icon(..)` for a static glyph
 for anything else. Popovers title their content and rise the body in after the title. Dropdowns
 use a field trigger and a menu with the current choice ticked.
 
+The highlight sits inside the panel's rows and is placed from their fixed heights
+(`menu/highlight.rs`). Don't draw it as a window overlay positioned from the last frame's layout:
+over a native page such as Settings, that overlay stayed hidden while a row was hovered. The
+`menu_highlight_stays_inside_the_panel_over_settings` test guards this.

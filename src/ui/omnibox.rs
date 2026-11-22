@@ -392,13 +392,7 @@ fn search_engine_selector(state: &AppState, theme: &Theme, overlays: &mut Vec<El
     let menu = menu
         .open(state.omnibox.search_engine_menu_open)
         .on_close(|state: &mut AppState| state.omnibox.search_engine_menu_open = false);
-    super::hover_highlight::build_highlight_menu(
-        state,
-        menu,
-        Some("search-engine-menu-menu"),
-        theme,
-        overlays,
-    )
+    menu.build(state, theme, overlays)
 }
 
 fn result_row(

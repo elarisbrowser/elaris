@@ -96,7 +96,7 @@ pub(crate) fn context_menu(
     );
 
     menu = join(menu, sections);
-    crate::ui::hover_highlight::build_context_menu(state, menu, theme, layer);
+    menu.build(state, theme, layer);
 }
 
 /// Adds each non-empty section, with a separator between neighbours.
