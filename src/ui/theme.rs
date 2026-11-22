@@ -289,8 +289,6 @@ pub(crate) const SWIPE_INDICATOR_SETTLE: Anim = Anim::new(Curve::tween(0.14, Eas
 pub(super) const HIGHLIGHT_MOTION: Spring = Spring::new(0.10, 0.0);
 pub(super) const HOVER_ENTER: Anim = Anim::new(Curve::tween(0.08, Easing::EASE_OUT));
 pub(super) const HOVER_EXIT: Anim = Anim::new(Curve::tween(0.15, Easing::EASE_OUT));
-/// Morph for a status glyph that swaps in place, such as reload and stop.
-pub(crate) const STATUS_GLYPH: Anim = Anim::new(Curve::tween(0.2, Easing::EASE_OUT));
 /// The scale a swapped-out glyph shrinks to (and a swapped-in one grows from).
 pub(crate) const GLYPH_MORPH_SCALE: f32 = 0.6;
 /// The blur, in points, a swapped-out glyph dissolves into.

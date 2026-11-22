@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The reload control. The arrow and the stop mark stay mounted and morph into each other: on
-//! press the arrow spins as it shrinks and blurs away, and the stop mark grows in its place.
+//! The reload control. The arrow and the stop mark morph into each other: on press the arrow
+//! spins as it shrinks and blurs away, and the stop mark grows in its place.
 
 use std::f32::consts::TAU;
 
-use rune::{Anim, El, icon};
+use rune::{Anim, El, el, icon};
 
 use crate::app::AppState;
 use crate::browser::Browser;
@@ -33,43 +33,33 @@ pub(super) fn button(state: &AppState, theme: &Theme) -> El {
     } else {
         frame.disabled(true).opacity(theme.disabled_opacity)
     };
-    // A full turn looks the same as none, so the arrow can snap back while it is invisible and
-    // spin forwards again on the next press.
-    let arrow = icon(&icons::RELOAD, theme::ICON)
-        .key("reload-arrow")
-        .color(theme.icon)
+    let inset = (theme::ICON_BUTTON - theme::ICON) / 2.0;
+    let morph = theme::glyph_morph(reduced);
+    // The arrow sits in a turntable that spins as the arrow leaves. A full turn looks the same as
+    // none, so the empty turntable snaps back while loading and spins forwards on the next press.
+    let arrow = (!loading).then(|| {
+        icon(&icons::RELOAD, theme::ICON)
+            .key("reload-arrow")
+            .color(theme.icon)
+            .transition(morph)
+    });
+    let turntable = el()
+        .key("reload-arrow-spin")
+        .size(theme::ICON, theme::ICON)
+        .absolute(inset, inset)
         .rotate(if loading { TAU } else { 0.0 })
         .rotate_motion(if loading && !reduced {
             theme::RELOAD_SPIN
         } else {
             Anim::INSTANT
-        });
-    let cross = icon(&icons::CLOSE, theme::ICON)
-        .key("reload-stop-cross")
-        .color(theme.icon);
-    button
-        .child(status_glyph(arrow, !loading, reduced))
-        .child(status_glyph(cross, loading, reduced))
-}
-
-/// A glyph centred in the reload button. The hidden one shrinks, blurs and fades away.
-fn status_glyph(mark: El, shown: bool, reduced: bool) -> El {
-    let inset = (theme::ICON_BUTTON - theme::ICON) / 2.0;
-    let motion = if reduced {
-        Anim::INSTANT
-    } else {
-        theme::STATUS_GLYPH
-    };
-    let mut mark = mark
-        .absolute(inset, inset)
-        .opacity(if shown { 1.0 } else { 0.0 })
-        .scale(if shown { 1.0 } else { theme::GLYPH_MORPH_SCALE })
-        .blur(if shown { 0.0 } else { theme::GLYPH_MORPH_BLUR })
-        .opacity_motion(motion)
-        .scale_motion(motion)
-        .blur_motion(motion);
-    if !shown {
-        mark = mark.a11y_hidden();
-    }
-    mark
+        })
+        .children(arrow);
+    let cross = loading.then(|| {
+        icon(&icons::CLOSE, theme::ICON)
+            .key("reload-stop-cross")
+            .color(theme.icon)
+            .absolute(inset, inset)
+            .transition(morph)
+    });
+    button.child(turntable).children(cross)
 }
