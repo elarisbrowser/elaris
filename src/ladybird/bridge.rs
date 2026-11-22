@@ -180,6 +180,9 @@ unsafe extern "C" {
     fn elaris_ladybird_copy_frame(view: *mut RawView, rgba: *mut u8, length: usize) -> i32;
     fn elaris_ladybird_gpu_frames_supported() -> i32;
     fn elaris_ladybird_set_gpu_frames(view: *mut RawView, enabled: i32) -> i32;
+    fn elaris_ladybird_set_remote_layer(view: *mut RawView, enabled: i32) -> i32;
+    fn elaris_ladybird_request_snapshot(view: *mut RawView, max_width: i32, max_height: i32)
+    -> i32;
     fn elaris_ladybird_gpu_frame(view: *mut RawView, out_frame: *mut RawGpuFrame) -> i32;
     fn elaris_ladybird_release_frames(view: *mut RawView, completed_serial: u64) -> i32;
     fn elaris_ladybird_mouse_event(view: *mut RawView, event: *const RawMouseEvent) -> i32;
@@ -424,6 +427,10 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
             33 => Event::WheelResult {
                 cancelled: raw.value != 0,
             },
+            34 => Event::RemoteLayer {
+                context_id: raw.request_id,
+            },
+            35 => Event::Snapshot(copy_favicon(raw)),
             28 => Event::Popup {
                 request: raw.request_id,
                 activate: raw.value != 0,
@@ -1145,6 +1152,25 @@ impl WebView {
     pub fn set_gpu_frames(&mut self, enabled: bool) -> Result<(), String> {
         // SAFETY: The view is live on its owner's thread.
         status_result(unsafe { elaris_ladybird_set_gpu_frames(self.raw.as_ptr(), enabled.into()) })
+    }
+
+    /// Lets the Compositor show the view's frames itself, in a CoreAnimation context it reports
+    /// with [`Event::RemoteLayer`] (macOS). Frames then arrive there, not through [`Self::gpu_frame`].
+    pub fn set_remote_layer(&mut self, enabled: bool) -> Result<(), String> {
+        // SAFETY: The view is live on its owner's thread.
+        status_result(unsafe {
+            elaris_ladybird_set_remote_layer(self.raw.as_ptr(), enabled.into())
+        })
+    }
+
+    /// Asks for the frame on display, scaled down to fit `max_width` x `max_height`; it arrives as
+    /// [`Event::Snapshot`]. Unlike [`Self::copy_frame`], it works while a remote layer shows the frames.
+    pub fn request_snapshot(&mut self, max_width: u32, max_height: u32) -> Result<(), String> {
+        let side = |value: u32| i32::try_from(value).unwrap_or(i32::MAX);
+        // SAFETY: The view is live on its owner's thread.
+        status_result(unsafe {
+            elaris_ladybird_request_snapshot(self.raw.as_ptr(), side(max_width), side(max_height))
+        })
     }
 
     /// Copies the frame on display into a GPU surface of the bridge's own.
