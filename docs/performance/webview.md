@@ -48,10 +48,10 @@ Frames keep their alpha as the Compositor wrote it; the CPU path forced it opaqu
 
 `ELARIS_CPU_FRAMES=1` selects the copying path described below.
 
-### Remote layers (macOS default)
+### Remote layers (macOS, opt-in)
 
-Tabs in a window go one step further: Ladybird's Compositor shows their frames itself. The
-engine asks for a remote layer (`ViewCommand::HostLayer`, `set_hosts_remote_layer`), and the
+With `ELARIS_REMOTE_LAYERS=1`, tabs in a window go one step further: Ladybird's Compositor
+shows their frames itself. The engine asks for a remote layer (`ViewCommand::HostLayer`, `set_hosts_remote_layer`), and the
 Compositor commits each frame into a CoreAnimation context of its own. The tab's surface shows
 that context with a `CALayerHost` (private API, looked up and checked at runtime, as Ladybird's
 own macOS UI does), given to Rune with `NativeSurface::set_layer`. Rune places the layer under
@@ -66,7 +66,7 @@ frame that arrived just after Rune drew waited a whole refresh, and the next one
   second, since no frame is in memory the engine can read.
 - Rune can't blur or sample what the layer shows: an overlay's backdrop blur over the page shows
   the page sharp.
-- `ELARIS_REMOTE_LAYERS=0` goes back to GPU frames.
+- Off by default: tabs use the GPU frames above.
 
 Measured with synthetic two-finger reversals on elarisbrowser.com, three interleaved runs per
 row, by capturing the window: refreshes where the page did not move while the gesture did, per

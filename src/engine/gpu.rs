@@ -49,14 +49,14 @@ pub(super) fn enabled() -> bool {
 }
 
 /// Whether the Compositor may show frames in a layer of its own (`Surface::hosts_layer`):
-/// `CALayerHost` exists, and `ELARIS_REMOTE_LAYERS=0` does not turn it off. Never in unit tests,
+/// `ELARIS_REMOTE_LAYERS=1` turns it on and `CALayerHost` exists. Never in unit tests,
 /// whose fake engine has no Compositor.
 #[cfg(target_os = "macos")]
 pub(super) fn remote_layers() -> bool {
     static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ENABLED.get_or_init(|| {
         !cfg!(test)
-            && std::env::var_os(REMOTE_LAYERS_VARIABLE).is_none_or(|value| value != "0")
+            && std::env::var_os(REMOTE_LAYERS_VARIABLE).is_some_and(|value| value != "0")
             && remote_layer::supported()
     })
 }

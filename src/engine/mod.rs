@@ -99,7 +99,7 @@ impl Default for Surface {
 
 impl Surface {
     /// Whether the surface can show its frames in a layer the window server composites (macOS,
-    /// unless `ELARIS_REMOTE_LAYERS=0`): each frame reaches the screen on the next refresh, with no
+    /// with `ELARIS_REMOTE_LAYERS=1`): each frame reaches the screen on the next refresh, with no
     /// copy and no redraw of the window's.
     pub(crate) fn hosts_layer(&self) -> bool {
         #[cfg(target_os = "macos")]
