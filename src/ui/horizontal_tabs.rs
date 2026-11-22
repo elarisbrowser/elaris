@@ -477,6 +477,7 @@ fn tab_view(state: &AppState, tab: &Tab, theme: &Theme) -> El {
             theme,
         )
         .hover_group()
+        .press_scale(1.0)
         .child(if active {
             close
         } else {
