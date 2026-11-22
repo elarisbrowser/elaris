@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import os
 import platform
+import socket
 import subprocess
 from pathlib import Path
 
@@ -35,6 +36,7 @@ def linux_test(args: argparse.Namespace) -> None:
 
 def linux_ui(args: argparse.Namespace) -> None:
     """Run Elaris in the container's virtual display. Open the printed noVNC address in a browser to see it."""
+    port = _free_local_port(NOVNC_PORT)
     _run_in_container(
         args,
         [
@@ -44,9 +46,19 @@ def linux_ui(args: argparse.Namespace) -> None:
             './elaris setup --skip-system-deps && ./elaris run "$ELARIS_URL"',
         ],
         extra_env={"ELARIS_URL": args.url},
-        publish=[f"127.0.0.1:{NOVNC_PORT}:{NOVNC_PORT}"],
-        announce=f"Open http://127.0.0.1:{NOVNC_PORT}/vnc.html?autoconnect=1&resize=scale in a browser.",
+        publish=[f"127.0.0.1:{port}:{NOVNC_PORT}"],
+        announce=f"Open http://127.0.0.1:{port}/vnc.html?autoconnect=1&resize=scale in a browser.",
+        name=f"elaris-ui-{os.getpid()}",
     )
+
+
+def _free_local_port(start: int) -> int:
+    """The first port at or above `start` that nothing on this machine is listening on."""
+    for port in range(start, start + 50):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            if probe.connect_ex(("127.0.0.1", port)) != 0:
+                return port
+    raise SystemExit(f"elaris: no free port found from {start} for the noVNC viewer")
 
 
 def _run_in_container(
@@ -56,6 +68,7 @@ def _run_in_container(
     extra_env: dict[str, str] | None = None,
     publish: list[str] | None = None,
     announce: str | None = None,
+    name: str | None = None,
 ) -> None:
     if platform.system() not in {"Darwin", "Linux"}:
         raise SystemExit("elaris: the Linux container commands run from macOS or Linux hosts")
@@ -140,6 +153,8 @@ def _run_in_container(
     )
 
     container = ["docker", "run", "--rm", "--init", "--platform", docker_platform, "--shm-size=2g", *mounts]
+    if name:
+        container.extend(["--name", name])
     for port in publish or []:
         container.extend(["--publish", port])
     env = {"ELARIS_JOBS": jobs, **(extra_env or {})}
@@ -150,7 +165,13 @@ def _run_in_container(
     print(f"Running on {architecture}. Container output follows.", flush=True)
     if announce:
         print(announce, flush=True)
-    run(*container)
+    try:
+        run(*container)
+    except (KeyboardInterrupt, SystemExit):
+        # Stopping the client does not stop its container, which would keep the port and the display.
+        if name:
+            subprocess.run(["docker", "stop", "--time", "5", name], capture_output=True, check=False)
+        raise
 
 
 def _host_architecture() -> str:
