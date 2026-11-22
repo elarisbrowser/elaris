@@ -219,6 +219,9 @@ impl super::AppState {
             Some(true) if !close.cancelled => {
                 let previous = self.browser.active_tab().map(Tab::id);
                 close.checking += 1;
+                // The approval arrives from the engine, not input, so the closing rows need
+                // asking to fade and close their space rather than unmount at once.
+                tx.animated();
                 if self.advance_close() {
                     self.close_window_approved(quit, tx);
                 } else if self.closing_tabs.is_none()

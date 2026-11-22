@@ -398,6 +398,8 @@ pub(crate) const ACTIVE_SHADOW_BLUR: f32 = 1.5;
 pub(crate) const SELECTION_MOTION: Spring = motion::SNAPPY;
 /// The short spring shared by live tab preview movement and the dragged tab's drop.
 pub(crate) const TAB_REORDER_MOTION: Spring = Spring::new(0.2, 0.12);
+/// How a tab row opens and its gap closes: brisk and without overshoot, so it lands cleanly.
+pub(crate) const TAB_PRESENCE_MOTION: Spring = Spring::new(0.22, 0.0);
 pub(crate) const TAB_DROP_SETTLE_SECONDS: f32 = 0.2;
 pub(crate) const TAB_DRAG_SCROLL_EDGE: f32 = 34.0;
 pub(crate) const TAB_DRAG_SCROLL_MAX: f32 = 520.0;

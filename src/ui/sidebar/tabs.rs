@@ -44,19 +44,21 @@ pub(super) fn view(
         .w_full()
         .gap(theme::TAB_GAP)
         .growth(GrowthSpec {
-            spring: reorder_motion,
+            spring: presence_motion(reduced_motion),
             ..GrowthSpec::default()
         })
         .motion(reorder_motion);
     if !has_favourites && !state.browser.tabs().is_empty() {
-        scroll_content = scroll_content.child(divider("regular-tabs-divider", theme));
+        scroll_content =
+            scroll_content.child(divider("regular-tabs-divider", theme).arrives_whole());
     }
     if new_tab_top {
-        scroll_content = scroll_content.child(new_tab_button(theme));
+        scroll_content = scroll_content.child(new_tab_button(theme).arrives_whole());
     }
-    scroll_content = scroll_content.child(regular_rows(state, active, theme, reduced_motion));
+    scroll_content =
+        scroll_content.child(regular_rows(state, active, theme, reduced_motion).arrives_whole());
     if !new_tab_top {
-        scroll_content = scroll_content.child(new_tab_button(theme));
+        scroll_content = scroll_content.child(new_tab_button(theme).arrives_whole());
     }
 
     let scroll_live = state.tab_drag.scroll_live();
@@ -263,6 +265,15 @@ fn favourites(
 }
 
 /// A hairline between sidebar sections. Its spacing comes from `SIDEBAR_DIVIDER_PADDING` alone.
+/// The spring a tab stack's rows open and close their space on.
+fn presence_motion(reduced_motion: bool) -> Spring {
+    if reduced_motion {
+        Spring::NONE
+    } else {
+        theme::TAB_PRESENCE_MOTION
+    }
+}
+
 fn divider(key: &'static str, theme: &Theme) -> El {
     col()
         .key(key)
@@ -303,7 +314,7 @@ fn regular_rows(
         .gap(theme::TAB_GAP)
         .motion(motion)
         .growth(GrowthSpec {
-            spring: motion,
+            spring: presence_motion(reduced_motion),
             ..GrowthSpec::default()
         });
     let split_pair = split_group_members(state, section)
@@ -315,14 +326,9 @@ fn regular_rows(
             PreviewItem::SourceSlot(_) | PreviewItem::DropSlot(_, _) => None,
         };
         if let Some(pair) = split_tab.filter(|_| !split_group_added) {
-            rows = rows.child(split_tab_group(
-                state,
-                section,
-                pair,
-                index,
-                items.len(),
-                theme,
-            ));
+            rows = rows.child(
+                split_tab_group(state, section, pair, index, items.len(), theme).arrives_whole(),
+            );
             split_group_added = true;
             continue;
         }
@@ -354,7 +360,7 @@ fn regular_rows(
                 theme,
             ),
         };
-        rows = rows.child(element);
+        rows = rows.child(element.arrives_whole());
     }
     col()
         .key("regular-section")
