@@ -198,13 +198,6 @@ pub enum Event {
     WheelResult {
         cancelled: bool,
     },
-    /// The Compositor shows the view's frames in this CoreAnimation context (0: no longer).
-    RemoteLayer {
-        context_id: u64,
-    },
-    /// The frame snapshot [`WebView::request_snapshot`] asked for, as favicon-style RGBA pixels;
-    /// `None` when the view had no frame.
-    Snapshot(Option<Favicon>),
     Popup {
         request: u64,
         activate: bool,

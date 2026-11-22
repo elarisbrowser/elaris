@@ -13,9 +13,6 @@ use crate::perf::{self, Count, Stage};
 pub(super) const RETAINED_HIDDEN_FRAMES: usize = 2;
 const FALLBACK_MAX_SIDE: u32 = 160;
 const THUMBNAIL_INTERVAL: Duration = Duration::from_secs(1);
-/// Snapshots for thumbnails fit this square, in pixels: twice the widest thumbnail.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-const SNAPSHOT_MAX_SIDE: u32 = 640;
 
 pub(super) fn evict_frame(view: &mut View) -> bool {
     // A GPU frame costs no CPU memory to keep, and has no pixels to shrink.
@@ -81,7 +78,13 @@ pub(super) fn show_frame(
         }
     };
     let rgba = perf::time(Stage::Copy, || view.view.copy_frame(&frame))?;
-    let thumbnail = if sample && wants_thumbnail(view) {
+    let thumbnail = if sample
+        && view.visible
+        && view.surface.preview_source.revision() == view.preview_revision
+        && view
+            .last_thumbnail
+            .is_none_or(|last| last.elapsed() >= THUMBNAIL_INTERVAL)
+    {
         view.last_thumbnail = Some(Instant::now());
         thumbnails::sample(frame.width, frame.height, &rgba)
     } else {
@@ -105,10 +108,6 @@ fn show_gpu_frame(
     timing: &mut Timing,
     sample: bool,
 ) -> Result<Option<Sample>, String> {
-    if view.hosted {
-        show_hosted_frame(view, timing, sample)?;
-        return Ok(None);
-    }
     if view.gpu_waiting {
         return Ok(None);
     }
@@ -136,7 +135,13 @@ fn show_gpu_frame(
             return Ok(None);
         }
     };
-    let thumbnail = if sample && wants_thumbnail(view) {
+    let thumbnail = if sample
+        && view.visible
+        && view.surface.preview_source.revision() == view.preview_revision
+        && view
+            .last_thumbnail
+            .is_none_or(|last| last.elapsed() >= THUMBNAIL_INTERVAL)
+    {
         view.last_thumbnail = Some(Instant::now());
         // A frame in GPU memory may have no pixels the CPU can read; then it has no thumbnail.
         view.view
@@ -154,31 +159,6 @@ fn show_gpu_frame(
     view.gate.shown(serial);
     view.showing_fallback = false;
     Ok(thumbnail)
-}
-
-/// The Compositor showed a frame in the view's own layer, which the window server shows: the
-/// window has nothing to draw. A thumbnail, at most once a second, comes as a snapshot
-/// (`Event::Snapshot`), since the frame is in no memory the engine can read.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-fn show_hosted_frame(view: &mut View, timing: &mut Timing, sample: bool) -> Result<(), String> {
-    if let Some(frame) = view.view.frame()? {
-        timing.shown(frame.width, frame.height, 0);
-    }
-    if sample && wants_thumbnail(view) {
-        view.last_thumbnail = Some(Instant::now());
-        view.view
-            .request_snapshot(SNAPSHOT_MAX_SIDE, SNAPSHOT_MAX_SIDE)?;
-    }
-    Ok(())
-}
-
-/// Whether the view's newest frame should refresh its thumbnail.
-fn wants_thumbnail(view: &View) -> bool {
-    view.visible
-        && view.surface.preview_source.revision() == view.preview_revision
-        && view
-            .last_thumbnail
-            .is_none_or(|last| last.elapsed() >= THUMBNAIL_INTERVAL)
 }
 
 /// Development timing (`ELARIS_PERF`): the last frame shown, the oldest input not yet on screen,

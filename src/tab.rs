@@ -122,8 +122,6 @@ pub(crate) struct Applied {
     pub(crate) focused: bool,
     /// Views start visible.
     pub(crate) hidden: bool,
-    /// The Compositor shows the view's frames in a layer of its own (`ViewCommand::HostLayer`).
-    pub(crate) hosted: bool,
     /// The surface's frame count at the last poll.
     pub(crate) frames: u64,
 }
@@ -250,14 +248,6 @@ impl Tab {
             TabUpdate::WebFullscreen(active) => self.web_fullscreen = active,
             // The browser's swipe tracking takes these before they reach a tab.
             TabUpdate::WheelResult(_) => {}
-            TabUpdate::RemoteLayer(context_id) => {
-                #[cfg(target_os = "macos")]
-                if let Some(gpu) = &self.surface.gpu {
-                    gpu.show_remote_layer(context_id);
-                }
-                #[cfg(not(target_os = "macos"))]
-                let _ = context_id;
-            }
             TabUpdate::PermissionPrompt(prompt) => self.permission_prompt = prompt,
             TabUpdate::ExternalUrl(request) => self.external_url = request,
             TabUpdate::Accessibility(event) => self.accessibility_events.push(event),

@@ -48,22 +48,6 @@ pub(super) fn enabled() -> bool {
     }
 }
 
-/// Whether the Compositor may show frames in a layer of its own (`Surface::hosts_layer`):
-/// `ELARIS_REMOTE_LAYERS=1` turns it on and `CALayerHost` exists. Never in unit tests,
-/// whose fake engine has no Compositor.
-#[cfg(target_os = "macos")]
-pub(super) fn remote_layers() -> bool {
-    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ENABLED.get_or_init(|| {
-        !cfg!(test)
-            && std::env::var_os(REMOTE_LAYERS_VARIABLE).is_some_and(|value| value != "0")
-            && remote_layer::supported()
-    })
-}
-
-#[cfg(target_os = "macos")]
-const REMOTE_LAYERS_VARIABLE: &str = "ELARIS_REMOTE_LAYERS";
-
 #[cfg(target_os = "linux")]
 type Wake = Arc<dyn Fn() + Send + Sync>;
 
@@ -140,21 +124,6 @@ impl GpuSurface {
         }
     }
 
-    /// Shows the Compositor's CoreAnimation context `context_id` in place of pushed frames, or
-    /// goes back to them for 0. Main thread only.
-    #[cfg(target_os = "macos")]
-    pub(crate) fn show_remote_layer(&self, context_id: u64) {
-        let layer = u32::try_from(context_id)
-            .ok()
-            .filter(|&id| id != 0)
-            .and_then(remote_layer::host);
-        // SAFETY: `layer` is a CALayer made above, retained until the surface retains it.
-        unsafe {
-            self.native
-                .set_layer(layer.as_ref().map(remote_layer::Host::as_ptr))
-        };
-    }
-
     /// Shows `frame` once Rune next draws, replacing any frame it has not drawn yet.
     #[cfg_attr(not(feature = "ladybird-bridge"), allow(dead_code))]
     pub(super) fn show(&self, frame: GpuFrame) -> Result<(), String> {
@@ -227,50 +196,5 @@ impl GpuSurface {
             }
         });
         self.native.push_dmabuf(read, serial)
-    }
-}
-
-/// `CALayerHost` shows the layers another process commits into a CoreAnimation context. It is
-/// not public API, so it is looked up and checked before use, as Ladybird's own macOS UI does.
-#[cfg(target_os = "macos")]
-mod remote_layer {
-    use objc2_05::rc::Retained;
-    use objc2_05::runtime::{AnyClass, AnyObject};
-    use objc2_05::{msg_send, sel};
-    use std::ptr::NonNull;
-
-    fn class() -> Option<&'static AnyClass> {
-        let class = AnyClass::get("CALayerHost")?;
-        let layer = AnyClass::get("CALayer")?;
-        let is_layer = std::iter::successors(Some(class), |class| class.superclass())
-            .any(|ancestor| std::ptr::eq(ancestor, layer));
-        (is_layer
-            && class.instance_method(sel!(contextId)).is_some()
-            && class.instance_method(sel!(setContextId:)).is_some())
-        .then_some(class)
-    }
-
-    pub(super) fn supported() -> bool {
-        class().is_some()
-    }
-
-    pub(super) struct Host(Retained<AnyObject>);
-
-    impl Host {
-        pub(super) fn as_ptr(&self) -> NonNull<std::ffi::c_void> {
-            NonNull::from(&*self.0).cast()
-        }
-    }
-
-    /// A layer showing context `context_id`.
-    pub(super) fn host(context_id: u32) -> Option<Host> {
-        // SAFETY: `class` checked that CALayerHost is a CALayer with a `contextId` property; the
-        // new object is owned here.
-        unsafe {
-            let layer: *mut AnyObject = msg_send![class()?, new];
-            let layer = Retained::from_raw(layer)?;
-            let _: () = msg_send![&*layer, setContextId: context_id];
-            Some(Host(layer))
-        }
     }
 }

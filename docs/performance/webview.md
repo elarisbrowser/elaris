@@ -48,37 +48,6 @@ Frames keep their alpha as the Compositor wrote it; the CPU path forced it opaqu
 
 `ELARIS_CPU_FRAMES=1` selects the copying path described below.
 
-### Remote layers (macOS, opt-in)
-
-With `ELARIS_REMOTE_LAYERS=1`, tabs in a window go one step further: Ladybird's Compositor
-shows their frames itself. The engine asks for a remote layer (`ViewCommand::HostLayer`, `set_hosts_remote_layer`), and the
-Compositor commits each frame into a CoreAnimation context of its own. The tab's surface shows
-that context with a `CALayerHost` (private API, looked up and checked at runtime, as Ladybird's
-own macOS UI does), given to Rune with `NativeSurface::set_layer`. Rune places the layer under
-its Metal layer at the surface's place, rounded as the pane is, and punches that place out of its
-own frame, so everything Rune draws over the page stays over it. Each page frame reaches the
-screen on the next refresh with no blit, no push to Rune and no redraw of the window; before, a
-frame that arrived just after Rune drew waited a whole refresh, and the next one replaced it.
-
-- Peek cards scale their page, which the layer can't follow, so a Peek page keeps the GPU
-  frames above and moves to a layer once promoted to a tab.
-- Thumbnails come from Compositor snapshots (`elaris_ladybird_request_snapshot`), at most once a
-  second, since no frame is in memory the engine can read.
-- Rune can't blur or sample what the layer shows: an overlay's backdrop blur over the page shows
-  the page sharp.
-- Off by default: tabs use the GPU frames above.
-
-Measured with synthetic two-finger reversals on elarisbrowser.com, three interleaved runs per
-row, by capturing the window: refreshes where the page did not move while the gesture did, per
-seven-second gesture.
-
-| | GPU frames | Remote layer |
-|---|---|---|
-| Idle | 25.3 (8.0 stall-then-jump) | 8.3 (0) |
-| Full CPU load | 63.3 (44.7 stall-then-jump) | 13.7 (0) |
-
-The holds left are refreshes for which the Compositor produced no frame.
-
 ### Linux (opt-in, untested on a GPU)
 
 `ELARIS_GPU_FRAMES=1` shares each frame as the dmabuf of Ladybird's own backing store. The
@@ -218,9 +187,8 @@ builds, by logging which page frame Rune drew at each refresh and each frame's c
   keeps moving the old way for about 120 ms after a reversal. That is the page's behaviour.
 - The remaining unevenness at speed, about ±1–2 CSS px a frame, follows Ladybird's rAF
   timestamp jitter above.
-- Under full CPU load, Ladybird's frames arrive bunched and late, and Rune showed a frame twice
-  and then skipped one, 5–20 times in seven seconds of scrolling. Remote layers remove that
-  step (see above).
+- Under full CPU load, Ladybird's frames arrive bunched and late, and Rune shows a frame twice
+  and then skips one, 5–20 times in seven seconds of scrolling.
 - An earlier trace with recurring 33 ms gaps inside the Compositor was recorded while
   `sample` profiled the Compositor and WebContent. Those gaps did not reproduce without it.
 

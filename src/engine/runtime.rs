@@ -46,8 +46,6 @@ struct View {
     /// A new frame is waiting for Rune's GPU to finish with a surface.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     gpu_waiting: bool,
-    /// The Compositor shows the frames in a layer of its own (`ViewCommand::HostLayer`).
-    hosted: bool,
 }
 
 pub(super) struct Runtime {
@@ -370,7 +368,6 @@ impl Runtime {
                 released_serial: 0,
                 #[cfg(any(target_os = "macos", target_os = "linux"))]
                 gpu_waiting: false,
-                hosted: false,
             },
         );
         Ok(())
@@ -494,24 +491,6 @@ impl Runtime {
                     updates.push(Update::Peek(tab, url, request));
                     continue;
                 }
-                Event::Snapshot(snapshot) => {
-                    let sample = snapshot.and_then(|frame| {
-                        thumbnails::sample(frame.width, frame.height, &frame.rgba)
-                    });
-                    if let Some(pixels) =
-                        sample.and_then(|sample| self.thumbnails.store(tab, sample))
-                    {
-                        updates.push(Update::Thumbnail(
-                            tab,
-                            Thumbnail {
-                                source: view.surface.preview_source.clone(),
-                                revision: view.preview_revision,
-                                pixels,
-                            },
-                        ));
-                    }
-                    continue;
-                }
                 Event::LoadError(error) => TabUpdate::LoadError(error),
                 Event::HoveredLink(url) => TabUpdate::HoveredLink(url),
                 Event::Tooltip(text) => TabUpdate::Tooltip(text),
@@ -527,7 +506,6 @@ impl Runtime {
                 }
                 Event::WebFullscreen(active) => TabUpdate::WebFullscreen(active),
                 Event::WheelResult { cancelled } => TabUpdate::WheelResult(cancelled),
-                Event::RemoteLayer { context_id } => TabUpdate::RemoteLayer(context_id),
                 Event::PermissionPrompt(prompt) => TabUpdate::PermissionPrompt(prompt),
                 Event::ExternalUrl(request) => TabUpdate::ExternalUrl(request),
                 Event::Accessibility(event) => TabUpdate::Accessibility(event),
@@ -729,12 +707,6 @@ fn apply_to_view(view: &mut View, command: ViewCommand, timing: &mut Timing) -> 
         ViewCommand::Visible(visible) => {
             web.set_visible(visible)?;
             view.visible = visible;
-            Ok(())
-        }
-        ViewCommand::HostLayer(hosted) if hosted == view.hosted => Ok(()),
-        ViewCommand::HostLayer(hosted) => {
-            web.set_remote_layer(hosted)?;
-            view.hosted = hosted;
             Ok(())
         }
     }
