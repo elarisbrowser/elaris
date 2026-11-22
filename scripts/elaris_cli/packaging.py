@@ -1,5 +1,6 @@
 """Assemble Elaris's app bundles: a branded .app on macOS and a desktop-entry tree on Linux."""
 
+import filecmp
 import shutil
 import subprocess
 from pathlib import Path
@@ -14,11 +15,16 @@ APP_ID = "org.elarisbrowser.Elaris"
 
 
 def _copy_if_changed(source: Path, destination: Path) -> bool:
-    """Copy `source` unless `destination` already has its modification time. Returns whether it copied."""
-    if destination.exists() and destination.stat().st_mtime_ns == source.stat().st_mtime_ns:
+    """Copy `source` over `destination` when their contents differ. Returns whether it copied.
+
+    The copy takes a fresh modification time on purpose: Launch Services caches an app's icon by file time,
+    so a copy that kept the source's older time can keep showing a stale icon in the Dock.
+    """
+    if destination.exists() and filecmp.cmp(source, destination, shallow=False):
         return False
     destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, destination)
+    shutil.copyfile(source, destination)
+    shutil.copymode(source, destination)
     return True
 
 

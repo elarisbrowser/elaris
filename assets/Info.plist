@@ -8,6 +8,8 @@
     <string>Icon</string>
     <key>CFBundleIconName</key>
     <string>Icon</string>
+    <key>CFBundleDisplayName</key>
+    <string>Elaris</string>
     <key>CFBundleIdentifier</key>
     <string>org.elarisbrowser.Elaris</string>
     <key>CFBundleName</key>
