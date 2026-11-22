@@ -69,6 +69,58 @@ fn settings_navigation_shows_one_category_in_narrow_and_wide_windows() {
 }
 
 #[test]
+fn settings_navigation_highlights_glide_to_the_hovered_and_chosen_items() {
+    let state = AppState::new(Some("elaris://settings"));
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::ui::view,
+        (1280.0, 800.0),
+        rune::Env::new(false, 1.0),
+    );
+    runtime.frame(0.0);
+    let rect = |runtime: &rune::Runtime<AppState>, key: &str| {
+        runtime
+            .elements()
+            .into_iter()
+            .find(|element| element.key.as_deref() == Some(key) && !element.exiting)
+            .map(|element| element.rect)
+    };
+    let centre = |[x, y, width, height]: [f32; 4]| (x + width / 2.0, y + height / 2.0);
+    let first = rect(&runtime, "settings-look-nav").unwrap();
+    let privacy = rect(&runtime, "settings-privacy-nav").unwrap();
+    let setup = rect(&runtime, "settings-system-nav").unwrap();
+    assert!(rect(&runtime, "page-nav-hover").is_none());
+    assert_eq!(rect(&runtime, "page-nav-selection").unwrap()[1], first[1]);
+
+    // The hover highlight appears under the pointer, then glides rather than jumping.
+    let (x, y) = centre(privacy);
+    runtime.pointer_move(x, y);
+    runtime.frame(0.0);
+    assert_eq!(rect(&runtime, "page-nav-hover").unwrap()[1], privacy[1]);
+    let (x, y) = centre(setup);
+    runtime.pointer_move(x, y);
+    runtime.frame(0.016);
+    let gliding = rect(&runtime, "page-nav-hover").unwrap()[1];
+    assert!(gliding > privacy[1] && gliding < setup[1], "{gliding}");
+    for _ in 0..60 {
+        runtime.frame(0.016);
+    }
+    assert_eq!(rect(&runtime, "page-nav-hover").unwrap()[1], setup[1]);
+
+    // Choosing the hovered item slides the selection there; the hover highlight steps aside.
+    runtime.pointer_down(x, y);
+    runtime.pointer_up(x, y);
+    runtime.frame(0.016);
+    let sliding = rect(&runtime, "page-nav-selection").unwrap()[1];
+    assert!(sliding > first[1] && sliding < setup[1], "{sliding}");
+    for _ in 0..60 {
+        runtime.frame(0.016);
+    }
+    assert_eq!(rect(&runtime, "page-nav-selection").unwrap()[1], setup[1]);
+    assert!(rect(&runtime, "page-nav-hover").is_none());
+}
+
+#[test]
 fn settings_updates_drive_search_download_and_startup_preferences() {
     let mut state = AppState::new(Some("example.com"));
     state.set_appearance(Appearance::Dark);

@@ -211,6 +211,8 @@ pub(crate) struct AppState {
     pub(crate) tab_drag: crate::ui::TabDragState,
     /// The category a native page with side navigation shows; its first when unset.
     pub(crate) page_category: Option<&'static str>,
+    /// The page navigation item under the pointer, which the hover highlight glides to.
+    pub(crate) page_nav_hover: Option<usize>,
     pub(crate) settings_picker_open: bool,
     pub(crate) startup_picker_open: bool,
     #[cfg(target_os = "linux")]
@@ -395,6 +397,7 @@ impl AppState {
             split_selection: 0,
             tab_drag: crate::ui::TabDragState::default(),
             page_category: None,
+            page_nav_hover: None,
             settings_picker_open: false,
             startup_picker_open: false,
             #[cfg(target_os = "linux")]

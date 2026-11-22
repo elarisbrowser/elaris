@@ -31,6 +31,7 @@ static CATEGORIES: [Category; 4] = [
         nav: NavItem {
             key: "settings-look",
             title: "Look & layout",
+            short: "Look",
             icon: &icons::SIDEBAR,
         },
         sections: appearance::sections,
@@ -39,6 +40,7 @@ static CATEGORIES: [Category; 4] = [
         nav: NavItem {
             key: "settings-browsing",
             title: "Browsing",
+            short: "Browsing",
             icon: &icons::PAGE,
         },
         sections: browsing::sections,
@@ -47,6 +49,7 @@ static CATEGORIES: [Category; 4] = [
         nav: NavItem {
             key: "settings-privacy",
             title: "Privacy & security",
+            short: "Privacy",
             icon: &icons::LOCK,
         },
         sections: privacy::sections,
@@ -55,6 +58,7 @@ static CATEGORIES: [Category; 4] = [
         nav: NavItem {
             key: "settings-system",
             title: "Browser setup",
+            short: "Setup",
             icon: &icons::SITE_CONTROLS,
         },
         sections: system::sections,
@@ -70,7 +74,7 @@ pub(super) fn view(cx: &mut PageContext) -> PageLayout {
     let nav = widgets::nav(
         "Settings categories",
         SCROLL,
-        CATEGORIES.iter().map(|category| &category.nav),
+        &CATEGORIES.each_ref().map(|category| &category.nav),
         current.nav.key,
         cx,
     );

@@ -6,7 +6,7 @@
 //! edges, spacing and type. All measurements come from the `PAGE_*` tokens in the theme.
 
 use rune::tok::{space, type_};
-use rune::{Align, El, Icon, col, el, icon, row, text};
+use rune::{Align, El, Icon, Spring, col, el, icon, row, text};
 use rune_kit::Kit;
 
 use crate::app::AppState;
@@ -19,75 +19,137 @@ pub(super) struct NavItem {
     /// Unique within the page; stored in [`AppState::page_category`] while selected.
     pub(super) key: &'static str,
     pub(super) title: &'static str,
+    /// The label in the narrow, equal-width row under the title.
+    pub(super) short: &'static str,
     pub(super) icon: &'static Icon,
 }
 
-/// Category navigation for [`PageLayout::nav`](super::layout::PageLayout::nav): a vertical
-/// list beside the content in wide panes and a scrolling row under the title in narrow ones.
-/// Choosing an item shows that category and returns `scroll_key` to the top.
+/// Category navigation for [`PageLayout::nav`](super::layout::PageLayout::nav), in a container
+/// like the omnibox and tab switcher: a raised highlight slides to the selected item and a
+/// hover highlight glides between items under the pointer. It is a vertical list beside the
+/// content in wide panes and an equal-width row under the title in narrow ones. Choosing an
+/// item shows that category and returns `scroll_key` to the top.
 pub(super) fn nav(
     label: &str,
     scroll_key: &'static str,
-    items: impl ExactSizeIterator<Item = &'static NavItem>,
+    items: &[&'static NavItem],
     selected: &str,
     cx: &PageContext,
 ) -> El {
+    let theme = cx.theme;
     let count = items.len();
-    let rows = items.enumerate().map(|(index, item)| {
-        let current = item.key == selected;
+    let current = items.iter().position(|item| item.key == selected);
+    let motion = if cx.reduced_motion {
+        Spring::NONE
+    } else {
+        theme::HIGHLIGHT_MOTION
+    };
+    let vertical = cx.side_nav;
+    let height = theme::PAGE_NAV_ROW_HEIGHT;
+    let pitch = height + theme::PAGE_NAV_GAP;
+    // Highlights sit under the rows: in a column they slide by offset, in the row they share
+    // the target item's grid cell as Rune Kit's segmented control does.
+    let highlight = |key: &str, index: usize| {
+        let base = el()
+            .key(key)
+            .h(height)
+            .radius(theme::PAGE_GROUP_RADIUS - theme::PAGE_NAV_INSET)
+            .continuous_corners()
+            .inert()
+            .a11y_hidden();
+        if vertical {
+            base.pin(Some(0.0), Some(0.0), Some(0.0), None)
+                .offset(0.0, index as f32 * pitch)
+                .offset_motion(motion)
+        } else {
+            base.grid_cell(index).token_motion(motion)
+        }
+    };
+    let hover = cx
+        .state
+        .page_nav_hover
+        .filter(|index| *index < count && Some(*index) != current)
+        .map(|index| highlight("page-nav-hover", index).fill(theme.hover));
+    let selection = current.map(|index| {
+        highlight("page-nav-selection", index)
+            .fill(theme.tab_active)
+            .shadow(
+                theme::ACTIVE_SHADOW_Y,
+                theme::ACTIVE_SHADOW_BLUR,
+                theme.tab_active_shadow,
+            )
+    });
+    let rows = items.iter().enumerate().map(|(index, item)| {
+        let on = Some(index) == current;
         let key = item.key;
-        row()
+        let mut entry = row()
             .key(format!("{key}-nav"))
-            .h(theme::PAGE_NAV_ROW_HEIGHT)
+            .h(height)
+            .min_w(0.0)
             .px(theme::PAGE_NAV_ROW_PADDING)
             .gap(space::S2 + space::S1 / 2.0)
             .center_y()
-            .radius(theme::PAGE_GROUP_RADIUS - space::S1)
+            .radius(theme::PAGE_GROUP_RADIUS - theme::PAGE_NAV_INSET)
             .role("button")
             .label(item.title)
-            .checked(current)
+            .checked(on)
             .position_in_set(index + 1, count)
             .focusable(true)
-            .focus_ring(theme::FOCUS_WIDTH, 0.0, cx.theme.focus)
-            .fill(if current {
-                cx.theme.settings_surface
-            } else {
-                rune::Color::TRANSPARENT
+            .focus_ring(theme::FOCUS_WIDTH, 0.0, theme.focus)
+            .on_hover_change(move |state: &mut AppState, inside, tx| {
+                if inside {
+                    state.page_nav_hover = Some(index);
+                } else if state.page_nav_hover == Some(index) {
+                    state.page_nav_hover = None;
+                } else {
+                    return;
+                }
+                tx.animated();
             })
-            .hover(cx.theme.hover)
-            .press(cx.theme.press)
             .on_press_tx(move |state: &mut AppState, tx| {
                 state.page_category = Some(key);
                 tx.scroll_to_instant(scroll_key, 0.0, 0.0);
-            })
-            .child(
+                tx.animated();
+            });
+        let ink = if on { theme.text } else { theme.text_muted };
+        if vertical {
+            entry = entry.w_full().child(
                 icon(item.icon, theme::ICON)
-                    .color(if current {
-                        cx.theme.accent
-                    } else {
-                        cx.theme.icon
-                    })
+                    .color(if on { theme.accent } else { theme.icon })
                     .a11y_hidden(),
-            )
-            .child(
-                text(item.title)
-                    // One style for every state, so selecting an item never resizes its label.
-                    .font(type_::BODY)
-                    .color(if current {
-                        cx.theme.text
-                    } else {
-                        cx.theme.text_muted
-                    })
-                    .single_line()
-                    .a11y_hidden(),
-            )
+            );
+        } else {
+            entry = entry.grid_cell(index).justify_center();
+        }
+        entry.child(
+            // One style for every state, so selecting an item never resizes its label.
+            text(if vertical { item.title } else { item.short })
+                .font(type_::BODY)
+                .color(ink)
+                .single_line()
+                .truncate()
+                .a11y_hidden(),
+        )
     });
-    let list = if cx.side_nav {
-        col().w_full().gap(space::S1 / 2.0)
+    // Highlights pin to this unpadded list, so they line up with the rows exactly.
+    let list = if vertical {
+        col().w_full()
     } else {
-        row().w_full().gap(space::S1).scroll_x()
-    };
-    list.key("page-nav").label(label).children(rows)
+        row().w_full().equal_columns(count)
+    }
+    .gap(theme::PAGE_NAV_GAP)
+    .children(hover)
+    .children(selection)
+    .children(rows);
+    col()
+        .key("page-nav")
+        .w_full()
+        .label(label)
+        .padding(theme::PAGE_NAV_INSET)
+        .fill(theme.settings_surface)
+        .radius(theme::PAGE_GROUP_RADIUS)
+        .continuous_corners()
+        .child(list)
 }
 
 /// The heading and sections of the category a page's [`nav`] selected.
