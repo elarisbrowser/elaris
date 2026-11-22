@@ -99,10 +99,23 @@ def _ladybird_macos_tool():
     return module
 
 
+# What the last full bundle was assembled from: the engine's helpers and Elaris's executable.
+RELEASE_BUNDLE_STAMP = ROOT / "build" / "Elaris.app.stamp"
+
+
+def _bundle_inputs(executable: Path) -> tuple[str, str]:
+    """When the engine's helpers and Elaris's executable last changed."""
+    helpers = (LADYBIRD_APP / "Contents" / "MacOS").iterdir()
+    engine = max(helper.stat().st_mtime_ns for helper in helpers if helper.is_file())
+    return str(engine), str(executable.stat().st_mtime_ns)
+
+
 def macos_release_bundle(executable: Path) -> Path:
     """build/Elaris.app with Ladybird's helpers, resources and libraries, relocatable and signed.
 
-    Assembled from scratch each time so no stale helper or library survives. Returns the bundled executable.
+    A full assembly copies and verifies every engine library, which takes about half a minute, so it runs only
+    when the engine changed. When only Elaris changed, its executable is swapped in and the bundle re-signed;
+    when nothing changed, the bundle is reused as is. Returns the bundled executable.
     """
     if not (LADYBIRD_APP / "Contents" / "MacOS" / LADYBIRD_APP_BINARY).is_file():
         raise SystemExit("elaris: Ladybird's app bundle is missing; run ./elaris build first")
@@ -110,11 +123,24 @@ def macos_release_bundle(executable: Path) -> Path:
 
     app = ROOT / "build" / "Elaris.app"
     contents = app / "Contents"
+    bundled_executable = contents / "MacOS" / executable.name
+    engine, elaris = _bundle_inputs(executable)
+    previous = RELEASE_BUNDLE_STAMP.read_text().split() if RELEASE_BUNDLE_STAMP.is_file() else []
+    if bundled_executable.is_file() and len(previous) == 2 and previous[0] == engine:
+        if previous[1] != elaris:
+            print("Updating Elaris in Elaris.app…", flush=True)
+            shutil.copy2(executable, bundled_executable)
+            tool.fix_rpaths(app)
+            tool.resign(app, ENGINE_BUILD)
+            RELEASE_BUNDLE_STAMP.write_text(f"{engine} {elaris}")
+        return bundled_executable
+
+    print("Bundling Elaris.app with Ladybird's engine (about 30 seconds)…", flush=True)
+    RELEASE_BUNDLE_STAMP.unlink(missing_ok=True)
     if app.exists():
         shutil.rmtree(app)
     macos = contents / "MacOS"
     macos.mkdir(parents=True)
-    bundled_executable = macos / executable.name
     shutil.copy2(executable, bundled_executable)
     for helper in (LADYBIRD_APP / "Contents" / "MacOS").iterdir():
         if helper.is_file() and helper.name != LADYBIRD_APP_BINARY:
@@ -139,6 +165,7 @@ def macos_release_bundle(executable: Path) -> Path:
     tool.resign(app, ENGINE_BUILD)
     tool.verify(app)
     print(f"copied {len(copied)} libraries into {app.name}/Contents/lib")
+    RELEASE_BUNDLE_STAMP.write_text(f"{engine} {elaris}")
     return bundled_executable
 
 
