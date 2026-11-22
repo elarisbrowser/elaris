@@ -49,6 +49,39 @@ impl TabLayout {
     }
 }
 
+/// Which edge of the window the vertical sidebar sits against.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum SidebarSide {
+    #[default]
+    Left,
+    Right,
+}
+
+impl SidebarSide {
+    pub(crate) const ALL: [Self; 2] = [Self::Left, Self::Right];
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Left => "Left",
+            Self::Right => "Right",
+        }
+    }
+
+    pub(crate) fn config_key(self) -> &'static str {
+        match self {
+            Self::Left => "left",
+            Self::Right => "right",
+        }
+    }
+
+    pub(crate) fn opposite(self) -> Self {
+        match self {
+            Self::Left => Self::Right,
+            Self::Right => Self::Left,
+        }
+    }
+}
+
 /// Where the New Tab button sits in the vertical sidebar's tab list.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum NewTabPosition {
@@ -171,6 +204,7 @@ pub(crate) struct Settings {
     pub(crate) page_zoom: u16,
     pub(crate) autoplay: crate::permissions::AutoplayPolicy,
     pub(crate) tab_layout: TabLayout,
+    pub(crate) sidebar_side: SidebarSide,
     pub(crate) new_tab_position: NewTabPosition,
     pub(crate) split_view_limit: usize,
     pub(crate) appearance: Appearance,
@@ -190,6 +224,7 @@ impl Default for Settings {
             page_zoom: 100,
             autoplay: crate::permissions::AutoplayPolicy::default(),
             tab_layout: TabLayout::default(),
+            sidebar_side: SidebarSide::default(),
             new_tab_position: NewTabPosition::default(),
             split_view_limit: 2,
             appearance: Appearance::System,
@@ -251,6 +286,7 @@ pub(crate) enum SettingsChange {
     PageZoom(u16),
     Autoplay(crate::permissions::AutoplayPolicy),
     TabLayout(TabLayout),
+    SidebarSide(SidebarSide),
     NewTabPosition(NewTabPosition),
     Appearance(Appearance),
     AccentColor(AccentColor),

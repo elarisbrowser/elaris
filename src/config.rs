@@ -13,11 +13,11 @@ use crate::address::SearchEngine;
 use crate::appearance::{AccentColor, Appearance};
 use crate::permissions::{AutoplayPolicy, PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{
-    ContentBlockList, DownloadDirectory, NewTabPosition, Settings, SettingsChange, StartupMode,
-    TabLayout,
+    ContentBlockList, DownloadDirectory, NewTabPosition, Settings, SettingsChange, SidebarSide,
+    StartupMode, TabLayout,
 };
 
-const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\naccent = \"blue\"\nglass = true\ntint_opacity = 100\ntab_layout = \"vertical\"\nnew_tab_position = \"top\"\n\n[split_view]\nmax_panes = 2\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n\n[pages]\nzoom = 100\n\n[performance]\nreduce_motion = false\n";
+const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\naccent = \"blue\"\nglass = true\ntint_opacity = 100\ntab_layout = \"vertical\"\nsidebar_side = \"left\"\nnew_tab_position = \"top\"\n\n[split_view]\nmax_panes = 2\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n\n[pages]\nzoom = 100\n\n[performance]\nreduce_motion = false\n";
 static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -61,6 +61,18 @@ pub(crate) fn parse(contents: &str) -> Result<ConfigLoad, String> {
             settings.tab_layout = layout;
         } else {
             issues.push(format!("Invalid value for [appearance].tab_layout: {value:?}; expected vertical or horizontal"));
+        }
+    }
+    if let Some(value) = string_value(&document, "appearance", "sidebar_side", &mut issues) {
+        if let Some(side) = SidebarSide::ALL
+            .into_iter()
+            .find(|side| side.config_key() == value)
+        {
+            settings.sidebar_side = side;
+        } else {
+            issues.push(format!(
+                "Invalid value for [appearance].sidebar_side: {value:?}; expected left or right"
+            ));
         }
     }
     if let Some(value) = string_value(&document, "appearance", "new_tab_position", &mut issues) {
@@ -410,6 +422,9 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
         SettingsChange::TabLayout(value) => {
             ("appearance", "tab_layout", value.config_key().to_owned())
         }
+        SettingsChange::SidebarSide(value) => {
+            ("appearance", "sidebar_side", value.config_key().to_owned())
+        }
         SettingsChange::NewTabPosition(value) => (
             "appearance",
             "new_tab_position",
@@ -551,6 +566,31 @@ mod tests {
         }
         let invalid = parse("[appearance]\ntab_layout = 'diagonal'").unwrap();
         assert_eq!(invalid.settings.tab_layout, TabLayout::Vertical);
+        assert_eq!(invalid.issues.len(), 1);
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn sidebar_side_defaults_to_left_and_round_trips() {
+        let directory = std::env::temp_dir().join(format!(
+            "elaris-config-sidebar-side-{}-{}",
+            std::process::id(),
+            NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed)
+        ));
+        let path = directory.join("config.toml");
+        assert_eq!(parse("").unwrap().settings.sidebar_side, SidebarSide::Left);
+        for side in [SidebarSide::Right, SidebarSide::Left] {
+            write_change(&path, &SettingsChange::SidebarSide(side)).unwrap();
+            assert_eq!(
+                parse(&fs::read_to_string(&path).unwrap())
+                    .unwrap()
+                    .settings
+                    .sidebar_side,
+                side
+            );
+        }
+        let invalid = parse("[appearance]\nsidebar_side = 'middle'").unwrap();
+        assert_eq!(invalid.settings.sidebar_side, SidebarSide::Left);
         assert_eq!(invalid.issues.len(), 1);
         fs::remove_dir_all(directory).unwrap();
     }

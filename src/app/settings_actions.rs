@@ -10,7 +10,8 @@ use crate::permissions::{
     AutoplayPolicy, PermissionDecision, PermissionKind, PermissionState, PermissionStore,
 };
 use crate::settings::{
-    ContentBlockList, DownloadDirectory, NewTabPosition, SettingsChange, StartupMode, TabLayout,
+    ContentBlockList, DownloadDirectory, NewTabPosition, SettingsChange, SidebarSide, StartupMode,
+    TabLayout,
 };
 use crate::tab::TabId;
 
@@ -27,6 +28,18 @@ impl super::AppState {
         }
     }
 
+    pub(crate) fn sidebar_on_right(&self) -> bool {
+        !self.horizontal_tabs() && self.settings.sidebar_side == SidebarSide::Right
+    }
+
+    pub(crate) fn set_sidebar_side(&mut self, side: SidebarSide) {
+        if self.settings.sidebar_side != side {
+            self.reset_tab_chrome();
+            self.settings.sidebar_side = side;
+            self.save_setting(SettingsChange::SidebarSide(side));
+        }
+    }
+
     pub(crate) fn set_new_tab_position(&mut self, position: NewTabPosition) {
         if self.settings.new_tab_position != position {
             self.settings.new_tab_position = position;
@@ -36,15 +49,20 @@ impl super::AppState {
 
     pub(super) fn prepare_tab_layout(&mut self, layout: TabLayout) {
         if self.settings.tab_layout != layout {
-            self.cancel_tab_drag();
-            self.hover_highlight = None;
-            self.tab_drag = Default::default();
-            self.dismiss_context_menu();
-            self.page_menu = Default::default();
-            crate::ui::dismiss_tab_preview(self);
-            self.site_controls_anchor = None;
-            self.site_permissions_open = false;
+            self.reset_tab_chrome();
         }
+    }
+
+    /// Drops drags, menus and anchors that belong to where the tabs were drawn before a move.
+    fn reset_tab_chrome(&mut self) {
+        self.cancel_tab_drag();
+        self.hover_highlight = None;
+        self.tab_drag = Default::default();
+        self.dismiss_context_menu();
+        self.page_menu = Default::default();
+        crate::ui::dismiss_tab_preview(self);
+        self.site_controls_anchor = None;
+        self.site_permissions_open = false;
     }
 
     pub(crate) fn set_appearance(&mut self, appearance: Appearance) {
