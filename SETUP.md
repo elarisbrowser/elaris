@@ -50,7 +50,13 @@ The setup command never adds a Ladybird fork or changes its pinned revision.
 
 Open the repository in a Dev Container to use the same Ladybird CI image as the Linux bridge workflow. First creation downloads the image and runs `./elaris setup --skip-system-deps`. Cargo, Rust toolchains, and Linux build artifacts persist in Docker volumes, separate from host build outputs. Run `./elaris check` or `./elaris build` inside the container. It is intended for Linux builds and checks, not native desktop or GPU testing.
 
-From the host terminal, `./elaris linux-build` runs the same setup and integrated build in Docker and streams its output. Pass `--jobs N` to change parallelism. Docker must be installed and running.
+From the host terminal, the Linux container commands run in Docker and stream their output. Docker must be installed and running. Each takes `--jobs N` to change parallelism and `--arch amd64` or `--arch arm64` to choose the container's architecture (default: this machine's). Each architecture keeps its own image and caches.
+
+- `./elaris linux-build` runs the setup and the integrated build.
+- `./elaris linux-test` runs the whole Linux suite: the build, the bridge CTest suite, the Rust clippy and tests, the Rust FFI smoke example, the release bundle, and the bundled browser run from a copy outside the build tree. It writes its logs and `summary.txt` to `linux-test-results/` and exits non-zero if any step fails.
+- `./elaris linux-ui [URL]` runs Elaris with the full engine in the container's virtual display. Open <http://127.0.0.1:6080/vnc.html?autoconnect=1&resize=scale> in a browser to see it.
+
+Emulated builds are slow. An amd64 build on an Apple Silicon host runs under emulation and can take several hours for the first full engine build.
 
 ## Lightweight Linux desktop
 

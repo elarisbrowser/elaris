@@ -14,7 +14,8 @@ RUN set -eu; \
         > /etc/apt/sources.list.d/llvm.list; \
     apt-get update -o APT::Update::Error-Mode=any; \
     apt-get install -y --no-install-recommends \
-        clang-tidy-22 libxkbcommon-dev mesa-vulkan-drivers libvulkan1 passwd patchelf sudo util-linux; \
+        clang-tidy-22 libxkbcommon-dev libxkbcommon-x11-0 mesa-vulkan-drivers libvulkan1 passwd patchelf sudo \
+        util-linux x11-utils x11vnc xvfb openbox novnc websockify; \
     rm -rf /var/lib/apt/lists/* /tmp/llvm-snapshot.gpg.key
 
 RUN groupadd --non-unique --gid "${USER_GID}" vscode \
@@ -28,6 +29,11 @@ ENV HOME=/home/vscode \
     CARGO_HOME=/home/vscode/.cargo \
     RUSTUP_HOME=/home/vscode/.rustup \
     PATH=/home/vscode/.cargo/bin:${PATH}
+
+# Display for `./elaris linux-ui`: a virtual screen, a window manager and a VNC server that noVNC serves to a browser.
+COPY entrypoint.sh /usr/local/bin/elaris-desktop-entrypoint
+COPY openbox.xml /etc/elaris-desktop/openbox.xml
+RUN chmod 0755 /usr/local/bin/elaris-desktop-entrypoint
 
 USER vscode
 WORKDIR /workspaces/elaris

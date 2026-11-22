@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Openbox runs only to put every application window full screen, without decorations. -->
+<openbox_config xmlns="http://openbox.org/3.4/rc">
+  <applications>
+    <application type="normal">
+      <decor>no</decor>
+      <fullscreen>yes</fullscreen>
+    </application>
+  </applications>
+</openbox_config>

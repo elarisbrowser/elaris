@@ -53,7 +53,9 @@ On Linux, the toolbar slides in when the pointer reaches the top of the window. 
 ```sh
 ./elaris check             # fmt, clippy, and tests
 ./elaris format            # format Rust and bridge C++
-./elaris linux-build       # build for Linux in Docker
+./elaris linux-build       # build for Linux in Docker (--arch amd64 for x86_64)
+./elaris linux-test        # run the whole Linux suite in Docker, logs in linux-test-results/
+./elaris linux-ui [URL]    # run Elaris in Docker, viewable at http://127.0.0.1:6080/vnc.html
 ./elaris bundle            # release build with Ladybird and the icon: build/Elaris.app (macOS) or build/linux/Elaris (Linux)
 ```
 
