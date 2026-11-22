@@ -146,7 +146,7 @@ Build content from `widgets.rs` rather than styling new surfaces:
 |---|---|
 | `NavItem`, `nav`, `category` | Category navigation in a container whose selection and hover highlights glide between items, like the omnibox and tab switcher; and the selected category's heading and sections |
 | `section` | A muted heading above one grouped surface |
-| `rows` | A grouped surface of padded rows divided by inset hairlines |
+| `rows` | A grouped surface of padded rows divided by inset hairlines; its height eases as rows are added or removed |
 | `setting`, `setting_with` | A title, description and trailing control; the control drops under the copy in compact panes |
 | `actions` | Several buttons as one control |
 | `message` | Centred empty, unavailable and unknown states; append a button to offer a way forward |
