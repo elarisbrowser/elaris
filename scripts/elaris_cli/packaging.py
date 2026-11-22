@@ -170,7 +170,11 @@ def macos_release_bundle(executable: Path) -> Path:
 
 
 def _elf_needed(binary: Path) -> list[str]:
-    output = subprocess.run(["readelf", "-d", str(binary)], capture_output=True, text=True, check=True).stdout
+    result = subprocess.run(["readelf", "-d", str(binary)], capture_output=True, text=True, check=False)
+    if result.returncode:
+        detail = (result.stderr or result.stdout).strip()
+        raise SystemExit(f"elaris: could not read the libraries {binary} needs: {detail}")
+    output = result.stdout
     return re.findall(r"\(NEEDED\)\s+Shared library: \[([^\]]+)\]", output)
 
 
