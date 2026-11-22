@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use crate::ui::animated_icon;
+use crate::ui::icons;
 use crate::ui::menu::{MenuItem, context_menu};
 use elaris::ladybird::{Edit, MediaAction, PageMenu};
 use rune::{El, PointerPress, Tx, el};
@@ -60,14 +61,21 @@ pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
     let mut menu = context_menu("page-context-menu", el(), Some(*point))
         .on_close(|s: &mut AppState| s.page_menu = Default::default());
     if let Some(media) = info.media {
-        menu = menu.item(item(
-            id,
-            if media.playing { "Pause" } else { "Play" },
-            move |s, _| {
-                s.browser
-                    .send(id, ViewCommand::MediaAction(MediaAction::TogglePlay))
-            },
-        ));
+        menu = menu.item(
+            item(
+                id,
+                if media.playing { "Pause" } else { "Play" },
+                move |s, _| {
+                    s.browser
+                        .send(id, ViewCommand::MediaAction(MediaAction::TogglePlay))
+                },
+            )
+            .icon(if media.playing {
+                &icons::PAUSE
+            } else {
+                &icons::RESUME
+            }),
+        );
         menu = menu.item(item(
             id,
             if media.muted { "Unmute" } else { "Mute" },
@@ -92,43 +100,52 @@ pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
     }
     if !info.url.is_empty() {
         if !info.image {
-            menu = menu.item(item(id, "Open Link", move |s, _| {
-                s.browser.send(
-                    id,
-                    ViewCommand::OpenContext {
-                        request,
-                        new_tab: false,
-                    },
-                )
-            }));
+            menu = menu.item(
+                item(id, "Open Link", move |s, _| {
+                    s.browser.send(
+                        id,
+                        ViewCommand::OpenContext {
+                            request,
+                            new_tab: false,
+                        },
+                    )
+                })
+                .icon(&icons::OPEN),
+            );
         }
-        menu = menu.item(item(
-            id,
-            if info.image {
-                "Open Image in New Tab"
-            } else {
-                "Open Link in New Tab"
-            },
-            move |s, _| {
-                s.browser.send(
-                    id,
-                    ViewCommand::OpenContext {
-                        request,
-                        new_tab: true,
-                    },
-                )
-            },
-        ));
+        menu = menu.item(
+            item(
+                id,
+                if info.image {
+                    "Open Image in New Tab"
+                } else {
+                    "Open Link in New Tab"
+                },
+                move |s, _| {
+                    s.browser.send(
+                        id,
+                        ViewCommand::OpenContext {
+                            request,
+                            new_tab: true,
+                        },
+                    )
+                },
+            )
+            .icon(&icons::OPEN_TAB),
+        );
         let url = info.url.clone();
-        menu = menu.item(item(
-            id,
-            if info.image {
-                "Copy Image Address"
-            } else {
-                "Copy Link Address"
-            },
-            move |_, tx| tx.copy(&url),
-        ));
+        menu = menu.item(
+            item(
+                id,
+                if info.image {
+                    "Copy Image Address"
+                } else {
+                    "Copy Link Address"
+                },
+                move |_, tx| tx.copy(&url),
+            )
+            .icon(&icons::LINK),
+        );
     } else if info.media.is_none() {
         if tab.can_go_back {
             menu = menu.item(
@@ -146,9 +163,12 @@ pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
                 item(id, "Reload", move |s, _| s.browser.reload(id))
                     .animated(&animated_icon::RELOAD),
             )
-            .item(item(id, "Reload Without Cache", move |s, _| {
-                s.browser.reload_bypassing_cache(id);
-            }));
+            .item(
+                item(id, "Reload Without Cache", move |s, _| {
+                    s.browser.reload_bypassing_cache(id);
+                })
+                .icon(&icons::RELOAD),
+            );
     }
     if !info.selection.is_empty() {
         let text = info.selection.clone();

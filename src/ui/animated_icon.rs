@@ -69,7 +69,11 @@ pub(crate) fn glyph(
     color: Color,
     reduced: bool,
 ) -> El {
-    let hovered = !reduced && state.animated_icon_hover.as_deref() == Some(owner);
+    // A menu row also plays while it is the keyboard-focused row, which is how a menu opened under
+    // a still pointer shows its first row before the pointer moves.
+    let hovered = !reduced
+        && (state.animated_icon_hover.as_deref() == Some(owner)
+            || state.context_menu_highlight.as_deref() == Some(owner));
     let (glyph, variant) = if hovered {
         (animated.motion, "motion")
     } else {
@@ -168,6 +172,40 @@ static FORWARD_MOTION: Icon = Icon {
 
 pub(crate) static FORWARD: AnimatedIcon = AnimatedIcon::new(&FORWARD_REST, &FORWARD_MOTION);
 
+/// The download arrow dips toward the tray and springs back.
+static DOWNLOAD_MOTION: Icon = Icon {
+    name: "download-motion",
+    view: 16.0,
+    body: r#"<g><animateTransform attributeName="transform" type="translate" values="0 0;0 2;0 0" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" dur="0.5s"/><path d="M8 2.5V9M5.25 6.5L8 9.25L10.75 6.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></g><path d="M3 12.25H13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
+pub(crate) static DOWNLOAD: AnimatedIcon =
+    AnimatedIcon::new(&super::icons::DOWNLOAD, &DOWNLOAD_MOTION);
+
+/// The theme glyphs turn once as the appearance changes. The system half-disc and the sun turn a
+/// full or symmetrical turn, so each ends in its rest pose; the moon rocks and settles.
+static SYSTEM_MOTION: Icon = Icon {
+    name: "system-motion",
+    view: 16.0,
+    body: r#"<g><animateTransform attributeName="transform" type="rotate" values="0 8 8;360 8 8" keyTimes="0;1" calcMode="spline" keySplines="0.4 0 0.2 1" dur="0.5s"/><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M8 2.5A5.5 5.5 0 0 1 8 13.5Z" fill="currentColor"/></g>"#,
+};
+
+static LIGHT_MOTION: Icon = Icon {
+    name: "light-motion",
+    view: 16.0,
+    body: r#"<g><animateTransform attributeName="transform" type="rotate" values="0 8 8;45 8 8" keyTimes="0;1" calcMode="spline" keySplines="0.4 0 0.2 1" dur="0.5s"/><circle cx="8" cy="8" r="2.75" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M8 1.75V3.25M8 12.75V14.25M1.75 8H3.25M12.75 8H14.25M3.6 3.6L4.65 4.65M11.35 11.35L12.4 12.4M3.6 12.4L4.65 11.35M11.35 4.65L12.4 3.6" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></g>"#,
+};
+
+static DARK_MOTION: Icon = Icon {
+    name: "dark-motion",
+    view: 16.0,
+    body: r#"<g><animateTransform attributeName="transform" type="rotate" values="0 8 8;-18 8 8;0 8 8" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" dur="0.5s"/><path d="M13 9.6A5.25 5.25 0 1 1 6.4 3A4.25 4.25 0 0 0 13 9.6Z" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/></g>"#,
+};
+
+pub(crate) static SYSTEM: AnimatedIcon = AnimatedIcon::new(&super::icons::SYSTEM, &SYSTEM_MOTION);
+pub(crate) static LIGHT: AnimatedIcon = AnimatedIcon::new(&super::icons::LIGHT, &LIGHT_MOTION);
+pub(crate) static DARK: AnimatedIcon = AnimatedIcon::new(&super::icons::DARK, &DARK_MOTION);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -211,6 +249,10 @@ mod tests {
             &HISTORY_MOTION,
             &BACK_MOTION,
             &FORWARD_MOTION,
+            &DOWNLOAD_MOTION,
+            &SYSTEM_MOTION,
+            &LIGHT_MOTION,
+            &DARK_MOTION,
         ] {
             assert_eq!(
                 text.icon_kind(motion),

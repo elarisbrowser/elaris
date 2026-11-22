@@ -20,7 +20,9 @@ pub(crate) use tabs::context_menu;
 #[cfg(target_os = "macos")]
 pub(crate) use tabs::floating_drag_preview;
 
+use super::animated_icon;
 use super::controls::row_button;
+use super::hover_highlight;
 use super::icons;
 use super::permission_prompt;
 use super::theme::{self, Theme};
@@ -144,7 +146,7 @@ fn body(state: &AppState, theme: &Theme, overlays: &mut Vec<El>, reduced_motion:
                 .center_y()
                 .child(super::downloads::trigger(state, theme, overlays))
                 .child(rune::el().grow(1.0))
-                .child(appearance(state.settings.appearance, theme)),
+                .child(appearance(state, theme)),
         )
 }
 
@@ -291,15 +293,31 @@ pub(super) fn site_controls(theme: &Theme, size: f32) -> El {
 }
 
 /// A quiet button at the foot of the sidebar that steps through System, Light and Dark.
-fn appearance(current: Appearance, theme: &Theme) -> El {
+fn appearance(state: &AppState, theme: &Theme) -> El {
+    let current = state.settings.appearance;
     let glyph = match current {
-        Appearance::System => &icons::SYSTEM,
-        Appearance::Light => &icons::LIGHT,
-        Appearance::Dark => &icons::DARK,
+        Appearance::System => &animated_icon::SYSTEM,
+        Appearance::Light => &animated_icon::LIGHT,
+        Appearance::Dark => &animated_icon::DARK,
     };
     let label = format!("Appearance: {}", current.label());
-    super::controls::icon_button("appearance", &label, glyph, theme::ICON_BUTTON, theme)
-        .label(label.clone())
-        .help(format!("{label}. Click to change."))
-        .on_press(|state: &mut AppState| state.set_appearance(state.settings.appearance.next()))
+    let frame = super::controls::icon_button_frame("appearance", &label, theme::ICON_BUTTON, theme);
+    hover_highlight::attach_with(
+        frame,
+        "appearance",
+        hover_highlight::Group::Controls,
+        animated_icon::hover_change("appearance"),
+    )
+    .child(animated_icon::glyph(
+        state,
+        glyph,
+        "appearance",
+        "appearance-glyph",
+        theme::ICON,
+        theme.icon,
+        state.sidebar.hover.reduced.get(),
+    ))
+    .label(label.clone())
+    .help(format!("{label}. Click to change."))
+    .on_press(|state: &mut AppState| state.set_appearance(state.settings.appearance.next()))
 }

@@ -6,7 +6,9 @@ use rune::tok::type_;
 use rune::{Align, El, LoopSpec, ScrollSpec, Side, col, el, row, text};
 
 use crate::app::AppState;
-use crate::ui::controls::icon_button;
+use crate::ui::animated_icon;
+use crate::ui::controls;
+use crate::ui::hover_highlight::{self, Group};
 use crate::ui::menu::Popover;
 use crate::ui::theme::{self, Theme};
 use elaris::downloads::{Download, DownloadId, Status};
@@ -20,13 +22,24 @@ pub(crate) fn trigger(state: &AppState, theme: &Theme, layer: &mut Vec<El>) -> E
         .iter()
         .filter(|download| matches!(download.status, Status::Pending | Status::Downloading))
         .count();
-    let mut button = icon_button(
+    let reduced = state.sidebar.hover.reduced.get();
+    let frame =
+        controls::icon_button_frame("downloads-button", "Downloads", theme::ICON_BUTTON, theme);
+    let mut button = hover_highlight::attach_with(
+        frame,
         "downloads-button",
-        "Downloads",
-        &super::icons::DOWNLOAD,
-        theme::ICON_BUTTON,
-        theme,
+        Group::Controls,
+        animated_icon::hover_change("downloads-button"),
     )
+    .child(animated_icon::glyph(
+        state,
+        &animated_icon::DOWNLOAD,
+        "downloads-button",
+        "downloads-glyph",
+        theme::ICON,
+        theme.icon,
+        reduced,
+    ))
     .on_press(|state: &mut AppState| state.downloads_open = !state.downloads_open);
     if active > 0 {
         let count = if active > 9 {
@@ -231,7 +244,7 @@ fn action_button(
     action: impl Fn(&mut crate::browser::Browser, DownloadId) -> Result<(), crate::browser::Error>
     + 'static,
 ) -> El {
-    icon_button(
+    controls::icon_button(
         &format!("download-action-{}-{label}", id.get()),
         label,
         glyph,
