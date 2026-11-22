@@ -118,8 +118,12 @@ Each page has one route and one renderer:
 
 1. Add the slug and tab title to `internal_pages!` in `src/internal.rs`.
 2. Add a module under `src/ui/internal/` with `fn view(cx: &mut PageContext) -> PageLayout`.
-3. Map the page to that function in `renderer` in `src/ui/internal/mod.rs`. The match is
-   exhaustive, so a route without a renderer does not compile.
+3. Register it in `page` in `src/ui/internal/mod.rs`. The match is exhaustive, so a route
+   without a renderer does not compile. List any `PageAction`s the page offers there too.
+
+Right-clicking an internal page opens a native context menu (`src/ui/internal/menu.rs`): Back and
+Forward when available, the page's actions, Copy Page Address, and links to the other internal
+pages. It shares the web page menu's key, hover highlight and dismissal.
 
 `PageContext` carries the app state, theme, a Rune Kit palette for the grouped surface, the
 overlay list for dialogs and pickers, reduced motion and the compact flag. `PageLayout::new`
