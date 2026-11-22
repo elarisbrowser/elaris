@@ -256,9 +256,16 @@ impl MenuItem {
         if disabled {
             entry = entry.opacity(theme.disabled_opacity);
         }
-        if self.animated.is_some() {
-            entry = entry.on_hover_change(animated_icon::hover_change(owner.clone()));
-        }
+        let icon_hover = self
+            .animated
+            .map(|_| animated_icon::hover_change(owner.clone()));
+        let row = owner.clone();
+        entry = entry.on_hover_change(move |state: &mut AppState, inside, tx| {
+            super::hover_highlight::hover_menu_row(state, &row, inside, tx);
+            if let Some(icon_hover) = &icon_hover {
+                icon_hover(state, inside, tx);
+            }
+        });
 
         let ink = if disabled {
             theme.text_muted

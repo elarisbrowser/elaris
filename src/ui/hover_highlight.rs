@@ -173,9 +173,9 @@ pub(super) fn selection(
         .a11y_hidden()
 }
 
-// Rune Kit focuses the menu item under the pointer and uses that same focus for arrow keys.
-pub(crate) fn poll_context_menu(state: &mut AppState, tx: &mut Tx) -> bool {
-    let scope = if state.context_menu().is_some() {
+/// The row keys of the open menu that draws a sliding highlight, or "" when none is open.
+fn highlight_scope(state: &AppState) -> &'static str {
+    if state.context_menu().is_some() {
         "sidebar-context-menu-item"
     } else if state.page_menu.open() {
         "page-context-menu-item"
@@ -183,16 +183,60 @@ pub(crate) fn poll_context_menu(state: &mut AppState, tx: &mut Tx) -> bool {
         "search-engine-menu-item"
     } else {
         ""
-    };
-    let item = tx
-        .focused()
-        .filter(|key| !scope.is_empty() && key.starts_with(scope));
-    if item == state.context_menu_highlight.as_deref() {
+    }
+}
+
+/// Arrow keys move focus between rows; the highlight follows focus only when focus itself moves.
+/// Reading it every poll let anything else that held focus, such as a native page, clear the
+/// pointer's highlight a moment after it appeared.
+pub(crate) fn poll_context_menu(state: &mut AppState, tx: &mut Tx) -> bool {
+    let scope = highlight_scope(state);
+    if scope.is_empty() {
+        state.context_menu_focus = None;
+        state.context_menu_hover = None;
+        if state.context_menu_highlight.take().is_some() {
+            tx.animated();
+            return true;
+        }
         return false;
     }
-    state.context_menu_highlight = item.map(str::to_owned);
+    // A pointer move commits live, which would land the highlight at once; applying the entered
+    // row here lets it glide.
+    if let Some(row) = state.context_menu_hover.take()
+        && state.context_menu_highlight.as_deref() != Some(row.as_str())
+    {
+        state.context_menu_highlight = Some(row);
+        tx.animated();
+        return true;
+    }
+    let focused = tx
+        .focused()
+        .filter(|key| key.starts_with(scope))
+        .map(str::to_owned);
+    if focused.is_none() || focused == state.context_menu_focus {
+        return false;
+    }
+    state.context_menu_focus = focused.clone();
+    if focused == state.context_menu_highlight {
+        return false;
+    }
+    state.context_menu_highlight = focused;
     tx.animated();
     true
+}
+
+/// The pointer entering a row of a sliding-highlight menu moves the highlight there directly.
+pub(in crate::ui) fn hover_menu_row(state: &mut AppState, key: &str, inside: bool, tx: &mut Tx) {
+    let scope = highlight_scope(state);
+    if !inside
+        || scope.is_empty()
+        || !key.starts_with(scope)
+        || state.context_menu_highlight.as_deref() == Some(key)
+    {
+        return;
+    }
+    state.context_menu_hover = Some(key.to_owned());
+    tx.wake_after(std::time::Duration::ZERO);
 }
 
 pub(in crate::ui) fn build_context_menu(
@@ -216,6 +260,12 @@ pub(in crate::ui) fn build_highlight_menu(
     if layer.len() > before
         && let Some(surface) = layer.pop()
     {
+        // Leaving the panel clears the pointer's highlight; focus brings it back with a key.
+        let surface = surface.on_hover_change(|state: &mut AppState, inside, tx| {
+            if !inside && state.context_menu_highlight.take().is_some() {
+                tx.animated();
+            }
+        });
         let surface = surface.on_pointer_move_local(|_: &mut AppState, _, tx| {
             tx.wake_after(std::time::Duration::ZERO);
             tx.live_only();

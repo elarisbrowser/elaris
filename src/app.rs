@@ -207,6 +207,11 @@ pub(crate) struct AppState {
     /// The animated icon under the pointer, which plays its motion glyph.
     pub(crate) animated_icon_hover: Option<String>,
     pub(crate) context_menu_highlight: Option<String>,
+    /// The menu row keyboard focus was last seen on, so a poll only moves the highlight when
+    /// focus itself moves.
+    pub(crate) context_menu_focus: Option<String>,
+    /// The row the pointer entered, applied by the next poll so the highlight glides there.
+    pub(crate) context_menu_hover: Option<String>,
     pub(crate) split_rect: [f32; 4],
     pub(crate) peek_presentation: crate::ui::peek::Presentation,
     pub(crate) split_preview: Option<usize>,
@@ -395,6 +400,8 @@ impl AppState {
             hover_highlight: None,
             animated_icon_hover: None,
             context_menu_highlight: None,
+            context_menu_focus: None,
+            context_menu_hover: None,
             split_rect: [0.0; 4],
             peek_presentation: Default::default(),
             split_preview: None,
