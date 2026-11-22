@@ -7,4 +7,4 @@ Icon=org.elarisbrowser.Elaris
 Terminal=false
 Categories=Network;WebBrowser;
 MimeType=x-scheme-handler/http;x-scheme-handler/https;
-StartupWMClass=elaris
+StartupWMClass=org.elarisbrowser.Elaris

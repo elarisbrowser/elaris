@@ -9,7 +9,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import dependencies, engine
+from . import dependencies, engine, packaging
 from .common import (
     CPP_BUILD_DIR,
     ROOT,
@@ -116,22 +116,20 @@ def _configure_bridge_environment(bridge_dir: str) -> None:
     os.environ[loader_variable] = os.pathsep.join(directories)
 
 
-def _macos_browser_bundle(executable: Path, name: str = "Elaris") -> Path:
-    contents = ROOT / "build" / f"{name}.app" / "Contents"
-    bundled_executable = contents / "MacOS" / executable.name
-    bundled_executable.parent.mkdir(parents=True, exist_ok=True)
-    copied = False
-    for source, destination in (
-        (ROOT / "assets" / "Info.plist", contents / "Info.plist"),
-        (executable, bundled_executable),
-    ):
-        if not destination.exists() or destination.stat().st_mtime_ns != source.stat().st_mtime_ns:
-            shutil.copy2(source, destination)
-            copied = True
-    if copied:
-        # Replacing any file in a signed bundle invalidates its signature, and macOS kills the app for that.
-        subprocess.run(["codesign", "--force", "--sign", "-", str(contents.parent)], check=True)
-    return bundled_executable
+def bundle(_args: argparse.Namespace) -> None:
+    """Build an optimised Elaris and package it with its icon for the current platform."""
+    build(argparse.Namespace(ui=False, release=True, jobs=None))
+    executable = _executable("release")
+    if sys.platform == "darwin":
+        bundled = packaging.macos_app_bundle(executable, "ElarisRelease")
+        print(f"\nBundled {bundled.parents[2]}")
+    elif sys.platform.startswith("linux"):
+        prefix = ROOT / "build" / "linux" / "Elaris"
+        packaging.linux_desktop_bundle(executable, prefix)
+        print(f"\nBundled {prefix}")
+        print(f"Install with: cp -R {prefix}/. ~/.local/  (then run update-desktop-database ~/.local/share/applications)")
+    else:
+        raise SystemExit("elaris: bundle supports macOS and Linux")
 
 
 def launch(args: argparse.Namespace) -> None:
@@ -142,7 +140,7 @@ def launch(args: argparse.Namespace) -> None:
             build(args)
         _configure_bridge_environment(bridge_lib_dir())
         bundle = "ElarisRelease" if release else "Elaris"
-        executable = _macos_browser_bundle(_executable(profile), bundle)
+        executable = packaging.macos_app_bundle(_executable(profile), bundle)
         run(str(executable), *([args.url] if args.url else []), *args.rune_args)
         return
     if _run_artifacts_are_current(args.ui, profile):
@@ -329,6 +327,7 @@ def register_commands(commands) -> None:
         ("format", format_sources, "Format Elaris Rust and C++ source files"),
         ("build", build, "Build Ladybird, its Elaris bridge, and the browser"),
         ("run", launch, "Build if needed and launch Elaris with Ladybird"),
+        ("bundle", bundle, "Build an optimised Elaris and package it with its icon"),
         ("hot", hot_reload, "Run Rune's guarded UI hot-reload workflow"),
         ("check", check, "Run formatting, Clippy, and tests"),
     ):
