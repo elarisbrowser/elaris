@@ -302,6 +302,9 @@ class ElarisWebView final : public WebView::HeadlessWebView {
     // Shows frames to the host as GPU surfaces: each is copied on the GPU into a surface of the blitter's, which the
     // host samples in place. The backing stores themselves are released as they would be for CPU reads.
     bool set_gpu_frames(bool enabled) {
+        // The copy reads each frame on the GPU, after the Compositor's work to draw it, so the Compositor hands a frame
+        // over once that work is scheduled rather than polling until it is done.
+        set_presents_from_cpu_memory(!enabled);
         if (!enabled) {
             m_blitter.reset();
             return true;
