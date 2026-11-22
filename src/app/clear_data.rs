@@ -24,9 +24,9 @@ impl ClearRange {
 
     pub(crate) fn label(self) -> &'static str {
         match self {
-            Self::LastHour => "Last hour",
-            Self::LastDay => "Last 24 hours",
-            Self::LastWeek => "Last 7 days",
+            Self::LastHour => "1 hour",
+            Self::LastDay => "24 hours",
+            Self::LastWeek => "7 days",
             Self::AllTime => "All time",
         }
     }

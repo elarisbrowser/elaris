@@ -20,6 +20,7 @@ pub(super) fn dialog(dialog: ClearDataDialog, theme: &Theme, overlays: &mut Vec<
         .position(|range| *range == dialog.range);
     let range = SegmentedControl::new(&ClearRange::ALL.map(ClearRange::label), selected)
         .label("Time range")
+        .width(None)
         .on_pick(|state: &mut AppState, index, _| {
             state.update_clear_data(|dialog| dialog.range = ClearRange::ALL[index]);
         })
