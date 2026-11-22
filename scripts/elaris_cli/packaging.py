@@ -1,17 +1,27 @@
-"""Assemble Elaris's app bundles: a branded .app on macOS and a desktop-entry tree on Linux."""
+"""Assemble Elaris's app bundles: a macOS .app and a Linux prefix tree, each with Ladybird's engine and the brand icon."""
 
 import filecmp
+import importlib.util
+import re
 import shutil
 import subprocess
 from pathlib import Path
 
-from .common import ROOT, run
+from .common import ENGINE, ROOT, VCPKG_INSTALLED, run, vcpkg_triplet
 
 ASSETS = ROOT / "assets"
 LINUX_ASSETS = ASSETS / "linux"
 # Compiled from the brand kit's Icon Composer document, so the designer's layers and gradient carry over.
 APP_ICON_SOURCE = ASSETS / "brand-kit" / "apple" / "Icon Exports" / "Icon.icon"
 APP_ID = "org.elarisbrowser.Elaris"
+ENGINE_BUILD = ROOT / "build" / "cpp-ladybird"
+LADYBIRD_APP = ENGINE_BUILD / "bin" / "Ladybird.app"
+# Ladybird's packager rewrites rpaths, copies linked libraries, and re-signs; Elaris reuses it rather than repeat it.
+LADYBIRD_MACOS_TOOL = ENGINE / "Meta" / "package-macos-test-bundle.py"
+# Elaris's app icon replaces Ladybird's own, so the engine's copies of these two are left behind.
+LADYBIRD_APP_ICON_FILES = ("Assets.car", "app_icon.icns")
+# Ladybird's own app binary; Elaris ships only the helper processes.
+LADYBIRD_APP_BINARY = "Ladybird"
 
 
 def _copy_if_changed(source: Path, destination: Path) -> bool:
@@ -53,20 +63,25 @@ def _macos_app_icon() -> Path:
     return output
 
 
-def macos_app_bundle(executable: Path, name: str = "Elaris") -> Path:
-    """Copy the executable, Info.plist and icon into build/<name>.app and sign it. Returns the bundled executable."""
-    contents = ROOT / "build" / f"{name}.app" / "Contents"
+def _macos_bundle_metadata(contents: Path) -> None:
+    """Copy the Info.plist and the compiled icon into an app's Contents."""
     icon = _macos_app_icon()
-    bundled_executable = contents / "MacOS" / executable.name
-    copies = [
+    for source, destination in (
         (ASSETS / "Info.plist", contents / "Info.plist"),
-        (executable, bundled_executable),
         (icon / "Assets.car", contents / "Resources" / "Assets.car"),
         (icon / "Icon.icns", contents / "Resources" / "Icon.icns"),
-    ]
-    # Every copy runs, so the list rather than `any` over a generator.
-    copied = [_copy_if_changed(source, destination) for source, destination in copies]
-    if any(copied):
+    ):
+        _copy_if_changed(source, destination)
+
+
+def macos_app_bundle(executable: Path, name: str = "ElarisDev") -> Path:
+    """A development .app around the executable. Ladybird's helpers stay in the build tree, which the bridge falls
+    back to when no packaged helpers sit beside the executable. Returns the bundled executable."""
+    contents = ROOT / "build" / f"{name}.app" / "Contents"
+    bundled_executable = contents / "MacOS" / executable.name
+    copied = _copy_if_changed(executable, bundled_executable)
+    _macos_bundle_metadata(contents)
+    if copied:
         # Replacing any file in a signed bundle invalidates its signature, and macOS kills the app for that.
         subprocess.run(["codesign", "--force", "--sign", "-", str(contents.parent)], check=True)
         # Launch Services also keys its icon cache on the bundle folder's time, so refresh it with the contents.
@@ -74,13 +89,145 @@ def macos_app_bundle(executable: Path, name: str = "Elaris") -> Path:
     return bundled_executable
 
 
-def linux_desktop_bundle(executable: Path, prefix: Path) -> Path:
-    """Lay out bin/ and share/ under `prefix`, so copying it into ~/.local or /usr installs Elaris with its icon."""
+def _ladybird_macos_tool():
+    """Load Ladybird's macOS bundle packager from the pinned engine checkout."""
+    spec = importlib.util.spec_from_file_location("ladybird_package_macos_test_bundle", LADYBIRD_MACOS_TOOL)
+    if spec is None or spec.loader is None:
+        raise SystemExit(f"elaris: Ladybird's macOS packager is missing at {LADYBIRD_MACOS_TOOL}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def macos_release_bundle(executable: Path) -> Path:
+    """build/Elaris.app with Ladybird's helpers, resources and libraries, relocatable and signed.
+
+    Assembled from scratch each time so no stale helper or library survives. Returns the bundled executable.
+    """
+    if not (LADYBIRD_APP / "Contents" / "MacOS" / LADYBIRD_APP_BINARY).is_file():
+        raise SystemExit("elaris: Ladybird's app bundle is missing; run ./elaris build first")
+    tool = _ladybird_macos_tool()
+
+    app = ROOT / "build" / "Elaris.app"
+    contents = app / "Contents"
+    if app.exists():
+        shutil.rmtree(app)
+    macos = contents / "MacOS"
+    macos.mkdir(parents=True)
+    bundled_executable = macos / executable.name
+    shutil.copy2(executable, bundled_executable)
+    for helper in (LADYBIRD_APP / "Contents" / "MacOS").iterdir():
+        if helper.is_file() and helper.name != LADYBIRD_APP_BINARY:
+            shutil.copy2(helper, macos / helper.name)
+    shutil.copytree(
+        LADYBIRD_APP / "Contents" / "Resources",
+        contents / "Resources",
+        ignore=shutil.ignore_patterns(*LADYBIRD_APP_ICON_FILES),
+    )
+    _macos_bundle_metadata(contents)
+
+    # Libraries come from the directories the built executables were linked against, which is what dyld searched.
+    search_directories = []
+    for binary in (executable, macos / "WebContent"):
+        for entry in tool.rpath_entries(binary):
+            directory = Path(entry)
+            if entry.startswith("/") and directory.is_dir() and directory not in search_directories:
+                search_directories.append(directory)
+    tool.fix_rpaths(app)
+    copied = tool.copy_linked_libraries(app, search_directories)
+    tool.fix_rpaths(app)
+    tool.resign(app, ENGINE_BUILD)
+    tool.verify(app)
+    print(f"copied {len(copied)} libraries into {app.name}/Contents/lib")
+    return bundled_executable
+
+
+def _elf_needed(binary: Path) -> list[str]:
+    output = subprocess.run(["readelf", "-d", str(binary)], capture_output=True, text=True, check=True).stdout
+    return re.findall(r"\(NEEDED\)\s+Shared library: \[([^\]]+)\]", output)
+
+
+def _linux_search_directories() -> list[Path]:
+    """The directories the engine's libraries were built into: Lagom's and vcpkg's."""
+    directories = [ENGINE_BUILD / "lib", VCPKG_INSTALLED / vcpkg_triplet() / "lib"]
+    return [directory for directory in directories if directory.is_dir()]
+
+
+def _copy_linux_libraries(binaries: list[Path], library_directory: Path) -> list[str]:
+    """Copy each library the binaries need that a build directory has, transitively. Libraries the system provides
+    (the C library, libstdc++, the graphics stack) are left to the system."""
+    search_directories = _linux_search_directories()
+    library_directory.mkdir(parents=True, exist_ok=True)
+    copied: list[str] = []
+    pending = list(binaries)
+    seen = {binary.resolve() for binary in pending}
+    while pending:
+        binary = pending.pop()
+        for name in _elf_needed(binary):
+            source = next((directory / name for directory in search_directories if (directory / name).is_file()), None)
+            if source is None:
+                continue
+            destination = library_directory / name
+            if not destination.exists():
+                shutil.copyfile(source.resolve(), destination)
+                shutil.copymode(source.resolve(), destination)
+                copied.append(name)
+            if destination.resolve() not in seen:
+                seen.add(destination.resolve())
+                pending.append(destination)
+    return copied
+
+
+def linux_prefix_bundle(executable: Path, prefix: Path) -> Path:
+    """A prefix tree (bin/, lib/, libexec/, share/) that copying into ~/.local or /usr installs whole.
+
+    Ladybird's layout is what its helpers search: they live in libexec/, their resources in share/Lagom, and each
+    binary finds the libraries in ../lib through its RUNPATH. Returns the installed executable.
+    """
+    if not (ENGINE_BUILD / "libexec" / "WebContent").is_file():
+        raise SystemExit("elaris: Ladybird's helper processes are missing; run ./elaris build first")
+    if shutil.which("patchelf") is None:
+        raise SystemExit("elaris: patchelf is required to bundle Linux libraries; install it and rerun ./elaris bundle")
+
+    # Assembled from scratch each time, so no stale library or helper survives a rebuild.
+    if prefix.exists():
+        shutil.rmtree(prefix)
     installed = prefix / "bin" / executable.name
-    _copy_if_changed(executable, installed)
-    _copy_if_changed(LINUX_ASSETS / f"{APP_ID}.desktop", prefix / "share" / "applications" / f"{APP_ID}.desktop")
+    installed.parent.mkdir(parents=True)
+    shutil.copy2(executable, installed)
+    helpers = sorted(path for path in (ENGINE_BUILD / "libexec").iterdir() if path.is_file())
+    (prefix / "libexec").mkdir()
+    for helper in helpers:
+        shutil.copy2(helper, prefix / "libexec" / helper.name)
+    library_directory = prefix / "lib"
+    _copy_linux_libraries([installed, *(prefix / "libexec" / helper.name for helper in helpers)], library_directory)
+
+    shutil.copytree(ENGINE_BUILD / "share" / "Lagom", prefix / "share" / "Lagom")
+    applications = prefix / "share" / "applications"
+    applications.mkdir(parents=True)
+    shutil.copy2(LINUX_ASSETS / f"{APP_ID}.desktop", applications / f"{APP_ID}.desktop")
     icon_root = LINUX_ASSETS / "icons"
     for source in icon_root.rglob("*"):
         if source.is_file():
-            _copy_if_changed(source, prefix / "share" / "icons" / source.relative_to(icon_root))
+            destination = prefix / "share" / "icons" / source.relative_to(icon_root)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+
+    run_path = {installed: "$ORIGIN/../lib"}
+    run_path.update({prefix / "libexec" / helper.name: "$ORIGIN/../lib" for helper in helpers})
+    run_path.update({library: "$ORIGIN" for library in library_directory.iterdir() if library.is_file()})
+    for binary, origin in run_path.items():
+        subprocess.run(["patchelf", "--set-rpath", origin, str(binary)], check=True)
+    _verify_linux_prefix(prefix)
     return installed
+
+
+def _verify_linux_prefix(prefix: Path) -> None:
+    """Fail if a binary's RUNPATH still names the build tree, since the bundle must run from anywhere."""
+    for binary in sorted(path for path in prefix.rglob("*") if path.is_file() and not path.is_symlink()):
+        if subprocess.run(["readelf", "-h", str(binary)], capture_output=True).returncode != 0:
+            continue
+        output = subprocess.run(["readelf", "-d", str(binary)], capture_output=True, text=True).stdout
+        for runpath in re.findall(r"\((?:RUNPATH|RPATH)\)\s+Library (?:runpath|rpath): \[([^\]]*)\]", output):
+            if any(entry.startswith("/") for entry in runpath.split(":")):
+                raise SystemExit(f"elaris: {binary.relative_to(prefix)} still has an absolute RUNPATH: {runpath}")

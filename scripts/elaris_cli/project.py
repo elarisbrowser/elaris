@@ -117,15 +117,15 @@ def _configure_bridge_environment(bridge_dir: str) -> None:
 
 
 def bundle(_args: argparse.Namespace) -> None:
-    """Build an optimised Elaris and package it with its icon for the current platform."""
+    """Build an optimised Elaris and package it with Ladybird's engine and the brand icon for this platform."""
     build(argparse.Namespace(ui=False, release=True, jobs=None))
     executable = _executable("release")
     if sys.platform == "darwin":
-        bundled = packaging.macos_app_bundle(executable, "Elaris")
+        bundled = packaging.macos_release_bundle(executable)
         print(f"\nBundled {bundled.parents[2]}")
     elif sys.platform.startswith("linux"):
         prefix = ROOT / "build" / "linux" / "Elaris"
-        packaging.linux_desktop_bundle(executable, prefix)
+        packaging.linux_prefix_bundle(executable, prefix)
         print(f"\nBundled {prefix}")
         print(f"Install with: cp -R {prefix}/. ~/.local/  (then run update-desktop-database ~/.local/share/applications)")
     else:
@@ -139,8 +139,10 @@ def launch(args: argparse.Namespace) -> None:
         if not _run_artifacts_are_current(ui_only=False, profile=profile):
             build(args)
         _configure_bridge_environment(bridge_lib_dir())
-        bundle = "Elaris" if release else "ElarisDev"
-        executable = packaging.macos_app_bundle(_executable(profile), bundle)
+        if release:
+            executable = packaging.macos_release_bundle(_executable(profile))
+        else:
+            executable = packaging.macos_app_bundle(_executable(profile), "ElarisDev")
         run(str(executable), *([args.url] if args.url else []), *args.rune_args)
         return
     if _run_artifacts_are_current(args.ui, profile):
