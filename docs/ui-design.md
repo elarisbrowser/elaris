@@ -156,3 +156,22 @@ Build content from `widgets.rs` rather than styling new surfaces:
 All page measurements and type styles are the `PAGE_*` tokens in `src/ui/theme.rs`. Settings has
 one module per category under `src/ui/internal/settings/`; add a category by listing its
 `NavItem` and `sections` function in `CATEGORIES`.
+
+## Animated icons
+
+`src/ui/animated_icon.rs` holds icons that play a motion glyph while hovered. Each `AnimatedIcon`
+pairs a static rest glyph with a motion glyph whose SMIL `<animate>`/`<animateTransform>` elements
+Rune plays on mount. To adopt one:
+
+1. Add a `static` motion `Icon` with `currentColor` shapes and a `<g>` of animations, keeping the
+   rest pose at `t = 0` and at the end. Check it classifies as `AnimatedMono`; the module's test
+   shows how.
+2. Declare `static NAME: AnimatedIcon = AnimatedIcon::new("name", &icons::REST, &MOTION);`.
+3. Attach `animated_icon::hover_change(&NAME)` to the control's hover (`hover_highlight::attach_with`
+   when it already has a shared highlight), and draw `animated_icon::glyph(state, &NAME, key, ..)`.
+
+Hover swaps the glyph under a new key, so the motion mounts afresh and replays on each hover.
+Reduced motion keeps the rest glyph. Rune's SMIL subset is bounded (see
+`rune-text/src/icon/anim/parse.rs`), and multi-colour icons stay static. Lucide-animated (MIT) is
+a Motion-based React library and Hugeicons' animated sets are third-party, so port their motion
+to SMIL by hand and check each source's licence before copying artwork.
