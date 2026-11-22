@@ -440,3 +440,13 @@ fn valid(active: &ActivePicker) -> bool {
         _ => false,
     }
 }
+
+/// Escape cancels the open picker, as its Cancel button does.
+pub(crate) fn cancel(state: &mut AppState) -> bool {
+    let Some(active) = state.form_picker.as_ref() else {
+        return false;
+    };
+    let (tab, request_id) = (active.tab, active.request_id);
+    reply(state, tab, request_id, None);
+    true
+}

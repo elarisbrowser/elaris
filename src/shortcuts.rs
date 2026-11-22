@@ -79,6 +79,9 @@ pub(crate) fn on_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> boo
         state.close_find(tx);
         return true;
     }
+    if event.key == Key::Escape && crate::ui::menu::escape(state) {
+        return true;
+    }
     if crate::ui::site_permissions::escape(state, event) {
         return true;
     }

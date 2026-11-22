@@ -717,3 +717,30 @@ impl<T: Copy + PartialEq + 'static> Dropdown<T> {
         menu.build(state, theme, layer)
     }
 }
+
+/// Escape closes the topmost open menu, popover or dropdown. A menu that opened on a press rarely
+/// holds keyboard focus, so the shortcut hook asks here before the page sees the key.
+pub(crate) fn escape(state: &mut AppState) -> bool {
+    if state.context_menu().is_some() {
+        state.dismiss_context_menu();
+    } else if state.page_menu.open() {
+        state.page_menu = Default::default();
+    } else if state.navigation_menu.is_some() {
+        state.navigation_menu = None;
+    } else if state.zoom_menu.is_some() {
+        state.zoom_menu = None;
+    } else if state.sidebar.overflow_menu_open {
+        state.sidebar.overflow_menu_open = false;
+    } else if state.omnibox.search_engine_menu_open {
+        state.omnibox.search_engine_menu_open = false;
+    } else if state.downloads_open {
+        state.downloads_open = false;
+    } else if state.startup_picker_open {
+        state.startup_picker_open = false;
+    } else if state.settings_picker_open {
+        state.settings_picker_open = false;
+    } else {
+        return super::form_picker::cancel(state);
+    }
+    true
+}
