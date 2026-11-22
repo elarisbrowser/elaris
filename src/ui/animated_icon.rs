@@ -236,13 +236,13 @@ pub(crate) static CLOSE: AnimatedIcon = AnimatedIcon::new(&super::icons::CLOSE, 
 static CLOSE_OTHERS_REST: Icon = Icon {
     name: "close-others",
     view: 16.0,
-    body: r#"<rect x="2.25" y="4.25" width="4.5" height="7.5" rx="1.25" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="6.25" y="4.25" width="3.5" height="7.5" rx="1.25" fill="currentColor"/><path d="M11.25 6L14 8.75M14 6L11.25 8.75" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>"#,
+    body: r#"<rect x="0.8" y="5.8" width="9" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3.4 2.8H13.1V10.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M11.4 1.2L15 4.8M15 1.2L11.4 4.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>"#,
 };
 
 static CLOSE_OTHERS_MOTION: Icon = Icon {
     name: "close-others-motion",
     view: 16.0,
-    body: r#"<rect x="2.25" y="4.25" width="4.5" height="7.5" rx="1.25" fill="none" stroke="currentColor" stroke-width="1.3"/><rect x="6.25" y="4.25" width="3.5" height="7.5" rx="1.25" fill="currentColor"/><g><animateTransform attributeName="transform" type="rotate" values="0 12.625 8;90 12.625 8" keyTimes="0;1" calcMode="spline" keySplines="0.4 0 0.2 1" dur="0.3s"/><path d="M11.25 6L14 8.75M14 6L11.25 8.75" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></g>"#,
+    body: r#"<rect x="0.8" y="5.8" width="9" height="9" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3.4 2.8H13.1V10.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><g><animateTransform attributeName="transform" type="rotate" values="0 13.2 3.0;90 13.2 3.0" keyTimes="0;1" calcMode="spline" keySplines="0.4 0 0.2 1" dur="0.3s"/><path d="M11.4 1.2L15 4.8M15 1.2L11.4 4.8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></g>"#,
 };
 
 pub(crate) static CLOSE_OTHERS: AnimatedIcon =
