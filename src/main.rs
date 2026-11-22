@@ -43,6 +43,9 @@ use rune::raw_window_handle::RawWindowHandle;
 use rune::{App, AppSpec, Chrome, WindowOptions, WindowSpec};
 
 fn main() {
+    // Matches the desktop entry's id, so Linux desktops show Elaris's name and icon for its windows.
+    #[cfg(target_os = "linux")]
+    rune::set_app_id("org.elarisbrowser.Elaris");
     let app = configure_app(App::new(app_spec(app::AppState::default, false)));
     #[cfg(target_os = "macos")]
     let app = {
