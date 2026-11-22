@@ -461,7 +461,7 @@ fn new_tab_at_top_lands_below_the_button_and_pushes_tabs_down() {
         "tabs start below the button"
     );
 
-    runtime.update(|state, tx| crate::app::new_tab(state, tx));
+    runtime.update(crate::app::new_tab);
     runtime.frame(0.0);
     runtime.key(KeyEvent {
         key: Key::Text("three.example".into()),
