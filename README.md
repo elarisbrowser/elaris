@@ -54,10 +54,10 @@ On Linux, the toolbar slides in when the pointer reaches the top of the window. 
 ./elaris check             # fmt, clippy, and tests
 ./elaris format            # format Rust and bridge C++
 ./elaris linux-build       # build for Linux in Docker
-./elaris bundle            # release build with its icon: build/Elaris.app (macOS) or build/linux/Elaris (Linux)
+./elaris bundle            # release build with Ladybird and the icon: build/Elaris.app (macOS) or build/linux/Elaris (Linux)
 ```
 
-On Linux, copy `build/linux/Elaris` into `~/.local` (or `/usr`) to install the launcher entry and icon.
+The Linux bundle is a prefix tree. Copy it into `~/.local` (or `/usr`) to install the launcher entry and icon, and install `patchelf` before bundling. Elaris needs a Vulkan driver at run time, such as the system's GPU driver or Mesa.
 
 Run `./elaris check` before opening a pull request. See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow and [SETUP.md](SETUP.md) for full environment details.
 
@@ -67,6 +67,7 @@ Run `./elaris check` before opening a pull request. See [CONTRIBUTING.md](CONTRI
 | --- | --- |
 | Architecture | [docs/architecture.md](docs/architecture.md) |
 | Ladybird integration | [docs/ladybird-embedding.md](docs/ladybird-embedding.md) |
+| Release procedure | [docs/release.md](docs/release.md) |
 | Development setup | [SETUP.md](SETUP.md) |
 | C++ bridge | [bridge/README.md](bridge/README.md) |
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
