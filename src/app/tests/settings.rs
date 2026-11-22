@@ -215,7 +215,7 @@ fn internal_pages_open_a_native_context_menu_with_page_actions() {
         ]
     );
 
-    runtime.update(|state, tx| crate::app::open_history(state, tx));
+    runtime.update(crate::app::open_history);
     for _ in 0..30 {
         runtime.frame(0.016);
     }
