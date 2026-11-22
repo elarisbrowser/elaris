@@ -8,7 +8,7 @@ use rune_kit::SegmentedControl;
 
 use crate::app::AppState;
 use crate::appearance::{AccentColor, Appearance};
-use crate::settings::{NewTabPosition, TabLayout};
+use crate::settings::{NewTabPosition, SidebarSide, TabLayout};
 use crate::ui::internal::PageContext;
 use crate::ui::internal::widgets::{setting, switch_kit};
 use crate::ui::theme::{self, Theme};
@@ -61,6 +61,20 @@ fn appearance(cx: &mut PageContext) -> El {
         tx.motion(theme::SIDEBAR_TOGGLE);
     })
     .build(&cx.kit);
+    let sidebar_side = SegmentedControl::new(
+        &SidebarSide::ALL.map(SidebarSide::label),
+        SidebarSide::ALL
+            .iter()
+            .position(|side| *side == state.settings.sidebar_side),
+    )
+    .width(Some(theme::PAGE_CONTROL_WIDTH))
+    .label("Sidebar Position")
+    .on_pick(|state: &mut AppState, index, tx| {
+        state.set_sidebar_side(SidebarSide::ALL[index]);
+        tx.animated();
+        tx.motion(theme::SIDEBAR_TOGGLE);
+    })
+    .build(&cx.kit);
     let new_tab_position = SegmentedControl::new(
         &NewTabPosition::ALL.map(NewTabPosition::label),
         NewTabPosition::ALL
@@ -87,6 +101,12 @@ fn appearance(cx: &mut PageContext) -> El {
             "Tab Layout",
             "Choose where open tabs appear.",
             tab_layout,
+        ),
+        setting(
+            cx,
+            "Sidebar position",
+            "Choose which side of the window the vertical sidebar sits on.",
+            sidebar_side,
         ),
         setting(
             cx,

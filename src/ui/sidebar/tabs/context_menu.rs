@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use crate::ui::menu::{MenuItem, context_menu as menu_at};
+use crate::ui::menu::{Menu, MenuItem, context_menu as menu_at};
 use rune::{El, Tx, el};
 
 use crate::app::{self, AppState};
+use crate::settings::TabLayout;
 use crate::tab::{Tab, TabSection};
 use crate::ui::animated_icon;
 use crate::ui::theme::{self, Theme};
@@ -143,7 +144,7 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
                 }),
         );
     }
-    menu = menu
+    menu = layout_items(state, menu.separator())
         .separator()
         .item(
             MenuItem::new("Open File…")
@@ -162,4 +163,36 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
                 }),
         );
     menu.build(state, theme, layer);
+}
+
+/// Switches between the sidebar and the tab strip, and moves the sidebar between the window's
+/// edges, without a trip to Settings.
+fn layout_items(state: &AppState, menu: Menu) -> Menu {
+    let (label, layout) = if state.horizontal_tabs() {
+        ("Show Tabs Vertically", TabLayout::Vertical)
+    } else {
+        ("Show Tabs Horizontally", TabLayout::Horizontal)
+    };
+    let menu = menu.item(MenuItem::new(label).on_select_tx(
+        move |state: &mut AppState, tx: &mut Tx| {
+            state.dismiss_context_menu();
+            state.set_tab_layout(layout);
+            tx.animated();
+            tx.motion(theme::SIDEBAR_TOGGLE);
+        },
+    ));
+    if state.horizontal_tabs() {
+        return menu;
+    }
+    let side = state.settings.sidebar_side.opposite();
+    menu.item(
+        MenuItem::new(format!("Move Sidebar {}", side.label())).on_select_tx(
+            move |state: &mut AppState, tx: &mut Tx| {
+                state.dismiss_context_menu();
+                state.set_sidebar_side(side);
+                tx.animated();
+                tx.motion(theme::SIDEBAR_TOGGLE);
+            },
+        ),
+    )
 }
