@@ -95,21 +95,24 @@ fn header_content(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>, revea
     )
     .shortcut_hint("cmd+s")
     .on_press_tx(super::toggle);
-    let mut header = row()
-        .key("header")
-        .h(theme::HEADER_HEIGHT)
-        .pr(theme::SIDEBAR_PADDING)
+    // The toggle and navigation keep their place whether or not the Linux window controls show:
+    // with the sidebar open they span its width, and the controls take the rest of the row.
+    let mut lead = row()
+        .key("header-lead")
+        .h_full()
         .gap(theme::NAV_GAP)
-        .center_y()
-        .absolute(0.0, 0.0)
-        .window_drag();
+        .center_y();
     #[cfg(not(elaris_ui = "linux"))]
     {
-        header = header.child(window_controls(_cx.titlebar_inset(), theme));
+        lead = lead.child(window_controls(_cx.titlebar_inset(), theme));
     }
-    header = header.child(toggle);
+    #[cfg(elaris_ui = "linux")]
+    {
+        lead = lead.pl(theme::SIDEBAR_PADDING);
+    }
+    lead = lead.child(toggle);
     if state.browser.private {
-        header = header.child(
+        lead = lead.child(
             text("Private")
                 .key("private-window")
                 .font(rune::tok::type_::LABEL)
@@ -117,16 +120,25 @@ fn header_content(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>, revea
                 .label("Private window"),
         );
     }
-
-    let (mut header, gap) = if collapsed || revealed {
-        (header.w_full(), el().w(theme::HEADER_GROUP_GAP))
+    lead = if collapsed {
+        lead.child(el().w(theme::HEADER_GROUP_GAP))
     } else {
-        (header.w(state.sidebar.width), spacer())
+        lead.w(state.sidebar.width)
+            .pr(theme::SIDEBAR_PADDING)
+            .child(spacer())
     };
-    header = header.child(gap);
-    header = header.children(navigation(state, theme));
+    lead = lead.children(navigation(state, theme));
+
+    let mut header = row()
+        .key("header")
+        .h(theme::HEADER_HEIGHT)
+        .gap(theme::NAV_GAP)
+        .center_y()
+        .absolute(0.0, 0.0)
+        .window_drag()
+        .child(lead);
     if collapsed || revealed {
-        header = header.child(spacer());
+        header = header.w_full().pr(theme::SIDEBAR_PADDING).child(spacer());
     }
     #[cfg(elaris_ui = "linux")]
     if revealed {
