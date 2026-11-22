@@ -206,6 +206,76 @@ pub(crate) static SYSTEM: AnimatedIcon = AnimatedIcon::new(&super::icons::SYSTEM
 pub(crate) static LIGHT: AnimatedIcon = AnimatedIcon::new(&super::icons::LIGHT, &LIGHT_MOTION);
 pub(crate) static DARK: AnimatedIcon = AnimatedIcon::new(&super::icons::DARK, &DARK_MOTION);
 
+/// The heart beats twice-over: it swells, dips and settles. The motion glyph is drawn about the
+/// heart's centre (8, 8) by translating the group to the centre and the path back out.
+static HEART_REST: Icon = Icon {
+    name: "heart",
+    view: 16.0,
+    body: r#"<path d="M8 13.25C8 13.25 2.25 9.9 2.25 6.1C2.25 4.2 3.7 2.75 5.4 2.75C6.6 2.75 7.5 3.45 8 4.3C8.5 3.45 9.4 2.75 10.6 2.75C12.3 2.75 13.75 4.2 13.75 6.1C13.75 9.9 8 13.25 8 13.25Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>"#,
+};
+
+static HEART_MOTION: Icon = Icon {
+    name: "heart-motion",
+    view: 16.0,
+    body: r#"<g transform="translate(8 8)"><g><animateTransform attributeName="transform" type="scale" values="1;1.22;0.94;1" keyTimes="0;0.35;0.65;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1" dur="0.6s" additive="replace"/><path transform="translate(-8 -8)" d="M8 13.25C8 13.25 2.25 9.9 2.25 6.1C2.25 4.2 3.7 2.75 5.4 2.75C6.6 2.75 7.5 3.45 8 4.3C8.5 3.45 9.4 2.75 10.6 2.75C12.3 2.75 13.75 4.2 13.75 6.1C13.75 9.9 8 13.25 8 13.25Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></g></g>"#,
+};
+
+pub(crate) static HEART: AnimatedIcon = AnimatedIcon::new(&HEART_REST, &HEART_MOTION);
+
+/// The close cross turns a quarter turn; a cross is symmetrical, so it settles in its rest pose.
+static CLOSE_MOTION: Icon = Icon {
+    name: "close-motion",
+    view: 16.0,
+    body: r#"<g><animateTransform attributeName="transform" type="rotate" values="0 8 8;90 8 8" keyTimes="0;1" calcMode="spline" keySplines="0.4 0 0.2 1" dur="0.3s"/><path d="M5 5L11 11M11 5L5 11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></g>"#,
+};
+
+pub(crate) static CLOSE: AnimatedIcon = AnimatedIcon::new(&super::icons::CLOSE, &CLOSE_MOTION);
+
+/// Close Other Tabs: the kept tab is the front card and the others stack behind it. On hover the
+/// stacked tabs slide under the kept one and fade out, one just after the other, then return.
+static CLOSE_OTHERS_REST: Icon = Icon {
+    name: "close-others",
+    view: 16.0,
+    body: r#"<path d="M2.5 9.5V3.75A1.25 1.25 0 0 1 3.75 2.5H9.25" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><path d="M4.25 7.25V4.5A1.25 1.25 0 0 1 5.5 3.25H10.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><rect x="5.75" y="5.25" width="7.5" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/>"#,
+};
+
+static CLOSE_OTHERS_MOTION: Icon = Icon {
+    name: "close-others-motion",
+    view: 16.0,
+    body: r#"<g><animateTransform attributeName="transform" type="translate" values="0 0;3 3;0 0" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" dur="0.5s"/><animate attributeName="opacity" values="1;0;1" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" dur="0.5s"/><path d="M2.5 9.5V3.75A1.25 1.25 0 0 1 3.75 2.5H9.25" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></g><g><animateTransform attributeName="transform" type="translate" begin="0.08s" values="0 0;3 3;0 0" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" dur="0.5s"/><animate attributeName="opacity" begin="0.08s" values="1;0;1" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" dur="0.5s"/><path d="M4.25 7.25V4.5A1.25 1.25 0 0 1 5.5 3.25H10.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></g><rect x="5.75" y="5.25" width="7.5" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.3"/>"#,
+};
+
+pub(crate) static CLOSE_OTHERS: AnimatedIcon =
+    AnimatedIcon::new(&CLOSE_OTHERS_REST, &CLOSE_OTHERS_MOTION);
+
+/// The divider between two panes sways once and settles.
+static SPLIT_MOTION: Icon = Icon {
+    name: "split-motion",
+    view: 16.0,
+    body: r#"<rect x="2.5" y="3.5" width="11" height="9" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.4"/><g><animateTransform attributeName="transform" type="translate" values="0 0;2 0;-1.5 0;0 0" keyTimes="0;0.4;0.7;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1" dur="0.5s"/><path d="M8 3.75V12.25" stroke="currentColor" stroke-width="1.4"/></g>"#,
+};
+
+pub(crate) static SPLIT: AnimatedIcon = AnimatedIcon::new(&super::icons::SPLIT_VIEW, &SPLIT_MOTION);
+
+/// The folder lifts and drops back, as if a file were tucked into it.
+static FOLDER_MOTION: Icon = Icon {
+    name: "folder-motion",
+    view: 16.0,
+    body: r#"<g><animateTransform attributeName="transform" type="translate" values="0 0;0 -1.5;0 0" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" dur="0.45s"/><path d="M2.5 4.25C2.5 3.84 2.84 3.5 3.25 3.5H6L7.5 5H12.75C13.16 5 13.5 5.34 13.5 5.75V11.75C13.5 12.16 13.16 12.5 12.75 12.5H3.25C2.84 12.5 2.5 12.16 2.5 11.75Z" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/></g>"#,
+};
+
+pub(crate) static FOLDER: AnimatedIcon = AnimatedIcon::new(&super::icons::FOLDER, &FOLDER_MOTION);
+
+/// The two sliders' knobs slide past each other, as settings are tuned.
+static SETTINGS_MOTION: Icon = Icon {
+    name: "settings-motion",
+    view: 16.0,
+    body: r#"<rect x="2.5" y="2.5" width="11" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.35"/><path d="M4.5 6H11M4.5 10H11" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/><circle cx="7" cy="6" r="1.25" fill="currentColor"><animate attributeName="cx" values="7;10;7" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" dur="0.5s"/></circle><circle cx="9" cy="10" r="1.25" fill="currentColor"><animate attributeName="cx" values="9;6;9" keyTimes="0;0.5;1" calcMode="spline" keySplines="0.4 0 0.2 1;0.4 0 0.2 1" dur="0.5s"/></circle>"#,
+};
+
+pub(crate) static SETTINGS: AnimatedIcon =
+    AnimatedIcon::new(&super::icons::SITE_CONTROLS, &SETTINGS_MOTION);
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -253,6 +323,12 @@ mod tests {
             &SYSTEM_MOTION,
             &LIGHT_MOTION,
             &DARK_MOTION,
+            &HEART_MOTION,
+            &CLOSE_MOTION,
+            &CLOSE_OTHERS_MOTION,
+            &SPLIT_MOTION,
+            &FOLDER_MOTION,
+            &SETTINGS_MOTION,
         ] {
             assert_eq!(
                 text.icon_kind(motion),

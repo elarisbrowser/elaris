@@ -6,7 +6,6 @@ use rune::{El, Tx, el};
 use crate::app::{self, AppState};
 use crate::tab::{Tab, TabSection};
 use crate::ui::animated_icon;
-use crate::ui::icons;
 use crate::ui::theme::{self, Theme};
 
 pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
@@ -42,38 +41,42 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
                     }),
             )
             .separator()
-            .item(MenuItem::new(section_action.0).on_select_tx(
-                move |state: &mut AppState, tx: &mut Tx| {
-                    state.dismiss_context_menu();
-                    state.move_tab_to_section_animated(tab, section_action.1, tx);
-                },
-            ));
+            .item(
+                MenuItem::new(section_action.0)
+                    .animated(&animated_icon::HEART)
+                    .on_select_tx(move |state: &mut AppState, tx: &mut Tx| {
+                        state.dismiss_context_menu();
+                        state.move_tab_to_section_animated(tab, section_action.1, tx);
+                    }),
+            );
         for (side, label) in ["Split Left", "Split Right"].into_iter().enumerate() {
-            menu = menu.item(MenuItem::new(label).icon(&icons::SPLIT_VIEW).on_select_tx(
-                move |state: &mut AppState, tx| {
-                    state.dismiss_context_menu();
-                    state.dismiss_find();
-                    if state.browser.split.is_some_and(|split| {
-                        split
-                            .panes(state.browser.split_view_limit)
-                            .iter()
-                            .all(Option::is_some)
-                    }) {
-                        state.place_split_tab(tab, side);
-                        tx.focus(crate::ui::viewport::focus_key(&state.browser), false);
-                    } else {
-                        state.begin_split_picker(tab, side);
-                        tx.focus(crate::ui::viewport::PICKER, false);
-                    }
-                    tx.animated();
-                    tx.motion(theme::TAB_REORDER_MOTION);
-                },
-            ));
+            menu = menu.item(
+                MenuItem::new(label)
+                    .animated(&animated_icon::SPLIT)
+                    .on_select_tx(move |state: &mut AppState, tx| {
+                        state.dismiss_context_menu();
+                        state.dismiss_find();
+                        if state.browser.split.is_some_and(|split| {
+                            split
+                                .panes(state.browser.split_view_limit)
+                                .iter()
+                                .all(Option::is_some)
+                        }) {
+                            state.place_split_tab(tab, side);
+                            tx.focus(crate::ui::viewport::focus_key(&state.browser), false);
+                        } else {
+                            state.begin_split_picker(tab, side);
+                            tx.focus(crate::ui::viewport::PICKER, false);
+                        }
+                        tx.animated();
+                        tx.motion(theme::TAB_REORDER_MOTION);
+                    }),
+            );
         }
         if let Some(split) = state.browser.split {
             menu = menu.item(
                 MenuItem::new("Swap Panes")
-                    .icon(&icons::SPLIT_VIEW)
+                    .animated(&animated_icon::SPLIT)
                     .on_select_tx(|state: &mut AppState, tx| {
                         state.dismiss_context_menu();
                         state.browser.swap_split();
@@ -91,7 +94,7 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
             {
                 menu = menu.item(
                     MenuItem::new("Remove Pane")
-                        .icon(&icons::CLOSE)
+                        .animated(&animated_icon::CLOSE)
                         .on_select_tx(move |state: &mut AppState, tx| {
                             state.dismiss_context_menu();
                             state.browser.exit_split(Some(other));
@@ -103,7 +106,7 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
             }
             menu = menu.item(
                 MenuItem::new("Exit Split View")
-                    .icon(&icons::SPLIT_VIEW)
+                    .animated(&animated_icon::SPLIT)
                     .on_select_tx(|state: &mut AppState, tx| {
                         state.dismiss_context_menu();
                         state.browser.exit_split(None);
@@ -114,17 +117,21 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
         }
         menu = menu
             .separator()
-            .item(MenuItem::new("Close Tab").icon(&icons::CLOSE).on_select(
-                move |state: &mut AppState| {
-                    state.dismiss_context_menu();
-                    state.close(tab);
-                },
-            ))
             .item(
-                MenuItem::new("Close Other Tabs").on_select(move |state: &mut AppState| {
-                    state.dismiss_context_menu();
-                    state.close_others(tab);
-                }),
+                MenuItem::new("Close Tab")
+                    .animated(&animated_icon::CLOSE)
+                    .on_select(move |state: &mut AppState| {
+                        state.dismiss_context_menu();
+                        state.close(tab);
+                    }),
+            )
+            .item(
+                MenuItem::new("Close Other Tabs")
+                    .animated(&animated_icon::CLOSE_OTHERS)
+                    .on_select(move |state: &mut AppState| {
+                        state.dismiss_context_menu();
+                        state.close_others(tab);
+                    }),
             );
     } else {
         menu = menu.item(
@@ -140,7 +147,7 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
         .separator()
         .item(
             MenuItem::new("Open File…")
-                .icon(&icons::FOLDER)
+                .animated(&animated_icon::FOLDER)
                 .on_select_tx(|state: &mut AppState, tx: &mut Tx| {
                     state.dismiss_context_menu();
                     crate::shortcuts::open_file(tx);
@@ -148,11 +155,11 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
         )
         .item(
             MenuItem::new("Settings")
-                .icon(&icons::SITE_CONTROLS)
+                .animated(&animated_icon::SETTINGS)
                 .on_select_tx(|state: &mut AppState, tx: &mut Tx| {
                     state.dismiss_context_menu();
                     app::open_settings(state, tx);
                 }),
         );
-    crate::ui::hover_highlight::build_context_menu(state, menu, theme, layer);
+    menu.build(state, theme, layer);
 }
