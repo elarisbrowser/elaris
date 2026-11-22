@@ -45,7 +45,7 @@ pub(super) fn view(
         .gap(theme::TAB_GAP)
         .growth(GrowthSpec {
             spring: presence_motion(reduced_motion),
-            ..GrowthSpec::default()
+            edge: theme::TAB_PRESENCE_EDGE,
         })
         .motion(reorder_motion);
     if !has_favourites && !state.browser.tabs().is_empty() {
@@ -315,7 +315,7 @@ fn regular_rows(
         .motion(motion)
         .growth(GrowthSpec {
             spring: presence_motion(reduced_motion),
-            ..GrowthSpec::default()
+            edge: theme::TAB_PRESENCE_EDGE,
         });
     let split_pair = split_group_members(state, section)
         .filter(|pair| pair.iter().all(|id| items.contains(&PreviewItem::Tab(*id))));

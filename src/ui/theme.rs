@@ -400,6 +400,8 @@ pub(crate) const SELECTION_MOTION: Spring = motion::SNAPPY;
 pub(crate) const TAB_REORDER_MOTION: Spring = Spring::new(0.2, 0.12);
 /// How a tab row opens and its gap closes: brisk and without overshoot, so it lands cleanly.
 pub(crate) const TAB_PRESENCE_MOTION: Spring = Spring::new(0.22, 0.0);
+/// The feathered edge a tab row reveals through as it opens: shallow and quick to clear.
+pub(crate) const TAB_PRESENCE_EDGE: rune::StreamEdge = rune::edge::FAST_FEATHER;
 pub(crate) const TAB_DROP_SETTLE_SECONDS: f32 = 0.2;
 pub(crate) const TAB_DRAG_SCROLL_EDGE: f32 = 34.0;
 pub(crate) const TAB_DRAG_SCROLL_MAX: f32 = 520.0;
