@@ -15,9 +15,9 @@ use crate::ui::{
     theme::{self, Theme},
 };
 
-use super::PageContext;
 use super::layout::PageLayout;
 use super::widgets;
+use super::{PageAction, PageContext};
 
 const SEARCH_WIDTH: f32 = 520.0;
 const ROW_HEIGHT: f32 = 48.0;
@@ -25,6 +25,19 @@ const TIME_WIDTH: f32 = 72.0;
 
 const SECTION_GAP: f32 = theme::PAGE_SECTION_GAP;
 const DIALOG_WIDTH: f32 = 400.0;
+
+pub(super) const ACTIONS: &[PageAction] = &[
+    PageAction {
+        label: "Refresh",
+        enabled: |state| !state.history_page.loading,
+        run: |state, _| state.request_history_page(),
+    },
+    PageAction {
+        label: "Clear History…",
+        enabled: |state| !state.history_page.writing,
+        run: |state, _| state.history_page.confirming = true,
+    },
+];
 
 pub(super) fn view(cx: &mut PageContext) -> PageLayout {
     let (state, theme, kit) = (cx.state, cx.theme, &cx.kit);

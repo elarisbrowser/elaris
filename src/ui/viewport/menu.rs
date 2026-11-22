@@ -10,6 +10,8 @@ use crate::{app::AppState, engine::ViewCommand, tab::TabId, ui::theme::Theme};
 pub(crate) struct PageMenuState {
     pub(super) anchor: Option<(TabId, PointerPress)>,
     current: Option<(TabId, PointerPress, PageMenu)>,
+    /// A menu on a native page, which Elaris builds without asking the engine.
+    native: Option<(TabId, PointerPress)>,
 }
 impl PageMenuState {
     pub(crate) fn receive(&mut self, id: TabId, menu: PageMenu) {
@@ -20,7 +22,14 @@ impl PageMenuState {
         }
     }
     pub(crate) fn open(&self) -> bool {
-        self.current.is_some()
+        self.current.is_some() || self.native.is_some()
+    }
+
+    pub(super) fn open_native(&mut self, id: TabId, point: PointerPress) {
+        *self = Self {
+            native: Some((id, point)),
+            ..Self::default()
+        };
     }
 }
 
@@ -35,6 +44,10 @@ fn item(id: TabId, label: &str, action: impl Fn(&mut AppState, &mut Tx) + 'stati
 }
 
 pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
+    if let Some((id, point)) = state.page_menu.native {
+        crate::ui::internal::context_menu(state, id, point, theme, layer);
+        return;
+    }
     let Some((id, point, info)) = &state.page_menu.current else {
         return;
     };

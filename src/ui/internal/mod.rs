@@ -3,8 +3,11 @@
 //! Native Rune pages for routes owned by Elaris.
 //!
 //! To add a page: declare its route in `src/internal.rs`, add a module here whose `view`
-//! takes a [`PageContext`] and returns a [`PageLayout`], and map it in [`renderer`]. The match is
-//! exhaustive, so a route without a renderer fails to compile.
+//! takes a [`PageContext`] and returns a [`PageLayout`], and register it in [`page`]. The match
+//! is exhaustive, so a route without a renderer fails to compile. A page can also list
+//! [`PageAction`]s, which its context menu offers.
+
+mod menu;
 
 mod history;
 mod layout;
@@ -39,16 +42,42 @@ pub(super) struct PageContext<'a> {
     pub(super) side_nav: bool,
 }
 
-type Renderer = fn(&mut PageContext) -> PageLayout;
+/// A command a page offers in its context menu.
+pub(super) struct PageAction {
+    pub(super) label: &'static str,
+    /// Whether it can run now; disabled items stay visible so the menu keeps its shape.
+    pub(super) enabled: fn(&AppState) -> bool,
+    pub(super) run: fn(&mut AppState, &mut rune::Tx),
+}
 
-fn renderer(page: InternalPage) -> Renderer {
+/// How Elaris renders one internal page.
+struct Page {
+    view: fn(&mut PageContext) -> PageLayout,
+    actions: &'static [PageAction],
+}
+
+fn page(page: InternalPage) -> Page {
     match page {
-        InternalPage::Settings => settings::view,
-        InternalPage::History => history::view,
-        InternalPage::Downloads => placeholders::downloads,
-        InternalPage::About => placeholders::about,
+        InternalPage::Settings => Page {
+            view: settings::view,
+            actions: settings::ACTIONS,
+        },
+        InternalPage::History => Page {
+            view: history::view,
+            actions: history::ACTIONS,
+        },
+        InternalPage::Downloads => Page {
+            view: placeholders::downloads,
+            actions: &[],
+        },
+        InternalPage::About => Page {
+            view: placeholders::about,
+            actions: &[],
+        },
     }
 }
+
+pub(crate) use self::menu::context_menu;
 
 pub(crate) fn view(
     state: &AppState,
@@ -69,7 +98,7 @@ pub(crate) fn view(
     };
     let side_nav = cx.side_nav;
     let page = match route {
-        InternalRoute::Page(page) => renderer(*page)(&mut cx),
+        InternalRoute::Page(route) => (page(*route).view)(&mut cx),
         InternalRoute::NotFound(address) => not_found(address, theme),
     };
     page.view(route.title(), theme, side_nav)

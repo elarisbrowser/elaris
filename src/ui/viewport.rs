@@ -639,6 +639,7 @@ fn page(
             state.dismiss_find();
             tx.focus(pane_key(side), false);
             if internal {
+                state.page_menu.open_native(id, p.window());
                 return;
             }
             state.page_menu.anchor = Some((id, p.window()));

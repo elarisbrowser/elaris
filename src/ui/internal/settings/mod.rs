@@ -15,11 +15,24 @@ use rune::El;
 use crate::ui::icons;
 use crate::ui::theme::Theme;
 
-use super::PageContext;
 use super::layout::PageLayout;
 use super::widgets::{self, NavItem};
+use super::{PageAction, PageContext};
 
 const SCROLL: &str = "settings-scroll";
+
+pub(super) const ACTIONS: &[PageAction] = &[
+    PageAction {
+        label: "Edit config.toml",
+        enabled: |_| true,
+        run: |state, _| state.open_config_file(),
+    },
+    PageAction {
+        label: "Reload config.toml",
+        enabled: |_| true,
+        run: |state, _| state.reload_configuration(),
+    },
+];
 
 struct Category {
     nav: NavItem,

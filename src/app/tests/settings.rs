@@ -174,3 +174,57 @@ fn content_blocking_settings_keep_the_enabled_lists() {
         BTreeSet::from([ContentBlockList::EasyList, ContentBlockList::CookieNotices])
     );
 }
+
+#[test]
+fn internal_pages_open_a_native_context_menu_with_page_actions() {
+    let state = AppState::new(Some("elaris://settings"));
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::ui::view,
+        (1280.0, 800.0),
+        rune::Env::new(false, 1.0),
+    );
+    runtime.frame(0.0);
+    let labels = |runtime: &rune::Runtime<AppState>| {
+        runtime
+            .elements()
+            .into_iter()
+            .filter(|element| {
+                element.role == "menuitem"
+                    && !element.exiting
+                    && element
+                        .key
+                        .as_deref()
+                        .is_some_and(|key| key.starts_with("page-context-menu"))
+            })
+            .filter_map(|element| element.label)
+            .collect::<Vec<_>>()
+    };
+
+    runtime.secondary_down(1200.0, 700.0);
+    runtime.secondary_up(1200.0, 700.0);
+    runtime.frame(0.0);
+    assert!(runtime.state.page_menu.open());
+    assert_eq!(
+        labels(&runtime),
+        [
+            "Edit config.toml",
+            "Reload config.toml",
+            "Copy Page Address",
+            "History",
+        ]
+    );
+
+    runtime.update(|state, tx| crate::app::open_history(state, tx));
+    for _ in 0..30 {
+        runtime.frame(0.016);
+    }
+    assert!(!runtime.state.page_menu.open());
+    runtime.secondary_down(1200.0, 700.0);
+    runtime.secondary_up(1200.0, 700.0);
+    runtime.frame(0.0);
+    let history = labels(&runtime);
+    assert_eq!(history[0], "Refresh");
+    assert!(history.contains(&"Settings".to_owned()));
+    assert!(!history.contains(&"History".to_owned()));
+}
