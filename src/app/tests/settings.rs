@@ -117,6 +117,19 @@ fn settings_navigation_highlights_glide_to_the_hovered_and_chosen_items() {
         runtime.frame(0.016);
     }
     assert_eq!(rect(&runtime, "page-nav-selection").unwrap()[1], setup[1]);
+
+    // Pausing on the selected item keeps the hover highlight, so the next move still glides.
+    let (x, y) = centre(privacy);
+    runtime.pointer_move(x, y);
+    runtime.frame(0.016);
+    let gliding = rect(&runtime, "page-nav-hover").unwrap()[1];
+    assert!(gliding > privacy[1] && gliding < setup[1], "{gliding}");
+
+    // Leaving the list clears it.
+    runtime.pointer_move(1.0, 790.0);
+    for _ in 0..60 {
+        runtime.frame(0.016);
+    }
     assert!(rect(&runtime, "page-nav-hover").is_none());
 }
 

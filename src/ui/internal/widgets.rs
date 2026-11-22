@@ -65,11 +65,17 @@ pub(super) fn nav(
             base.grid_cell(index).token_motion(motion)
         }
     };
+    // Over the selected item the hover highlight fades out in place rather than unmounting, so
+    // the next item it reaches still glides from where it was.
     let hover = cx
         .state
         .page_nav_hover
-        .filter(|index| *index < count && Some(*index) != current)
-        .map(|index| highlight("page-nav-hover", index).fill(theme.hover));
+        .filter(|index| *index < count)
+        .map(|index| {
+            highlight("page-nav-hover", index)
+                .fill(theme.hover)
+                .opacity(if Some(index) == current { 0.0 } else { 1.0 })
+        });
     let selection = current.map(|index| {
         highlight("page-nav-selection", index)
             .fill(theme.tab_active)
@@ -96,15 +102,13 @@ pub(super) fn nav(
             .position_in_set(index + 1, count)
             .focusable(true)
             .focus_ring(theme::FOCUS_WIDTH, 0.0, theme.focus)
+            // Only entering moves the highlight; leaving the whole list clears it, so crossing
+            // the gap between items never drops it.
             .on_hover_change(move |state: &mut AppState, inside, tx| {
-                if inside {
+                if inside && state.page_nav_hover != Some(index) {
                     state.page_nav_hover = Some(index);
-                } else if state.page_nav_hover == Some(index) {
-                    state.page_nav_hover = None;
-                } else {
-                    return;
+                    tx.animated();
                 }
-                tx.animated();
             })
             .on_press_tx(move |state: &mut AppState, tx| {
                 state.page_category = Some(key);
@@ -149,6 +153,11 @@ pub(super) fn nav(
         .fill(theme.settings_surface)
         .radius(theme::PAGE_GROUP_RADIUS)
         .continuous_corners()
+        .on_hover_change(|state: &mut AppState, inside, tx| {
+            if !inside && state.page_nav_hover.take().is_some() {
+                tx.animated();
+            }
+        })
         .child(list)
 }
 
