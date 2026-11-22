@@ -599,6 +599,7 @@ fn page(
                 theme,
                 overlays,
                 reduced_motion,
+                state.browser.pane_width(side),
             ));
         }
         if focused

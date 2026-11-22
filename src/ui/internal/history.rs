@@ -4,7 +4,7 @@
 
 use elaris::history::{Page, PageEntry};
 use rune::tok::{space, type_};
-use rune::{El, GrowthSpec, Key, ScrollSpec, Transition, col, el, icon, row, text, text_input};
+use rune::{El, GrowthSpec, Key, Transition, col, el, icon, row, text, text_input};
 use rune_kit::{Button, ButtonVariant, Checkbox, Dialog, Kit};
 
 use crate::address::compact_address;
@@ -15,18 +15,18 @@ use crate::ui::{
     theme::{self, Theme},
 };
 
-const CONTENT_WIDTH: f32 = 960.0;
+use super::layout::{self, PageLayout, SECTION_GAP};
 const SEARCH_WIDTH: f32 = 520.0;
 const ROW_HEIGHT: f32 = 48.0;
 const TIME_WIDTH: f32 = 72.0;
-const SECTION_GAP: f32 = 24.0;
 
 pub(super) fn view(
     state: &AppState,
     theme: &Theme,
     overlays: &mut Vec<El>,
     reduced_motion: bool,
-) -> El {
+    compact: bool,
+) -> PageLayout {
     let history = &state.history_page;
     let kit = theme.kit(theme.settings_surface);
     if history.confirming {
@@ -36,34 +36,31 @@ pub(super) fn view(
         .page
         .as_ref()
         .is_some_and(|page| !page.entries.is_empty());
-    let header = row()
-        .key("history-header")
-        .w_full()
-        .gap(theme::PAGE_GROUP_PADDING)
+    let actions = row()
+        .gap(space::S2)
         .center_y()
-        .child(
-            text("History")
-                .font(theme::PAGE_TITLE)
-                .color(theme.text)
-                .role("heading")
-                .grow(1.0)
-                .min_w(0.0),
-        )
-        .child(search(state, theme))
-        .child(
-            row()
-                .grow(1.0)
-                .min_w(0.0)
-                .gap(space::S2)
-                .center_y()
-                .justify_end()
-                .children(actions(state, theme, &kit, has_entries)),
-        );
+        .justify_end()
+        .children(actions(state, theme, &kit, has_entries));
+    let toolbar = if compact {
+        col()
+            .w_full()
+            .gap(space::S2)
+            .child(search(state, theme))
+            .child(actions.w_full())
+    } else {
+        row()
+            .w_full()
+            .gap(theme::PAGE_GROUP_PADDING)
+            .center_y()
+            .justify_between()
+            .child(search(state, theme))
+            .child(actions)
+    }
+    .key("history-header");
     let mut results = col()
         .key("history-results")
         .w_full()
-        .gap(space::S2)
-        .pb(space::S6);
+        .gap(theme::PAGE_GROUP_PADDING);
     if let Some(error) = &history.action_error {
         results = results.child(
             text(error)
@@ -113,32 +110,12 @@ pub(super) fn view(
         });
     }
     results = results.child(entries(state, theme, &kit, reduced_motion));
-    let list = row().w_full().justify_center().child(
-        col()
-            .w_full()
-            .max_w(CONTENT_WIDTH)
-            .px(space::S6)
-            .child(results)
-            .children(pagination(state, &kit)),
-    );
-    col()
-        .key("history-page")
-        .w_full()
-        .h_full()
-        .pt(space::S6)
-        .gap(space::S6)
-        .child(header.px(space::S6))
-        .child(
-            col()
-                .key(HISTORY_SCROLL)
-                .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .child(list),
-        )
+    PageLayout {
+        scroll_key: HISTORY_SCROLL,
+        icon: &icons::HISTORY,
+        toolbar: Some(toolbar),
+        content: results.children(pagination(state, &kit)),
+    }
 }
 
 /// The header's trailing controls: selection actions while any row is ticked, otherwise Clear.
@@ -256,12 +233,12 @@ fn entries(state: &AppState, theme: &Theme, kit: &Kit, reduced_motion: bool) -> 
     };
     for day in page.entries.chunk_by(|a, b| a.date == b.date) {
         let date = &day[0].date;
-        let mut rows = motion(super::group(theme));
+        let mut rows = motion(layout::group(theme));
         for (index, entry) in day.iter().enumerate() {
             rows = rows.child(entry_row(state, entry, index == 0, theme, kit, quiet));
         }
         list = list.child({
-            let section = super::section(
+            let section = layout::section(
                 format!("history-date-{date}"),
                 &date_label(date, page),
                 theme,
@@ -535,7 +512,7 @@ fn entry_row(
     } else {
         row.arrives_whole()
     };
-    row.children((!first).then(|| super::separator(theme)))
+    row.children((!first).then(|| layout::separator(theme)))
         .child(content)
 }
 
@@ -571,25 +548,7 @@ fn pagination(state: &AppState, kit: &Kit) -> Option<El> {
 }
 
 fn empty(title: &str, detail: &str, theme: &Theme) -> El {
-    col()
-        .key("history-empty")
-        .w_full()
-        .items_center()
-        .gap(space::S2)
-        .py(space::S6)
-        .child(icon(&icons::HISTORY, 20.0).color(theme.icon).a11y_hidden())
-        .child(
-            text(title)
-                .font(type_::BODY)
-                .color(theme.text)
-                .role("heading"),
-        )
-        .child(
-            text(detail)
-                .font(type_::BODY)
-                .color(theme.text_muted)
-                .wrap(),
-        )
+    layout::message(title, detail, theme).key("history-empty")
 }
 
 fn confirmation(theme: &Theme, overlays: &mut Vec<El>) {

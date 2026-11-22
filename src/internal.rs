@@ -2,32 +2,42 @@
 
 //! Explicit routes for Elaris-owned native pages.
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum InternalPage {
-    Settings,
-    History,
-    Downloads,
-    About,
+// Declare each route once so its canonical address, title, and parser stay in sync.
+macro_rules! internal_pages {
+    ($($page:ident => ($slug:literal, $title:literal)),+ $(,)?) => {
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        pub(crate) enum InternalPage {
+            $($page),+
+        }
+
+        impl InternalPage {
+            pub(crate) fn address(self) -> &'static str {
+                match self {
+                    $(Self::$page => concat!("elaris://", $slug)),+
+                }
+            }
+
+            pub(crate) fn title(self) -> &'static str {
+                match self {
+                    $(Self::$page => $title),+
+                }
+            }
+
+            fn from_slug(slug: &str) -> Option<Self> {
+                match slug {
+                    $($slug => Some(Self::$page),)+
+                    _ => None,
+                }
+            }
+        }
+    };
 }
 
-impl InternalPage {
-    pub(crate) fn address(self) -> &'static str {
-        match self {
-            Self::Settings => "elaris://settings",
-            Self::History => "elaris://history",
-            Self::Downloads => "elaris://downloads",
-            Self::About => "elaris://about",
-        }
-    }
-
-    pub(crate) fn title(self) -> &'static str {
-        match self {
-            Self::Settings => "Settings",
-            Self::History => "History",
-            Self::Downloads => "Downloads",
-            Self::About => "About Elaris",
-        }
-    }
+internal_pages! {
+    Settings => ("settings", "Settings"),
+    History => ("history", "History"),
+    Downloads => ("downloads", "Downloads"),
+    About => ("about", "About Elaris"),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -37,7 +47,7 @@ pub(crate) enum InternalRoute {
 }
 
 impl InternalRoute {
-    /// Parses every `elaris:` URL as native, but only recognizes the four supported routes.
+    /// Parses every `elaris:` URL as native, but only recognizes registered routes.
     pub(crate) fn parse(address: &str) -> Option<Self> {
         let address = address.trim();
         let (scheme, rest) = address.split_once(':')?;
@@ -45,14 +55,7 @@ impl InternalRoute {
             return None;
         }
 
-        let route = rest.strip_prefix("//").unwrap_or_default();
-        let page = match route {
-            "settings" => Some(InternalPage::Settings),
-            "history" => Some(InternalPage::History),
-            "downloads" => Some(InternalPage::Downloads),
-            "about" => Some(InternalPage::About),
-            _ => None,
-        };
+        let page = rest.strip_prefix("//").and_then(InternalPage::from_slug);
         Some(page.map_or_else(|| Self::NotFound(address.to_owned()), Self::Page))
     }
 
@@ -70,7 +73,7 @@ impl InternalRoute {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{InternalPage, InternalRoute};
 
     #[test]
     fn recognizes_only_explicit_internal_routes() {
@@ -82,6 +85,10 @@ mod tests {
             ("ELARIS://settings", InternalPage::Settings),
         ] {
             assert_eq!(InternalRoute::parse(url), Some(InternalRoute::Page(page)));
+            assert_eq!(
+                InternalRoute::parse(page.address()),
+                Some(InternalRoute::Page(page))
+            );
         }
         assert_eq!(InternalRoute::parse("https://elaris/settings"), None);
     }

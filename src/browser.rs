@@ -942,16 +942,20 @@ impl Browser {
     }
 
     pub(crate) fn viewport_width(&self) -> f32 {
+        self.pane_width(self.focused_side())
+    }
+
+    pub(crate) fn pane_width(&self, side: usize) -> f32 {
         self.displayed_split()
             .map_or(self.content_width(), |split| {
                 let count = split.pane_count.min(self.split_view_limit);
                 if count == 2 {
-                    return split::widths(self.content_width(), split.ratio)[self.focused_side()];
+                    return split::widths(self.content_width(), split.ratio)[side];
                 }
                 split::grid_cell_rect(
                     [0.0, 0.0, self.content_width(), self.window.viewport[1]],
                     count,
-                    self.focused_side(),
+                    side,
                     split.ratio,
                 )[2]
             })

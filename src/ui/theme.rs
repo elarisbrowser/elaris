@@ -301,7 +301,7 @@ pub(crate) const PAGE_TITLE: rune::TextStyle = rune::TextStyle::new(26.0, 600.0)
 /// Headings above each grouped surface on a native page.
 pub(crate) const PAGE_SECTION_TITLE: rune::TextStyle = rune::TextStyle::new(14.0, 600.0).lh(19.0);
 /// How far a native page's content sits from the top, and the gap under each section heading.
-pub(crate) const PAGE_TOP_PADDING: f32 = 48.0;
+pub(crate) const PAGE_TOP_PADDING: f32 = space::S6;
 pub(crate) const PAGE_SECTION_TITLE_GAP: f32 = 9.0;
 /// The rounded surface that groups a native page's rows.
 pub(crate) const PAGE_GROUP_RADIUS: f32 = radius::LG;

@@ -3,14 +3,16 @@
 //! Native Rune pages for routes owned by Elaris.
 
 mod history;
+mod layout;
 mod settings;
 
-use rune::tok::type_;
-use rune::{El, col, el, text};
+use rune::{El, Icon};
 
 use crate::app::AppState;
 use crate::internal::{InternalPage, InternalRoute};
-use crate::ui::theme::{self, Theme};
+use crate::ui::{icons, theme::Theme};
+
+use self::layout::PageLayout;
 
 pub(crate) fn view(
     state: &AppState,
@@ -18,70 +20,55 @@ pub(crate) fn view(
     theme: &Theme,
     overlays: &mut Vec<El>,
     reduced_motion: bool,
+    pane_width: f32,
 ) -> El {
-    match route {
-        InternalRoute::Page(InternalPage::Settings) => settings::view(state, theme, overlays),
-        InternalRoute::Page(InternalPage::History) => {
-            history::view(state, theme, overlays, reduced_motion)
+    let compact = pane_width > 0.0 && pane_width < layout::COMPACT_BREAKPOINT;
+    let page = match route {
+        InternalRoute::Page(InternalPage::Settings) => {
+            settings::view(state, theme, overlays, compact)
         }
-        InternalRoute::Page(page) => message_page(
-            page.title(),
+        InternalRoute::Page(InternalPage::History) => {
+            history::view(state, theme, overlays, reduced_motion, compact)
+        }
+        InternalRoute::Page(InternalPage::Downloads) => placeholder(
+            "downloads-scroll",
+            &icons::DOWNLOAD,
+            "Manage downloads",
+            "Use the Downloads button at the bottom of the sidebar or next to the address bar.",
+            theme,
+        ),
+        InternalRoute::Page(InternalPage::About) => placeholder(
+            "about-scroll",
+            &icons::INFO,
+            "Coming soon",
             "This page is reserved for a future release.",
             theme,
         ),
-        InternalRoute::NotFound(address) => message_page(
-            "Page not found",
-            &format!("Elaris does not have an internal page at {address}."),
-            theme,
-        ),
+        InternalRoute::NotFound(address) => PageLayout {
+            scroll_key: "internal-not-found-scroll",
+            icon: &icons::INFO,
+            toolbar: None,
+            content: layout::message(
+                "Unknown address",
+                &format!("Elaris does not have an internal page at {address}."),
+                theme,
+            ),
+        },
+    };
+    page.view(route.title(), theme)
+}
+
+fn placeholder(
+    scroll_key: &'static str,
+    icon: &'static Icon,
+    title: &str,
+    detail: &str,
+    theme: &Theme,
+) -> PageLayout {
+    PageLayout {
+        scroll_key,
+        icon,
+        toolbar: None,
+        content: layout::message(title, detail, theme),
     }
-}
-
-fn message_page(title: &str, message: &str, theme: &Theme) -> El {
-    col()
-        .key("internal-message-page")
-        .w_full()
-        .h_full()
-        .center()
-        .gap(10.0)
-        .child(text(title).font(theme::PAGE_TITLE).color(theme.text))
-        .child(
-            text(message)
-                .font(type_::BODY)
-                .color(theme.text_muted)
-                .wrap(),
-        )
-}
-
-/// A titled block of a native page: a muted heading above its grouped content.
-fn section(key: impl Into<String>, title: &str, theme: &Theme, content: El) -> El {
-    col()
-        .key(key)
-        .w_full()
-        .gap(theme::PAGE_SECTION_TITLE_GAP)
-        .child(
-            text(title)
-                .font(theme::PAGE_SECTION_TITLE)
-                .color(theme.text_muted)
-                .role("heading")
-                .px(theme::PAGE_GROUP_PADDING),
-        )
-        .child(content)
-}
-
-/// The rounded surface that groups a native page's rows.
-fn group(theme: &Theme) -> El {
-    col()
-        .w_full()
-        .fill(theme.settings_surface)
-        .continuous_corners()
-        .clip_rounded(theme::PAGE_GROUP_RADIUS)
-}
-
-/// A hairline between rows of a [`group`], inset to line up with the rows' content.
-fn separator(theme: &Theme) -> El {
-    el().w_full()
-        .h(1.0)
-        .px(theme::PAGE_GROUP_PADDING)
-        .child(el().w_full().h_full().fill(theme.separator))
 }

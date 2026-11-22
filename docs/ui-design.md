@@ -111,3 +111,13 @@ sample. With the bridge environment described in [the bridge README](../bridge/R
 The locked Rust checks and headless Ladybird smoke tests ran on macOS. Linux x86-64 passed a
 cross-target check. Linux runtime behaviour, live responsiveness, and appearance and motion in
 native windows remain unverified.
+
+## Internal pages
+
+Add the page's slug and tab title to the route declaration in `src/internal.rs`. Add its native
+content under `src/ui/internal/` and wire it into the exhaustive dispatch in that directory's
+`mod.rs`. The renderer supplies a `PageLayout` with a stable scroll key, an Elaris icon, and its own
+content. An optional toolbar stays visible above the scroll region. Reuse `layout::section`,
+`layout::group`, and `layout::message` for grouped rows and inline states. The shared frame handles
+the page title, alignment, theme, and scrolling. Use the pane's compact layout for controls that
+need to stack in Split View.
