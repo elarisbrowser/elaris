@@ -114,10 +114,30 @@ native windows remain unverified.
 
 ## Internal pages
 
-Add the page's slug and tab title to the route declaration in `src/internal.rs`. Add its native
-content under `src/ui/internal/` and wire it into the exhaustive dispatch in that directory's
-`mod.rs`. The renderer supplies a `PageLayout` with a stable scroll key, an Elaris icon, and its own
-content. An optional toolbar stays visible above the scroll region. Reuse `layout::section`,
-`layout::group`, and `layout::message` for grouped rows and inline states. The shared frame handles
-the page title, alignment, theme, and scrolling. Use the pane's compact layout for controls that
-need to stack in Split View.
+Each page has one route and one renderer:
+
+1. Add the slug and tab title to `internal_pages!` in `src/internal.rs`.
+2. Add a module under `src/ui/internal/` with `fn view(cx: &mut PageContext) -> PageLayout`.
+3. Map the page to that function in `renderer` in `src/ui/internal/mod.rs`. The match is
+   exhaustive, so a route without a renderer does not compile.
+
+`PageContext` carries the app state, theme, a Rune Kit palette for the grouped surface, the
+overlay list for dialogs and pickers, reduced motion and the compact flag. `PageLayout::new`
+takes a stable scroll key, an icon and the content; `.toolbar(..)` pins controls under the title.
+The frame in `layout.rs` handles the title, column width, alignment and scrolling.
+
+Build content from `widgets.rs` rather than styling new surfaces:
+
+| Widget | Use |
+|---|---|
+| `Category`, `categories`, `jump_bar` | Large headings that split a long page, with buttons that scroll to each one |
+| `section` | A muted heading above one grouped surface |
+| `rows` | A grouped surface of padded rows divided by inset hairlines |
+| `setting`, `setting_with` | A title, description and trailing control; the control drops under the copy in compact panes |
+| `actions` | Several buttons as one control |
+| `message` | Centred empty, unavailable and unknown states; append a button to offer a way forward |
+| `group`, `separator` | Custom rows, such as History entries |
+| `switch_kit` | Accent-coloured switches |
+
+All page measurements and type styles are the `PAGE_*` tokens in `src/ui/theme.rs`. Settings has
+one module per category under `src/ui/internal/settings/`.
