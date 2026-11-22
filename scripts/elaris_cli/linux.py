@@ -119,6 +119,8 @@ def _run_in_container(
     volumes = {
         "/home/vscode/.cargo": f"{volume_prefix}-cargo",
         "/home/vscode/.rustup": f"{volume_prefix}-rustup",
+        # ccache's default directory. Keeping it in a volume lets rebuilds reuse compiled objects.
+        "/home/vscode/.cache/ccache": f"{volume_prefix}-ccache",
         str(ROOT / "build"): f"{volume_prefix}-build",
         str(ROOT / "target"): f"{volume_prefix}-target",
         str(ENGINE / "Build"): f"{volume_prefix}-ladybird-build",

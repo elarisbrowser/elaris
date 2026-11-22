@@ -10,6 +10,7 @@ vcpkg_build_dir=${ELARIS_VCPKG_BUILD_DIR:-"${workspace}/.git/modules/Build"}
 for directory in \
     /home/vscode/.cargo \
     /home/vscode/.rustup \
+    /home/vscode/.cache \
     "${workspace}/build" \
     "${workspace}/target" \
     "${workspace}/vendor/ladybird/Build" \

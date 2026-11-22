@@ -22,7 +22,7 @@ RUN groupadd --non-unique --gid "${USER_GID}" vscode \
     && useradd --non-unique --uid "${USER_UID}" --gid vscode --create-home --shell /bin/bash vscode \
     && printf 'vscode ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/vscode \
     && chmod 0440 /etc/sudoers.d/vscode \
-    && mkdir -p /home/vscode/.cargo /home/vscode/.rustup \
+    && mkdir -p /home/vscode/.cargo /home/vscode/.rustup /home/vscode/.cache/ccache \
     && chown -R vscode:vscode /home/vscode
 
 ENV HOME=/home/vscode \
