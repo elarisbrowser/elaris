@@ -60,6 +60,7 @@ DEBIAN_PACKAGES = (
     "unzip",
     "zip",
     "lsb-release",
+    "patchelf",
 )
 
 FEDORA_PACKAGES = (
@@ -124,6 +125,7 @@ ARCH_PACKAGES = (
     "unzip",
     "zip",
     "clang",
+    "patchelf",
 )
 
 OPENSUSE_PACKAGES = (
@@ -154,6 +156,7 @@ OPENSUSE_PACKAGES = (
     "zip",
     "clang",
     "clang-tools",
+    "patchelf",
 )
 
 

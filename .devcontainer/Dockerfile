@@ -14,7 +14,7 @@ RUN set -eu; \
         > /etc/apt/sources.list.d/llvm.list; \
     apt-get update -o APT::Update::Error-Mode=any; \
     apt-get install -y --no-install-recommends \
-        clang-tidy-22 libxkbcommon-dev passwd sudo util-linux; \
+        clang-tidy-22 libxkbcommon-dev mesa-vulkan-drivers libvulkan1 passwd patchelf sudo util-linux; \
     rm -rf /var/lib/apt/lists/* /tmp/llvm-snapshot.gpg.key
 
 RUN groupadd --non-unique --gid "${USER_GID}" vscode \

@@ -15,8 +15,8 @@ for directory in \
     "${workspace}/vendor/ladybird/Build" \
     "${vcpkg_build_dir}"
 do
-    current_owner=$(stat -c '%u:%g' "${directory}")
-    if [ "${current_owner}" != "${owner}" ]; then
+    # Nested directories can be created as root by an earlier step, so check the whole tree, not just its top.
+    if [ -n "$(find "${directory}" \( ! -uid "${uid}" -o ! -gid "${gid}" \) -print -quit)" ]; then
         printf 'Fixing Docker volume ownership: %s\n' "${directory}"
         if [ "$(id -u)" -eq 0 ]; then
             chown -R "${owner}" "${directory}"
