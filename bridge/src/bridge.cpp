@@ -19,6 +19,7 @@
 #include <LibCore/GeolocationProvider.h>
 #include <LibCore/Promise.h>
 #include <LibCore/StandardPaths.h>
+#include <LibCore/System.h>
 #include <LibCore/Timer.h>
 #include <LibFileSystem/FileSystem.h>
 #include <LibGfx/Bitmap.h>
@@ -1268,13 +1269,32 @@ static void update_now_playing(ElarisLadybird& bridge) {
 #endif
 }
 
+// Ladybird finds its helper processes and resources relative to the directory the application runs from. A packaged
+// Elaris keeps them beside its executable (macOS) or under its prefix's libexec (Linux), so use that layout when it is
+// present. Development runs fall back to the build tree the bridge was compiled in.
+static Optional<AK::ByteString> helper_directory()
+{
+    auto executable = Core::System::current_executable_path();
+    if (executable.is_error())
+        return Optional<AK::ByteString>{ELARIS_LADYBIRD_HELPER_DIR};
+    auto directory = AK::LexicalPath::dirname(executable.value());
+    auto packaged = [](AK::ByteString const& candidate) {
+        return FileSystem::exists(AK::LexicalPath::join(candidate, "WebContent"sv).string());
+    };
+    if (packaged(directory))
+        return Optional<AK::ByteString>{directory};
+    if (packaged(AK::LexicalPath::join(directory, ".."sv, "libexec"sv).string()))
+        return Optional<AK::ByteString>{directory};
+    return Optional<AK::ByteString>{ELARIS_LADYBIRD_HELPER_DIR};
+}
+
 extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* profile_dir,
                                           ElarisLadybirdEventCallback callback, void* context,
                                           ElarisLadybird** out_bridge) {
     if (out_bridge)
         *out_bridge = nullptr;
-    if (!resource_dir || !profile_dir || !out_bridge)
-        return fail("resource_dir, profile_dir, and out_bridge are required");
+    if (!profile_dir || !out_bridge)
+        return fail("profile_dir and out_bridge are required");
     if (s_application)
         return fail("Ladybird is already initialized in this process");
     if (s_event_loop_thread != std::thread::id{} && s_event_loop_thread != std::this_thread::get_id())
@@ -1284,7 +1304,8 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
         s_event_loop_thread = std::this_thread::get_id();
     }
 
-    WebView::s_ladybird_resource_root = resource_dir;
+    if (resource_dir)
+        WebView::s_ladybird_resource_root = resource_dir;
     s_download_directory_override.clear();
     if (auto* fixture = std::getenv("ELARIS_TEST_LOCATION"); fixture && std::string_view(fixture) == "1") {
         Core::GeolocationProvider::set_provider_functions(
@@ -1300,7 +1321,7 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
         AK::StringView(profile_dir, std::char_traits<char>::length(profile_dir)),
     };
     Main::Arguments main_arguments{0, nullptr, arguments};
-    auto application = ElarisApplication::create(main_arguments, Optional<AK::ByteString>{ELARIS_LADYBIRD_HELPER_DIR});
+    auto application = ElarisApplication::create(main_arguments, helper_directory());
     if (application.is_error()) {
         if (Core::EventLoop::is_running()) {
             s_event_loop = &Core::EventLoop::current();
@@ -1311,7 +1332,8 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
 
     s_application = application.release_value();
     // Ladybird's platform initialization during create() resets the root from its own search, so set it again.
-    WebView::s_ladybird_resource_root = resource_dir;
+    if (resource_dir)
+        WebView::s_ladybird_resource_root = resource_dir;
     s_event_loop = &Core::EventLoop::current();
     s_event_loop_thread = std::this_thread::get_id();
     *out_bridge = new ElarisLadybird{

@@ -322,7 +322,7 @@ unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEvent) {
                 url: text,
                 image: raw.value & 1 != 0,
                 editable: raw.value & 2 != 0,
-                media: (raw.value & 4 != 0).then(|| super::MediaMenu {
+                media: (raw.value & 4 != 0).then_some(super::MediaMenu {
                     playing: raw.value & 8 != 0,
                     muted: raw.value & 16 != 0,
                     can_enter_picture_in_picture: raw.value & 32 != 0,
@@ -590,11 +590,11 @@ impl Ladybird {
     /// Starts Ladybird. `callback` receives every view's events with the id the view was
     /// created with, synchronously while [`Self::wait`] or [`Self::pump`] runs.
     pub fn new(
-        resource_dir: &Path,
+        resource_dir: Option<&Path>,
         profile_dir: &Path,
         callback: impl FnMut(u64, Event) + 'static,
     ) -> Result<Self, String> {
-        let resource_dir = path_cstring(resource_dir)?;
+        let resource_dir = resource_dir.map(path_cstring).transpose()?;
         let profile_dir = path_cstring(profile_dir)?;
         let state = NonNull::from(Box::leak(Box::new(CallbackState {
             callback: Box::new(callback),
@@ -604,7 +604,9 @@ impl Ladybird {
         // SAFETY: Paths are valid for the call; the callback context lives until `Owner` drops.
         let status = unsafe {
             elaris_ladybird_create(
-                resource_dir.as_ptr(),
+                resource_dir
+                    .as_ref()
+                    .map_or(std::ptr::null(), |path| path.as_ptr()),
                 profile_dir.as_ptr(),
                 Some(dispatch),
                 state.as_ptr().cast(),

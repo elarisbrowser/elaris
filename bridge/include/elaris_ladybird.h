@@ -260,7 +260,8 @@ typedef struct {
     int32_t repeat;
 } ElarisLadybirdKeyEvent;
 
-/* All calls, including callbacks, run on the thread that initializes the bridge. */
+/* All calls, including callbacks, run on the thread that initializes the bridge. resource_dir may be NULL to use
+ * the resources Ladybird finds beside its helper processes. */
 int32_t elaris_ladybird_create(const char* resource_dir, const char* profile_dir, ElarisLadybirdEventCallback callback,
                                void* context, ElarisLadybird** out_bridge);
 /* An optional per-application destination override. NULL restores the operating system Downloads directory. */

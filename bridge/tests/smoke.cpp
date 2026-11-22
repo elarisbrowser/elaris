@@ -558,7 +558,7 @@ int main(int argc, char** argv) {
     }
 
     ElarisLadybird* bridge = nullptr;
-    if (elaris_ladybird_create(nullptr, argv[2], nullptr, nullptr, &bridge) == 0 || bridge)
+    if (elaris_ladybird_create(argv[1], nullptr, nullptr, nullptr, &bridge) == 0 || bridge)
         return 1;
     if (elaris_ladybird_create_view(nullptr, 0, nullptr) == 0 || !elaris_ladybird_last_error()[0])
         return 1;

@@ -26,7 +26,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let events = Rc::new(RefCell::new(VecDeque::new()));
     let sink = Rc::clone(&events);
-    let mut browser = Ladybird::new(&resources, &profile, move |_, event| {
+    let mut browser = Ladybird::new(Some(&resources), &profile, move |_, event| {
         if matches!(
             event,
             Event::PermissionPrompt(_)

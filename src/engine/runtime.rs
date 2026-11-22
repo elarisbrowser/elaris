@@ -76,12 +76,13 @@ impl Runtime {
         download_directory: Option<PathBuf>,
         display: elaris::ladybird::DisplayMetadata,
     ) -> Result<(Self, Option<String>), String> {
-        let resources = directory("ELARIS_LADYBIRD_RESOURCE_DIR", "vendor/ladybird/Base/res");
+        // Ladybird finds its resources beside its helper processes unless a path overrides them.
+        let resources = std::env::var_os("ELARIS_LADYBIRD_RESOURCE_DIR").map(PathBuf::from);
         std::fs::create_dir_all(&profile)
             .map_err(|e| format!("cannot create profile {}: {e}", profile.display()))?;
         let events = Rc::new(RefCell::new(Vec::new()));
         let sink = Rc::clone(&events);
-        let mut ladybird = Ladybird::new(&resources, &profile, move |view, event| {
+        let mut ladybird = Ladybird::new(resources.as_deref(), &profile, move |view, event| {
             sink.borrow_mut().push((view, event));
         })?;
         let download_directory_error =
@@ -713,11 +714,4 @@ fn apply_to_view(view: &mut View, command: ViewCommand, timing: &mut Timing) -> 
             Ok(())
         }
     }
-}
-
-/// A directory from `variable`, or `fallback` within the source tree for development builds.
-fn directory(variable: &str, fallback: &str) -> PathBuf {
-    std::env::var_os(variable)
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(fallback))
 }

@@ -24,6 +24,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ensure_outside_user_downloads(&profile_dir)?;
     let download_dir = profile_dir.join("isolated-downloads");
     ensure_outside_user_downloads(&download_dir)?;
+    // A file left by an earlier run would make this run save as "rust-ffi (1).txt".
+    if download_dir.exists() {
+        std::fs::remove_dir_all(&download_dir)?;
+    }
     std::fs::create_dir_all(&download_dir)?;
     let download_dir = download_dir.canonicalize()?;
     ensure_outside_user_downloads(&download_dir)?;
@@ -34,12 +38,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let callback_title = Rc::clone(&saw_title);
     let callback_frame = Rc::clone(&saw_frame);
     let callback_downloads = Rc::clone(&download_updates);
-    let mut browser = Ladybird::new(&resource_dir, &profile_dir, move |_, event| match event {
-        Event::Title(title) if title == "Elaris Bridge Smoke" => callback_title.set(true),
-        Event::ReadyToPaint => callback_frame.set(true),
-        Event::Download(download) => callback_downloads.borrow_mut().push(download),
-        _ => {}
-    })?;
+    let mut browser = Ladybird::new(
+        Some(&resource_dir),
+        &profile_dir,
+        move |_, event| match event {
+            Event::Title(title) if title == "Elaris Bridge Smoke" => callback_title.set(true),
+            Event::ReadyToPaint => callback_frame.set(true),
+            Event::Download(download) => callback_downloads.borrow_mut().push(download),
+            _ => {}
+        },
+    )?;
     browser.set_download_directory(&download_dir)?;
     let mut view = browser.create_view(1, 60.0)?;
     view.load(&file_url)?;
@@ -119,7 +127,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         thread::sleep(Duration::from_millis(5));
     }
     drop(browser);
-    drop(Ladybird::new(&resource_dir, &profile_dir, |_, _| {})?);
+    drop(Ladybird::new(Some(&resource_dir), &profile_dir, |_, _| {})?);
     drop(server);
     Ok(())
 }
