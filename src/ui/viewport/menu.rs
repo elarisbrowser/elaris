@@ -27,12 +27,13 @@ pub(crate) struct PageMenuState {
     native: Option<(TabId, PointerPress)>,
 }
 impl PageMenuState {
-    pub(crate) fn receive(&mut self, id: TabId, menu: PageMenu) {
-        if let Some((owner, point)) = self.anchor.take()
-            && owner == id
-        {
-            self.current = Some((id, point, menu));
-        }
+    /// Opens the menu the engine built for tab `id`, if it answers the pending press.
+    pub(crate) fn receive(&mut self, id: TabId, menu: PageMenu) -> bool {
+        let Some((owner, point)) = self.anchor.take().filter(|(owner, _)| *owner == id) else {
+            return false;
+        };
+        self.current = Some((owner, point, menu));
+        true
     }
     pub(crate) fn open(&self) -> bool {
         self.current.is_some() || self.native.is_some()
@@ -58,6 +59,7 @@ fn act(
             action(s, tx);
         }
         s.page_menu = Default::default();
+        tx.animated();
     }
 }
 

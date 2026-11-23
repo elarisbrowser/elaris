@@ -291,7 +291,10 @@ fn apply_page_updates(state: &mut AppState, polled: &mut crate::browser::Polled,
     if let Some((id, menu)) = polled.menu.take()
         && !state.omnibox.open
     {
-        state.page_menu.receive(id, menu);
+        // The menu arrives from the engine rather than from input, so ask Rune to animate it.
+        if state.page_menu.receive(id, menu) {
+            tx.animated();
+        }
     }
     // While the page animates, Rune keeps drawing at the display's rate; a frame's pixels alone
     // would only wake it, which can miss every other refresh.
