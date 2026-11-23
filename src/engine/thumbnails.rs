@@ -25,13 +25,19 @@ impl Cache {
 
     /// Announces a new image handle. Existing handles wake Rune directly when displayed.
     pub(super) fn store(&mut self, tab: TabId, sample: Sample) -> Option<Weak<Pixels>> {
-        let (entry, new) = if let Some(index) = self.0.iter().position(|(id, _)| *id == tab) {
-            (self.0.remove(index).unwrap(), false)
-        } else {
-            if self.0.len() == CAPACITY {
-                self.0.pop_front();
+        let existing = self
+            .0
+            .iter()
+            .position(|(id, _)| *id == tab)
+            .and_then(|index| self.0.remove(index));
+        let (entry, new) = match existing {
+            Some(entry) => (entry, false),
+            None => {
+                if self.0.len() == CAPACITY {
+                    self.0.pop_front();
+                }
+                ((tab, Arc::new(Pixels::new())), true)
             }
-            ((tab, Arc::new(Pixels::new())), true)
         };
         entry.1.set(sample.width, sample.height, sample.rgba);
         let announced = new.then(|| Arc::downgrade(&entry.1));

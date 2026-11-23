@@ -1204,7 +1204,9 @@ impl WebView {
             io_surface: raw.io_surface,
             #[cfg(target_os = "linux")]
             dmabuf: super::DmabufPlane {
-                fd: owned_fd.expect("checked above"),
+                fd: owned_fd.ok_or_else(|| {
+                    "Ladybird sent a DMA-BUF frame without a descriptor".to_owned()
+                })?,
                 offset: raw.dmabuf_offset,
                 stride: raw.dmabuf_stride,
                 format: raw.dmabuf_format,

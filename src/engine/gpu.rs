@@ -120,7 +120,11 @@ impl GpuSurface {
         }
         #[cfg(target_os = "linux")]
         {
-            *self.linux.wake.lock().expect("GPU frame wake poisoned") = Some(Arc::new(wake));
+            *self
+                .linux
+                .wake
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(Arc::new(wake));
         }
     }
 
@@ -163,7 +167,11 @@ impl GpuSurface {
         let fd = OwnedFd::from(file);
         let key = (bitmap_id, metadata.dev(), metadata.ino(), [width, height]);
         let buffer = {
-            let mut buffers = self.linux.buffers.lock().expect("GPU buffers poisoned");
+            let mut buffers = self
+                .linux
+                .buffers
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             if buffers.len() >= KEPT_BUFFERS && !buffers.contains_key(&key) {
                 buffers.clear();
             }
@@ -191,7 +199,12 @@ impl GpuSurface {
                 eprintln!("Elaris: a GPU frame could not be shown: {error}");
             }
             completed.fetch_max(serial, Ordering::AcqRel);
-            if let Some(wake) = linux.wake.lock().expect("GPU frame wake poisoned").clone() {
+            if let Some(wake) = linux
+                .wake
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone()
+            {
                 wake();
             }
         });

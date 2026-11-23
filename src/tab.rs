@@ -49,7 +49,7 @@ impl TabId {
         LIVE_TAB_IDS
             .get_or_init(|| Mutex::new(HashSet::new()))
             .lock()
-            .expect("live tab registry poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .insert(id.0);
         id
     }
@@ -57,7 +57,7 @@ impl TabId {
     pub(crate) fn release(self) {
         if let Some(ids) = LIVE_TAB_IDS.get() {
             ids.lock()
-                .expect("live tab registry poisoned")
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .remove(&self.0);
         }
     }
@@ -65,7 +65,7 @@ impl TabId {
     pub(crate) fn is_live(self) -> bool {
         LIVE_TAB_IDS.get().is_some_and(|ids| {
             ids.lock()
-                .expect("live tab registry poisoned")
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .contains(&self.0)
         })
     }

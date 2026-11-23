@@ -71,7 +71,9 @@ impl AppState {
             return false;
         }
         let registered = WINDOW_REGISTRY.get().is_some_and(|registry| {
-            let registry = registry.lock().expect("window registry poisoned");
+            let registry = registry
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             [self.window_id, destination]
                 .into_iter()
                 .all(|id| registry.get(&id).is_some_and(rune::WindowHandle::is_ready))
@@ -207,7 +209,7 @@ impl AppState {
                             if let Some(window) = WINDOW_REGISTRY.get().and_then(|registry| {
                                 registry
                                     .lock()
-                                    .expect("window registry poisoned")
+                                    .unwrap_or_else(std::sync::PoisonError::into_inner)
                                     .get(&id)
                                     .cloned()
                             }) {
@@ -233,7 +235,7 @@ impl AppState {
                         && WINDOW_REGISTRY.get().is_some_and(|registry| {
                             registry
                                 .lock()
-                                .expect("window registry poisoned")
+                                .unwrap_or_else(std::sync::PoisonError::into_inner)
                                 .get(&transfer.destination)
                                 .is_some_and(rune::WindowHandle::is_ready)
                         })
@@ -277,7 +279,7 @@ impl AppState {
         let mut registry = SESSION_REGISTRY
             .get_or_init(Default::default)
             .lock()
-            .expect("session registry poisoned");
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut updated = registry.clone();
         if source_session.tabs.is_empty() {
             updated.remove(&source);
@@ -338,10 +340,13 @@ impl InTransit {
             .transfer_tab(&mut destination.browser, tab, section, index)
             .map_err(|error| error.to_string())?;
         if let Err(error) = destination.persist_transfer(source, &self.source_session) {
-            destination
-                .browser
-                .transfer_tab(&mut self.browser, tab, self.section, 0)
-                .expect("both browsers still use the same engine");
+            if let Err(error) =
+                destination
+                    .browser
+                    .transfer_tab(&mut self.browser, tab, self.section, 0)
+            {
+                eprintln!("Elaris: could not put a tab back after a failed transfer: {error:?}");
+            }
             destination.browser.split = split;
             if let Some(id) = active {
                 destination.browser.activate_tab(id);
@@ -357,9 +362,12 @@ impl InTransit {
         let index = self
             .index
             .min(source.browser.section_tabs(self.section).count());
-        self.browser
+        if let Err(error) = self
+            .browser
             .transfer_tab(&mut source.browser, id, self.section, index)
-            .expect("the source still uses the engine that owns the in-transit tab");
+        {
+            eprintln!("Elaris: could not restore a tab after a failed transfer: {error:?}");
+        }
         if let Some(split) = self.split
             && split
                 .panes

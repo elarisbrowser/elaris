@@ -65,8 +65,10 @@ pub(super) fn poll(state: &mut AppState, tx: &mut Tx) {
             return;
         };
         if detach.submitted {
-            if !super::transfer::in_progress() {
-                discard(pending.take().unwrap());
+            if !super::transfer::in_progress()
+                && let Some(detach) = pending.take()
+            {
+                discard(detach);
             }
             return;
         }
@@ -76,15 +78,19 @@ pub(super) fn poll(state: &mut AppState, tx: &mut Tx) {
         });
         if let Some(error) = error {
             eprintln!("Elaris: could not detach tab: {error}");
-            discard(pending.take().unwrap());
+            if let Some(detach) = pending.take() {
+                discard(detach);
+            }
             return;
         }
-        if state.browser.tab(detach.tab).is_none() {
-            discard(pending.take().unwrap());
+        let Some(tab) = state.browser.tab(detach.tab) else {
+            if let Some(detach) = pending.take() {
+                discard(detach);
+            }
             return;
-        }
+        };
         if detach.window.is_ready() {
-            let section = state.browser.tab(detach.tab).unwrap().section();
+            let section = tab.section();
             if state.request_tab_transfer(detach.tab, detach.destination, section, 0) {
                 detach.submitted = true;
                 return;

@@ -64,9 +64,11 @@ pub(super) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) {
                 .autofocus()
                 .on_edit(move |state: &mut AppState| {
                     &mut dialog_tab(state, id)
+                        // Invariant: the view is built from the same state the input runs against, so a displayed dialog's tab exists.
                         .expect("displayed dialog tab must exist")
                         .page_dialog
                         .as_mut()
+                        // Invariant: the displayed dialog is the request this input belongs to.
                         .expect("dialog input belongs to the displayed request")
                         .response
                 })

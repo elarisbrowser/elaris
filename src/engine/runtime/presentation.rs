@@ -151,7 +151,9 @@ fn show_gpu_frame(
     } else {
         None
     };
-    let gpu = view.surface.gpu.as_ref().expect("checked by the caller");
+    let Some(gpu) = view.surface.gpu.as_ref() else {
+        return Err("a GPU frame arrived for a surface without a GPU".to_owned());
+    };
     let (width, height, serial) = (frame.width, frame.height, frame.serial);
     perf::time(Stage::Set, || gpu.show(frame))?;
     view.surface.count_frame();

@@ -43,14 +43,14 @@ static WINDOW_WAKERS: Mutex<Option<HashMap<u64, Notify>>> = Mutex::new(None);
 pub(crate) fn register_window_waker(window: u64, notify: Notify) {
     let mut slot = WINDOW_WAKERS
         .lock()
-        .expect("window waker registry poisoned");
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     slot.get_or_insert_with(HashMap::new).insert(window, notify);
 }
 
 pub(crate) fn unregister_window_waker(window: u64) {
     if let Some(wakers) = WINDOW_WAKERS
         .lock()
-        .expect("window waker registry poisoned")
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .as_mut()
     {
         wakers.remove(&window);
@@ -60,7 +60,7 @@ pub(crate) fn unregister_window_waker(window: u64) {
 pub(crate) fn wake_all_windows() {
     let wakers = WINDOW_WAKERS
         .lock()
-        .expect("window waker registry poisoned");
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     if let Some(wakers) = wakers.as_ref() {
         for notify in wakers.values() {
             notify();
@@ -456,12 +456,12 @@ impl Engine {
             .updates
             .pending
             .lock()
-            .expect("engine update queue poisoned");
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let receiver = self
             .updates
             .receiver
             .lock()
-            .expect("engine update receiver poisoned");
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         pending.extend(receiver.try_iter());
         let mut owned = Vec::new();
         let mut retained = VecDeque::new();
@@ -483,7 +483,7 @@ impl Engine {
             .updates
             .pending
             .lock()
-            .expect("engine update queue poisoned");
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         pending.retain(|update| update_tab(update) != Some(tab));
     }
 

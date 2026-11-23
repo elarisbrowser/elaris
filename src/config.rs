@@ -486,7 +486,11 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
     {
         Value::from(value == "true")
     } else if matches!(key, "tint_opacity" | "max_panes" | "zoom") {
-        Value::from(value.parse::<i64>().expect("numeric setting is an integer"))
+        Value::from(
+            value
+                .parse::<i64>()
+                .map_err(|_| format!("{key} must be a whole number"))?,
+        )
     } else {
         Value::from(value)
     };

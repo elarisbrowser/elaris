@@ -30,14 +30,14 @@ fn registry() -> std::sync::MutexGuard<'static, HashSet<u64>> {
     MINI_WINDOWS
         .get_or_init(Default::default)
         .lock()
-        .expect("mini window registry poisoned")
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 pub(crate) fn is_mini_window(id: u64) -> bool {
     MINI_WINDOWS.get().is_some_and(|windows| {
         windows
             .lock()
-            .expect("mini window registry poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .contains(&id)
     })
 }
@@ -46,7 +46,7 @@ pub(super) fn forget(id: u64) {
     if let Some(windows) = MINI_WINDOWS.get() {
         windows
             .lock()
-            .expect("mini window registry poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .remove(&id);
     }
 }

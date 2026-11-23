@@ -13,7 +13,7 @@ impl Browser {
     pub(crate) fn downloads(&self) -> Vec<Download> {
         self.downloads
             .lock()
-            .expect("download list poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
             .filter(|download| download.private == self.private)
             .cloned()
@@ -24,7 +24,7 @@ impl Browser {
     pub(crate) fn all_downloads(&self) -> Vec<Download> {
         self.downloads
             .lock()
-            .expect("download list poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
     }
 
@@ -32,7 +32,7 @@ impl Browser {
     pub(crate) fn forget_private_downloads(&self) {
         self.downloads
             .lock()
-            .expect("download list poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .retain(|download| !download.private);
     }
 
@@ -78,7 +78,7 @@ impl Browser {
         let id = DownloadId::next().map_err(Error::Download)?;
         self.downloads
             .lock()
-            .expect("download list poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .push(Download::pending(id, &request, url));
         engine.send(Command::StartDownload(id, request));
         Ok(id)
@@ -132,7 +132,7 @@ impl Browser {
         }
         self.downloads
             .lock()
-            .expect("download list poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .retain(|download| download.id != id);
         Ok(())
     }
@@ -160,7 +160,7 @@ impl Browser {
     fn download(&self, id: DownloadId) -> Result<Download, Error> {
         self.downloads
             .lock()
-            .expect("download list poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
             .find(|download| download.id == id)
             .cloned()
@@ -176,7 +176,10 @@ impl Browser {
     }
 
     pub(super) fn apply_download_update(&mut self, id: DownloadId, update: downloads::Update) {
-        let mut downloads = self.downloads.lock().expect("download list poisoned");
+        let mut downloads = self
+            .downloads
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let Some(download) = downloads.iter_mut().find(|download| download.id == id) else {
             // A private session's reset reports its downloads cancelled after they were forgotten.
             let finished_private = update.private
@@ -198,7 +201,7 @@ impl Browser {
     pub(crate) fn remove_finished_downloads(&self, since: Option<std::time::SystemTime>) {
         self.downloads
             .lock()
-            .expect("download list poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .retain(|download| {
                 matches!(
                     download.status,
@@ -231,7 +234,7 @@ impl Browser {
         if let Some(download) = self
             .downloads
             .lock()
-            .expect("download list poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter_mut()
             .find(|item| item.id == id)
         {
@@ -244,7 +247,7 @@ impl Browser {
         if let Some(download) = self
             .downloads
             .lock()
-            .expect("download list poisoned")
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter_mut()
             .find(|item| item.id == id)
         {

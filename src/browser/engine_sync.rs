@@ -168,7 +168,9 @@ impl Browser {
                         // Ladybird already parsed and authorized this navigation. Keep its referrer
                         // and origin by transferring the descriptor instead of re-loading the URL.
                         let tab = self.insert_tab(url);
-                        self.tab_mut(tab).unwrap().engine.pending_load = None;
+                        if let Some(tab) = self.tab_mut(tab) {
+                            tab.engine.pending_load = None;
+                        }
                         self.send(tab, ViewCommand::LoadPrepared { source, request });
                         if activate {
                             self.activate_tab(tab);

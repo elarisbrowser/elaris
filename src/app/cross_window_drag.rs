@@ -276,7 +276,7 @@ fn locate_pointer(source: u64, pointer: &DesktopPointer) -> Option<(u64, [f32; 2
     let windows = WINDOW_REGISTRY
         .get()?
         .lock()
-        .expect("window registry poisoned");
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let private = crate::app::is_private_window(source);
     let mut hits = windows
         .iter()
