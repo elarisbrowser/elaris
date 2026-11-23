@@ -6,6 +6,7 @@ use crate::ui::icons;
 use crate::ui::tab_switcher::{tab_labels, tab_symbol};
 use crate::ui::theme;
 use elaris::ladybird::{Edit, MediaAction, PageMenu};
+use rune::FileDialogOptions;
 use rune::tok::type_;
 use rune::{El, PointerPress, Tx, col, el, row, text};
 
@@ -45,6 +46,16 @@ impl PageMenuState {
             ..Self::default()
         };
     }
+}
+
+/// The name a saved image starts with: the last path segment of its address, without query or fragment.
+fn image_file_name(url: &str) -> String {
+    let path = url.split(['?', '#']).next().unwrap_or_default();
+    path.rsplit('/')
+        .next()
+        .filter(|name| !name.is_empty())
+        .unwrap_or("image")
+        .to_owned()
 }
 
 /// Runs `action` while tab `id` is still the active one, returns focus to the page, then closes
@@ -288,13 +299,28 @@ pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
         if info.image {
             let save_url = url.clone();
             menu = menu.item(
-                item(id, "Save Image", move |s, _| {
-                    if let Err(error) = s
-                        .browser
-                        .start_download(elaris_core::downloads::Request::new(save_url.clone()))
-                    {
-                        eprintln!("Elaris: {error}");
-                    }
+                item(id, "Save Image As…", move |_, tx| {
+                    let options = FileDialogOptions {
+                        title: "Save Image As".into(),
+                        file_name: Some(image_file_name(&save_url)),
+                        ..Default::default()
+                    };
+                    let save_url = save_url.clone();
+                    tx.save_file(options, move |s: &mut AppState, result, _| {
+                        let path = match result {
+                            Ok(Some(path)) => path,
+                            Ok(None) => return,
+                            Err(error) => {
+                                eprintln!("Elaris: {error}");
+                                return;
+                            }
+                        };
+                        let request =
+                            elaris_core::downloads::Request::new(save_url).destination(path);
+                        if let Err(error) = s.browser.start_download(request) {
+                            eprintln!("Elaris: {error}");
+                        }
+                    });
                 })
                 .icon(&icons::DOWNLOAD),
             );
