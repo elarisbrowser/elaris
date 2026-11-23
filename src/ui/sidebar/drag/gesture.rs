@@ -257,12 +257,14 @@ impl TabDragState {
         );
         dragging.target = Some(TabDropTarget { section, index });
         dragging.valid = true;
-        // Tick as the drop slot moves, but not when the drag first picks one.
-        if previous
-            .0
-            .is_some_and(|target| Some(target) != dragging.target)
-        {
-            crate::platform::trackpad::step_haptic();
+        // Tap firmly on entering another section, such as favourites, and tick as the slot
+        // moves within one; not when the drag first picks a target.
+        if let Some(before) = previous.0 {
+            if before.section != section {
+                crate::platform::trackpad::threshold_haptic();
+            } else if before.index != index {
+                crate::platform::trackpad::step_haptic();
+            }
         }
         previous != (dragging.target, dragging.valid)
     }
