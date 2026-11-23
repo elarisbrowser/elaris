@@ -331,7 +331,7 @@ class ElarisWebView final : public WebView::HeadlessWebView {
     // Called on the owner thread each time the view presents a frame.
     AK::Function<void()> on_presented;
 
-    void set_owner(WebView::ViewImplementation const& owner) {
+    void set_owner(WebView::ViewImplementation& owner) {
         set_owner_view(owner);
     }
 
@@ -2053,7 +2053,7 @@ extern "C" int32_t elaris_ladybird_load(ElarisLadybirdView* handle, char const* 
     auto parsed = URL::Parser::basic_parse(AK::StringView(url, std::char_traits<char>::length(url)));
     if (!parsed.has_value())
         return fail("invalid URL");
-    handle->view->load(parsed.release_value());
+    handle->view->load_from_browser_ui(parsed.release_value());
     return succeed();
 }
 

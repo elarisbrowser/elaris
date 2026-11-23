@@ -43,7 +43,7 @@
 +        return;
 +    }
 +    if (modifiers == Web::UIEvents::Mod_Shift) {
-+        if (view().take_input_to_open_link_in_new_tab({}))
++        if (view().take_input_to_open_link_in_new_tab({}, *this))
 +            view().open_navigation_in_new_tab(verified_navigation.release_value(), Elaris::peek_disposition);
          return;
      }
