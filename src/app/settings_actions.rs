@@ -65,6 +65,13 @@ impl super::AppState {
         }
     }
 
+    /// Shows or hides the horizontal layout's bookmarks bar.
+    pub(crate) fn toggle_bookmarks_bar(&mut self) {
+        let shown = !self.settings.bookmarks_bar;
+        self.settings.bookmarks_bar = shown;
+        self.save_setting(SettingsChange::BookmarksBar(shown));
+    }
+
     pub(crate) fn set_page_style(&mut self, style: PageStyle) {
         if self.settings.page_style != style {
             self.settings.page_style = style;

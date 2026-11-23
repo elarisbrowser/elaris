@@ -124,6 +124,7 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
             "new_tab_position",
             value.config_key().to_owned(),
         ),
+        SettingsChange::BookmarksBar(value) => ("appearance", "bookmarks_bar", value.to_string()),
         SettingsChange::PageStyle(value) => {
             ("appearance", "page_style", value.config_key().to_owned())
         }
@@ -187,6 +188,7 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
         || key == "glass"
         || key == "reduce_motion"
         || key == "force_dark"
+        || key == "bookmarks_bar"
     {
         Value::from(value == "true")
     } else if matches!(key, "tint_opacity" | "grain" | "max_panes" | "zoom") {

@@ -45,6 +45,8 @@ pub(crate) enum Shortcut {
     /// Save every web page in the window to a new bookmark folder.
     BookmarkAllTabs,
     OpenBookmarks,
+    /// Show or hide the horizontal layout's bookmarks bar.
+    ToggleBookmarksBar,
     /// Go back in the active tab's history.
     Back,
     /// Go forward in the active tab's history.
@@ -94,6 +96,7 @@ const BINDINGS: &[Binding] = &[
     bind(Shortcut::BookmarkPage, "d", false),
     bind(Shortcut::BookmarkAllTabs, "d", true),
     bind_option(Shortcut::OpenBookmarks, "b"),
+    bind(Shortcut::ToggleBookmarksBar, "b", true),
 ];
 
 /// Command-Y on macOS, and Control-H elsewhere.
@@ -238,6 +241,11 @@ pub(crate) fn dispatch(state: &mut AppState, shortcut: Shortcut, tx: &mut Tx) {
         Shortcut::BookmarkPage => state.bookmark_active_tab(),
         Shortcut::BookmarkAllTabs => state.bookmark_all_tabs(tx),
         Shortcut::OpenBookmarks => app::open_bookmarks(state, tx),
+        Shortcut::ToggleBookmarksBar => {
+            state.toggle_bookmarks_bar();
+            tx.animated();
+            tx.motion(ui::theme::SIDEBAR_TOGGLE);
+        }
         Shortcut::OpenTaskManager => app::open_task_manager(state, tx),
         Shortcut::PreviousTab
         | Shortcut::NextTab
@@ -380,6 +388,7 @@ mod tests {
         assert_eq!(press('9', false), Some(Shortcut::SelectLastTab));
         assert_eq!(press('d', false), Some(Shortcut::BookmarkPage));
         assert_eq!(press('D', true), Some(Shortcut::BookmarkAllTabs));
+        assert_eq!(press('B', true), Some(Shortcut::ToggleBookmarksBar));
         let manage = KeyEvent {
             key: Key::Command('b'),
             mods: Mods {
@@ -412,7 +421,7 @@ mod tests {
     fn menus_show_the_registry_chord() {
         let back = Shortcut::Back.binding().unwrap();
         assert_eq!((back.key, back.shift, back.option), ("[", false, false));
-        assert_eq!(Shortcut::OpenBookmarks.binding().unwrap().option, true);
+        assert!(Shortcut::OpenBookmarks.binding().unwrap().option);
         assert_eq!(Shortcut::OpenTaskManager.binding(), None);
     }
 

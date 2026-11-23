@@ -184,6 +184,28 @@ fn keep_awake_sites_round_trip_and_skip_what_names_no_site() {
 }
 
 #[test]
+fn bookmarks_bar_defaults_to_shown_and_round_trips() {
+    let directory = std::env::temp_dir().join(format!(
+        "elaris-config-bookmarks-bar-{}-{}",
+        std::process::id(),
+        NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed)
+    ));
+    let path = directory.join("config.toml");
+    assert!(parse("").unwrap().settings.bookmarks_bar);
+    for shown in [false, true] {
+        write_change(&path, &SettingsChange::BookmarksBar(shown)).unwrap();
+        assert_eq!(
+            parse(&fs::read_to_string(&path).unwrap())
+                .unwrap()
+                .settings
+                .bookmarks_bar,
+            shown
+        );
+    }
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn new_tab_position_defaults_to_top_and_round_trips() {
     let directory = std::env::temp_dir().join(format!(
         "elaris-config-new-tab-{}-{}",

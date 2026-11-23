@@ -27,9 +27,45 @@ pub(crate) fn horizontal_chrome_height(state: &AppState) -> f32 {
         }
 }
 
-/// The bar shows in the horizontal layout once the Bookmarks Bar holds something.
+/// The bar shows in the horizontal layout while it isn't collapsed and the Bookmarks Bar holds a
+/// bookmark, itself or in a folder; empty folders alone don't show it.
 fn bar_shown(state: &AppState) -> bool {
-    state.horizontal_tabs() && !state.bookmarks().bar().is_empty()
+    state.settings.bookmarks_bar && bar_has_bookmarks(state)
+}
+
+fn bar_has_bookmarks(state: &AppState) -> bool {
+    fn holds_link(bookmark: &Bookmark) -> bool {
+        !bookmark.is_folder() || bookmark.children().iter().any(holds_link)
+    }
+    state.horizontal_tabs() && state.bookmarks().bar().iter().any(holds_link)
+}
+
+/// The toolbar's button that brings back a collapsed bookmarks bar; none while it shows, or
+/// with nothing to show.
+pub(in crate::ui) fn expand_button(state: &AppState, theme: &Theme) -> Option<El> {
+    (!state.settings.bookmarks_bar && bar_has_bookmarks(state)).then(|| {
+        bar_toggle(
+            "bookmarks-bar-show",
+            "Show bookmarks bar",
+            &icons::CHEVRON_DOWN,
+            theme,
+        )
+    })
+}
+
+fn bar_toggle(key: &str, label: &str, glyph: &'static rune::Icon, theme: &Theme) -> El {
+    crate::ui::components::hover_highlight::attach(
+        controls::icon_button_style(key, label, glyph, theme::ICON_BUTTON, theme),
+        key,
+        crate::ui::components::hover_highlight::Group::Controls,
+    )
+    .help(label)
+    .shortcut_hint("cmd+shift+b")
+    .on_press_tx(|state: &mut AppState, tx| {
+        state.toggle_bookmarks_bar();
+        tx.animated();
+        tx.motion(theme::SIDEBAR_TOGGLE);
+    })
 }
 
 /// The star in the address field, drawn like the field's other buttons and filled when the active
@@ -387,7 +423,12 @@ pub(in crate::ui) fn bar(state: &AppState, theme: &Theme, overlays: &mut Vec<El>
             chip
         });
     }
-    Some(bar)
+    Some(bar.child(el().grow(1.0)).child(bar_toggle(
+        "bookmarks-bar-hide",
+        "Hide bookmarks bar",
+        &icons::CHEVRON_UP,
+        theme,
+    )))
 }
 
 fn chip(state: &AppState, bookmark: &Bookmark, theme: &Theme) -> El {
@@ -399,7 +440,7 @@ fn chip(state: &AppState, bookmark: &Bookmark, theme: &Theme) -> El {
         .px(theme::ROW_PADDING / 2.0)
         .gap(space::S1)
         .center_y()
-        .radius(theme::ROW_RADIUS)
+        .radius(theme::BOOKMARKS_BAR_ITEM_RADIUS)
         .continuous_corners()
         .hover(theme.hover)
         .press(theme.press)
@@ -777,6 +818,42 @@ mod tests {
         assert_eq!(
             runtime.state.context_menu_highlight.as_deref(),
             Some(row.as_str())
+        );
+    }
+
+    #[test]
+    fn the_bar_needs_a_bookmark_and_collapses_to_a_toolbar_button() {
+        let mut runtime = runtime(TabLayout::Horizontal, false);
+        runtime.update(|state, _| {
+            state
+                .bookmarks()
+                .add_folder(BookmarkId::BAR, "Empty", 0)
+                .unwrap();
+        });
+        runtime.frame(0.016);
+        assert!(
+            runtime.presented("bookmarks-bar").is_none(),
+            "an empty folder alone"
+        );
+
+        runtime.update(|state, _| state.bookmark_tab(state.browser.tabs()[0].id(), false));
+        runtime.frame(0.032);
+        runtime.frame(1.0);
+        assert!(runtime.presented("bookmarks-bar").is_some());
+        assert!(runtime.presented("bookmarks-bar-show").is_none());
+
+        let ([x, y, w, h], _) = runtime.presented("bookmarks-bar-hide").unwrap();
+        let (x, y) = (x + w / 2.0, y + h / 2.0);
+        runtime.pointer_down(x, y);
+        runtime.pointer_up(x, y);
+        runtime.frame(1.05);
+        runtime.frame(2.0);
+        assert!(!runtime.state.settings.bookmarks_bar);
+        assert!(runtime.presented("bookmarks-bar").is_none());
+        assert!(runtime.presented("bookmarks-bar-show").is_some());
+        assert_eq!(
+            horizontal_chrome_height(&runtime.state),
+            theme::HORIZONTAL_CHROME_HEIGHT
         );
     }
 }

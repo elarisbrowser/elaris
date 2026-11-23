@@ -171,6 +171,7 @@ pub(super) fn action_from_id(id: isize) -> Option<Action> {
         120 => Action::Shortcut(Shortcut::BookmarkAllTabs),
         121 => Action::Shortcut(Shortcut::Back),
         122 => Action::Shortcut(Shortcut::Forward),
+        123 => Action::Shortcut(Shortcut::ToggleBookmarksBar),
         _ => return None,
     })
 }
@@ -200,6 +201,7 @@ fn shortcut_id(shortcut: Shortcut) -> isize {
         Shortcut::BookmarkAllTabs => 20,
         Shortcut::Back => 21,
         Shortcut::Forward => 22,
+        Shortcut::ToggleBookmarksBar => 23,
         _ => -1,
     }
 }

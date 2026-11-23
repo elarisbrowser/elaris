@@ -209,6 +209,8 @@ pub(crate) fn install(app: rune::AppHandle<AppState>) {
             shortcut_item("Bookmark This Page", Shortcut::BookmarkPage),
             shortcut_item("Bookmark All Tabs…", Shortcut::BookmarkAllTabs),
             shortcut_item("Manage Bookmarks", Shortcut::OpenBookmarks),
+            separator(),
+            shortcut_item("Show Bookmarks Bar", Shortcut::ToggleBookmarksBar),
         ],
         mtm,
         &target,

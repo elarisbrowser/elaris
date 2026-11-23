@@ -90,6 +90,9 @@ pub fn parse(contents: &str) -> Result<ConfigLoad, String> {
             ));
         }
     }
+    if let Some(value) = bool_value(&document, "appearance", "bookmarks_bar", &mut issues) {
+        settings.bookmarks_bar = value;
+    }
     if let Some(value) = string_value(&document, "appearance", "page_style", &mut issues) {
         if let Some(style) = PageStyle::ALL
             .into_iter()

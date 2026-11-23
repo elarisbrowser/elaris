@@ -244,6 +244,8 @@ pub(crate) const BOOKMARKS_BAR_PADDING: f32 = space::S2;
 pub(crate) const BOOKMARKS_BAR_GAP: f32 = space::S1;
 pub(crate) const BOOKMARKS_BAR_ITEM_HEIGHT: f32 = 24.0;
 pub(crate) const BOOKMARKS_BAR_ITEM_MAX: f32 = 180.0;
+/// Bar items are flat; only their hover shows this slight rounding.
+pub(crate) const BOOKMARKS_BAR_ITEM_RADIUS: f32 = radius::SM;
 pub(crate) const BOOKMARKS_MENU_WIDTH: f32 = 240.0;
 /// The bookmark editor's fields.
 pub(crate) const BOOKMARK_EDITOR_WIDTH: f32 = 280.0;

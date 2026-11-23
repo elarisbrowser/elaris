@@ -238,6 +238,7 @@ pub(super) fn view(
         .child(super::omnibox::address_bar(
             state, cx, theme, reduced, overlays,
         ))
+        .children(super::bookmarks::expand_button(state, theme))
         .child(downloads::trigger(state, theme, overlays));
     drag_overlay(state, theme, overlays, reduced);
 
