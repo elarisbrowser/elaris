@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Pointer gestures: pressing a tab, crossing the drag threshold, and settling on release or cancel.
+use crate::platform::haptics::{self, Haptic};
 
 use crate::tab::{Tab, TabId, TabSection};
 
@@ -261,9 +262,9 @@ impl TabDragState {
         // moves within one; not when the drag first picks a target.
         if let Some(before) = previous.0 {
             if before.section != section {
-                crate::platform::trackpad::threshold_haptic();
+                haptics::play(Haptic::Snap);
             } else if before.index != index {
-                crate::platform::trackpad::step_haptic();
+                haptics::play(Haptic::Tick);
             }
         }
         previous != (dragging.target, dragging.valid)

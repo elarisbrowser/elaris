@@ -2,6 +2,7 @@
 
 //! Resizing the sidebar by dragging its edge. Past its limits the edge stretches with growing
 //! resistance, as a scroll view does at its ends, and on release it springs back within them.
+use crate::platform::haptics::{self, Haptic};
 
 use rune::{Cursor, El, Tx, el};
 
@@ -33,7 +34,7 @@ pub(crate) fn handle(state: &AppState, window_width: f32) -> El {
                 state.sidebar.width = stretched(drag.data + grow * drag.dx);
                 // Tap once as the edge passes a limit and starts to resist.
                 if was_within && settled(state.sidebar.width) != state.sidebar.width {
-                    crate::platform::trackpad::threshold_haptic();
+                    haptics::play(Haptic::Snap);
                 }
             }
             // The spring back waits for the next frame: a drag's commits land at once, and a

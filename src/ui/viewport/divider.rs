@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! The split view's draggable dividers, which resize the panes on either side.
+use crate::platform::haptics::{self, Haptic};
 
 use crate::app::AppState;
 use crate::browser::split;
@@ -34,7 +35,7 @@ pub(super) fn divider(live: bool, theme: &Theme) -> El {
                 }
             } else if !drag.cancelled() {
                 if state.browser.resize_split(drag.data + drag.dx) {
-                    crate::platform::trackpad::threshold_haptic();
+                    haptics::play(Haptic::Snap);
                 }
                 tx.instant();
             }
@@ -57,7 +58,7 @@ pub(super) fn grid_divider(row: usize, columns: usize, theme: &Theme) -> El {
                     let equal = 1.0 / columns as f32;
                     let ratio = (share - equal + 0.5).clamp(0.0, 1.0);
                     if matches!(ratio, 0.0 | 1.0) && ratio != split.ratio {
-                        crate::platform::trackpad::threshold_haptic();
+                        haptics::play(Haptic::Snap);
                     }
                     split.ratio = ratio;
                     tx.instant();

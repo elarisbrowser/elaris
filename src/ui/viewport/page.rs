@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! The page surface: the web page element with its pointer, wheel and key handlers, hover link, and swipe arrow.
+use crate::platform::haptics::{self, Haptic};
 
 use super::input::{mouse_kind, page_key};
 use super::panes::pane_key;
@@ -193,7 +194,7 @@ pub(super) fn page(
         .on_wheel(move |state: &mut AppState, wheel, _| {
             if let Some(id) = id.filter(|_| !internal) {
                 if state.browser.wheel_page(id, wheel) {
-                    crate::platform::trackpad::threshold_haptic();
+                    haptics::play(Haptic::Snap);
                 }
                 true
             } else {
