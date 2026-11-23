@@ -67,6 +67,12 @@ pub(crate) struct Binding {
 
 /// Every chord the browser answers to, so this table is the one place to change a key. Menus
 /// read their key equivalents from it, and the first entry for a shortcut is the one they show.
+///
+/// Chords kept out of this table on purpose:
+/// - Native macOS keys (Cmd+Z/X/C/V/A, Cmd+Q, Cmd+H, Cmd+M, Ctrl+Cmd+F) are wired by AppKit in
+///   `platform/macos/menu/construct.rs`, as every macOS app does.
+/// - Escape and Ctrl+Tab depend on what is open (find bar, split picker, tab switcher, drag,
+///   fullscreen), so `on_key` and `tab_switcher::cycle_key` handle them in order.
 const BINDINGS: &[Binding] = &[
     bind(Shortcut::NewWindow, "n", false),
     bind(Shortcut::NewPrivateWindow, "n", true),
