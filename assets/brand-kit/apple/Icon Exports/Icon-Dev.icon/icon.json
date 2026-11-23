@@ -7,6 +7,30 @@
       "layers" : [
         {
           "blend-mode" : "normal",
+          "image-name" : "tag-dev.svg",
+          "name" : "tag-dev",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0
+      }
+    },
+    {
+      "layers" : [
+        {
+          "blend-mode" : "normal",
           "image-name" : "logo-color.svg",
           "name" : "logo-color",
           "position" : {

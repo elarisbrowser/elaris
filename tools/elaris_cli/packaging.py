@@ -15,11 +15,11 @@ PACKAGING = ROOT / "packaging"
 LINUX_ASSETS = PACKAGING / "linux"
 # Compiled from the brand kit's Icon Composer documents, so the designer's layers and gradient carry over.
 APP_ICONS = ASSETS / "brand-kit" / "apple" / "Icon Exports"
-# Stable releases wear the blue icon; dev runs and canary builds the yellow one, so they are easy to tell apart.
+# Stable releases wear the blue icon; dev runs and canary builds the yellow one with a DEV or CANARY tag.
 APP_ICON_SOURCES = {
     "stable": APP_ICONS / "Icon.icon",
     "dev": APP_ICONS / "Icon-Dev.icon",
-    "canary": APP_ICONS / "Icon-Dev.icon",
+    "canary": APP_ICONS / "Icon-Canary.icon",
 }
 APP_ID = "org.elarisbrowser.Elaris"
 ENGINE_BUILD = ROOT / "build" / "cpp-ladybird"
