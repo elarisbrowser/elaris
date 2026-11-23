@@ -26,14 +26,14 @@ struct Limits {
 }
 
 const BALANCED: Limits = Limits {
-    normal: Duration::from_secs(60 * 60),
-    elevated: Duration::from_secs(10 * 60),
+    normal: Duration::from_secs(30 * 60),
+    elevated: Duration::from_secs(5 * 60),
     critical: Duration::from_secs(60),
 };
 
 const MAXIMUM: Limits = Limits {
-    normal: Duration::from_secs(15 * 60),
-    elevated: Duration::from_secs(2 * 60),
+    normal: Duration::from_secs(10 * 60),
+    elevated: Duration::from_secs(60),
     critical: Duration::from_secs(30),
 };
 
@@ -60,11 +60,11 @@ impl MemorySaver {
         match self {
             Self::Off => "Background tabs stay awake.",
             Self::Balanced => {
-                "Tabs unused for an hour sleep, and sooner when your computer runs low on memory. \
+                "Tabs unused for 30 minutes sleep, and sooner when your computer runs low on memory. \
                  Favourites stay awake unless memory runs critically low."
             }
             Self::Maximum => {
-                "Tabs unused for 15 minutes sleep, and within minutes when memory runs low."
+                "Tabs unused for 10 minutes sleep, and within a minute when memory runs low."
             }
         }
     }
@@ -250,7 +250,7 @@ mod tests {
 
     #[test]
     fn pressure_sleeps_the_longest_unseen_tab_one_at_a_time() {
-        let tabs = [tab(1, 12), tab(2, 30), tab(3, 0)];
+        let tabs = [tab(1, 6), tab(2, 20), tab(3, 0)];
         assert_eq!(MemorySaver::Balanced.choose(Pressure::Elevated, &tabs), [2]);
         assert_eq!(
             MemorySaver::Balanced.choose(Pressure::Normal, &tabs),
@@ -260,9 +260,9 @@ mod tests {
 
     #[test]
     fn pressure_prefers_the_tab_that_frees_the_most() {
-        let mut heavy = tab(1, 12);
+        let mut heavy = tab(1, 6);
         heavy.memory = Some(2048 * MEGABYTE);
-        let mut light = tab(2, 50);
+        let mut light = tab(2, 25);
         light.memory = Some(40 * MEGABYTE);
         assert_eq!(
             MemorySaver::Balanced.choose(Pressure::Elevated, &[heavy, light]),
