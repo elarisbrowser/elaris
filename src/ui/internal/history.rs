@@ -560,7 +560,8 @@ fn entry_row(
     let row = if quiet {
         row.instant_changes()
     } else {
-        row.arrives_whole()
+        // Folds shut on the fade's own timing, instead of waiting out the stack's hold.
+        row.fold_glide(theme::TAB_PRESENCE_MOTION)
     };
     row.children((!first).then(|| widgets::separator(theme)))
         .child(content)
