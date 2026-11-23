@@ -12,6 +12,8 @@
     <string>Elaris</string>
     <key>CFBundleIdentifier</key>
     <string>org.elarisbrowser.Elaris</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.4</string>
     <key>CFBundleName</key>
     <string>Elaris</string>
     <key>CFBundlePackageType</key>
