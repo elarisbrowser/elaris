@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! A DEV or CANARY tag on the Dock icon. The packager writes the build's channel into Info.plist under
+//! A DEV tag on the Dock icon of development builds. The packager writes the build's channel into Info.plist under
 //! `ElarisChannel`. App icons are clipped to their rounded square, so the Dock tile draws the icon itself with
-//! the tag on top, where it can hang over the icon's corner. Stable builds and unbundled runs show no tag.
+//! the tag on top, where it can hang over the icon's corner. Canary and stable builds, and unbundled runs, show no tag.
 
 use objc2_05::msg_send;
 use objc2_05::runtime::{AnyClass, AnyObject};
@@ -26,18 +26,14 @@ const TAG_PADDING: f64 = 0.07;
 /// `NSFontWeightHeavy`.
 const TAG_WEIGHT: f64 = 0.56;
 
-/// The tag for this build's channel, or `None` for stable builds and runs outside a bundle.
+/// "DEV" for development builds, or `None` for canary, stable, and runs outside a bundle.
 fn channel_tag() -> Option<&'static str> {
     let key = NSString::from_str(CHANNEL_KEY);
     let value = unsafe { NSBundle::mainBundle().objectForInfoDictionaryKey(&key) }?;
-    [("dev", "DEV"), ("canary", "CANARY")]
-        .into_iter()
-        .find(|(channel, _)| {
-            let channel = NSString::from_str(channel);
-            // SAFETY: `isEqual:` takes any object and returns a BOOL.
-            unsafe { msg_send![&*value, isEqual: &*channel] }
-        })
-        .map(|(_, tag)| tag)
+    let dev = NSString::from_str("dev");
+    // SAFETY: `isEqual:` takes any object and returns a BOOL.
+    let is_dev: bool = unsafe { msg_send![&*value, isEqual: &*dev] };
+    is_dev.then_some("DEV")
 }
 
 /// Draws the app icon with the channel's tag into the Dock tile. Call once the app has finished launching.

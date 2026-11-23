@@ -17,7 +17,7 @@ LINUX_ASSETS = PACKAGING / "linux"
 # Compiled from the brand kit's Icon Composer documents, so the designer's layers and gradient carry over.
 APP_ICONS = ASSETS / "brand-kit" / "apple" / "Icon Exports"
 # Stable releases wear the blue icon; dev runs and canary builds the yellow one, so they are easy to tell apart.
-# The app reads the channel from Info.plist and adds a DEV or CANARY tag to its Dock icon.
+# The app reads the channel from Info.plist and adds a DEV tag to its Dock icon in dev runs.
 APP_ICON_SOURCES = {
     "stable": APP_ICONS / "Icon.icon",
     "dev": APP_ICONS / "Icon-Dev.icon",
