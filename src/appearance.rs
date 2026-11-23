@@ -10,6 +10,43 @@ pub(crate) enum Appearance {
     Dark,
 }
 
+/// The material behind the window when glass is on.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum GlassStyle {
+    /// The popover vibrancy material.
+    Frosted,
+    /// The Liquid Glass material on macOS 26 and later.
+    #[default]
+    Liquid,
+}
+
+impl GlassStyle {
+    /// Every style, in the order the settings page shows them.
+    pub(crate) const ALL: [Self; 2] = [Self::Frosted, Self::Liquid];
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Frosted => "Frosted",
+            Self::Liquid => "Liquid",
+        }
+    }
+
+    pub(crate) fn config_key(self) -> &'static str {
+        match self {
+            Self::Frosted => "frosted",
+            Self::Liquid => "liquid",
+        }
+    }
+
+    pub(crate) fn from_config_key(value: &str) -> Option<Self> {
+        match value {
+            "frosted" => Some(Self::Frosted),
+            "liquid" => Some(Self::Liquid),
+            _ => None,
+        }
+    }
+}
+
 /// The interface accent used for focus, selection and emphasized controls.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum AccentColor {
@@ -124,6 +161,15 @@ mod tests {
         assert!(!Appearance::System.is_dark(false));
         assert!(!Appearance::Light.is_dark(true));
         assert!(Appearance::Dark.is_dark(false));
+    }
+
+    #[test]
+    fn glass_styles_round_trip_through_config_keys() {
+        for style in GlassStyle::ALL {
+            assert_eq!(GlassStyle::from_config_key(style.config_key()), Some(style));
+        }
+        assert_eq!(GlassStyle::default(), GlassStyle::Liquid);
+        assert_eq!(GlassStyle::from_config_key("clear"), None);
     }
 
     #[test]

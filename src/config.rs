@@ -10,14 +10,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use toml_edit::{DocumentMut, Item, Table, Value};
 
 use crate::address::SearchEngine;
-use crate::appearance::{AccentColor, Appearance};
+use crate::appearance::{AccentColor, Appearance, GlassStyle};
 use crate::permissions::{AutoplayPolicy, PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{
-    ContentBlockList, DownloadDirectory, NewTabPosition, Settings, SettingsChange, SidebarSide,
-    StartupMode, TabLayout,
+    ContentBlockList, DownloadDirectory, NewTabPosition, PageStyle, Settings, SettingsChange,
+    SidebarSide, StartupMode, TabLayout,
 };
 
-const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\naccent = \"blue\"\nglass = true\ntint_opacity = 100\ntab_layout = \"vertical\"\nsidebar_side = \"left\"\nnew_tab_position = \"top\"\n\n[split_view]\nmax_panes = 2\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n\n[pages]\nzoom = 100\n\n[performance]\nreduce_motion = false\n";
+const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\naccent = \"blue\"\nglass = true\nglass_style = \"liquid\"\ntint_opacity = 100\ngrain = 0\ntab_layout = \"vertical\"\nsidebar_side = \"left\"\nnew_tab_position = \"top\"\npage_style = \"card\"\n\n[split_view]\nmax_panes = 2\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n\n[pages]\nzoom = 100\n\n[performance]\nreduce_motion = false\n";
 static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -87,6 +87,18 @@ pub(crate) fn parse(contents: &str) -> Result<ConfigLoad, String> {
             ));
         }
     }
+    if let Some(value) = string_value(&document, "appearance", "page_style", &mut issues) {
+        if let Some(style) = PageStyle::ALL
+            .into_iter()
+            .find(|style| style.config_key() == value)
+        {
+            settings.page_style = style;
+        } else {
+            issues.push(format!(
+                "Invalid value for [appearance].page_style: {value:?}; expected card or edge_to_edge"
+            ));
+        }
+    }
     if let Some(value) = integer_value(&document, "split_view", "max_panes", &mut issues) {
         if (2..=64).contains(&value) {
             settings.split_view_limit = value as usize;
@@ -126,6 +138,23 @@ pub(crate) fn parse(contents: &str) -> Result<ConfigLoad, String> {
         } else {
             issues.push(format!(
                 "Invalid value for [appearance].tint_opacity: {value}; expected 0 through 100"
+            ));
+        }
+    }
+    if let Some(value) = string_value(&document, "appearance", "glass_style", &mut issues) {
+        settings.glass_style = GlassStyle::from_config_key(&value).unwrap_or_else(|| {
+            issues.push(format!(
+                "Invalid value for [appearance].glass_style: {value:?}; expected frosted or liquid"
+            ));
+            defaults.glass_style
+        });
+    }
+    if let Some(value) = integer_value(&document, "appearance", "grain", &mut issues) {
+        if (0..=100).contains(&value) {
+            settings.grain = value as u8;
+        } else {
+            issues.push(format!(
+                "Invalid value for [appearance].grain: {value}; expected 0 through 100"
             ));
         }
     }
@@ -430,6 +459,9 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
             "new_tab_position",
             value.config_key().to_owned(),
         ),
+        SettingsChange::PageStyle(value) => {
+            ("appearance", "page_style", value.config_key().to_owned())
+        }
         SettingsChange::SplitViewLimit(value) => {
             ("split_view", "max_panes", (*value).clamp(2, 64).to_string())
         }
@@ -466,7 +498,11 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
             },
         ),
         SettingsChange::GlassEnabled(value) => ("appearance", "glass", value.to_string()),
+        SettingsChange::GlassStyle(value) => {
+            ("appearance", "glass_style", value.config_key().to_owned())
+        }
         SettingsChange::TintOpacity(value) => ("appearance", "tint_opacity", value.to_string()),
+        SettingsChange::Grain(value) => ("appearance", "grain", value.to_string()),
         SettingsChange::ReduceMotion(value) => ("performance", "reduce_motion", value.to_string()),
         SettingsChange::ContentBlocking(value) => {
             ("content_blocking", "enabled", value.to_string())
@@ -485,7 +521,7 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
     let mut new_value = if section == "content_blocking" || key == "glass" || key == "reduce_motion"
     {
         Value::from(value == "true")
-    } else if matches!(key, "tint_opacity" | "max_panes" | "zoom") {
+    } else if matches!(key, "tint_opacity" | "grain" | "max_panes" | "zoom") {
         Value::from(
             value
                 .parse::<i64>()
@@ -595,6 +631,31 @@ mod tests {
         }
         let invalid = parse("[appearance]\nsidebar_side = 'middle'").unwrap();
         assert_eq!(invalid.settings.sidebar_side, SidebarSide::Left);
+        assert_eq!(invalid.issues.len(), 1);
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn page_style_defaults_to_card_and_round_trips() {
+        let directory = std::env::temp_dir().join(format!(
+            "elaris-config-page-style-{}-{}",
+            std::process::id(),
+            NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed)
+        ));
+        let path = directory.join("config.toml");
+        assert_eq!(parse("").unwrap().settings.page_style, PageStyle::Card);
+        for style in [PageStyle::EdgeToEdge, PageStyle::Card] {
+            write_change(&path, &SettingsChange::PageStyle(style)).unwrap();
+            assert_eq!(
+                parse(&fs::read_to_string(&path).unwrap())
+                    .unwrap()
+                    .settings
+                    .page_style,
+                style
+            );
+        }
+        let invalid = parse("[appearance]\npage_style = 'floating'").unwrap();
+        assert_eq!(invalid.settings.page_style, PageStyle::Card);
         assert_eq!(invalid.issues.len(), 1);
         fs::remove_dir_all(directory).unwrap();
     }
@@ -893,6 +954,31 @@ mod tests {
         );
         assert_eq!(loaded.settings.startup, StartupMode::BlankWindow);
         fs::remove_file(path).expect("remove round-trip config");
+    }
+
+    #[test]
+    fn glass_style_and_grain_default_round_trip_and_reject_bad_values() {
+        let defaults = parse("").unwrap().settings;
+        assert_eq!(defaults.glass_style, GlassStyle::Liquid);
+        assert_eq!(defaults.grain, 0);
+
+        let path = std::env::temp_dir().join(format!(
+            "elaris-config-glass-{}-{}.toml",
+            std::process::id(),
+            NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::write(&path, DEFAULT_CONFIG).expect("write initial config");
+        write_change(&path, &SettingsChange::GlassStyle(GlassStyle::Frosted)).unwrap();
+        write_change(&path, &SettingsChange::Grain(40)).unwrap();
+        let loaded = load_or_create(&path).expect("reload changed config");
+        assert_eq!(loaded.settings.glass_style, GlassStyle::Frosted);
+        assert_eq!(loaded.settings.grain, 40);
+        fs::remove_file(path).expect("remove glass config");
+
+        let invalid = parse("[appearance]\nglass_style = 'clear'\ngrain = 101").unwrap();
+        assert_eq!(invalid.settings.glass_style, GlassStyle::Liquid);
+        assert_eq!(invalid.settings.grain, 0);
+        assert_eq!(invalid.issues.len(), 2);
     }
 
     #[test]

@@ -269,6 +269,32 @@ pub(super) fn setting_with(cx: &PageContext, title: &str, detail: El, control: E
     }
 }
 
+/// A [`setting`] led by an icon tile.
+pub(super) fn setting_icon(
+    cx: &PageContext,
+    glyph: &'static Icon,
+    title: &str,
+    description: &str,
+    control: El,
+) -> El {
+    let tile = row()
+        .size(theme::PAGE_ROW_ICON, theme::PAGE_ROW_ICON)
+        .center()
+        .radius(theme::PAGE_ROW_ICON_RADIUS)
+        .fill(cx.theme.overlay_control)
+        .child(icon(glyph, theme::ICON).color(cx.theme.icon).a11y_hidden());
+    row()
+        .w_full()
+        .gap(theme::PAGE_ROW_GAP)
+        .center_y()
+        .child(tile)
+        .child(
+            setting(cx, title, description, control)
+                .grow(1.0)
+                .min_w(0.0),
+        )
+}
+
 pub(super) fn row_title(title: &str, theme: &Theme) -> El {
     text(title).font(theme::PAGE_ROW_TITLE).color(theme.text)
 }

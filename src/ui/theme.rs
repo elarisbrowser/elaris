@@ -349,6 +349,9 @@ pub(crate) const PAGE_ROW_PADDING: f32 = space::S3;
 pub(crate) const PAGE_ROW_MIN_HEIGHT: f32 = 52.0;
 pub(crate) const PAGE_ROW_GAP: f32 = space::S3 + space::S1;
 pub(crate) const PAGE_ROW_COPY_GAP: f32 = 3.0;
+/// The icon tile that can lead a grouped row, and its corner radius.
+pub(crate) const PAGE_ROW_ICON: f32 = 32.0;
+pub(crate) const PAGE_ROW_ICON_RADIUS: f32 = radius::MD;
 /// Side navigation on pages with categories: its width, row height and inner padding, and the
 /// pane width below which it folds into a horizontal row under the title.
 pub(crate) const PAGE_NAV_WIDTH: f32 = 196.0;

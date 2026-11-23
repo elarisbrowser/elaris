@@ -154,7 +154,7 @@ pub(crate) fn view(
                 Some(page_origin[0] + theme::FIND_INSET),
                 Some(page_origin[1] + theme::FIND_INSET),
                 Some(
-                    theme::VIEWPORT_INSET
+                    state.page_inset()
                         + theme::FIND_INSET
                         + state
                             .browser

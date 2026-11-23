@@ -189,6 +189,23 @@ fn search_engine_pixels(engine: SearchEngine) -> &'static Pixels {
     };
     images[index].pixels()
 }
+
+pub(crate) static GLASS: Icon = icon(
+    "glass",
+    r#"<rect x="2.5" y="4.5" width="8.5" height="8.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M5.5 2.5H11.5A2 2 0 0 1 13.5 4.5V10.5" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>"#,
+);
+pub(crate) static DROP: Icon = icon(
+    "drop",
+    r#"<path d="M8 2.25C8 2.25 3.75 7.1 3.75 9.75A4.25 4.25 0 0 0 12.25 9.75C12.25 7.1 8 2.25 8 2.25Z" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/>"#,
+);
+pub(crate) static CONTRAST: Icon = icon(
+    "contrast",
+    r#"<circle cx="8" cy="8" r="5.75" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M8 2.25A5.75 5.75 0 0 1 8 13.75Z" fill="currentColor"/>"#,
+);
+pub(crate) static GRAIN: Icon = icon(
+    "grain",
+    r#"<circle cx="8" cy="8" r="5.75" fill="none" stroke="currentColor" stroke-width="1.25" stroke-dasharray="1 1.75" stroke-linecap="round"/>"#,
+);
 pub(crate) static HISTORY: Icon = icon(
     "history",
     r#"<path d="M3.25 5.25A5.5 5.5 0 1 1 2.5 8" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/><path d="M2.25 2.75V5.5H5M8 4.5V8L10.25 9.5" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>"#,

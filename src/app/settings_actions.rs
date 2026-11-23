@@ -3,15 +3,15 @@
 use std::path::PathBuf;
 
 use crate::address::SearchEngine;
-use crate::appearance::{AccentColor, Appearance};
+use crate::appearance::{AccentColor, Appearance, GlassStyle};
 use crate::config::ConfigLoad;
 use crate::internal::InternalPage;
 use crate::permissions::{
     AutoplayPolicy, PermissionDecision, PermissionKind, PermissionState, PermissionStore,
 };
 use crate::settings::{
-    ContentBlockList, DownloadDirectory, NewTabPosition, SettingsChange, SidebarSide, StartupMode,
-    TabLayout,
+    ContentBlockList, DownloadDirectory, NewTabPosition, PageStyle, SettingsChange, SidebarSide,
+    StartupMode, TabLayout,
 };
 use crate::tab::TabId;
 
@@ -44,6 +44,32 @@ impl super::AppState {
         if self.settings.new_tab_position != position {
             self.settings.new_tab_position = position;
             self.save_setting(SettingsChange::NewTabPosition(position));
+        }
+    }
+
+    pub(crate) fn set_page_style(&mut self, style: PageStyle) {
+        if self.settings.page_style != style {
+            self.settings.page_style = style;
+            self.save_setting(SettingsChange::PageStyle(style));
+        }
+    }
+
+    /// How far the page sits in from the window and sidebar edges; nothing when edge to edge.
+    pub(crate) fn page_inset(&self) -> f32 {
+        match self.settings.page_style {
+            PageStyle::Card => crate::ui::theme::VIEWPORT_INSET,
+            PageStyle::EdgeToEdge => 0.0,
+        }
+    }
+
+    /// The page's corner radius; square when edge to edge.
+    pub(crate) fn page_radius(&self) -> f32 {
+        match self.settings.page_style {
+            PageStyle::EdgeToEdge => 0.0,
+            PageStyle::Card if self.horizontal_tabs() => {
+                crate::ui::theme::HORIZONTAL_VIEWPORT_RADIUS
+            }
+            PageStyle::Card => crate::ui::theme::VIEWPORT_RADIUS,
         }
     }
 
@@ -148,6 +174,14 @@ impl super::AppState {
         self.save_setting(SettingsChange::GlassEnabled(enabled));
     }
 
+    pub(crate) fn set_glass_style(&mut self, style: GlassStyle) {
+        if self.settings.glass_style == style {
+            return;
+        }
+        self.settings.set_glass_style(style);
+        self.save_setting(SettingsChange::GlassStyle(style));
+    }
+
     pub(crate) fn set_tint_opacity(&mut self, opacity: u8) {
         let opacity = opacity.min(100);
         if self.settings.tint_opacity == opacity {
@@ -155,6 +189,15 @@ impl super::AppState {
         }
         self.settings.set_tint_opacity(opacity);
         self.save_setting(SettingsChange::TintOpacity(opacity));
+    }
+
+    pub(crate) fn set_grain(&mut self, grain: u8) {
+        let grain = grain.min(100);
+        if self.settings.grain == grain {
+            return;
+        }
+        self.settings.set_grain(grain);
+        self.save_setting(SettingsChange::Grain(grain));
     }
 
     pub(crate) fn set_reduce_motion(&mut self, enabled: bool) {

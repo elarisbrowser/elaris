@@ -30,7 +30,16 @@ pub(super) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
 
     let fullscreen = state.browser.fullscreen_tab().is_some();
     let page = viewport::view(state, &theme, &mut overlays, reduced_motion);
-    let mut window = super::window_surface(state, &theme, cfg!(elaris_ui = "linux"));
+    let window_size = cx
+        .layout_size("window")
+        .unwrap_or([super::WINDOW_MIN_SIZE.0, super::WINDOW_MIN_SIZE.1]);
+    let mut window = super::window_surface(
+        state,
+        &theme,
+        cfg!(elaris_ui = "linux"),
+        window_size,
+        cx.env().scale,
+    );
     if fullscreen {
         window = window.child(page);
     } else if cfg!(elaris_ui = "linux") {

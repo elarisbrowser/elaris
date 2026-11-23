@@ -8,6 +8,7 @@ mod controls;
 mod downloads;
 mod find;
 pub(crate) mod form_picker;
+mod grain;
 pub(crate) mod horizontal_tabs;
 pub(crate) mod hover_highlight;
 mod icons;
@@ -44,6 +45,7 @@ use rune::SystemMaterial;
 use rune::{Cx, El, col, row};
 
 use crate::app::AppState;
+use crate::appearance::GlassStyle;
 
 /// The focus key of the page viewport.
 pub(crate) const VIEWPORT: &str = "viewport";
@@ -84,7 +86,10 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     } else {
         theme::HEADER_HEIGHT
     }));
-    let mut window = window_surface(state, &theme, horizontal);
+    let window_size = cx
+        .layout_size("window")
+        .unwrap_or([WINDOW_MIN_SIZE.0, WINDOW_MIN_SIZE.1]);
+    let mut window = window_surface(state, &theme, horizontal, window_size, cx.env().scale);
     if fullscreen {
         window = window.child(viewport::view(state, &theme, &mut overlays, reduced_motion));
     } else if horizontal {
@@ -167,21 +172,44 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
 }
 
 /// The window's background, glass included, laid out as a column or a row.
-fn window_surface(state: &AppState, theme: &theme::Theme, vertical: bool) -> El {
+fn window_surface(
+    state: &AppState,
+    theme: &theme::Theme,
+    vertical: bool,
+    window_size: [f32; 2],
+    scale: f32,
+) -> El {
     let mut window = if vertical { col() } else { row() }
         .key("window")
         .w_full()
         .h_full()
         .fill(theme.window);
     if state.settings.glass_enabled {
-        window = window.system_material(SystemMaterial::Glass).child(
-            rune::el()
-                .key("window-tint")
-                .absolute(0.0, 0.0)
-                .w_full()
-                .h_full()
-                .fill(theme.window),
-        );
+        window = window
+            .system_material(glass_material(state.settings.glass_style))
+            .child(
+                rune::el()
+                    .key("window-tint")
+                    .absolute(0.0, 0.0)
+                    .w_full()
+                    .h_full()
+                    .fill(theme.window),
+            );
+        if state.settings.grain > 0 {
+            window = window.child(grain::layer(
+                state.settings.grain,
+                window_size[0],
+                window_size[1],
+                scale,
+            ));
+        }
     }
     window
+}
+
+fn glass_material(style: GlassStyle) -> SystemMaterial {
+    match style {
+        GlassStyle::Frosted => SystemMaterial::Popover,
+        GlassStyle::Liquid => SystemMaterial::Glass,
+    }
 }

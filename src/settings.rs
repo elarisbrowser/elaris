@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use crate::address::SearchEngine;
-use crate::appearance::{AccentColor, Appearance};
+use crate::appearance::{AccentColor, Appearance, GlassStyle};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum StartupMode {
@@ -104,6 +104,32 @@ impl NewTabPosition {
         match self {
             Self::Top => "top",
             Self::Bottom => "bottom",
+        }
+    }
+}
+
+/// How the web page sits in the window: inset as a rounded card, or filling its area.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum PageStyle {
+    #[default]
+    Card,
+    EdgeToEdge,
+}
+
+impl PageStyle {
+    pub(crate) const ALL: [Self; 2] = [Self::Card, Self::EdgeToEdge];
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Card => "As a card",
+            Self::EdgeToEdge => "Edge to edge",
+        }
+    }
+
+    pub(crate) fn config_key(self) -> &'static str {
+        match self {
+            Self::Card => "card",
+            Self::EdgeToEdge => "edge_to_edge",
         }
     }
 }
@@ -206,6 +232,7 @@ pub(crate) struct Settings {
     pub(crate) tab_layout: TabLayout,
     pub(crate) sidebar_side: SidebarSide,
     pub(crate) new_tab_position: NewTabPosition,
+    pub(crate) page_style: PageStyle,
     pub(crate) split_view_limit: usize,
     pub(crate) appearance: Appearance,
     pub(crate) accent_color: AccentColor,
@@ -213,7 +240,12 @@ pub(crate) struct Settings {
     pub(crate) download_directory: DownloadDirectory,
     pub(crate) startup: StartupMode,
     pub(crate) glass_enabled: bool,
+    pub(crate) glass_style: GlassStyle,
+    /// How much of the window's colour tints the glass, 0 through 100. The settings page shows
+    /// the inverse as transparency.
     pub(crate) tint_opacity: u8,
+    /// How strong the still noise over the glass is, 0 through 100.
+    pub(crate) grain: u8,
     pub(crate) reduce_motion: bool,
     pub(crate) content_blocking: ContentBlocking,
 }
@@ -226,6 +258,7 @@ impl Default for Settings {
             tab_layout: TabLayout::default(),
             sidebar_side: SidebarSide::default(),
             new_tab_position: NewTabPosition::default(),
+            page_style: PageStyle::default(),
             split_view_limit: 2,
             appearance: Appearance::System,
             accent_color: AccentColor::Blue,
@@ -233,7 +266,9 @@ impl Default for Settings {
             download_directory: DownloadDirectory::Default,
             startup: StartupMode::RestoreSession,
             glass_enabled: true,
+            glass_style: GlassStyle::default(),
             tint_opacity: 100,
+            grain: 0,
             reduce_motion: false,
             content_blocking: ContentBlocking::default(),
         }
@@ -272,8 +307,16 @@ impl Settings {
         self.glass_enabled = enabled;
     }
 
+    pub(crate) fn set_glass_style(&mut self, style: GlassStyle) {
+        self.glass_style = style;
+    }
+
     pub(crate) fn set_tint_opacity(&mut self, opacity: u8) {
         self.tint_opacity = opacity.min(100);
+    }
+
+    pub(crate) fn set_grain(&mut self, grain: u8) {
+        self.grain = grain.min(100);
     }
 
     pub(crate) fn set_reduce_motion(&mut self, enabled: bool) {
@@ -288,13 +331,16 @@ pub(crate) enum SettingsChange {
     TabLayout(TabLayout),
     SidebarSide(SidebarSide),
     NewTabPosition(NewTabPosition),
+    PageStyle(PageStyle),
     Appearance(Appearance),
     AccentColor(AccentColor),
     SearchEngine(SearchEngine),
     DownloadDirectory(DownloadDirectory),
     Startup(StartupMode),
     GlassEnabled(bool),
+    GlassStyle(GlassStyle),
     TintOpacity(u8),
+    Grain(u8),
     ReduceMotion(bool),
     SplitViewLimit(usize),
     ContentBlocking(bool),

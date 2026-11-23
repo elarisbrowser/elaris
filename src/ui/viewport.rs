@@ -31,24 +31,14 @@ pub(crate) fn view(
     let top_padding = if header_above_page(state) {
         theme::HEADER_HEIGHT
     } else {
-        theme::VIEWPORT_INSET
+        state.page_inset()
     };
     let fullscreen = state.browser.fullscreen_tab().is_some();
     let top_padding = if fullscreen { 0.0 } else { top_padding };
     let horizontal = state.horizontal_tabs();
     let right = state.sidebar_on_right();
-    let inset = if fullscreen {
-        0.0
-    } else {
-        theme::VIEWPORT_INSET
-    };
-    let radius = if fullscreen {
-        0.0
-    } else if horizontal {
-        theme::HORIZONTAL_VIEWPORT_RADIUS
-    } else {
-        theme::VIEWPORT_RADIUS
-    };
+    let inset = if fullscreen { 0.0 } else { state.page_inset() };
+    let radius = if fullscreen { 0.0 } else { state.page_radius() };
     let viewport = rune::row()
         .key("viewport-container")
         .grow(1.0)
@@ -475,15 +465,16 @@ pub(crate) fn page_origin(state: &AppState) -> [f32; 2] {
     if state.browser.fullscreen_tab().is_some() {
         return [0.0, 0.0];
     }
+    let inset = state.page_inset();
     let left = if state.sidebar.collapsed || state.sidebar_on_right() {
-        theme::VIEWPORT_INSET
+        inset
     } else {
         state.sidebar.width
     };
     let top = if header_above_page(state) {
         theme::HEADER_HEIGHT
     } else {
-        theme::VIEWPORT_INSET
+        inset
     };
     let offset = state
         .browser
@@ -509,8 +500,8 @@ pub(crate) fn page_origin(state: &AppState) -> [f32; 2] {
         });
     if state.horizontal_tabs() {
         [
-            theme::VIEWPORT_INSET + offset[0],
-            theme::HORIZONTAL_CHROME_HEIGHT + theme::VIEWPORT_INSET + offset[1],
+            inset + offset[0],
+            theme::HORIZONTAL_CHROME_HEIGHT + inset + offset[1],
         ]
     } else {
         [left + offset[0], top + offset[1]]
