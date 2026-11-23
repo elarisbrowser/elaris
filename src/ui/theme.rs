@@ -240,7 +240,7 @@ pub(crate) const HORIZONTAL_EMPTY_SECTION: f32 = space::S2;
 pub(crate) const HEADER_HEIGHT: f32 = 38.0;
 /// The top-edge target that reveals the Linux toolbar while it is hidden.
 #[cfg(elaris_ui = "linux")]
-pub(crate) const TITLEBAR_HOT_ZONE: f32 = 4.0;
+pub(crate) const TITLEBAR_HOT_ZONE: f32 = 6.0;
 /// The Linux toolbar and the content beneath it settle with a short, quiet spring.
 #[cfg(elaris_ui = "linux")]
 pub(crate) const TITLEBAR_REVEAL: Spring = Spring::new(0.28, 0.0);
