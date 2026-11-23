@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use super::*;
-use crate::address::SearchEngine;
-use crate::appearance::Appearance;
 use crate::omnibox;
-use crate::settings::{ContentBlockList, DownloadDirectory};
+use elaris_core::address::SearchEngine;
+use elaris_core::appearance::Appearance;
+use elaris_core::settings::{ContentBlockList, DownloadDirectory};
 use rune::Mods;
 use std::collections::BTreeSet;
 

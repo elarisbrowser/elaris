@@ -8,7 +8,7 @@ use elaris::ladybird::GpuPoll;
 use super::Verdict;
 use super::View;
 use super::thumbnails::{self, Sample};
-use crate::perf::{self, Count, Stage};
+use elaris_core::perf::{self, Count, Stage};
 
 pub(super) const RETAINED_HIDDEN_FRAMES: usize = 2;
 const FALLBACK_MAX_SIDE: u32 = 160;

@@ -2,7 +2,7 @@
 
 //! The page-zoom chip and the menu that changes it.
 
-use crate::ui::menu::{Menu, MenuItem};
+use crate::ui::components::menu::{Menu, MenuItem};
 use rune::{El, Transition, el, text};
 
 use crate::app::AppState;

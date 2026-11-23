@@ -7,8 +7,8 @@ use rune::{El, Icon, Transition, icon};
 
 use crate::app::AppState;
 use crate::browser::Browser;
-use crate::ui::controls;
-use crate::ui::hover_highlight;
+use crate::ui::components::controls;
+use crate::ui::components::hover_highlight;
 use crate::ui::icons;
 use crate::ui::theme::{self, Theme};
 

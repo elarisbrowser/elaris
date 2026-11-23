@@ -4,8 +4,8 @@
 //! last told about it. The browser owns every tab and is the only one to change them.
 
 use crate::engine::{FindResult, Surface, TabUpdate, Thumbnail};
-use crate::internal::InternalRoute;
-use crate::permissions::PermissionKind;
+use elaris_core::internal::InternalRoute;
+use elaris_core::permissions::PermissionKind;
 use rune::Pixels;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;

@@ -897,6 +897,7 @@ name = "elaris"
 version = "0.1.0-alpha.1"
 dependencies = [
  "block2 0.5.1",
+ "elaris-core",
  "objc2 0.5.3",
  "objc2-app-kit 0.2.2",
  "objc2-foundation 0.2.2",
@@ -905,8 +906,17 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
- "toml_edit",
  "x11rb",
+]
+
+[[package]]
+name = "elaris-core"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "toml_edit",
 ]
 
 [[package]]

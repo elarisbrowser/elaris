@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use super::paths::{
-    Platform, application_dir, config_directory, parse_xdg_download_directory, profile_directory,
-};
 use super::session::{load_session, load_sessions, write_session_atomic, write_sessions_atomic};
 use super::*;
+use elaris_core::history::History;
+use elaris_core::paths::Platform;
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, mpsc};
 
 static NEXT_TEMP: AtomicU64 = AtomicU64::new(1);
 
@@ -148,181 +149,6 @@ fn shared_history_page_results_stay_with_the_requesting_window() {
 }
 
 #[test]
-fn macos_and_linux_paths_follow_native_conventions() {
-    let home = Path::new("/home/tester");
-    assert_eq!(
-        application_dir(Platform::MacOs, Some(home), None, false),
-        Some(home.join("Library/Application Support/Elaris"))
-    );
-    assert_eq!(
-        application_dir(Platform::Linux, Some(home), None, false),
-        Some(home.join(".local/share/Elaris"))
-    );
-    assert_eq!(
-        application_dir(
-            Platform::Linux,
-            Some(home),
-            Some(Path::new("/mnt/user-data")),
-            false
-        ),
-        Some(PathBuf::from("/mnt/user-data/Elaris"))
-    );
-    assert_eq!(
-        application_dir(
-            Platform::Linux,
-            Some(home),
-            Some(Path::new("relative")),
-            false
-        ),
-        Some(home.join(".local/share/Elaris"))
-    );
-}
-
-#[test]
-fn development_paths_are_isolated_from_release_paths() {
-    let home = Path::new("/home/tester");
-    let release = application_dir(Platform::Linux, Some(home), None, false).unwrap();
-    let development = application_dir(Platform::Linux, Some(home), None, true).unwrap();
-    assert_eq!(development, release.join("development"));
-    let config_release = config_directory(Platform::Linux, Some(home), None, false).unwrap();
-    let config_development = config_directory(Platform::Linux, Some(home), None, true).unwrap();
-    assert_eq!(config_development, config_release.join("development"));
-}
-
-#[test]
-fn config_paths_follow_platform_conventions_and_xdg() {
-    let home = Path::new("/home/tester");
-    assert_eq!(
-        config_directory(Platform::MacOs, Some(home), None, false),
-        Some(home.join("Library/Application Support/Elaris"))
-    );
-    assert_eq!(
-        config_directory(Platform::Linux, Some(home), None, false),
-        Some(home.join(".config/elaris"))
-    );
-    assert_eq!(
-        config_directory(
-            Platform::Linux,
-            Some(home),
-            Some(Path::new("/mnt/user-config")),
-            false
-        ),
-        Some(PathBuf::from("/mnt/user-config/elaris"))
-    );
-    let paths = Paths::resolve_with(
-        Platform::Linux,
-        None,
-        Some(home),
-        None,
-        Some(Path::new("/mnt/user-config")),
-        None,
-        false,
-    )
-    .expect("resolve Linux paths");
-    assert_eq!(
-        paths.config_file,
-        PathBuf::from("/mnt/user-config/elaris/config.toml")
-    );
-}
-
-#[test]
-fn parses_xdg_download_directory_without_evaluating_shell_content() {
-    let home = Path::new("/home/tester");
-    assert_eq!(
-        parse_xdg_download_directory(
-            "XDG_DOWNLOAD_DIR=\"$HOME/Shared Downloads\" # user choice",
-            home
-        ),
-        Some(home.join("Shared Downloads"))
-    );
-    assert_eq!(
-        parse_xdg_download_directory("XDG_DOWNLOAD_DIR=\"/mnt/files\"", home),
-        Some(PathBuf::from("/mnt/files"))
-    );
-    assert_eq!(
-        parse_xdg_download_directory("XDG_DOWNLOAD_DIR=\"$(touch /tmp/pwned)\"", home),
-        None
-    );
-}
-
-#[test]
-fn data_directory_override_is_exact_and_sets_the_default_profile() {
-    let temp = TempDir::new();
-    let data_dir = temp.0.join("isolated-data");
-    let paths = Paths::resolve_with(
-        Platform::MacOs,
-        Some(&data_dir),
-        Some(Path::new("/Users/tester")),
-        None,
-        None,
-        None,
-        true,
-    )
-    .expect("resolve explicit data directory");
-
-    assert_eq!(paths.application_dir, data_dir);
-    assert_eq!(paths.profile_dir, paths.application_dir.join("profile"));
-    assert_eq!(
-        paths.history_file,
-        paths.application_dir.join("history.sqlite")
-    );
-    assert_eq!(
-        paths.session_file,
-        paths.application_dir.join("session.json")
-    );
-    assert_eq!(paths.config_file, paths.application_dir.join("config.toml"));
-    assert!(!paths.application_dir.exists());
-}
-
-#[test]
-fn data_directory_override_keeps_the_ladybird_profile_override() {
-    let temp = TempDir::new();
-    let data_dir = temp.0.join("isolated-data");
-    let explicit_profile = temp.0.join("ladybird-profile");
-    let paths = Paths::resolve_with(
-        Platform::Linux,
-        Some(&data_dir),
-        Some(Path::new("/home/tester")),
-        Some(Path::new("/xdg-data")),
-        None,
-        Some(&explicit_profile),
-        true,
-    )
-    .expect("resolve explicit paths");
-
-    assert_eq!(paths.application_dir, data_dir);
-    assert_eq!(paths.profile_dir, explicit_profile);
-    assert!(!paths.application_dir.exists());
-    assert!(!paths.profile_dir.exists());
-}
-
-#[test]
-fn relative_data_directory_overrides_are_rejected() {
-    let error = Paths::resolve_with(
-        Platform::Linux,
-        Some(Path::new("relative-data")),
-        Some(Path::new("/home/tester")),
-        None,
-        None,
-        None,
-        true,
-    )
-    .unwrap_err();
-    assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
-}
-
-#[test]
-fn explicit_ladybird_profile_directory_is_preserved() {
-    let application = Path::new("/home/tester/.local/share/Elaris/development");
-    let explicit = Path::new("/tmp/elaris-profile-override");
-    assert_eq!(profile_directory(application, Some(explicit)), explicit);
-    assert_eq!(
-        profile_directory(application, None),
-        application.join("profile")
-    );
-}
-
-#[test]
 fn session_round_trips_order_and_active_tab() {
     let session = Session::new(
         vec![
@@ -421,15 +247,15 @@ fn configuration_reload_runs_on_storage_worker_and_returns_typed_values() {
     };
     assert_eq!(
         loaded.settings.appearance,
-        crate::appearance::Appearance::Dark
+        elaris_core::appearance::Appearance::Dark
     );
     assert_eq!(
         loaded.settings.search_engine,
-        crate::address::SearchEngine::Brave
+        elaris_core::address::SearchEngine::Brave
     );
     assert_eq!(
         loaded.settings.startup,
-        crate::settings::StartupMode::BlankWindow
+        elaris_core::settings::StartupMode::BlankWindow
     );
 }
 

@@ -3,7 +3,6 @@
 // blocker call reaches the engine's settings.
 
 #include <elaris_ladybird.h>
-#include "dev_options.h"
 
 #include <AK/JsonValue.h>
 
@@ -19,6 +18,8 @@
 #include <iostream>
 #include <string>
 #include <thread>
+
+#include "dev_options.h"
 
 namespace {
 

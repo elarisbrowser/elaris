@@ -8,7 +8,7 @@ use crate::app::AppState;
 use crate::tab::{TabId, TabSection};
 use crate::ui::theme::{self, Theme};
 
-use super::tab_row;
+use super::row::tab_row;
 
 #[derive(Clone, Copy)]
 pub(super) enum TabRowStyle {

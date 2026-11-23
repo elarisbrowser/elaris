@@ -1274,8 +1274,7 @@ static void update_now_playing(ElarisLadybird& bridge) {
 // Ladybird finds its helper processes and resources relative to the directory the application runs from. A packaged
 // Elaris keeps them beside its executable (macOS) or under its prefix's libexec (Linux), so use that layout when it is
 // present. Development runs fall back to the build tree the bridge was compiled in.
-static Optional<AK::ByteString> helper_directory()
-{
+static Optional<AK::ByteString> helper_directory() {
     auto executable = Core::System::current_executable_path();
     if (executable.is_error())
         return Optional<AK::ByteString>{ELARIS_LADYBIRD_HELPER_DIR};
@@ -1335,7 +1334,8 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
         "--disable-sandbox"sv,
     };
     bool const sandbox_free = (s_dev_options & ELARIS_LADYBIRD_DEV_SANDBOX_OFF) != 0;
-    Main::Arguments main_arguments{0, nullptr, sandbox_free ? Span<AK::StringView>{sandbox_free_arguments} : Span<AK::StringView>{arguments}};
+    Main::Arguments main_arguments{
+        0, nullptr, sandbox_free ? Span<AK::StringView>{sandbox_free_arguments} : Span<AK::StringView>{arguments}};
     auto application = ElarisApplication::create(main_arguments, helper_directory());
     if (application.is_error()) {
         if (Core::EventLoop::is_running()) {

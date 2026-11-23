@@ -56,7 +56,7 @@ mod tests {
                 dark,
                 false,
                 100,
-                crate::appearance::AccentColor::Blue,
+                elaris_core::appearance::AccentColor::Blue,
             );
             assert!(contrast(theme.text, theme.overlay_panel) >= 3.0);
             let selected_surface = composite(theme.overlay_selected, theme.overlay_panel);

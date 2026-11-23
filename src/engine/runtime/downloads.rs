@@ -5,7 +5,7 @@ use std::process::Command as ProcessCommand;
 
 use super::{Ladybird, Runtime};
 use crate::engine::DownloadAction;
-use elaris::downloads::{DownloadId, Request as DownloadRequest};
+use elaris_core::downloads::{DownloadId, Request as DownloadRequest};
 
 impl Runtime {
     pub(super) fn start_download(

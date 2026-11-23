@@ -7,7 +7,7 @@ use rune::{El, col, row, text};
 use rune_kit::{Button, ButtonVariant, Dialog, SegmentedControl};
 
 use crate::app::{AppState, ClearDataDialog, ClearRange};
-use crate::ui::internal::widgets::switch_kit;
+use crate::ui::components::widgets::switch_kit;
 use crate::ui::theme::{self, Theme};
 
 const DIALOG_WIDTH: f32 = 440.0;

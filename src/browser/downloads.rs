@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use super::{Browser, Error};
-use crate::address::url_for_address;
 use crate::engine::{Command, DownloadAction};
-use elaris::downloads::{
+use elaris_core::address::url_for_address;
+use elaris_core::downloads::{
     self, Download, DownloadId, Request as DownloadRequest, Status as DownloadStatus,
 };
 

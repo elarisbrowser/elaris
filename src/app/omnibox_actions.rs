@@ -3,13 +3,13 @@
 use rune::Tx;
 
 use super::new_tab;
-use crate::address::{self, Destination};
 use crate::browser::Browser;
-use crate::internal::InternalRoute;
 use crate::omnibox::{self, Action, Suggestion};
-use crate::settings::NewTabPosition;
 use crate::tab::{Tab, TabSection};
 use crate::ui::viewport::focus_key;
+use elaris_core::address::{self, Destination};
+use elaris_core::internal::InternalRoute;
+use elaris_core::settings::NewTabPosition;
 
 impl super::AppState {
     /// Loads what the omnibox holds in the active tab.

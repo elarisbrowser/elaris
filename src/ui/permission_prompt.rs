@@ -6,10 +6,10 @@ use rune_kit::{Button, ButtonVariant};
 
 use crate::app::AppState;
 use crate::engine::ViewCommand;
-use crate::permissions::PermissionKind;
 use crate::tab::{Tab, TabId};
 use crate::ui::icons;
 use crate::ui::theme::{self, Theme};
+use elaris_core::permissions::PermissionKind;
 
 /// Keeps page timing from steering browser UI: prompts ignore clicks until armed, and
 /// entering fullscreen shows who took the screen and how to leave.
@@ -278,7 +278,7 @@ pub(super) fn fullscreen_notice(state: &AppState, theme: &Theme) -> Option<El> {
         .page_guards
         .fullscreen
         .filter(|&(id, until)| id == tab.id() && until.is_finite())?;
-    let site = crate::permissions::PermissionStore::origin(&tab.committed_url)
+    let site = elaris_core::permissions::PermissionStore::origin(&tab.committed_url)
         .unwrap_or_else(|| tab.committed_url.clone());
     Some(
         row()

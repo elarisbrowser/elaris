@@ -1,3 +1,14 @@
+[workspace]
+members = ["crates/elaris-core"]
+default-members = [".", "crates/elaris-core"]
+resolver = "3"
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+all = "warn"
+
 [package]
 name = "elaris"
 version = "0.1.0-alpha.1"
@@ -15,7 +26,10 @@ features = ["accessibility", "embedded-fonts", "metal-backend", "native-file-dia
 git = "https://github.com/elarisbrowser/rune"
 rev = "79027ad5f9ae942ca674521784d9abd9af23315e"
 
-[dependencies.rusqlite]
+[dependencies.elaris-core]
+path = "crates/elaris-core"
+
+[dev-dependencies.rusqlite]
 version = "0.32"
 features = ["bundled"]
 
@@ -25,9 +39,6 @@ features = ["derive", "rc"]
 
 [dependencies.serde_json]
 version = "1"
-
-[dependencies.toml_edit]
-version = "0.25"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.5.1"
@@ -76,7 +87,7 @@ features = [
 hot = ["rune/hot"]
 # Shows the Linux window layout on any platform, for previewing it on macOS.
 linux-ui = []
-ladybird-bridge = []
+ladybird-bridge = ["elaris-core/ladybird-bridge"]
 
 [[example]]
 name = "ladybird_smoke"
@@ -86,11 +97,8 @@ required-features = ["ladybird-bridge"]
 name = "ladybird_permissions"
 required-features = ["ladybird-bridge"]
 
-[lints.rust]
-unsafe_op_in_unsafe_fn = "deny"
-
-[lints.clippy]
-all = "warn"
+[lints]
+workspace = true
 
 # Keep Elaris easy to debug while reducing the cold-start cost of its large UI dependencies.
 [profile.dev.package."*"]

@@ -36,7 +36,7 @@ DYLD_LIBRARY_PATH="$PWD/build/cpp-ladybird/lib:$prefix/lib" \
   "$PWD/bridge/tests/smoke.html"
 ```
 
-The C ABI unsafe code is isolated in `src/ladybird/bridge.rs`. Its owner is neither `Send` nor `Sync`, views borrow that owner, and Rust callback panics are caught before returning through C. The example tests navigation/title/frame delivery, resize and an application reinitialization. Normal Cargo builds remain independent of the bridge.
+The C ABI unsafe code is isolated in `src/ladybird/bridge/`, with the raw declarations in `ffi.rs`. Its owner is neither `Send` nor `Sync`, views borrow that owner, and Rust callback panics are caught before returning through C. The example tests navigation/title/frame delivery, resize and an application reinitialization. Normal Cargo builds remain independent of the bridge.
 
 The callback panic boundary regression test can be run with:
 
@@ -55,7 +55,7 @@ To run full Linux verification, open **Actions → Ladybird bridge (Linux) → R
 
 Everyday push and pull request checks remain in `.github/workflows/ci.yml`; they run Rust formatting, check, Clippy and tests plus Elaris C++ formatting without configuring or building Ladybird. The manual workflow caches Ladybird's vcpkg checkout and binary packages, ccache (capped at 3 GiB), Cargo downloads, and the Ladybird, bridge and Rust build directories. It restores the latest cache and explicitly saves progress even when a later build or smoke test fails, so retries can reuse completed dependency work and continue incremental builds. Cache keys are scoped to the Ladybird CI image and dependency manifests, with unique run IDs so each attempt can publish an updated snapshot. Bridge-specific Rust Clippy and callback boundary tests run in the manual workflow because they require the compiled FFI library; the everyday checks do not. Ladybird's helper resolves shared build paths through the parent repository's `.git/modules` for this nested submodule, so the workflow sets and caches those paths explicitly.
 
-Automatic runs can be added later by defining `push` and `pull_request` path filters beside `workflow_dispatch`. Include changes to `.github/workflows/ladybird-bridge-linux.yml`, `bridge/**`, the `vendor/ladybird` submodule pointer, `Cargo.toml`, `Cargo.lock`, `build.rs`, `src/lib.rs`, the Rust bridge module, the smoke example, and `scripts/elaris_cli/**`.
+Automatic runs can be added later by defining `push` and `pull_request` path filters beside `workflow_dispatch`. Include changes to `.github/workflows/ladybird-bridge-linux.yml`, `bridge/**`, the `vendor/ladybird` submodule pointer, `Cargo.toml`, `Cargo.lock`, `build.rs`, `src/lib.rs`, the Rust bridge module, the smoke example, and `tools/elaris_cli/**`.
 
 ## Verified behavior and limitations
 

@@ -32,7 +32,7 @@ pub(super) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) {
     let title = if before_unload {
         "Leave this page?".to_owned()
     } else {
-        crate::permissions::PermissionStore::origin(&tab.committed_url).map_or_else(
+        elaris_core::permissions::PermissionStore::origin(&tab.committed_url).map_or_else(
             || "This page says".into(),
             |origin| format!("{origin} says"),
         )

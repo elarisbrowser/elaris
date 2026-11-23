@@ -16,20 +16,15 @@ pub(super) mod tabs;
 
 use rune::tok::type_;
 use rune::{El, Transition, Tx, col, icon, row, text};
-pub(crate) use tabs::context_menu;
-#[cfg(target_os = "macos")]
-pub(crate) use tabs::floating_drag_preview;
 
-use super::animated_icon;
-use super::controls::row_button;
-use super::hover_highlight;
 use super::icons;
 use super::permission_prompt;
 use super::theme::{self, Theme};
 use crate::app::{self, AppState};
-use crate::appearance::Appearance;
-pub(crate) use drag::MoveResult as TabDragMoveResult;
-pub(crate) use drag::{DragVisual, TabDragState, TabDropTarget};
+use crate::ui::components::animated_icon;
+use crate::ui::components::controls::row_button;
+use crate::ui::components::hover_highlight;
+use elaris_core::appearance::Appearance;
 
 /// How the sidebar is laid out: what the window shows of it, not of the browser.
 pub(crate) struct SidebarState {
@@ -163,7 +158,7 @@ fn search_field(state: &AppState, theme: &Theme, reduced: bool, marks: Vec<El>) 
         .map(|tab| tab.url.as_str())
         .filter(|url| !url.is_empty() && *url != "about:blank");
     let label = address
-        .map(crate::address::compact_address)
+        .map(elaris_core::address::compact_address)
         .unwrap_or("Search or type a URL");
     let launcher = row_button(
         "omnibox-launcher",
@@ -218,7 +213,7 @@ fn copy_link(state: &AppState, url: &str, theme: &Theme, reduced: bool) -> El {
     let copied = state.sidebar.link_copied_until.is_some();
     let size = theme::ICON_BUTTON;
     let inset = (size - theme::ICON) / 2.0;
-    let glyph = crate::ui::controls::confirm_glyph(
+    let glyph = crate::ui::components::controls::confirm_glyph(
         "copy-link",
         &icons::LINK,
         theme::ICON,
@@ -227,7 +222,7 @@ fn copy_link(state: &AppState, url: &str, theme: &Theme, reduced: bool) -> El {
         reduced,
     );
     let url = url.to_owned();
-    super::hover_highlight::attach(
+    crate::ui::components::hover_highlight::attach(
         rune::el()
             .key("copy-link")
             .size(size, size)
@@ -247,7 +242,7 @@ fn copy_link(state: &AppState, url: &str, theme: &Theme, reduced: bool) -> El {
             })
             .child(glyph.size(theme::ICON, theme::ICON).absolute(inset, inset)),
         "copy-link",
-        super::hover_highlight::Group::Controls,
+        crate::ui::components::hover_highlight::Group::Controls,
     )
 }
 
@@ -263,7 +258,7 @@ pub(crate) fn settle_copy_link(state: &mut AppState, clock: f64) -> bool {
 }
 
 pub(super) fn site_controls(theme: &Theme, size: f32) -> El {
-    super::controls::icon_button(
+    crate::ui::components::controls::icon_button(
         "site-controls",
         "Site permissions and page information",
         &icons::SITE_CONTROLS,
@@ -297,7 +292,12 @@ fn appearance(state: &AppState, theme: &Theme) -> El {
         Appearance::Dark => &animated_icon::DARK,
     };
     let label = format!("Appearance: {}", current.label());
-    let frame = super::controls::icon_button_frame("appearance", &label, theme::ICON_BUTTON, theme);
+    let frame = crate::ui::components::controls::icon_button_frame(
+        "appearance",
+        &label,
+        theme::ICON_BUTTON,
+        theme,
+    );
     hover_highlight::attach_with(
         frame,
         "appearance",

@@ -152,7 +152,7 @@ pub(crate) struct Placement {
     #[cfg(target_os = "macos")]
     usable: objc2_foundation_02::NSRect,
     #[cfg(target_os = "linux")]
-    x11: x11::Placement,
+    x11: crate::platform::linux::x11::Placement,
 }
 
 #[cfg(target_os = "macos")]
@@ -161,11 +161,13 @@ fn placement(source: u64) -> Option<Placement> {
     use objc2_foundation_02::MainThreadMarker;
 
     let windows = super::WINDOW_REGISTRY.get()?.lock().ok()?;
-    let frame = crate::window_macos::with_window(windows.get(&source)?, |native| native.frame())?;
+    let frame = crate::platform::macos::window::with_window(windows.get(&source)?, |native| {
+        native.frame()
+    })?;
     let main = MainThreadMarker::new()?;
     // SAFETY: the drag handler is on AppKit's main thread.
     let pointer = unsafe { NSEvent::mouseLocation() };
-    let hit = crate::drag_overlay_macos::window_below_preview(pointer, main);
+    let hit = crate::platform::macos::drag_overlay::window_below_preview(pointer, main);
     // Finder and the wallpaper can have window numbers. Only an Elaris hit consumes this drop.
     let browser_hit = u32::try_from(hit).ok().is_some_and(|hit| {
         windows
@@ -205,13 +207,10 @@ fn contains(
 }
 
 #[cfg(target_os = "linux")]
-mod x11;
-
-#[cfg(target_os = "linux")]
 fn placement(source: u64) -> Option<Placement> {
     let window = super::native_window(source)?;
     Some(Placement {
-        x11: x11::placement(&window)?,
+        x11: crate::platform::linux::x11::placement(&window)?,
     })
 }
 
@@ -223,7 +222,7 @@ fn placement(_: u64) -> Option<Placement> {
 impl Placement {
     pub(crate) fn apply(self, window: &WindowHandle) {
         #[cfg(target_os = "macos")]
-        crate::window_macos::with_window(window, |native| {
+        crate::platform::macos::window::with_window(window, |native| {
             native.setFrame_display(self.frame_near_pointer(native.frame().size), true);
         });
         #[cfg(target_os = "linux")]

@@ -3,17 +3,13 @@
 //! The window's interface: a sidebar beside the active tab's page. Each part is its own module;
 //! colours and measurements live in `theme`.
 
-pub(crate) mod animated_icon;
-mod controls;
+pub(crate) mod components;
 mod downloads;
 mod find;
 pub(crate) mod form_picker;
-mod grain;
 pub(crate) mod horizontal_tabs;
-pub(crate) mod hover_highlight;
 mod icons;
 pub(crate) mod internal;
-pub(crate) mod menu;
 mod mini;
 mod omnibox;
 mod page_dialog;
@@ -31,13 +27,13 @@ pub(crate) mod theme;
 pub(crate) mod viewport;
 pub(crate) use viewport::menu::PageMenuState;
 
+pub(crate) use sidebar::drag::{
+    DragVisual, MoveResult as TabDragMoveResult, TabDragState, TabDropTarget,
+};
 pub(crate) use sidebar::header::settle_zoom_chip;
 pub(crate) use sidebar::resize::settle as settle_sidebar;
 pub(crate) use sidebar::settle_copy_link;
-pub(crate) use sidebar::{
-    DragVisual, SidebarState, TabDragMoveResult, TabDragState, TabDropTarget,
-    toggle as toggle_sidebar,
-};
+pub(crate) use sidebar::{SidebarState, toggle as toggle_sidebar};
 pub(crate) use site_permissions::settle_site_action;
 pub(crate) use theme::{TAB_REORDER_MOTION, TRAFFIC_LIGHTS, WINDOW_MIN_SIZE};
 
@@ -45,7 +41,7 @@ use rune::SystemMaterial;
 use rune::{Cx, El, col, row};
 
 use crate::app::AppState;
-use crate::appearance::GlassStyle;
+use elaris_core::appearance::GlassStyle;
 
 /// The focus key of the page viewport.
 pub(crate) const VIEWPORT: &str = "viewport";
@@ -53,12 +49,12 @@ pub(crate) const HISTORY_SEARCH: &str = "history-search";
 pub(crate) const HISTORY_SCROLL: &str = "history-scroll";
 pub(crate) const FIND_INPUT: &str = "find-input";
 #[cfg(target_os = "macos")]
-pub(crate) use sidebar::floating_drag_preview;
+pub(crate) use sidebar::tabs::floating_drag_preview;
 pub(crate) use theme::FIND_MOTION;
 
 pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     #[cfg(elaris_ui = "macos")]
-    crate::menu_macos::refresh(state);
+    crate::platform::macos::menu::refresh(state);
     if state.is_mini() {
         return mini::view(state, cx);
     }
@@ -140,7 +136,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     }
     overlays.extend(tab_preview::view(state, cx, &theme, reduced_motion));
     viewport::menu::view(state, &theme, &mut overlays);
-    sidebar::context_menu(state, &theme, &mut overlays);
+    sidebar::tabs::context_menu(state, &theme, &mut overlays);
     sidebar::header::history_menu(state, &theme, &mut overlays);
     #[cfg(elaris_ui = "linux")]
     if !horizontal && state.titlebar.reveals_on_hover() {
@@ -149,7 +145,12 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     let height = cx
         .layout_size("window")
         .map_or(WINDOW_MIN_SIZE.1, |size| size[1]);
-    overlays.extend(hover_highlight::view(state, cx, &theme, reduced_motion));
+    overlays.extend(components::hover_highlight::view(
+        state,
+        cx,
+        &theme,
+        reduced_motion,
+    ));
     overlays.extend(tab_switcher::view(state, &theme, height, reduced_motion));
     site_permissions::view(state, cx, &theme, &mut overlays, reduced_motion);
     overlays.extend(permission_prompt::view(
@@ -196,7 +197,7 @@ fn window_surface(
                     .fill(theme.window),
             );
         if state.settings.grain > 0 {
-            window = window.child(grain::layer(
+            window = window.child(components::grain::layer(
                 state.settings.grain,
                 window_size[0],
                 window_size[1],

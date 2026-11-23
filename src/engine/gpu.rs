@@ -37,14 +37,16 @@ pub(super) fn enabled() -> bool {
     #[cfg(target_os = "macos")]
     {
         static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        *ENABLED
-            .get_or_init(|| crate::dev::var(CPU_FRAMES_VARIABLE).is_none_or(|value| value == "0"))
+        *ENABLED.get_or_init(|| {
+            elaris_core::dev::var(CPU_FRAMES_VARIABLE).is_none_or(|value| value == "0")
+        })
     }
     #[cfg(target_os = "linux")]
     {
         static ENABLED: OnceLock<bool> = OnceLock::new();
-        *ENABLED
-            .get_or_init(|| crate::dev::var(GPU_FRAMES_VARIABLE).is_some_and(|value| value != "0"))
+        *ENABLED.get_or_init(|| {
+            elaris_core::dev::var(GPU_FRAMES_VARIABLE).is_some_and(|value| value != "0")
+        })
     }
 }
 

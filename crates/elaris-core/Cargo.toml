@@ -1,0 +1,27 @@
+[package]
+name = "elaris-core"
+version = "0.1.0-alpha.1"
+edition = "2024"
+license = "GPL-3.0-only"
+rust-version = "1.89"
+publish = false
+
+[dependencies.rusqlite]
+version = "0.32"
+features = ["bundled"]
+
+[dependencies.serde_json]
+version = "1"
+
+[dependencies.serde]
+version = "1"
+features = ["derive", "rc"]
+
+[dependencies.toml_edit]
+version = "0.25"
+
+[features]
+ladybird-bridge = []
+
+[lints]
+workspace = true

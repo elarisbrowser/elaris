@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use crate::ui::animated_icon::{self, AnimatedIcon};
+use crate::ui::components::animated_icon::{self, AnimatedIcon};
+use crate::ui::components::menu::{Menu, MenuItem, context_menu};
 use crate::ui::icons;
-use crate::ui::menu::{Menu, MenuItem, context_menu};
 use crate::ui::tab_switcher::{tab_labels, tab_symbol};
 use crate::ui::theme;
 use elaris::ladybird::{Edit, MediaAction, PageMenu};

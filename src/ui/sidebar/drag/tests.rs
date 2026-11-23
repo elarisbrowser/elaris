@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
+use super::state::Gesture;
 use super::*;
+use crate::tab::{Tab, TabId, TabSection};
+use crate::ui::theme;
 
 fn tabs(count: usize) -> Vec<Tab> {
     (0..count)

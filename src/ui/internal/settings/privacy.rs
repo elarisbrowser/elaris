@@ -6,10 +6,10 @@ use rune::El;
 use rune_kit::{Button, ButtonVariant};
 
 use crate::app::AppState;
-use crate::settings::ContentBlockList;
+use crate::ui::components::widgets::{setting, switch_kit};
 use crate::ui::internal::PageContext;
 use crate::ui::internal::clear_data;
-use crate::ui::internal::widgets::{setting, switch_kit};
+use elaris_core::settings::ContentBlockList;
 
 use super::section;
 

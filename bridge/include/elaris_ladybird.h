@@ -260,8 +260,8 @@ typedef struct {
     int32_t repeat;
 } ElarisLadybirdKeyEvent;
 
-/* Development and test switches as bit flags. The Rust host sets them only in debug builds, and tests set them from their own
- * environment; release builds never set them, so the bridge reads no environment variables of its own. */
+/* Development and test switches as bit flags. The Rust host sets them only in debug builds, and tests set them from
+ * their own environment; release builds never set them, so the bridge reads no environment variables of its own. */
 #define ELARIS_LADYBIRD_DEV_SANDBOX_OFF 1u
 #define ELARIS_LADYBIRD_DEV_TEST_LOCATION 2u
 #define ELARIS_LADYBIRD_DEV_MICROPHONE_DENIED 4u
