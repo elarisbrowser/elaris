@@ -7,6 +7,7 @@
 
 mod appearance;
 mod browsing;
+mod keyboard;
 mod memory;
 mod privacy;
 mod system;
@@ -40,7 +41,7 @@ struct Category {
     sections: fn(&mut PageContext) -> Vec<El>,
 }
 
-static CATEGORIES: [Category; 4] = [
+static CATEGORIES: [Category; 5] = [
     Category {
         nav: NavItem {
             key: "settings-look",
@@ -58,6 +59,15 @@ static CATEGORIES: [Category; 4] = [
             icon: &icons::PAGE,
         },
         sections: browsing::sections,
+    },
+    Category {
+        nav: NavItem {
+            key: "settings-keyboard",
+            title: "Keyboard shortcuts",
+            short: "Keyboard",
+            icon: &icons::KEYBOARD,
+        },
+        sections: keyboard::sections,
     },
     Category {
         nav: NavItem {

@@ -146,6 +146,8 @@ pub(crate) struct AppState {
     pub(crate) history_page: HistoryPage,
     pub(crate) task_manager: TaskManagerPage,
     pub(crate) memory_saver: super::memory_saver::MemorySaverState,
+    pub(crate) search_engine_form: super::search_engines::SearchEngineForm,
+    pub(crate) shortcut_recorder: super::keyboard::ShortcutRecorder,
     /// The page title the window shows.
     pub(super) window_title: Option<String>,
     pub(crate) zoom_menu: Option<TabId>,

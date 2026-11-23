@@ -39,6 +39,8 @@ pub(crate) struct MenuState {
     has_sidebar: bool,
     pub(crate) sidebar_visible: bool,
     pub(crate) favourite: bool,
+    /// Settings is listening for a shortcut's new chord, so the menu's own keys pause.
+    pub(crate) recording_shortcut: bool,
 }
 
 impl MenuState {
@@ -57,6 +59,7 @@ impl MenuState {
             has_sidebar: !state.horizontal_tabs(),
             sidebar_visible: !state.horizontal_tabs() && !state.sidebar.collapsed,
             favourite: tab.is_some_and(|tab| tab.section() == TabSection::Favourite),
+            recording_shortcut: state.shortcut_recorder.recording.is_some(),
         }
     }
 

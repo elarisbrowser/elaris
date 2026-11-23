@@ -9,7 +9,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use toml_edit::{DocumentMut, Item, Table, Value};
 
+use crate::address::CustomSearchEngine;
 use crate::appearance::Appearance;
+use crate::keybindings::KeyBindings;
 use crate::permissions::{AutoplayPolicy, PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{DownloadDirectory, SettingsChange, StartupMode};
 
@@ -99,6 +101,12 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
             .map_err(|error| format!("cannot parse built-in configuration: {error}"))?,
         Err(error) => return Err(format!("cannot read configuration: {error}")),
     };
+    if let SettingsChange::SearchEngines(engines) = change {
+        return write_search_engines(path, document, engines);
+    }
+    if let SettingsChange::KeyBindings(bindings) = change {
+        return write_keybindings(path, document, bindings);
+    }
     if let SettingsChange::KeepAwakeSites(sites) = change {
         let sites: toml_edit::Array = sites.iter().map(String::as_str).collect();
         return put(
@@ -110,7 +118,9 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
         );
     }
     let (section, key, value) = match change {
-        SettingsChange::KeepAwakeSites(_) => unreachable!("lists are saved above"),
+        SettingsChange::KeepAwakeSites(_)
+        | SettingsChange::SearchEngines(_)
+        | SettingsChange::KeyBindings(_) => unreachable!("lists and tables are saved above"),
         SettingsChange::PageZoom(value) => ("pages", "zoom", value.to_string()),
         SettingsChange::Autoplay(value) => ("pages", "autoplay", value.key().to_owned()),
         SettingsChange::TabLayout(value) => {
@@ -208,6 +218,80 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
         Value::from(value)
     };
     put(path, document, section, key, new_value)
+}
+
+/// Rewrites `[search.engines]`, one `[search.engines.<key>]` table per provider.
+fn write_search_engines(
+    path: &Path,
+    mut document: DocumentMut,
+    engines: &[CustomSearchEngine],
+) -> Result<(), String> {
+    let search = document
+        .as_table_mut()
+        .entry("search")
+        .or_insert(Item::Table(Table::new()))
+        .as_table_mut()
+        .ok_or_else(|| "[search] must be a TOML table".to_owned())?;
+    if engines.is_empty() {
+        search.remove("engines");
+    } else {
+        let table = emptied_table(search, "engines", "[search.engines]")?;
+        // Only the providers' own headers show, not a bare [search.engines].
+        table.set_implicit(true);
+        for engine in engines {
+            let mut entry = Table::new();
+            entry.insert("name", Item::Value(Value::from(engine.name())));
+            entry.insert("url", Item::Value(Value::from(engine.url())));
+            table.insert(engine.key(), Item::Table(entry));
+        }
+    }
+    save(path, &document)
+}
+
+/// Rewrites `[keybindings]`: one chord as a string, several as a list, none as `""`.
+fn write_keybindings(
+    path: &Path,
+    mut document: DocumentMut,
+    bindings: &KeyBindings,
+) -> Result<(), String> {
+    if bindings.is_empty() {
+        document.as_table_mut().remove("keybindings");
+    } else {
+        let table = emptied_table(document.as_table_mut(), "keybindings", "[keybindings]")?;
+        for (action, chords) in bindings {
+            let value = match chords.as_slice() {
+                [] => Value::from(""),
+                [chord] => Value::from(chord.to_string()),
+                chords => Value::Array(chords.iter().map(ToString::to_string).collect()),
+            };
+            table.insert(action, Item::Value(value));
+        }
+    }
+    save(path, &document)
+}
+
+/// The table at `key`, created if missing and emptied if not, so its header comment survives.
+fn emptied_table<'a>(
+    parent: &'a mut Table,
+    key: &str,
+    name: &str,
+) -> Result<&'a mut Table, String> {
+    let table = parent
+        .entry(key)
+        .or_insert(Item::Table(Table::new()))
+        .as_table_mut()
+        .ok_or_else(|| format!("{name} must be a TOML table"))?;
+    table.clear();
+    Ok(table)
+}
+
+fn save(path: &Path, document: &DocumentMut) -> Result<(), String> {
+    write_atomic(path, document.to_string().as_bytes()).map_err(|error| {
+        format!(
+            "cannot save configuration {}: {error}",
+            crate::paths::display_path(path)
+        )
+    })
 }
 
 /// Sets one value, keeping the comments and spacing around the one it replaces, and saves the file.

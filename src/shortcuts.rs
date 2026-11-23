@@ -135,7 +135,72 @@ const RESERVED: &[(Chord, &str)] = &[
     #[cfg(target_os = "macos")]
     (Chord::new('h', false, false), "Hide Elaris"),
     #[cfg(target_os = "macos")]
+    (Chord::new('h', false, true), "Hide Others"),
+    #[cfg(target_os = "macos")]
     (Chord::new('m', false, false), "Minimize"),
+];
+
+/// How Settings lists the actions: each group's title and its actions with their titles. An
+/// action missing here still shows, under "Other", titled from its name.
+const GROUPS: &[(&str, &[(Shortcut, &str)])] = &[
+    (
+        "Windows and tabs",
+        &[
+            (Shortcut::NewWindow, "New window"),
+            (Shortcut::NewPrivateWindow, "New private window"),
+            (Shortcut::NewTab, "New tab"),
+            (Shortcut::ReopenClosedTab, "Reopen closed tab"),
+            (Shortcut::Close, "Close tab"),
+            (Shortcut::PreviousTab, "Previous tab"),
+            (Shortcut::NextTab, "Next tab"),
+            (Shortcut::SelectLastTab, "Last tab"),
+            (Shortcut::ToggleSidebar, "Show or hide the sidebar"),
+        ],
+    ),
+    (
+        "Navigation",
+        &[
+            (Shortcut::FocusOmnibox, "Address bar"),
+            (Shortcut::CopyAddress, "Copy address"),
+            (Shortcut::Back, "Back"),
+            (Shortcut::Forward, "Forward"),
+            (Shortcut::Reload, "Reload"),
+            (Shortcut::ReloadBypassingCache, "Reload without cache"),
+            (Shortcut::OpenFile, "Open file"),
+        ],
+    ),
+    (
+        "Page",
+        &[
+            (Shortcut::Find, "Find in page"),
+            (Shortcut::FindNext, "Find next"),
+            (Shortcut::FindPrevious, "Find previous"),
+            (Shortcut::ZoomIn, "Zoom in"),
+            (Shortcut::ZoomOut, "Zoom out"),
+            (Shortcut::ResetZoom, "Reset zoom"),
+        ],
+    ),
+    (
+        "Bookmarks and history",
+        &[
+            (Shortcut::BookmarkPage, "Bookmark this page"),
+            (Shortcut::BookmarkAllTabs, "Bookmark all tabs"),
+            (Shortcut::OpenBookmarks, "Manage bookmarks"),
+            (Shortcut::SearchBookmarks, "Search bookmarks"),
+            (
+                Shortcut::ToggleBookmarksBar,
+                "Show or hide the bookmarks bar",
+            ),
+            (Shortcut::OpenHistory, "Show history"),
+        ],
+    ),
+    (
+        "Browser",
+        &[
+            (Shortcut::OpenSettings, "Settings"),
+            (Shortcut::OpenTaskManager, "Task manager"),
+        ],
+    ),
 ];
 
 /// Each action `[keybindings]` can rebind, by its name there. Picking a tab by its number is
@@ -242,7 +307,7 @@ impl Shortcut {
     }
 
     /// The action's name in `[keybindings]`.
-    fn name(self) -> Option<&'static str> {
+    pub(crate) fn name(self) -> Option<&'static str> {
         NAMES
             .iter()
             .find(|(shortcut, _)| *shortcut == self)
@@ -251,18 +316,84 @@ impl Shortcut {
 
     /// The chord as a menu shows it: "⇧⌘D" on macOS, "Ctrl+Shift+D" elsewhere.
     pub(crate) fn hint(self) -> Option<String> {
-        let chord = self.binding()?.chord;
-        let key = chord.key.to_ascii_uppercase();
-        Some(if cfg!(target_os = "macos") {
-            let shift = if chord.shift { "⇧" } else { "" };
-            let option = if chord.option { "⌥" } else { "" };
-            format!("{option}{shift}⌘{key}")
-        } else {
-            let shift = if chord.shift { "+Shift" } else { "" };
-            let option = if chord.option { "+Alt" } else { "" };
-            format!("Ctrl{shift}{option}+{key}")
-        })
+        self.binding().map(|binding| chord_label(binding.chord))
     }
+}
+
+/// A chord as menus show it: "⌥⇧⌘D" on macOS, "Ctrl+Shift+Alt+D" elsewhere.
+pub(crate) fn chord_label(chord: Chord) -> String {
+    let key = chord.key.to_ascii_uppercase();
+    if cfg!(target_os = "macos") {
+        let shift = if chord.shift { "⇧" } else { "" };
+        let option = if chord.option { "⌥" } else { "" };
+        format!("{option}{shift}⌘{key}")
+    } else {
+        let shift = if chord.shift { "+Shift" } else { "" };
+        let option = if chord.option { "+Alt" } else { "" };
+        format!("Ctrl{shift}{option}+{key}")
+    }
+}
+
+/// What a reserved chord does, if `chord` is one.
+pub(crate) fn reserved_by(chord: Chord) -> Option<&'static str> {
+    RESERVED
+        .iter()
+        .find(|(reserved, _)| *reserved == chord)
+        .map(|(_, owner)| *owner)
+}
+
+/// The action `chord` runs now, if any.
+pub(crate) fn owner(chord: Chord) -> Option<Shortcut> {
+    with_keymap(|keymap| {
+        keymap
+            .iter()
+            .find(|binding| binding.chord == chord)
+            .map(|binding| binding.shortcut)
+    })
+}
+
+/// The chord a key press is, if it uses the shortcut modifier and no Control on macOS, which
+/// chords cannot express.
+pub(crate) fn chord_of(event: &KeyEvent) -> Option<Chord> {
+    let Key::Command(typed) = event.key else {
+        return None;
+    };
+    if cfg!(target_os = "macos") && event.mods.ctrl {
+        return None;
+    }
+    Some(Chord::new(
+        base_key(typed),
+        event.mods.shift,
+        event.mods.alt,
+    ))
+}
+
+/// The action's title in Settings.
+pub(crate) fn title(shortcut: Shortcut) -> String {
+    settings_list()
+        .into_iter()
+        .find(|(_, listed, _)| *listed == shortcut)
+        .map_or_else(String::new, |(_, _, title)| title)
+}
+
+/// Every rebindable action in Settings order, as (group title, action, action title).
+pub(crate) fn settings_list() -> Vec<(&'static str, Shortcut, String)> {
+    let mut listed: Vec<_> = GROUPS
+        .iter()
+        .flat_map(|(group, actions)| {
+            actions
+                .iter()
+                .map(move |(shortcut, title)| (*group, *shortcut, (*title).to_owned()))
+        })
+        .collect();
+    for &(shortcut, name) in NAMES {
+        if !listed.iter().any(|(_, listed, _)| *listed == shortcut) {
+            let mut title = name.replace('_', " ");
+            title[..1].make_ascii_uppercase();
+            listed.push(("Other", shortcut, title));
+        }
+    }
+    listed
 }
 
 /// Rune's hook for keys nothing focused took: runs the shortcut the key is, if any.

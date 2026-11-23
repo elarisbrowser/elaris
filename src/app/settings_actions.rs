@@ -409,7 +409,7 @@ impl super::AppState {
         self.save_setting(SettingsChange::SplitViewLimit(limit));
     }
 
-    fn save_setting(&mut self, change: SettingsChange) {
+    pub(super) fn save_setting(&mut self, change: SettingsChange) {
         super::publish_settings(&self.settings);
         if let Some(storage) = &self.storage
             && let Err(error) = storage.save_setting(change)

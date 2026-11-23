@@ -79,9 +79,27 @@ impl fmt::Display for Chord {
 /// Each overridden action's chords, by action name. An empty list removes the action's keys.
 pub type KeyBindings = BTreeMap<String, Vec<Chord>>;
 
+/// Makes `chord` the only key for `action`, taking it from any other action that lists it.
+pub fn assign(bindings: &mut KeyBindings, action: &str, chord: Chord) {
+    for chords in bindings.values_mut() {
+        chords.retain(|bound| *bound != chord);
+    }
+    bindings.insert(action.to_owned(), vec![chord]);
+}
+
 #[cfg(test)]
 mod tests {
-    use super::Chord;
+    use super::{Chord, KeyBindings, assign};
+
+    #[test]
+    fn assigning_a_chord_takes_it_from_other_actions() {
+        let k = Chord::new('k', false, false);
+        let j = Chord::new('j', false, false);
+        let mut bindings = KeyBindings::from([("find".to_owned(), vec![k, j])]);
+        assign(&mut bindings, "new_tab", k);
+        assert_eq!(bindings["find"], [j]);
+        assert_eq!(bindings["new_tab"], [k]);
+    }
 
     #[test]
     fn parses_modifiers_in_any_order_and_case() {

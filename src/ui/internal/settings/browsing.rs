@@ -4,15 +4,18 @@
 
 use std::path::{Path, PathBuf};
 
-use rune::tok::type_;
-use rune::{El, text};
+use rune::tok::{space, type_};
+use rune::{El, col, row, text};
 use rune_kit::{Button, ButtonVariant, SegmentedControl};
 
 use crate::app::AppState;
+use crate::ui::components::controls;
 use crate::ui::components::menu::Dropdown;
-use crate::ui::components::widgets::{actions, setting, setting_with};
+use crate::ui::components::widgets::{actions, setting, setting_with, text_field};
+use crate::ui::icons;
 use crate::ui::internal::PageContext;
-use elaris_core::address::SearchEngine;
+use crate::ui::theme;
+use elaris_core::address::{QUERY_PLACEHOLDER, SearchEngine};
 use elaris_core::permissions::AutoplayPolicy;
 use elaris_core::settings::DownloadDirectory;
 
@@ -88,16 +91,85 @@ fn search(cx: &mut PageContext) -> El {
             state.settings_picker_open = false;
         })
         .build(cx.state, cx.theme, cx.overlays);
-    section(
-        "Search",
+    let mut rows = vec![setting(
+        cx,
+        "Search engine",
+        "Used for searches from the address bar.",
+        select,
+    )];
+    for index in 0..cx.state.settings.custom_search_engines.len() {
+        rows.push(custom_engine(cx, index));
+    }
+    rows.push(add_engine(cx));
+    section("Search", cx.theme, rows)
+}
+
+/// One of the user's engines: its name and address, and a button that removes it.
+fn custom_engine(cx: &PageContext, index: usize) -> El {
+    let engine = &cx.state.settings.custom_search_engines[index];
+    let remove = controls::icon_button(
+        &format!("search-engine-remove-{}", engine.key()),
+        &format!("Remove {}", engine.name()),
+        &icons::CLOSE,
+        theme::CLOSE_BUTTON,
         cx.theme,
-        [setting(
-            cx,
-            "Search engine",
-            "Used for searches from the address bar.",
-            select,
-        )],
     )
+    .focusable(true)
+    .on_press(move |state: &mut AppState| state.remove_search_engine(index));
+    let address = text(engine.url())
+        .font(type_::BODY)
+        .color(cx.theme.text_muted)
+        .single_line()
+        .truncate();
+    setting_with(cx, engine.name(), address, remove).key(format!("search-engine-{}", engine.key()))
+}
+
+/// The form that adds an engine: a name, an address with %s for the query, and Add.
+fn add_engine(cx: &PageContext) -> El {
+    let theme = cx.theme;
+    let form = &cx.state.search_engine_form;
+    let name = text_field(
+        theme,
+        &form.name,
+        "search-engine-name",
+        "Search engine name",
+        "Name",
+        |state| &mut state.search_engine_form.name,
+        AppState::add_search_engine,
+    );
+    let url = text_field(
+        theme,
+        &form.url,
+        "search-engine-url",
+        "Search engine address",
+        "Address, with %s",
+        |state| &mut state.search_engine_form.url,
+        AppState::add_search_engine,
+    );
+    let add = Button::new("Add")
+        .disabled(form.name.text.trim().is_empty() || form.url.text.trim().is_empty())
+        .on_press(|state: &mut AppState| state.add_search_engine())
+        .build(&cx.kit);
+    let control = col()
+        .w(theme::PAGE_CONTROL_WIDTH)
+        .gap(space::S2)
+        .child(name)
+        .child(url)
+        .child(row().w_full().justify_end().child(add));
+    let detail = match &form.error {
+        Some(error) => text(error.as_str())
+            .font(type_::BODY)
+            .color(theme.text)
+            .wrap()
+            .role("alert"),
+        None => text(format!(
+            "Put {QUERY_PLACEHOLDER} in the address where the search terms go."
+        ))
+        .font(type_::BODY)
+        .color(theme.text_muted)
+        .wrap(),
+    };
+    setting_with(cx, "Add a search engine", detail, control)
 }
 
 fn downloads(cx: &mut PageContext) -> El {

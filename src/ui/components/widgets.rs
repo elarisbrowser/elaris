@@ -6,7 +6,9 @@
 //! edges, spacing and type. All measurements come from the `PAGE_*` tokens in the theme.
 
 use rune::tok::{space, type_};
-use rune::{Align, El, GrowthSpec, Icon, Spring, col, el, icon, row, text};
+use rune::{
+    Align, El, GrowthSpec, Icon, Key, Spring, TextEdit, col, el, icon, row, text, text_input,
+};
 use rune_kit::Kit;
 
 use crate::app::AppState;
@@ -298,6 +300,48 @@ pub(crate) fn setting_icon(
 
 pub(crate) fn row_title(title: &str, theme: &Theme) -> El {
     text(title).font(theme::PAGE_ROW_TITLE).color(theme.text)
+}
+
+/// A single-line text field filling its row. `edit` finds its text in the state; Return runs
+/// `submit`.
+pub(crate) fn text_field(
+    theme: &Theme,
+    input: &TextEdit,
+    key: &str,
+    label: &str,
+    placeholder: &str,
+    edit: fn(&mut AppState) -> &mut TextEdit,
+    submit: fn(&mut AppState),
+) -> El {
+    let field = text_input(input, type_::BODY)
+        .key(key)
+        .single_line()
+        .grow(1.0)
+        .min_w(0.0)
+        .color(theme.text)
+        .caret(theme.text, theme.selection)
+        .no_focus_ring()
+        .placeholder(placeholder, theme.text_muted)
+        .label(label)
+        .on_edit(edit)
+        .on_input_key(move |state: &mut AppState, event, _| {
+            let enter = event.key == Key::Enter;
+            if enter {
+                submit(state);
+            }
+            enter
+        });
+    row()
+        .w_full()
+        .min_w(0.0)
+        .h(theme::FIELD_HEIGHT)
+        .center_y()
+        .px(theme::FIELD_PADDING)
+        .radius(theme::FIELD_RADIUS)
+        .fill(theme.address_field)
+        .border(1.0, theme.control_border)
+        .focus_within_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
+        .child(field)
 }
 
 /// Buttons laid side by side as one trailing control.

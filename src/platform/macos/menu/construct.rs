@@ -2,6 +2,8 @@
 
 //! Builds the native menu bar and its items, and installs it on the AppKit main thread.
 
+use std::cell::Cell;
+
 use objc2_05::rc::Retained;
 use objc2_05::runtime::{AnyObject, ProtocolObject, Sel};
 use objc2_05::{msg_send, msg_send_id, sel};
@@ -14,7 +16,7 @@ use super::items::{
 };
 use super::quit::quit_guard;
 use super::target::menu_target_class;
-use super::{FULL_SCREEN_ITEM, MENU_ITEMS, MENU_TARGET};
+use super::{FULL_SCREEN_ITEM, KEYS_PAUSED, MENU_ITEMS, MENU_TARGET};
 use crate::app::AppState;
 use crate::shortcuts::Shortcut;
 
@@ -77,19 +79,31 @@ fn set_modifiers(item: &NSMenuItem, shift: bool, option: bool, control: bool) {
     );
 }
 
+/// Takes the shortcut items' keys away while `paused`, so AppKit lets a chord being recorded
+/// reach the window instead of running its menu item, and gives them back after.
+pub(super) fn pause_key_equivalents(paused: bool) {
+    if KEYS_PAUSED.with(|slot| slot.replace(paused)) != paused {
+        apply_key_equivalents();
+    }
+}
+
 /// Gives each shortcut item the chord the keymap has for it now, or none. AppKit answers menu
 /// key equivalents before the window sees the key, so a stale one would keep an old chord alive.
 pub(crate) fn apply_key_equivalents() {
     if MainThreadMarker::new().is_none() {
         return;
     }
+    let paused = KEYS_PAUSED.with(Cell::get);
     MENU_ITEMS.with(|slot| {
         for item in slot.borrow().iter() {
             let tag = unsafe { msg_send![&**item, tag] };
             let Some(Action::Shortcut(shortcut)) = action_from_id(tag) else {
                 continue;
             };
-            let chord = shortcut.binding().map(|binding| binding.chord);
+            let chord = shortcut
+                .binding()
+                .map(|binding| binding.chord)
+                .filter(|_| !paused);
             let key = chord.map_or(String::new(), |chord| chord.key.to_string());
             unsafe { item.setKeyEquivalent(&NSString::from_str(&key)) };
             if let Some(chord) = chord {

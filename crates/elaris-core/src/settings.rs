@@ -391,6 +391,65 @@ impl Settings {
         crate::address::search_url(self.search_engine, &self.custom_search_engines, query)
     }
 
+    /// Adds a provider named `name` that searches with `url`, keyed by a slug of its name that no
+    /// other provider uses. Returns the new provider.
+    pub fn add_custom_search_engine(
+        &mut self,
+        name: &str,
+        url: &str,
+    ) -> Result<SearchEngine, String> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("Enter a name for the search engine.".to_owned());
+        }
+        let slug: String = name
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() {
+                    c.to_ascii_lowercase()
+                } else {
+                    '-'
+                }
+            })
+            .collect::<String>()
+            .split('-')
+            .filter(|part| !part.is_empty())
+            .collect::<Vec<_>>()
+            .join("-");
+        let base = if slug.is_empty() {
+            "engine".to_owned()
+        } else {
+            slug
+        };
+        let taken =
+            |key: &str| SearchEngine::from_config_key(key, &self.custom_search_engines).is_some();
+        let key = std::iter::once(base.clone())
+            .chain((2..).map(|n| format!("{base}-{n}")))
+            .find(|key| !taken(key))
+            .expect("an unused key exists");
+        let engine = CustomSearchEngine::new(&key, name, url.trim()).map_err(|error| {
+            let mut error = error.replacen("its url", "The address", 1);
+            error.push('.');
+            error
+        })?;
+        self.custom_search_engines.push(engine);
+        Ok(SearchEngine::Custom(self.custom_search_engines.len() - 1))
+    }
+
+    /// Removes one of the user's providers. Choosing it falls back to the default provider, and
+    /// later providers keep pointing at the same engines.
+    pub fn remove_custom_search_engine(&mut self, index: usize) {
+        if index >= self.custom_search_engines.len() {
+            return;
+        }
+        self.custom_search_engines.remove(index);
+        self.search_engine = match self.search_engine {
+            SearchEngine::Custom(chosen) if chosen == index => SearchEngine::default(),
+            SearchEngine::Custom(chosen) if chosen > index => SearchEngine::Custom(chosen - 1),
+            other => other,
+        };
+    }
+
     /// Records the chosen provider as `[search].engine` would name it.
     pub fn search_engine_change(&self) -> SettingsChange {
         SettingsChange::SearchEngine(
@@ -456,6 +515,10 @@ pub enum SettingsChange {
     AccentColor(AccentColor),
     /// The provider's `[search].engine` key.
     SearchEngine(String),
+    /// The whole `[search.engines]` table.
+    SearchEngines(Vec<CustomSearchEngine>),
+    /// The whole `[keybindings]` table.
+    KeyBindings(crate::keybindings::KeyBindings),
     DownloadDirectory(DownloadDirectory),
     Startup(StartupMode),
     GlassEnabled(bool),
@@ -475,6 +538,38 @@ pub enum SettingsChange {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn custom_engines_get_unique_keys_and_removal_keeps_the_choice() {
+        let mut settings = Settings::default();
+        let url = "https://example.com/?q=%s";
+        settings
+            .add_custom_search_engine("My Engine!", url)
+            .unwrap();
+        let second = settings.add_custom_search_engine("my engine", url).unwrap();
+        settings.add_custom_search_engine("Google", url).unwrap();
+        let keys: Vec<_> = settings
+            .custom_search_engines
+            .iter()
+            .map(|e| e.key())
+            .collect();
+        assert_eq!(keys, ["my-engine", "my-engine-2", "google-2"]);
+        assert!(settings.add_custom_search_engine(" ", url).is_err());
+        let error = settings
+            .add_custom_search_engine("X", "example.com")
+            .unwrap_err();
+        assert!(error.starts_with("The address must start"), "{error}");
+
+        settings.set_search_engine(second);
+        settings.remove_custom_search_engine(0);
+        assert_eq!(settings.search_engine, SearchEngine::Custom(0));
+        assert_eq!(
+            settings.search_engine_label(settings.search_engine),
+            "my engine"
+        );
+        settings.remove_custom_search_engine(0);
+        assert_eq!(settings.search_engine, SearchEngine::default());
+    }
 
     #[test]
     fn defaults_are_sensible_and_download_paths_are_validated() {

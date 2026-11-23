@@ -7,6 +7,7 @@ pub(super) fn active_url(state: &AppState) -> &str {
 }
 
 mod bookmarks;
+mod customize;
 mod find;
 mod history;
 mod horizontal_tabs;

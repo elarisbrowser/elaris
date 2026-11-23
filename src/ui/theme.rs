@@ -410,6 +410,10 @@ pub(crate) const FOCUS_WIDTH: f32 = 2.0;
 pub(crate) const FIELD_HEIGHT: f32 = 36.0;
 pub(crate) const FIELD_PADDING: f32 = space::S3;
 pub(crate) const FIELD_RADIUS: f32 = radius::LG;
+/// The keys a shortcut shows in Settings, wide enough for "Ctrl+Shift+Alt+X".
+pub(crate) const SHORTCUT_FIELD_WIDTH: f32 = 136.0;
+/// As tall as the buttons beside it, so a list of shortcuts stays compact.
+pub(crate) const SHORTCUT_FIELD_HEIGHT: f32 = FIELD_HEIGHT - 8.0;
 
 /// The floating search palette and its compact result rows.
 pub(crate) const OMNIBOX_WIDTH: f32 = 680.0;

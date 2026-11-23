@@ -7,7 +7,8 @@ page and skipped; the rest of the file still applies.
 
 ## Custom search engines
 
-Add a table under `[search.engines]` for each provider, then select it in Settings, the omnibox's
+Settings → Browsing → Search adds and removes search engines. Each one is saved as a table under
+`[search.engines]`, which you can also write by hand. Select an engine in Settings, the omnibox's
 search engine menu, or `[search].engine`:
 
 ```toml
@@ -33,7 +34,14 @@ generic search glyph instead of a brand mark.
 
 ## Keyboard shortcuts
 
-`[keybindings]` replaces the keys of any action listed below. Actions not listed keep their
+Settings → Keyboard shortcuts lists every action with its keys. Click the keys, then press the new
+chord: Backspace removes the action's keys, Escape or a click elsewhere cancels, and the reset button
+restores the default. A chord that another action had moves to the one you're recording, and
+Settings says which action lost it. While Settings is listening, the macOS menu bar's shortcut keys
+pause, so a chord reaches the recorder instead of running its menu item.
+
+Settings saves the result to `[keybindings]` and replaces that table, so comments inside it are not
+kept. `[keybindings]` replaces the keys of any action listed below. Actions not listed keep their
 defaults.
 
 ```toml

@@ -33,6 +33,8 @@ thread_local! {
     static MENU_STATE: RefCell<Option<MenuState>> = const { RefCell::new(None) };
     static APP_HANDLES: RefCell<HashMap<u64, rune::AppHandle<AppState>>> = RefCell::new(HashMap::new());
     static ACTIVE_WINDOW: Cell<Option<u64>> = const { Cell::new(None) };
+    /// Shortcut items show no keys while Settings records a new chord.
+    static KEYS_PAUSED: Cell<bool> = const { Cell::new(false) };
     /// Windows whose pages have not yet agreed to unload for a pending quit.
     static QUIT_PENDING: RefCell<Option<HashSet<u64>>> = const { RefCell::new(None) };
 }

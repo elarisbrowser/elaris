@@ -204,6 +204,8 @@ impl AppState {
             history_page: HistoryPage::default(),
             task_manager: Default::default(),
             memory_saver: Default::default(),
+            search_engine_form: Default::default(),
+            shortcut_recorder: Default::default(),
             window_title: None,
             zoom_menu: None,
             translate_menu: None,

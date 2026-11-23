@@ -99,6 +99,7 @@ pub(super) fn apply_menu_state(snapshot: MenuState, mtm: MainThreadMarker) {
             };
         }
     });
+    super::construct::pause_key_equivalents(snapshot.recording_shortcut);
 }
 
 fn menu_command(action: Action) -> Option<MenuCommand> {

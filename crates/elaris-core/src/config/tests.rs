@@ -339,6 +339,56 @@ fn keybindings_accept_one_chord_a_list_or_nothing() {
 }
 
 #[test]
+fn search_engines_and_keybindings_tables_round_trip() {
+    let path = std::env::temp_dir().join(format!(
+        "elaris-config-tables-{}-{}.toml",
+        std::process::id(),
+        NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed)
+    ));
+    fs::write(&path, "# mine\n[keybindings]\nfind = \"mod+j\"\n").unwrap();
+    let mut settings = Settings::default();
+    settings
+        .add_custom_search_engine("Kagi Search", "https://kagi.com/search?q=%s")
+        .unwrap();
+    let mut bindings = crate::keybindings::KeyBindings::new();
+    bindings.insert("new_tab".to_owned(), vec![Chord::new('k', true, false)]);
+    bindings.insert("copy_address".to_owned(), Vec::new());
+    bindings.insert(
+        "zoom_in".to_owned(),
+        vec![Chord::new('=', false, false), Chord::new('=', true, false)],
+    );
+    for change in [
+        SettingsChange::SearchEngines(settings.custom_search_engines.clone()),
+        SettingsChange::KeyBindings(bindings.clone()),
+    ] {
+        write_change(&path, &change).unwrap();
+    }
+    let contents = fs::read_to_string(&path).unwrap();
+    assert!(contents.starts_with("# mine\n"), "{contents}");
+    assert!(
+        contents.contains("[search.engines.kagi-search]"),
+        "{contents}"
+    );
+    assert!(!contents.contains("[search.engines]\n"), "{contents}");
+    let loaded = parse(&contents).unwrap();
+    assert!(loaded.issues.is_empty(), "{:?}", loaded.issues);
+    assert_eq!(
+        loaded.settings.custom_search_engines,
+        settings.custom_search_engines
+    );
+    assert_eq!(loaded.settings.keybindings, bindings);
+
+    write_change(&path, &SettingsChange::SearchEngines(Vec::new())).unwrap();
+    write_change(&path, &SettingsChange::KeyBindings(Default::default())).unwrap();
+    let contents = fs::read_to_string(&path).unwrap();
+    assert!(
+        !contents.contains("engines") && !contents.contains("keybindings"),
+        "{contents}"
+    );
+    fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn invalid_values_fall_back_with_key_specific_messages() {
     let config = parse(
         "[appearance]\ntheme = \"sepia\"\n[search]\nengine = 5\n[downloads]\ndirectory = \"relative\"\n[startup]\nmode = \"later\"\n",

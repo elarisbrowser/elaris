@@ -1,0 +1,49 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
+//! The Settings form that adds the user's own search engines, and removing them again.
+
+use rune::TextEdit;
+
+use super::AppState;
+use elaris_core::address::SearchEngine;
+use elaris_core::settings::SettingsChange;
+
+/// What is being typed into the Add search engine form, and why the last attempt failed.
+#[derive(Default)]
+pub(crate) struct SearchEngineForm {
+    pub(crate) name: TextEdit,
+    pub(crate) url: TextEdit,
+    pub(crate) error: Option<String>,
+}
+
+impl AppState {
+    /// Adds the engine the form describes, or says what is wrong with it.
+    pub(crate) fn add_search_engine(&mut self) {
+        let form = &self.search_engine_form;
+        let added = self
+            .settings
+            .add_custom_search_engine(&form.name.text, &form.url.text);
+        match added {
+            Ok(_) => {
+                self.search_engine_form = SearchEngineForm::default();
+                self.save_search_engines();
+            }
+            Err(error) => self.search_engine_form.error = Some(error),
+        }
+    }
+
+    /// Removes one of the user's engines. If it was the chosen one, the default takes over.
+    pub(crate) fn remove_search_engine(&mut self, index: usize) {
+        let was_chosen = self.settings.search_engine == SearchEngine::Custom(index);
+        self.settings.remove_custom_search_engine(index);
+        self.save_search_engines();
+        if was_chosen {
+            self.save_setting(self.settings.search_engine_change());
+        }
+    }
+
+    fn save_search_engines(&mut self) {
+        let engines = self.settings.custom_search_engines.clone();
+        self.save_setting(SettingsChange::SearchEngines(engines));
+    }
+}

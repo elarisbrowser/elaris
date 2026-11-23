@@ -65,6 +65,11 @@ impl CustomSearchEngine {
     pub fn name(&self) -> &str {
         &self.name
     }
+
+    /// The URL template, with [`QUERY_PLACEHOLDER`] where the query goes.
+    pub fn url(&self) -> &str {
+        &self.template
+    }
 }
 
 impl SearchEngine {
