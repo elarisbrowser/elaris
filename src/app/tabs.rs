@@ -120,7 +120,7 @@ impl super::AppState {
     fn close_window_approved(&self, quit: bool, tx: &mut Tx) {
         #[cfg(target_os = "macos")]
         if quit {
-            crate::menu_macos::quit_window_approved(self.window_id, tx);
+            crate::platform::macos::menu::quit_window_approved(self.window_id, tx);
             return;
         }
         tx.close_window();
@@ -130,7 +130,7 @@ impl super::AppState {
     fn close_window_cancelled(&self, quit: bool) {
         #[cfg(target_os = "macos")]
         if quit {
-            crate::menu_macos::quit_cancelled();
+            crate::platform::macos::menu::quit_cancelled();
         }
     }
 
@@ -309,7 +309,7 @@ impl super::AppState {
 
     pub(crate) fn cancel_tab_drag(&mut self) -> bool {
         #[cfg(target_os = "macos")]
-        crate::drag_overlay_macos::hide(self.window_id);
+        crate::platform::macos::drag_overlay::hide(self.window_id);
         super::cross_window_drag::clear(self.window_id)
             | self.split_preview.take().is_some()
             | self.tab_drag.cancel()

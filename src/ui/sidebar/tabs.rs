@@ -113,7 +113,7 @@ pub(in crate::ui) fn drag_overlay(
     let active = state.browser.active_tab().map(Tab::id);
     let show_inline = {
         #[cfg(elaris_ui = "macos")]
-        let show = !crate::drag_overlay_macos::shown();
+        let show = !crate::platform::macos::drag_overlay::shown();
         #[cfg(not(elaris_ui = "macos"))]
         let show = true;
         show
@@ -678,7 +678,7 @@ pub(in crate::ui) fn tab_drag_handler(row: El, id: TabId, members: Vec<TabId>) -
         }
         rune::Phase::Up => {
             #[cfg(elaris_ui = "macos")]
-            crate::drag_overlay_macos::hide(state.window_id);
+            crate::platform::macos::drag_overlay::hide(state.window_id);
 
             if !state.tab_drag.is_dragging()
                 && crate::app::cross_window_drag::release_pending(state.window_id)

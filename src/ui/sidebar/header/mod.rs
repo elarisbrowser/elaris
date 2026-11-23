@@ -284,7 +284,7 @@ pub(in crate::ui) fn linux_window_controls(state: &AppState, theme: &Theme) -> V
 }
 
 /// Plain circles under the native window controls, which stay transparent until the pointer
-/// reaches them (`titlebar_controls`). `inset` is where the zoom button ends; with no controls
+/// reaches them (`platform::macos::titlebar`). `inset` is where the zoom button ends; with no controls
 /// over the content, as in full screen, it is zero and nothing is drawn.
 #[cfg(not(elaris_ui = "linux"))]
 pub(in crate::ui) fn window_controls(inset: f32, theme: &Theme) -> El {

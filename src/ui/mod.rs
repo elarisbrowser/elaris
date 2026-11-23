@@ -58,7 +58,7 @@ pub(crate) use theme::FIND_MOTION;
 
 pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     #[cfg(elaris_ui = "macos")]
-    crate::menu_macos::refresh(state);
+    crate::platform::macos::menu::refresh(state);
     if state.is_mini() {
         return mini::view(state, cx);
     }

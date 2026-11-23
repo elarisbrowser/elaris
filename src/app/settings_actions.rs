@@ -136,11 +136,11 @@ impl super::AppState {
     }
 
     pub(crate) fn refresh_default_browser(&mut self) {
-        self.default_browser = crate::default_browser::is_default();
+        self.default_browser = crate::platform::default_browser::is_default();
     }
 
     pub(crate) fn make_default_browser(&mut self) {
-        self.default_browser_error = crate::default_browser::make_default().err();
+        self.default_browser_error = crate::platform::default_browser::make_default().err();
         self.refresh_default_browser();
     }
 

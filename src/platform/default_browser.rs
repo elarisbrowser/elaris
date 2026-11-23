@@ -3,9 +3,9 @@
 //! Whether Elaris opens web links by default, and the request that makes it so.
 
 #[cfg(target_os = "linux")]
-use crate::default_browser_linux as platform;
+use super::linux::default_browser as platform;
 #[cfg(target_os = "macos")]
-use crate::default_browser_macos as platform;
+use super::macos::default_browser as platform;
 
 /// Whether Elaris is the default web browser, or `None` when the system cannot say.
 pub(crate) fn is_default() -> Option<bool> {

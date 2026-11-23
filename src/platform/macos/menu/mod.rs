@@ -2,6 +2,8 @@
 
 //! Native macOS application menus, dispatched into Elaris's shared browser actions.
 
+mod state;
+
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 
@@ -14,8 +16,8 @@ use objc2_app_kit_02::{
 use objc2_foundation_02::{MainThreadMarker, NSString};
 use rune::Tx;
 
+use self::state::{MenuCommand, MenuState};
 use crate::app::AppState;
-use crate::menu_state::{MenuCommand, MenuState};
 use crate::shortcuts::{self, Shortcut};
 use crate::tab::{Tab, TabSection};
 

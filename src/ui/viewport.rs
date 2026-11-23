@@ -690,7 +690,7 @@ fn page(
         .on_wheel(move |state: &mut AppState, wheel, _| {
             if let Some(id) = id.filter(|_| !internal) {
                 if state.browser.wheel_page(id, wheel) {
-                    crate::trackpad::threshold_haptic();
+                    crate::platform::trackpad::threshold_haptic();
                 }
                 true
             } else {

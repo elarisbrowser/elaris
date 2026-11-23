@@ -10,13 +10,13 @@ use x11rb::{
 };
 
 #[derive(Clone, Copy)]
-pub(super) struct Placement {
+pub(crate) struct Placement {
     pointer: (i32, i32),
     bounds: [i32; 4],
 }
 
 impl Placement {
-    pub(super) fn apply(self, window: &WindowHandle) {
+    pub(crate) fn apply(self, window: &WindowHandle) {
         let Some(window_placement) = window.placement() else {
             return;
         };
@@ -36,7 +36,7 @@ impl Placement {
     }
 }
 
-pub(super) fn placement(window: &WindowHandle) -> Option<Placement> {
+pub(crate) fn placement(window: &WindowHandle) -> Option<Placement> {
     window
         .with_raw_handle(|handle| {
             matches!(

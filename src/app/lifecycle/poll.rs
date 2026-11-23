@@ -14,14 +14,14 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     }
     #[cfg(target_os = "macos")]
     let deactivated_drag = super::super::transfer::in_progress()
-        && !crate::window_macos::application_active()
+        && !crate::platform::macos::window::application_active()
         && super::cancel_deactivated_drag(state, tx);
     #[cfg(not(target_os = "macos"))]
     let deactivated_drag = false;
     let incoming_drag = super::super::cross_window_drag::poll(state, tx);
     let transferred = state.advance_tab_transfer(tx);
     #[cfg(target_os = "macos")]
-    let native_preview_changed = crate::drag_overlay_macos::poll(state, tx);
+    let native_preview_changed = crate::platform::macos::drag_overlay::poll(state, tx);
     #[cfg(not(target_os = "macos"))]
     let native_preview_changed = false;
     super::super::detach::poll(state, tx);

@@ -171,7 +171,7 @@ fn sample_outside_source(id: u64, main: MainThreadMarker) -> Option<(NSPoint, NS
     // SAFETY: this poll runs on AppKit's main thread.
     let pointer = unsafe { NSEvent::mouseLocation() };
     let window = crate::app::native_window(id)?;
-    let frame = crate::window_macos::with_window(&window, |native| native.frame())?;
+    let frame = crate::platform::macos::window::with_window(&window, |native| native.frame())?;
     if pointer.x >= frame.origin.x
         && pointer.x < frame.origin.x + frame.size.width
         && pointer.y >= frame.origin.y

@@ -5,41 +5,31 @@ mod app;
 mod appearance;
 mod browser;
 mod config;
-mod default_browser;
-#[cfg(target_os = "linux")]
-mod default_browser_linux;
-#[cfg(target_os = "macos")]
-mod default_browser_macos;
 mod dev;
 mod download_history;
-#[cfg(target_os = "macos")]
-mod drag_overlay_macos;
 mod engine;
 mod input;
 mod internal;
-#[cfg(target_os = "macos")]
-mod menu_macos;
-#[cfg(target_os = "macos")]
-mod menu_state;
 mod omnibox;
 mod page_accessibility;
 mod perf;
 mod permissions;
+mod platform;
 mod settings;
 mod shortcuts;
 mod site_controls;
 mod storage;
 mod tab;
-#[cfg(target_os = "macos")]
-mod titlebar_controls;
-mod trackpad;
 mod ui;
-#[cfg(target_os = "macos")]
-mod window_macos;
 
 use std::sync::Arc;
 
 use rune::{App, AppSpec, Chrome, WindowOptions, WindowSpec};
+
+#[cfg(target_os = "macos")]
+use platform::macos::{drag_overlay, menu};
+#[cfg(elaris_ui = "macos")]
+use platform::macos::{titlebar, window};
 
 fn main() {
     // Matches the desktop entry's id, so Linux desktops show Elaris's name and icon for its windows.
@@ -49,13 +39,13 @@ fn main() {
     #[cfg(target_os = "macos")]
     let app = {
         let mut app = app.keep_running().release_gpu_when_closed();
-        drag_overlay_macos::install(&mut app);
+        drag_overlay::install(&mut app);
         app
     };
     let app_handle = app.handle();
     let app = app.on_ready(move |_| {
         #[cfg(target_os = "macos")]
-        menu_macos::install(app_handle.clone());
+        menu::install(app_handle.clone());
         start_window_workers(app_handle.clone());
         let wake_handle = app_handle.clone();
         app::termination::install(move || wake_handle.wake());
@@ -120,9 +110,9 @@ fn configure_app(app: App<app::AppState>) -> App<app::AppState> {
             register_handle.update(move |state, _| {
                 app::register_window(state.window_id, retained_window);
             });
-            window_macos::install(window);
-            titlebar_controls::install(window);
-            if let Some(display) = titlebar_controls::display_metadata(window) {
+            window::install(window);
+            titlebar::install(window);
+            if let Some(display) = titlebar::display_metadata(window) {
                 app_handle.update(move |state, _| state.set_display(display));
             }
         })
@@ -151,7 +141,7 @@ fn start_window_workers(handle: rune::AppHandle<app::AppState>) {
         app::start_workers(state, waker);
         let restored = state.take_restored_windows();
         #[cfg(target_os = "macos")]
-        menu_macos::register_window(state.window_id, menu_handle);
+        menu::register_window(state.window_id, menu_handle);
         for session in restored {
             open_browser_window_with_session(session);
         }
