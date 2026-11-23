@@ -218,6 +218,15 @@ typedef struct {
     int32_t click_count;
 } ElarisLadybirdMouseEvent;
 
+/* A trackpad pinch, which zooms the page's visual viewport about the pointer as Ladybird's own UI does. */
+typedef struct {
+    int32_t x; /* Device pixels from the view's top-left. */
+    int32_t y;
+    int32_t modifiers;
+    double scale_delta;        /* Scale by 1 + scale_delta; positive zooms in. */
+    int32_t continues_gesture; /* Nonzero for every step of a pinch after its first. */
+} ElarisLadybirdPinchEvent;
+
 typedef enum {
     ELARIS_LADYBIRD_KEY_PRESS = 1,
     ELARIS_LADYBIRD_KEY_RELEASE = 2,
@@ -355,6 +364,7 @@ int32_t elaris_ladybird_gpu_frame(ElarisLadybirdView* view, ElarisLadybirdGpuFra
  * of older frames. */
 int32_t elaris_ladybird_release_frames(ElarisLadybirdView* view, uint64_t completed_serial);
 int32_t elaris_ladybird_mouse_event(ElarisLadybirdView* view, const ElarisLadybirdMouseEvent* event);
+int32_t elaris_ladybird_pinch_event(ElarisLadybirdView* view, const ElarisLadybirdPinchEvent* event);
 typedef enum {
     ELARIS_EDIT_COPY,
     ELARIS_EDIT_CUT,

@@ -2770,6 +2770,24 @@ extern "C" int32_t elaris_ladybird_mouse_event(ElarisLadybirdView* handle, Elari
     return succeed();
 }
 
+extern "C" int32_t elaris_ladybird_pinch_event(ElarisLadybirdView* handle, ElarisLadybirdPinchEvent const* event) {
+    if (!handle || !event)
+        return fail("view and pinch event are required");
+    if (!on_owner_thread(handle->bridge))
+        return fail("input must be sent on the initialization thread");
+    if (!std::isfinite(event->scale_delta))
+        return fail("pinch scale must be finite");
+
+    // As Ladybird's Qt view sends a native zoom gesture.
+    Web::PinchEvent pinch;
+    pinch.position = {event->x, event->y};
+    pinch.modifiers = to_modifiers(event->modifiers);
+    pinch.scale_delta = event->scale_delta;
+    pinch.continues_gesture = event->continues_gesture != 0;
+    handle->view->enqueue_input_event(AK::move(pinch));
+    return succeed();
+}
+
 extern "C" int32_t elaris_ladybird_key_event(ElarisLadybirdView* handle, ElarisLadybirdKeyEvent const* event) {
     if (!handle || !event)
         return fail("view and key event are required");
