@@ -34,6 +34,10 @@ pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
     {
         // The toggle and navigation always show; revealing the row only adds the window
         // controls and pushes the page down beneath them.
+        // A system frame draws its own bar, so Elaris's toolbar is left out entirely.
+        if crate::app::LinuxDecorations::current() == crate::app::LinuxDecorations::System {
+            return el();
+        }
         let visible = header_revealed(state);
         let header = header_content(state, theme, cx, visible);
         if visible {
@@ -54,8 +58,12 @@ pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
 
 /// Whether the Linux row shows its window controls and holds the page below it: always with the
 /// sidebar closed or on the right, otherwise while the pointer is at the top edge or in the row.
+/// Never with a system frame, which has no toolbar to show.
 #[cfg(elaris_ui = "linux")]
 pub(crate) fn header_revealed(state: &AppState) -> bool {
+    if crate::app::LinuxDecorations::current() == crate::app::LinuxDecorations::System {
+        return false;
+    }
     state.sidebar.collapsed
         || state.sidebar_on_right()
         || state.titlebar.is_visible()

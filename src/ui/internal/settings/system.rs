@@ -45,7 +45,7 @@ fn window_frame(cx: &mut PageContext) -> El {
             mode.label().to_lowercase()
         ),
         None => "Automatic uses the system frame on tiling window managers, where Elaris \
-                 hides its window controls. Changes apply after a restart."
+                 hides its toolbar and window controls. Changes apply after a restart."
             .to_owned(),
     };
     if cx.state.restart_notice {
