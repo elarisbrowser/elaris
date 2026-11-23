@@ -38,8 +38,6 @@ mod window_macos;
 
 use std::sync::Arc;
 
-#[cfg(elaris_ui = "linux")]
-use rune::raw_window_handle::RawWindowHandle;
 use rune::{App, AppSpec, Chrome, WindowOptions, WindowSpec};
 
 fn main() {
@@ -107,15 +105,7 @@ fn configure_app(app: App<app::AppState>) -> App<app::AppState> {
         app.on_window(move |window| {
             let retained_window = window.clone();
             let register_handle = app_handle.clone();
-            let x11_window = window
-                .with_raw_handle(|handle| match handle.as_raw() {
-                    RawWindowHandle::Xlib(handle) => Some(handle.window),
-                    _ => None,
-                })
-                .ok()
-                .flatten();
             register_handle.update(move |state, _| {
-                state.titlebar.set_x11_window(x11_window);
                 app::register_window(state.window_id, retained_window);
             });
         })
