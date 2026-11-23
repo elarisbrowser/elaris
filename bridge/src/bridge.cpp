@@ -1572,6 +1572,25 @@ extern "C" int32_t elaris_ladybird_start_download(ElarisLadybird* bridge, char c
     return succeed();
 }
 
+extern "C" int32_t elaris_ladybird_start_download_to(ElarisLadybird* bridge, char const* input_url,
+                                                    char const* destination, uint64_t* out_download_id) {
+    if (out_download_id)
+        *out_download_id = 0;
+    if (!bridge || !input_url || !destination || !destination[0] || !out_download_id)
+        return fail("bridge, URL, destination, and download id output are required");
+    if (!on_owner_thread(bridge))
+        return fail("download must start on the initialization thread");
+    auto parsed = URL::Parser::basic_parse(AK::StringView(input_url, std::char_traits<char>::length(input_url)));
+    if (!parsed.has_value() || !parsed->scheme().is_one_of("http"sv, "https"sv))
+        return fail("download URL must use HTTP or HTTPS");
+
+    // The user chose this path in a save dialog, so an existing file there is replaced.
+    *out_download_id = s_application->file_downloader().download_file(
+        WebView::IsPrivate::No, parsed.value(), AK::LexicalPath{destination},
+        WebView::FileDownloader::MayReplaceDestination::Yes);
+    return succeed();
+}
+
 extern "C" int32_t elaris_ladybird_cancel_download(ElarisLadybird* bridge, uint64_t download_id) {
     if (!bridge)
         return fail("bridge is required");

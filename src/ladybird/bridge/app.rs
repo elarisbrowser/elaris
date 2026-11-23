@@ -376,6 +376,24 @@ impl Ladybird {
         Ok(id)
     }
 
+    /// Starts a direct HTTP(S) download to a destination the user chose, replacing a file already there.
+    pub fn start_download_to(&mut self, url: &str, destination: &Path) -> Result<u64, String> {
+        let url = CString::new(url).map_err(|_| "URL contains an interior NUL byte".to_owned())?;
+        let destination = CString::new(destination.as_os_str().as_encoded_bytes())
+            .map_err(|_| "destination contains an interior NUL byte".to_owned())?;
+        let mut id = 0;
+        // SAFETY: Both strings and the output stay live through this owner-thread call.
+        status_result(unsafe {
+            elaris_ladybird_start_download_to(
+                self.owner.raw.as_ptr(),
+                url.as_ptr(),
+                destination.as_ptr(),
+                &mut id,
+            )
+        })?;
+        Ok(id)
+    }
+
     /// Cancels a Ladybird transfer by its bridge-side identifier.
     pub fn cancel_download(&mut self, id: u64) -> Result<(), String> {
         // SAFETY: The bridge is live on its owner thread.

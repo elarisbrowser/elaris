@@ -299,6 +299,9 @@ int32_t elaris_ladybird_set_download_directory(ElarisLadybird* bridge, const cha
 /* Starts an HTTP(S) URL through Ladybird's request server and returns its Ladybird-side ID. */
 int32_t elaris_ladybird_start_download(ElarisLadybird* bridge, const char* url, const char* suggested_filename,
                                        uint64_t* out_download_id);
+/* Starts an HTTP(S) URL to a destination the user chose, replacing any file already there. */
+int32_t elaris_ladybird_start_download_to(ElarisLadybird* bridge, const char* url, const char* destination,
+                                          uint64_t* out_download_id);
 int32_t elaris_ladybird_cancel_download(ElarisLadybird* bridge, uint64_t download_id);
 /* Cancels every in-flight download. */
 int32_t elaris_ladybird_cancel_active_downloads(ElarisLadybird* bridge);

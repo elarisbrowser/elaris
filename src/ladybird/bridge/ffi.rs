@@ -121,6 +121,12 @@ unsafe extern "C" {
         suggested_filename: *const c_char,
         out_download_id: *mut u64,
     ) -> i32;
+    pub(super) fn elaris_ladybird_start_download_to(
+        bridge: *mut RawBridge,
+        url: *const c_char,
+        destination: *const c_char,
+        out_download_id: *mut u64,
+    ) -> i32;
     pub(super) fn elaris_ladybird_cancel_download(bridge: *mut RawBridge, download_id: u64) -> i32;
     pub(super) fn elaris_ladybird_cancel_active_downloads(bridge: *mut RawBridge) -> i32;
     pub(super) fn elaris_ladybird_pause_download(
