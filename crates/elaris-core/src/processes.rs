@@ -315,6 +315,25 @@ fn contains(haystack: &str, lowercase_needle: &str) -> bool {
     haystack.to_lowercase().contains(lowercase_needle)
 }
 
+/// The memory each browser tab's page holds, in bytes, by the tab's view ID. A process shared by
+/// several tabs of one site is split evenly between them, and the helpers it owns, such as its
+/// media server, count towards it.
+pub fn tab_memory(processes: &[Process]) -> std::collections::HashMap<u64, u64> {
+    let mut memory = std::collections::HashMap::new();
+    for process in processes.iter().filter(|process| !process.tabs.is_empty()) {
+        let helpers: u64 = processes
+            .iter()
+            .filter(|helper| helper.owner == Some(process.id))
+            .map(|helper| helper.memory)
+            .sum();
+        let share = (process.memory + helpers) / process.tabs.len() as u64;
+        for tab in process.tabs.iter().filter(|tab| tab.view != 0) {
+            *memory.entry(tab.view).or_default() += share;
+        }
+    }
+    memory
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -334,6 +353,25 @@ mod tests {
             tabs: Vec::new(),
             frames: Vec::new(),
         }
+    }
+
+    #[test]
+    fn tab_memory_splits_shared_processes_and_counts_helpers() {
+        let tab = |view| ProcessTab {
+            view,
+            title: String::new(),
+        };
+        let mut shared = process(2, "WebContent", "a.example", 600);
+        shared.tabs = vec![tab(7), tab(8)];
+        let mut alone = process(3, "WebContent", "b.example", 100);
+        alone.tabs = vec![tab(9)];
+        let mut helper = process(4, "MediaServer", "", 50);
+        helper.owner = Some(3);
+        let memory = tab_memory(&[process(1, "Browser", "", 999), shared, alone, helper]);
+        assert_eq!(memory[&7], 300);
+        assert_eq!(memory[&8], 300);
+        assert_eq!(memory[&9], 150);
+        assert_eq!(memory.len(), 3);
     }
 
     #[test]

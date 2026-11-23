@@ -3,8 +3,8 @@
 //! Memory Saver: which background tabs to put to sleep, and when.
 //!
 //! Two things put a tab to sleep. Time: a tab left unseen for its mode's idle limit sleeps. Memory
-//! pressure: while the system runs short, the limit drops, and the longest-unseen tab sleeps, one
-//! per check, so each check can measure what the last one freed. A tab doing something that sleep
+//! pressure: while the system runs short, the limit drops, and the tab that frees the most sleeps,
+//! one per check, so each check can measure what the last one freed. A tab doing something that sleep
 //! would break, such as playing audio or using the microphone, is never chosen.
 
 use std::time::Duration;
@@ -114,7 +114,7 @@ impl MemorySaver {
     }
 
     /// The tabs to put to sleep now. Every tab past its normal idle limit sleeps; under pressure,
-    /// so does the longest-unseen tab past the lowered limit.
+    /// so does the one past the lowered limit that frees the most, by [`Candidate::score`].
     pub fn choose<Id: Copy>(self, pressure: Pressure, candidates: &[Candidate<Id>]) -> Vec<Id> {
         let Some(limits) = self.limits() else {
             return Vec::new();
@@ -134,7 +134,7 @@ impl MemorySaver {
                 .iter()
                 .filter(eligible)
                 .filter(|candidate| candidate.idle >= limit && candidate.idle < limits.normal)
-                .max_by_key(|candidate| candidate.idle)
+                .max_by_key(|candidate| candidate.score())
             {
                 chosen.push(oldest.id);
             }
@@ -196,7 +196,23 @@ pub struct Candidate<Id> {
     pub favourite: bool,
     /// Doing something that sleep would break, such as playing audio or using the microphone.
     pub busy: bool,
+    /// The memory the tab's page holds, in bytes, when the engine has said.
+    pub memory: Option<u64>,
 }
+
+impl<Id> Candidate<Id> {
+    /// How worthwhile sleeping the tab is: the memory it frees, weighed by how long it has gone
+    /// unseen, since a tab used a little while ago is likely to be used again soon. A tab whose
+    /// memory is unknown counts as holding [`ASSUMED_TAB_MEMORY`].
+    pub fn score(&self) -> u128 {
+        let megabytes = self.memory.unwrap_or(ASSUMED_TAB_MEMORY) / MEGABYTE;
+        u128::from(megabytes.max(1)) * (self.idle.as_secs().max(1) as f64).sqrt() as u128
+    }
+}
+
+const MEGABYTE: u64 = 1024 * 1024;
+/// What a page whose memory is unknown is taken to hold: a typical small page.
+pub const ASSUMED_TAB_MEMORY: u64 = 100 * MEGABYTE;
 
 #[cfg(test)]
 mod tests {
@@ -210,6 +226,7 @@ mod tests {
             idle: MINUTE * minutes as u32,
             favourite: false,
             busy: false,
+            memory: None,
         }
     }
 
@@ -238,6 +255,24 @@ mod tests {
         assert_eq!(
             MemorySaver::Balanced.choose(Pressure::Normal, &tabs),
             [0; 0]
+        );
+    }
+
+    #[test]
+    fn pressure_prefers_the_tab_that_frees_the_most() {
+        let mut heavy = tab(1, 12);
+        heavy.memory = Some(2048 * MEGABYTE);
+        let mut light = tab(2, 50);
+        light.memory = Some(40 * MEGABYTE);
+        assert_eq!(
+            MemorySaver::Balanced.choose(Pressure::Elevated, &[heavy, light]),
+            [1]
+        );
+        // With similar memory, the longer-unseen tab goes first.
+        heavy.memory = light.memory;
+        assert_eq!(
+            MemorySaver::Balanced.choose(Pressure::Elevated, &[heavy, light]),
+            [2]
         );
     }
 
