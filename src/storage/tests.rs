@@ -2,10 +2,13 @@
 
 use super::session::{load_session, load_sessions, write_session_atomic, write_sessions_atomic};
 use super::*;
+use elaris_core::history::History;
 use elaris_core::paths::Platform;
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, mpsc};
 
 static NEXT_TEMP: AtomicU64 = AtomicU64::new(1);
 
