@@ -64,14 +64,21 @@ fn pages(cx: &mut PageContext) -> El {
 }
 
 fn search(cx: &mut PageContext) -> El {
-    const OPTIONS: [SearchEngine; 4] = [
+    const BUILT_IN: [SearchEngine; 4] = [
         SearchEngine::DuckDuckGo,
         SearchEngine::Google,
         SearchEngine::Bing,
         SearchEngine::Brave,
     ];
+    let settings = &cx.state.settings;
+    let custom = (0..settings.custom_search_engines.len()).map(SearchEngine::Custom);
+    let options: Vec<_> = BUILT_IN
+        .into_iter()
+        .chain(custom)
+        .map(|engine| (engine, settings.search_engine_label(engine).to_owned()))
+        .collect();
     let select = Dropdown::new("settings-search-engine", "Search engine")
-        .options(OPTIONS.map(|option| (option, option.label())))
+        .options(options)
         .current(cx.state.settings.search_engine)
         .open(cx.state.settings_picker_open)
         .on_toggle(|state| state.settings_picker_open = !state.settings_picker_open)

@@ -156,7 +156,7 @@ impl super::AppState {
             return;
         }
         self.settings.set_search_engine(search_engine);
-        self.save_setting(SettingsChange::SearchEngine(search_engine));
+        self.save_setting(self.settings.search_engine_change());
     }
 
     pub(crate) fn set_download_directory(&mut self, directory: DownloadDirectory) {

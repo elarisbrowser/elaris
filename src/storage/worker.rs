@@ -288,7 +288,7 @@ pub(super) fn run_worker(
                 notify(&shared);
             }
             Command::ReloadConfig => {
-                let result = config::load_or_create(&config_file);
+                let result = config::load_or_create(&config_file).map(Box::new);
                 config_events
                     .lock()
                     .expect("configuration event lock poisoned")

@@ -18,7 +18,7 @@ impl super::AppState {
         let result = match address::destination_for_input(&address) {
             Ok(Destination::Url(url)) => self.navigate_destination(&url),
             Ok(Destination::Search(query)) => {
-                self.navigate_destination(&address::search_url(self.settings.search_engine, &query))
+                self.navigate_destination(&self.settings.search_url(&query))
             }
             Err(error) => Err(crate::browser::Error::Address(error)),
         };
@@ -94,7 +94,8 @@ impl super::AppState {
             &bookmarks,
             &history,
             self.sidebar.collapsed,
-            self.settings.search_engine,
+            self.settings
+                .search_engine_label(self.settings.search_engine),
         );
         if self.horizontal_tabs() {
             suggestions.retain(|suggestion| suggestion.action != Action::ToggleSidebar);
@@ -113,9 +114,7 @@ impl super::AppState {
     pub(crate) fn choose_suggestion(&mut self, suggestion: Suggestion, tx: &mut Tx) {
         let result = match suggestion.action {
             Action::Navigate(url) => self.navigate_destination(&url),
-            Action::Search(query) => {
-                self.navigate_destination(&address::search_url(self.settings.search_engine, &query))
-            }
+            Action::Search(query) => self.navigate_destination(&self.settings.search_url(&query)),
             Action::VisitRecent(url) => self.navigate_destination(&url),
             Action::SwitchTab(tab) => {
                 self.activate(tab);

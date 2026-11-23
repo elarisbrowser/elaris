@@ -12,31 +12,121 @@ pub enum SearchEngine {
     #[default]
     DuckDuckGo,
     Brave,
+    /// One of the user's own providers, by its position in the custom engine list.
+    Custom(usize),
+}
+
+/// Where a search query goes in a custom provider's URL template.
+pub const QUERY_PLACEHOLDER: &str = "%s";
+
+/// A provider the user added in `[search.engines]`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CustomSearchEngine {
+    key: String,
+    name: String,
+    template: String,
+}
+
+impl CustomSearchEngine {
+    /// Checks the key and URL template; `name` falls back to the key when it is empty.
+    pub fn new(key: &str, name: &str, template: &str) -> Result<Self, String> {
+        if key.is_empty()
+            || !key
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+        {
+            return Err("its key may only use letters, digits, - and _".to_owned());
+        }
+        if SearchEngine::from_built_in_key(key).is_some() {
+            return Err("its key is already used by a built-in engine".to_owned());
+        }
+        let scheme = template.split_once("://").map(|(scheme, _)| scheme);
+        if !matches!(scheme, Some(scheme) if scheme.eq_ignore_ascii_case("https") || scheme.eq_ignore_ascii_case("http"))
+        {
+            return Err("its url must start with https:// or http://".to_owned());
+        }
+        if !template.contains(QUERY_PLACEHOLDER) {
+            return Err(format!(
+                "its url must contain {QUERY_PLACEHOLDER} where the query goes"
+            ));
+        }
+        let name = name.trim();
+        Ok(Self {
+            key: key.to_owned(),
+            name: if name.is_empty() { key } else { name }.to_owned(),
+            template: template.to_owned(),
+        })
+    }
+
+    pub fn key(&self) -> &str {
+        &self.key
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
 }
 
 impl SearchEngine {
-    /// The providers shown in the omnibox menu.
-    pub const ALL: [Self; 4] = [Self::Google, Self::Bing, Self::DuckDuckGo, Self::Brave];
+    /// The built-in providers, in the order the omnibox menu shows them.
+    pub const BUILT_IN: [Self; 4] = [Self::Google, Self::Bing, Self::DuckDuckGo, Self::Brave];
 
-    pub fn label(self) -> &'static str {
+    /// Every provider: the built-in ones, then the user's own in config order.
+    pub fn all(custom: &[CustomSearchEngine]) -> impl Iterator<Item = Self> {
+        Self::BUILT_IN
+            .into_iter()
+            .chain((0..custom.len()).map(Self::Custom))
+    }
+
+    /// A custom engine whose index is out of range resolves to the default provider, so a stale
+    /// index never panics.
+    fn resolve(self, custom: &[CustomSearchEngine]) -> Resolved<'_> {
         match self {
-            Self::Google => "Google",
-            Self::Bing => "Bing",
-            Self::DuckDuckGo => "DuckDuckGo",
-            Self::Brave => "Brave Search",
+            Self::Custom(index) => custom
+                .get(index)
+                .map_or(Resolved::BuiltIn(Self::default()), Resolved::Custom),
+            built_in => Resolved::BuiltIn(built_in),
         }
     }
 
-    pub fn config_key(self) -> &'static str {
-        match self {
-            Self::Google => "google",
-            Self::Bing => "bing",
-            Self::DuckDuckGo => "duckduckgo",
-            Self::Brave => "brave",
+    pub fn label(self, custom: &[CustomSearchEngine]) -> &str {
+        match self.resolve(custom) {
+            Resolved::Custom(engine) => engine.name(),
+            Resolved::BuiltIn(Self::Google) => "Google",
+            Resolved::BuiltIn(Self::Bing) => "Bing",
+            Resolved::BuiltIn(Self::Brave) => "Brave Search",
+            Resolved::BuiltIn(_) => "DuckDuckGo",
         }
     }
 
-    pub fn from_config_key(key: &str) -> Option<Self> {
+    pub fn config_key(self, custom: &[CustomSearchEngine]) -> &str {
+        match self.resolve(custom) {
+            Resolved::Custom(engine) => engine.key(),
+            Resolved::BuiltIn(Self::Google) => "google",
+            Resolved::BuiltIn(Self::Bing) => "bing",
+            Resolved::BuiltIn(Self::Brave) => "brave",
+            Resolved::BuiltIn(_) => "duckduckgo",
+        }
+    }
+
+    /// The custom engine this refers to, if any.
+    pub fn custom(self, custom: &[CustomSearchEngine]) -> Option<&CustomSearchEngine> {
+        match self.resolve(custom) {
+            Resolved::Custom(engine) => Some(engine),
+            Resolved::BuiltIn(_) => None,
+        }
+    }
+
+    pub fn from_config_key(key: &str, custom: &[CustomSearchEngine]) -> Option<Self> {
+        Self::from_built_in_key(key).or_else(|| {
+            custom
+                .iter()
+                .position(|engine| engine.key == key)
+                .map(Self::Custom)
+        })
+    }
+
+    fn from_built_in_key(key: &str) -> Option<Self> {
         match key {
             "google" => Some(Self::Google),
             "bing" => Some(Self::Bing),
@@ -45,15 +135,11 @@ impl SearchEngine {
             _ => None,
         }
     }
+}
 
-    fn search_prefix(self) -> &'static str {
-        match self {
-            Self::Google => "https://www.google.com/search?q=",
-            Self::Bing => "https://www.bing.com/search?q=",
-            Self::DuckDuckGo => "https://duckduckgo.com/?q=",
-            Self::Brave => "https://search.brave.com/search?q=",
-        }
-    }
+enum Resolved<'a> {
+    BuiltIn(SearchEngine),
+    Custom(&'a CustomSearchEngine),
 }
 
 /// What the omnibox should do with its input.
@@ -99,17 +185,22 @@ pub fn destination_for_input(input: &str) -> Result<Destination, &'static str> {
 pub fn url_for_address(input: &str) -> Result<String, &'static str> {
     match destination_for_input(input)? {
         Destination::Url(url) => Ok(url),
-        Destination::Search(query) => Ok(search_url(SearchEngine::default(), &query)),
+        Destination::Search(query) => Ok(search_url(SearchEngine::default(), &[], &query)),
     }
 }
 
 /// Builds a URL for a search without sending the query until it is submitted.
-pub fn search_url(engine: SearchEngine, query: &str) -> String {
-    let prefix = engine.search_prefix();
-    let mut url = String::with_capacity(prefix.len() + query.len() * 3);
-    url.push_str(prefix);
-    encode_url_bytes(&mut url, query.as_bytes(), false);
-    url
+pub fn search_url(engine: SearchEngine, custom: &[CustomSearchEngine], query: &str) -> String {
+    let mut encoded = String::with_capacity(query.len() * 3);
+    encode_url_bytes(&mut encoded, query.as_bytes(), false);
+    let prefix = match engine.resolve(custom) {
+        Resolved::Custom(engine) => return engine.template.replace(QUERY_PLACEHOLDER, &encoded),
+        Resolved::BuiltIn(SearchEngine::Google) => "https://www.google.com/search?q=",
+        Resolved::BuiltIn(SearchEngine::Bing) => "https://www.bing.com/search?q=",
+        Resolved::BuiltIn(SearchEngine::Brave) => "https://search.brave.com/search?q=",
+        Resolved::BuiltIn(_) => "https://duckduckgo.com/?q=",
+    };
+    prefix.to_owned() + &encoded
 }
 
 /// Encodes an absolute local path without treating filename punctuation as URL syntax.
@@ -185,7 +276,8 @@ fn is_local_host(host: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        Destination, SearchEngine, destination_for_input, file_url, search_url, url_for_address,
+        CustomSearchEngine, Destination, SearchEngine, destination_for_input, file_url, search_url,
+        url_for_address,
     };
     use std::path::Path;
 
@@ -243,7 +335,7 @@ mod tests {
     #[test]
     fn encodes_search_queries_as_utf8_url_components() {
         assert_eq!(
-            search_url(SearchEngine::Google, "best Rust GUI / framework?"),
+            search_url(SearchEngine::Google, &[], "best Rust GUI / framework?"),
             "https://www.google.com/search?q=best%20Rust%20GUI%20%2F%20framework%3F"
         );
         assert_eq!(
@@ -276,5 +368,35 @@ mod tests {
             url_for_address("/tmp/page.html").as_deref(),
             Ok("file:///tmp/page.html")
         );
+    }
+
+    #[test]
+    fn custom_engines_fill_every_placeholder_and_resolve_by_key() {
+        let custom =
+            [
+                CustomSearchEngine::new("kagi", "Kagi", "https://kagi.com/search?q=%s&src=%s")
+                    .unwrap(),
+            ];
+        let kagi = SearchEngine::from_config_key("kagi", &custom).unwrap();
+        assert_eq!(kagi, SearchEngine::Custom(0));
+        assert_eq!(kagi.label(&custom), "Kagi");
+        assert_eq!(kagi.config_key(&custom), "kagi");
+        assert_eq!(
+            search_url(kagi, &custom, "a b"),
+            "https://kagi.com/search?q=a%20b&src=a%20b"
+        );
+        assert_eq!(SearchEngine::all(&custom).count(), 5);
+        // A stale index falls back to the default provider rather than panicking.
+        assert_eq!(SearchEngine::Custom(9).label(&custom), "DuckDuckGo");
+    }
+
+    #[test]
+    fn custom_engines_reject_bad_keys_and_templates() {
+        let url = "https://example.com/?q=%s";
+        assert!(CustomSearchEngine::new("google", "", url).is_err());
+        assert!(CustomSearchEngine::new("my engine", "", url).is_err());
+        assert!(CustomSearchEngine::new("x", "", "https://example.com/").is_err());
+        assert!(CustomSearchEngine::new("x", "", "ftp://example.com/%s").is_err());
+        assert_eq!(CustomSearchEngine::new("x", " ", url).unwrap().name(), "x");
     }
 }

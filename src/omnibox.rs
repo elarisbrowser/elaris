@@ -5,7 +5,7 @@
 use rune::TextEdit;
 
 use crate::tab::{Tab, TabId};
-use elaris_core::address::{self, Destination, SearchEngine};
+use elaris_core::address::{self, Destination};
 use elaris_core::history::Entry as HistoryEntry;
 
 const MAX_TAB_SUGGESTIONS: usize = 4;
@@ -131,7 +131,7 @@ pub(crate) fn suggestions(
     bookmarks: &[BookmarkHint],
     history: &[HistoryEntry],
     sidebar_collapsed: bool,
-    search_engine: SearchEngine,
+    search_engine: &str,
 ) -> Vec<Suggestion> {
     let query = query.trim();
     let mut suggestions = Vec::new();
@@ -150,7 +150,7 @@ pub(crate) fn suggestions(
             Destination::Search(query) => suggestions.push(Suggestion {
                 section: Section::Navigate,
                 title: query.clone(),
-                detail: search_engine.label().to_owned(),
+                detail: search_engine.to_owned(),
                 glyph: Glyph::Search,
                 action: Action::Search(query),
             }),
@@ -407,7 +407,7 @@ mod tests {
             ),
             tab(3, "Rust blog", "https://blog.example.org"),
         ];
-        let suggestions = suggestions("rust", &tabs, &[], &[], false, SearchEngine::default());
+        let suggestions = suggestions("rust", &tabs, &[], &[], false, "DuckDuckGo");
         let tabs: Vec<_> = suggestions
             .iter()
             .filter(|suggestion| suggestion.section == Section::OpenTabs)
@@ -420,14 +420,7 @@ mod tests {
     #[test]
     fn matches_open_tabs_by_domain_and_url_and_selects_the_existing_tab() {
         let tabs = [tab(7, "Elaris", "https://github.com/theo/elaris/issues")];
-        let suggestions = suggestions(
-            "github.com",
-            &tabs,
-            &[],
-            &[],
-            false,
-            SearchEngine::default(),
-        );
+        let suggestions = suggestions("github.com", &tabs, &[], &[], false, "DuckDuckGo");
         assert!(suggestions.iter().any(|suggestion| {
             suggestion.title == "Elaris"
                 && suggestion.action == Action::SwitchTab(TabId::from_raw(7))
@@ -450,7 +443,7 @@ mod tests {
                 visit_count: 1,
             },
         ];
-        let suggestions = suggestions("rust", &[], &[], &history, false, SearchEngine::default());
+        let suggestions = suggestions("rust", &[], &[], &history, false, "DuckDuckGo");
         let recent: Vec<_> = suggestions
             .iter()
             .filter(|suggestion| suggestion.section == Section::Recent)
@@ -477,14 +470,7 @@ mod tests {
     }
 
     fn find(query: &str, bookmarks: &[BookmarkHint], history: &[HistoryEntry]) -> Vec<Suggestion> {
-        suggestions(
-            query,
-            &[],
-            bookmarks,
-            history,
-            false,
-            SearchEngine::default(),
-        )
+        suggestions(query, &[], bookmarks, history, false, "DuckDuckGo")
     }
 
     #[test]
@@ -600,7 +586,7 @@ mod tests {
             },
         ];
 
-        let rust = suggestions("rust", &[], &[], &history, false, SearchEngine::default());
+        let rust = suggestions("rust", &[], &[], &history, false, "DuckDuckGo");
         let recent: Vec<_> = rust
             .iter()
             .filter(|suggestion| suggestion.section == Section::Recent)
@@ -608,7 +594,7 @@ mod tests {
         assert_eq!(recent[0].title, "Rust Book");
         assert_eq!(recent[1].title, "Source repository");
 
-        let github = suggestions("github", &[], &[], &history, false, SearchEngine::default());
+        let github = suggestions("github", &[], &[], &history, false, "DuckDuckGo");
         assert!(github.iter().any(|suggestion| {
             suggestion.section == Section::Recent
                 && suggestion.action

@@ -146,7 +146,7 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
         SettingsChange::AccentColor(value) => {
             ("appearance", "accent", value.config_key().to_owned())
         }
-        SettingsChange::SearchEngine(value) => ("search", "engine", value.config_key().to_owned()),
+        SettingsChange::SearchEngine(key) => ("search", "engine", key.clone()),
         SettingsChange::DownloadDirectory(value) => (
             "downloads",
             "directory",

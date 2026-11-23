@@ -1,23 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! The search providers' coloured brand marks. They are bitmaps, not strokes, so they are decoded once and
-//! shared.
+//! shared. The user's own providers have no mark, so they show the search glyph.
 
 use std::sync::{Arc, OnceLock};
 
-use rune::{El, Image, ImageCache, Pixels, el};
+use rune::{Color, El, Image, ImageCache, Pixels, el, icon};
 
 use elaris_core::address::SearchEngine;
 
 static SEARCH_ENGINE_IMAGES: OnceLock<[Image; 4]> = OnceLock::new();
 
-pub(crate) fn search_engine(engine: SearchEngine, size: f32) -> El {
-    el().size(size, size)
-        .center()
-        .pixels(search_engine_pixels(engine))
+/// `glyph` colours the search glyph a custom provider shows in place of a brand mark.
+pub(crate) fn search_engine(engine: SearchEngine, size: f32, glyph: Color) -> El {
+    match search_engine_pixels(engine) {
+        Some(pixels) => el().size(size, size).center().pixels(pixels),
+        None => icon(&super::SEARCH, size).color(glyph),
+    }
 }
 
-fn search_engine_pixels(engine: SearchEngine) -> &'static Pixels {
+fn search_engine_pixels(engine: SearchEngine) -> Option<&'static Pixels> {
     let images = SEARCH_ENGINE_IMAGES.get_or_init(|| {
         let cache = ImageCache::new(Arc::new(|| {}));
         let images = [
@@ -39,6 +41,7 @@ fn search_engine_pixels(engine: SearchEngine) -> &'static Pixels {
         SearchEngine::Bing => 1,
         SearchEngine::DuckDuckGo => 2,
         SearchEngine::Brave => 3,
+        SearchEngine::Custom(_) => return None,
     };
-    images[index].pixels()
+    Some(images[index].pixels())
 }

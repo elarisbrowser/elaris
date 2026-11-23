@@ -37,7 +37,8 @@ pub(crate) struct Storage {
 
 pub(crate) enum ConfigEvent {
     Saved(Result<(), String>),
-    Reloaded(Result<ConfigLoad, String>),
+    /// Boxed because the loaded settings dwarf the other variant.
+    Reloaded(Result<Box<ConfigLoad>, String>),
 }
 
 impl Storage {

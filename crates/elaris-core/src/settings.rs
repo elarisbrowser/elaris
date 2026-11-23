@@ -5,7 +5,7 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use crate::address::SearchEngine;
+use crate::address::{CustomSearchEngine, SearchEngine};
 use crate::appearance::{AccentColor, Appearance, GlassStyle};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -281,6 +281,8 @@ pub struct Settings {
     pub appearance: Appearance,
     pub accent_color: AccentColor,
     pub search_engine: SearchEngine,
+    /// The user's own providers from `[search.engines]`, in config order.
+    pub custom_search_engines: Vec<CustomSearchEngine>,
     pub download_directory: DownloadDirectory,
     pub startup: StartupMode,
     pub glass_enabled: bool,
@@ -315,6 +317,7 @@ impl Default for Settings {
             appearance: Appearance::System,
             accent_color: AccentColor::Blue,
             search_engine: SearchEngine::DuckDuckGo,
+            custom_search_engines: Vec::new(),
             download_directory: DownloadDirectory::Default,
             startup: StartupMode::RestoreSession,
             glass_enabled: true,
@@ -341,6 +344,25 @@ impl Settings {
 
     pub fn set_search_engine(&mut self, search_engine: SearchEngine) {
         self.search_engine = search_engine;
+    }
+
+    /// The name of a search provider, built in or the user's own.
+    pub fn search_engine_label(&self, engine: SearchEngine) -> &str {
+        engine.label(&self.custom_search_engines)
+    }
+
+    /// The URL that searches for `query` with the chosen provider.
+    pub fn search_url(&self, query: &str) -> String {
+        crate::address::search_url(self.search_engine, &self.custom_search_engines, query)
+    }
+
+    /// Records the chosen provider as `[search].engine` would name it.
+    pub fn search_engine_change(&self) -> SettingsChange {
+        SettingsChange::SearchEngine(
+            self.search_engine
+                .config_key(&self.custom_search_engines)
+                .to_owned(),
+        )
     }
 
     pub fn set_download_directory(
@@ -395,7 +417,8 @@ pub enum SettingsChange {
     WindowDecorations(WindowDecorations),
     Appearance(Appearance),
     AccentColor(AccentColor),
-    SearchEngine(SearchEngine),
+    /// The provider's `[search].engine` key.
+    SearchEngine(String),
     DownloadDirectory(DownloadDirectory),
     Startup(StartupMode),
     GlassEnabled(bool),

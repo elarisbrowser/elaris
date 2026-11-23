@@ -14,7 +14,7 @@ pub(crate) struct Dropdown<T> {
     label: String,
     width: f32,
     current: Option<T>,
-    options: Vec<(T, &'static str)>,
+    options: Vec<(T, String)>,
     open: bool,
     toggle: Option<fn(&mut AppState)>,
     close: Option<fn(&mut AppState)>,
@@ -36,8 +36,14 @@ impl<T: Copy + PartialEq + 'static> Dropdown<T> {
         }
     }
 
-    pub(crate) fn options(mut self, options: impl IntoIterator<Item = (T, &'static str)>) -> Self {
-        self.options = options.into_iter().collect();
+    pub(crate) fn options<L: Into<String>>(
+        mut self,
+        options: impl IntoIterator<Item = (T, L)>,
+    ) -> Self {
+        self.options = options
+            .into_iter()
+            .map(|(value, label)| (value, label.into()))
+            .collect();
         self
     }
 
@@ -71,7 +77,7 @@ impl<T: Copy + PartialEq + 'static> Dropdown<T> {
             .options
             .iter()
             .find(|(value, _)| Some(*value) == self.current)
-            .map_or("", |(_, label)| label);
+            .map_or("", |(_, label)| label.as_str());
         let field = row()
             .key(format!("{}-field", self.key))
             .w(self.width)

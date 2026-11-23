@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use toml_edit::{DocumentMut, Item};
 
-use crate::address::SearchEngine;
+use crate::address::{CustomSearchEngine, SearchEngine};
 use crate::appearance::{AccentColor, Appearance, GlassStyle};
 use crate::permissions::{AutoplayPolicy, PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{
@@ -243,13 +243,21 @@ pub fn parse(contents: &str) -> Result<ConfigLoad, String> {
             }
         }
     }
+    settings.custom_search_engines = parse_search_engines(&document, &mut issues);
     if let Some(value) = string_value(&document, "search", "engine", &mut issues) {
-        settings.search_engine = SearchEngine::from_config_key(&value).unwrap_or_else(|| {
-            issues.push(format!(
-                "Invalid value for [search].engine: {value:?}; expected duckduckgo, google, bing or brave"
-            ));
-            defaults.search_engine
-        });
+        let custom = &settings.custom_search_engines;
+        settings.search_engine =
+            SearchEngine::from_config_key(&value, custom).unwrap_or_else(|| {
+                let mut expected = String::from("duckduckgo, google, bing, brave");
+                for engine in custom {
+                    expected.push_str(", ");
+                    expected.push_str(engine.key());
+                }
+                issues.push(format!(
+                    "Invalid value for [search].engine: {value:?}; expected one of {expected}"
+                ));
+                defaults.search_engine
+            });
     }
     if let Some(value) = string_value(&document, "downloads", "directory", &mut issues) {
         settings.download_directory = if value == "default" {
@@ -285,6 +293,49 @@ pub fn parse(contents: &str) -> Result<ConfigLoad, String> {
         permissions,
         issues,
     })
+}
+
+/// Reads `[search.engines.<key>]` tables, each with a `url` holding `%s` and an optional `name`.
+fn parse_search_engines(
+    document: &DocumentMut,
+    issues: &mut Vec<String>,
+) -> Vec<CustomSearchEngine> {
+    let Some(item) = document
+        .get("search")
+        .and_then(|search| search.get("engines"))
+    else {
+        return Vec::new();
+    };
+    let Some(engines) = item.as_table() else {
+        issues.push("[search.engines] must be a TOML table".to_owned());
+        return Vec::new();
+    };
+    let mut parsed = Vec::new();
+    for (key, item) in engines {
+        let Some(table) = item.as_table() else {
+            issues.push(format!("[search.engines.{key}] must be a TOML table"));
+            continue;
+        };
+        let Some(url) = table.get("url").and_then(Item::as_str) else {
+            issues.push(format!("[search.engines.{key}].url must be a string"));
+            continue;
+        };
+        let name = match table.get("name") {
+            None => "",
+            Some(name) => match name.as_str() {
+                Some(name) => name,
+                None => {
+                    issues.push(format!("[search.engines.{key}].name must be a string"));
+                    ""
+                }
+            },
+        };
+        match CustomSearchEngine::new(key, name, url) {
+            Ok(engine) => parsed.push(engine),
+            Err(error) => issues.push(format!("Ignoring search engine {key:?}: {error}")),
+        }
+    }
+    parsed
 }
 
 fn parse_permissions(document: &DocumentMut, issues: &mut Vec<String>) -> PermissionStore {

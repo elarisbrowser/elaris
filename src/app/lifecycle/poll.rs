@@ -240,7 +240,7 @@ fn update_configuration(state: &mut AppState, polled: &crate::browser::Polled) -
                 changed = true;
             }
             storage::ConfigEvent::Reloaded(Ok(load)) => {
-                state.apply_config_load(load);
+                state.apply_config_load(*load);
                 changed = true;
             }
             storage::ConfigEvent::Reloaded(Err(error)) => {

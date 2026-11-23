@@ -265,6 +265,37 @@ fn parses_defaults_and_known_settings() {
 }
 
 #[test]
+fn custom_search_engines_load_in_order_and_can_be_selected() {
+    let config = parse(
+        "[search]\nengine = \"kagi\"\n\n[search.engines.kagi]\nname = \"Kagi\"\nurl = \"https://kagi.com/search?q=%s\"\n\n[search.engines.docs]\nurl = \"https://docs.rs/releases/search?query=%s\"\n\n[search.engines.bad]\nurl = \"https://example.com/\"\n",
+    )
+    .expect("valid config parses");
+    let settings = &config.settings;
+    assert_eq!(settings.search_engine, SearchEngine::Custom(0));
+    assert_eq!(
+        settings.search_engine_label(SearchEngine::Custom(1)),
+        "docs"
+    );
+    assert_eq!(settings.custom_search_engines.len(), 2);
+    assert_eq!(
+        settings.search_url("x y"),
+        "https://kagi.com/search?q=x%20y"
+    );
+    assert_eq!(config.issues.len(), 1);
+    assert!(config.issues[0].contains("\"bad\""));
+}
+
+#[test]
+fn unknown_search_engine_names_the_custom_keys_it_expected() {
+    let config = parse(
+        "[search]\nengine = \"kagy\"\n[search.engines.kagi]\nurl = \"https://kagi.com/?q=%s\"\n",
+    )
+    .expect("valid TOML with an invalid value is recoverable");
+    assert_eq!(config.settings.search_engine, SearchEngine::DuckDuckGo);
+    assert!(config.issues[0].ends_with("brave, kagi"));
+}
+
+#[test]
 fn invalid_values_fall_back_with_key_specific_messages() {
     let config = parse(
         "[appearance]\ntheme = \"sepia\"\n[search]\nengine = 5\n[downloads]\ndirectory = \"relative\"\n[startup]\nmode = \"later\"\n",
@@ -479,7 +510,7 @@ fn every_setting_change_round_trips_through_the_shared_model() {
         SettingsChange::PageZoom(125),
         SettingsChange::Appearance(Appearance::Dark),
         SettingsChange::AccentColor(AccentColor::Pink),
-        SettingsChange::SearchEngine(SearchEngine::Brave),
+        SettingsChange::SearchEngine("brave".to_owned()),
         SettingsChange::DownloadDirectory(DownloadDirectory::Custom(PathBuf::from(
             "/tmp/elaris-downloads",
         ))),

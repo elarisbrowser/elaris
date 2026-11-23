@@ -345,8 +345,9 @@ pub(super) fn address_bar(
 }
 
 fn search_engine_selector(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> El {
-    let engine = state.settings.search_engine;
-    let label = format!("Search engine: {}", engine.label());
+    let settings = &state.settings;
+    let engine = settings.search_engine;
+    let label = format!("Search engine: {}", settings.search_engine_label(engine));
     let height = if state.horizontal_tabs() {
         theme::CLOSE_BUTTON
     } else {
@@ -377,15 +378,16 @@ fn search_engine_selector(state: &AppState, theme: &Theme, overlays: &mut Vec<El
         .child(super::icons::search_engine(
             engine,
             theme::OMNIBOX_SEARCH_ICON,
+            theme.icon,
         ))
         .child(icon(&super::icons::CHEVRON_DOWN, theme::OMNIBOX_SEARCH_CHEVRON).color(theme.icon));
     let mut menu = Menu::new("search-engine-menu")
         .trigger(trigger)
         .group_label("Search with");
-    for option in SearchEngine::ALL {
+    for option in SearchEngine::all(&settings.custom_search_engines) {
         menu = menu.item(
-            MenuItem::new(option.label())
-                .lead(super::icons::search_engine(option, theme::ICON))
+            MenuItem::new(settings.search_engine_label(option))
+                .lead(super::icons::search_engine(option, theme::ICON, theme.icon))
                 .checked(option == engine)
                 .on_select_tx(move |state: &mut AppState, tx: &mut Tx| {
                     state.set_search_engine(option);
