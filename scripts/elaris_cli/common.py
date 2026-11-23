@@ -5,13 +5,22 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
+import threading
+import time
 from pathlib import Path
 from typing import Optional
+
+from . import ui
 
 ROOT = Path(__file__).resolve().parents[2]
 ENGINE = ROOT / "vendor" / "ladybird"
 CPP_BUILD_DIR = ROOT / "build" / "cpp-ladybird"
 VCPKG_INSTALLED = ENGINE / "Build" / "release" / "vcpkg_installed"
+LOG_DIR = ROOT / "build" / "logs"
+LOG_TAIL_LINES = 25
+# Ninja and CMake report progress as "[done/total] description".
+_PROGRESS = re.compile(r"\[\s*(\d+)/(\d+)\]")
 
 
 def vcpkg_triplet() -> Optional[str]:
@@ -31,6 +40,79 @@ def run(*command: str, cwd: Path = ROOT) -> None:
         raise SystemExit(f"elaris: required command '{command[0]}' was not found")
     except subprocess.CalledProcessError as error:
         raise SystemExit(error.returncode) from error
+
+
+def run_step(
+    title: str,
+    *command: str,
+    cwd: Path = ROOT,
+    position: Optional[tuple[int, int]] = None,
+    log_dir: Path = LOG_DIR,
+) -> None:
+    """Run one build step. On an interactive terminal it shows a live spinner or progress bar and
+    keeps the full output in a log file; otherwise the output streams as it always has."""
+    argv = (command_path(command[0]) or command[0], *command[1:])
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+    log_path = log_dir / f"{slug}.log"
+    captured = ui.animated()
+    started = time.monotonic()
+    try:
+        if captured:
+            returncode = _capture(title, position, argv, cwd, log_path)
+        else:
+            ui.announce(title, position)
+            returncode = subprocess.run(argv, cwd=cwd, check=False).returncode
+    except FileNotFoundError:
+        ui.step_result(title, position, time.monotonic() - started, "failed")
+        raise SystemExit(f"elaris: required command '{command[0]}' was not found") from None
+    except KeyboardInterrupt:
+        ui.step_result(title, position, time.monotonic() - started, "interrupted")
+        raise SystemExit(130) from None
+
+    elapsed = time.monotonic() - started
+    if returncode:
+        ui.step_result(title, position, elapsed, "failed")
+        if captured and log_path.is_file():
+            tail = log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-LOG_TAIL_LINES:]
+            for text in tail:
+                ui.muted(f"  {text}", stream=sys.stderr)
+            ui.muted(f"Full log: {log_path}", stream=sys.stderr)
+        raise SystemExit(returncode)
+    ui.step_result(title, position, elapsed)
+
+
+def _capture(
+    title: str,
+    position: Optional[tuple[int, int]],
+    argv: tuple[str, ...],
+    cwd: Path,
+    log_path: Path,
+) -> int:
+    """Run a step with its output written to a log file and drawn as a live progress line."""
+    progress = ui.Progress(title, position)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("w", encoding="utf-8", errors="replace") as log:
+        process = subprocess.Popen(argv, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        reader = threading.Thread(target=_pump, args=(process.stdout, log, progress), daemon=True)
+        progress.start()
+        reader.start()
+        try:
+            return process.wait()
+        finally:
+            if process.poll() is None:  # Interrupted: stop the child before reporting.
+                process.terminate()
+                process.wait()
+            reader.join()
+            progress.stop()
+
+
+def _pump(stream, log, progress: ui.Progress) -> None:
+    for raw in iter(stream.readline, b""):
+        text = raw.decode("utf-8", errors="replace").rstrip()
+        log.write(text + "\n")
+        match = _PROGRESS.search(text)
+        progress.update(text, (int(match[1]), int(match[2])) if match else None)
+    stream.close()
 
 
 def require(*commands: str) -> None:

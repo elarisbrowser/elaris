@@ -4,15 +4,38 @@
 import argparse
 import sys
 
-from elaris_cli import cpp, desktop, engine, linux, project, rune
+from elaris_cli import cpp, desktop, engine, linux, project, rune, ui
 
 
 if sys.version_info < (3, 9):
     raise SystemExit("elaris: Python 3.9 or newer is required")
 
+EXAMPLES = """\
+examples:
+  ./elaris setup               install prerequisites and initialise Ladybird
+  ./elaris run example.com     build if needed, then open a page
+  ./elaris check               format, lint, and test
+
+Run './elaris <command> --help' for a command's options.
+Global options go before the command, for example './elaris --verbose build'.
+Set NO_COLOR=1 to turn off colour. Build logs are kept in build/logs/.
+"""
+
 
 def parser() -> argparse.ArgumentParser:
-    cli = argparse.ArgumentParser(description="Developer commands for Elaris")
+    cli = argparse.ArgumentParser(
+        prog="./elaris",
+        description="Developer commands for Elaris",
+        epilog=EXAMPLES,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    cli.add_argument("--no-color", action="store_true", help="Print plain text without colour")
+    cli.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Stream every build line instead of showing a progress display",
+    )
     commands = cli.add_subparsers(dest="command", required=True)
     project.register_commands(commands)
     cpp.register_commands(commands)
@@ -25,7 +48,18 @@ def parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = parser().parse_args()
-    args.handler(args)
+    ui.configure(no_color=args.no_color, verbose=args.verbose)
+    try:
+        args.handler(args)
+    except KeyboardInterrupt:
+        ui.muted("Interrupted", stream=sys.stderr)
+        raise SystemExit(130) from None
+    except SystemExit as error:
+        # Command failures pass a message; print it in the same style as every other error.
+        if isinstance(error.code, str):
+            ui.error(error.code.removeprefix("elaris: "))
+            raise SystemExit(1) from None
+        raise
 
 
 if __name__ == "__main__":
