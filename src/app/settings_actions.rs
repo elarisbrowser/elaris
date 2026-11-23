@@ -226,7 +226,7 @@ impl super::AppState {
         self.save_setting(SettingsChange::ReduceMotion(enabled));
     }
 
-    pub(crate) fn set_memory_saver(&mut self, mode: elaris_core::memory_saver::MemorySaver) {
+    pub(crate) fn set_memory_saver(&mut self, mode: elaris_memory_saver::MemorySaver) {
         if self.settings.memory_saver == mode {
             return;
         }

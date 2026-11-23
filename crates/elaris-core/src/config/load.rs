@@ -10,12 +10,12 @@ use toml_edit::{DocumentMut, Item};
 
 use crate::address::SearchEngine;
 use crate::appearance::{AccentColor, Appearance, GlassStyle};
-use crate::memory_saver::MemorySaver;
 use crate::permissions::{AutoplayPolicy, PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{
     ContentBlockList, DownloadDirectory, NewTabPosition, PageStyle, Settings, SidebarSide,
     StartupMode, TabLayout, WindowDecorations,
 };
+use elaris_memory_saver::MemorySaver;
 
 use super::write::write_atomic;
 use super::{AUTOPLAY_KEY, DEFAULT_CONFIG};

@@ -12,8 +12,8 @@ use crate::ui::icons;
 use crate::ui::internal::PageContext;
 use crate::ui::theme::{self, Theme};
 use elaris_core::appearance::{AccentColor, Appearance, GlassStyle};
-use elaris_core::memory_saver::MemorySaver;
 use elaris_core::settings::{NewTabPosition, PageStyle, SidebarSide, TabLayout};
+use elaris_memory_saver::MemorySaver;
 
 use super::section;
 

@@ -12,8 +12,8 @@ use rune::Tx;
 use super::AppState;
 use crate::browser::Polled;
 use crate::tab::TabId;
-use elaris_core::memory_saver::{Candidate, Pressure};
 use elaris_core::permissions::{PermissionKind, PermissionState, PermissionStore};
+use elaris_memory_saver::{Candidate, Pressure};
 
 #[derive(Default)]
 pub(crate) struct MemorySaverState {
@@ -46,7 +46,7 @@ impl AppState {
         if self.memory_saver.check.is_some_and(|due| now < due) {
             return false;
         }
-        let pressure = crate::platform::memory::pressure();
+        let pressure = Pressure::current();
         let Some(interval) = mode.check_interval(pressure) else {
             self.memory_saver.check = None;
             return false;

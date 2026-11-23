@@ -9,6 +9,10 @@
 
 use std::time::Duration;
 
+mod pressure;
+
+pub use pressure::Pressure;
+
 /// How eagerly Memory Saver puts background tabs to sleep.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum MemorySaver {
@@ -40,10 +44,6 @@ const MAXIMUM: Limits = Limits {
 /// How often to check, by pressure: rarely while memory is plentiful, often while it is short.
 const CHECK_NORMAL: Duration = Duration::from_secs(30);
 const CHECK_UNDER_PRESSURE: Duration = Duration::from_secs(5);
-
-/// Linux reports no pressure level, so it is judged by the share of memory still available.
-const ELEVATED_AVAILABLE_PERCENT: u64 = 20;
-const CRITICAL_AVAILABLE_PERCENT: u64 = 10;
 
 impl MemorySaver {
     pub const ALL: [Self; 3] = [Self::Off, Self::Balanced, Self::Maximum];
@@ -140,50 +140,6 @@ impl MemorySaver {
             }
         }
         chosen
-    }
-}
-
-/// How short the system is of memory.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Pressure {
-    #[default]
-    Normal,
-    Elevated,
-    Critical,
-}
-
-impl Pressure {
-    /// From macOS's `kern.memorystatus_vm_pressure_level`: 1 normal, 2 warning, 4 critical.
-    pub fn from_macos_level(level: i32) -> Self {
-        match level {
-            4.. => Self::Critical,
-            2..=3 => Self::Elevated,
-            _ => Self::Normal,
-        }
-    }
-
-    /// From the text of Linux's `/proc/meminfo`, by the share of memory still available.
-    pub fn from_meminfo(meminfo: &str) -> Option<Self> {
-        let field = |name: &str| {
-            meminfo.lines().find_map(|line| {
-                line.strip_prefix(name)?
-                    .strip_prefix(':')?
-                    .split_whitespace()
-                    .next()?
-                    .parse::<u64>()
-                    .ok()
-            })
-        };
-        let total = field("MemTotal").filter(|total| *total > 0)?;
-        let available = field("MemAvailable")?;
-        let percent = available.saturating_mul(100) / total;
-        Some(if percent < CRITICAL_AVAILABLE_PERCENT {
-            Self::Critical
-        } else if percent < ELEVATED_AVAILABLE_PERCENT {
-            Self::Elevated
-        } else {
-            Self::Normal
-        })
     }
 }
 
@@ -304,29 +260,6 @@ mod tests {
             MemorySaver::Maximum.choose(Pressure::Normal, &[favourite]),
             [1]
         );
-    }
-
-    #[test]
-    fn pressure_is_read_from_macos_and_linux() {
-        assert_eq!(Pressure::from_macos_level(1), Pressure::Normal);
-        assert_eq!(Pressure::from_macos_level(2), Pressure::Elevated);
-        assert_eq!(Pressure::from_macos_level(4), Pressure::Critical);
-        let meminfo = |available| {
-            format!("MemTotal:       1000 kB\nMemFree: 1 kB\nMemAvailable:   {available} kB\n")
-        };
-        assert_eq!(
-            Pressure::from_meminfo(&meminfo(500)),
-            Some(Pressure::Normal)
-        );
-        assert_eq!(
-            Pressure::from_meminfo(&meminfo(150)),
-            Some(Pressure::Elevated)
-        );
-        assert_eq!(
-            Pressure::from_meminfo(&meminfo(50)),
-            Some(Pressure::Critical)
-        );
-        assert_eq!(Pressure::from_meminfo("MemTotal: 1000 kB"), None);
     }
 
     #[test]

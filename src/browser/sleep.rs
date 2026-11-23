@@ -8,7 +8,7 @@ use std::time::Instant;
 use super::Browser;
 use crate::engine::Command;
 use crate::tab::{Applied, Tab, TabId, TabSection};
-use elaris_core::memory_saver::Candidate;
+use elaris_memory_saver::Candidate;
 
 impl Tab {
     /// Doing something that closing its view would break or lose.

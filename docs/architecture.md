@@ -1,6 +1,6 @@
 # Architecture
 
-Elaris is a Cargo workspace: the `elaris` package and the UI-free `crates/elaris-core` library. Rune owns the window and interface on the UI thread. Ladybird runs on
+Elaris is a Cargo workspace: the `elaris` package, the UI-free `crates/elaris-core` library, and the `crates/elaris-memory-saver` policy. Rune owns the window and interface on the UI thread. Ladybird runs on
 its own thread behind the Elaris-owned C++ bridge. A separate storage worker owns the SQLite
 connection and writes session files, so neither page work nor browser-data writes block Rune.
 
@@ -9,6 +9,7 @@ connection and writes session files, so neither page work nor browser-data write
 | Module | Responsibility |
 |---|---|
 | `crates/elaris-core/` | UI-free core: settings, TOML configuration, permissions, address rules, the history and download stores, internal routes, storage paths and development timing. Builds and tests without Rune or the engine. |
+| `crates/elaris-memory-saver/` | Memory Saver: its modes, which background tabs to sleep and when, and the system's memory pressure (macOS pressure level, Linux `/proc/meminfo`). Depends on nothing; `elaris-core` uses it for the setting. |
 | `src/main.rs` | Builds the Rune app and installs its lifecycle hooks. |
 | `src/app.rs` and `src/app/` | `AppState`, construction and startup policy, window registry and per-window helpers; `lifecycle/poll.rs` coordinates per-frame updates. |
 | `src/browser.rs` and `src/browser/` | Ordered web and native tabs, section ordering, selection, navigation, find, lifecycle, engine connection and display state; download commands, engine polling and synchronization, input routing, Peek and Split View. |
@@ -31,7 +32,7 @@ connection and writes session files, so neither page work nor browser-data write
 | `packaging/` | macOS `Info.plist` and the Linux desktop entry and icons used by bundling. |
 
 The main dependency direction is `ui` → `app` → `browser` → `engine` → `ladybird` → bridge, with `elaris-core`
-below all of them and depending on none of them.
+(and `elaris-memory-saver` beneath it) below all of them and depending on none of them.
 Storage is an app-owned boundary: the app queues committed visits and session snapshots, and the
 storage worker handles disk access. The UI knows tabs and pixels, not SQLite or C++.
 

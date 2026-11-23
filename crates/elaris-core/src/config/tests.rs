@@ -122,7 +122,7 @@ fn page_style_defaults_to_card_and_round_trips() {
 
 #[test]
 fn memory_saver_defaults_to_balanced_and_round_trips() {
-    use crate::memory_saver::MemorySaver;
+    use elaris_memory_saver::MemorySaver;
     let directory = std::env::temp_dir().join(format!(
         "elaris-config-memory-saver-{}-{}",
         std::process::id(),
