@@ -268,6 +268,8 @@ impl Default for ContentBlocking {
 pub struct Settings {
     pub page_zoom: u16,
     pub autoplay: crate::permissions::AutoplayPolicy,
+    /// Darkens pages that don't provide a dark theme of their own.
+    pub force_dark: bool,
     pub tab_layout: TabLayout,
     pub sidebar_side: SidebarSide,
     pub new_tab_position: NewTabPosition,
@@ -296,6 +298,7 @@ impl Default for Settings {
         Self {
             page_zoom: 100,
             autoplay: crate::permissions::AutoplayPolicy::default(),
+            force_dark: false,
             tab_layout: TabLayout::default(),
             sidebar_side: SidebarSide::default(),
             new_tab_position: NewTabPosition::default(),
@@ -386,6 +389,7 @@ pub enum SettingsChange {
     TintOpacity(u8),
     Grain(u8),
     ReduceMotion(bool),
+    ForceDark(bool),
     MemorySaver(crate::memory_saver::MemorySaver),
     SplitViewLimit(usize),
     ContentBlocking(bool),

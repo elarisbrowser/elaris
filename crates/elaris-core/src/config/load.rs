@@ -187,6 +187,9 @@ pub fn parse(contents: &str) -> Result<ConfigLoad, String> {
             defaults.autoplay
         });
     }
+    if let Some(value) = bool_value(&document, "pages", "force_dark", &mut issues) {
+        settings.force_dark = value;
+    }
     if let Some(value) = bool_value(&document, "performance", "reduce_motion", &mut issues) {
         settings.reduce_motion = value;
     }

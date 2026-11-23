@@ -160,6 +160,7 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
         }
         SettingsChange::TintOpacity(value) => ("appearance", "tint_opacity", value.to_string()),
         SettingsChange::Grain(value) => ("appearance", "grain", value.to_string()),
+        SettingsChange::ForceDark(value) => ("pages", "force_dark", value.to_string()),
         SettingsChange::ReduceMotion(value) => ("performance", "reduce_motion", value.to_string()),
         SettingsChange::MemorySaver(value) => {
             ("performance", "memory_saver", value.config_key().to_owned())
@@ -178,7 +179,10 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
     let table = item
         .as_table_mut()
         .ok_or_else(|| format!("[{section}] must be a TOML table"))?;
-    let mut new_value = if section == "content_blocking" || key == "glass" || key == "reduce_motion"
+    let mut new_value = if section == "content_blocking"
+        || key == "glass"
+        || key == "reduce_motion"
+        || key == "force_dark"
     {
         Value::from(value == "true")
     } else if matches!(key, "tint_opacity" | "grain" | "max_panes" | "zoom") {

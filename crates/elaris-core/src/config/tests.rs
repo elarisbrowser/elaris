@@ -511,3 +511,20 @@ fn atomic_config_replacement_leaves_no_temporary_files() {
     );
     fs::remove_dir_all(directory).expect("remove temporary config directory");
 }
+
+#[test]
+fn force_dark_defaults_to_off_and_round_trips() {
+    let path = std::env::temp_dir().join(format!(
+        "elaris-force-dark-{}-{}.toml",
+        std::process::id(),
+        NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed)
+    ));
+    let loaded = load_or_create(&path).expect("create the default configuration");
+    assert!(!loaded.settings.force_dark);
+
+    write_change(&path, &SettingsChange::ForceDark(true)).expect("turn force dark on");
+    let loaded = load_or_create(&path).expect("load force dark");
+    assert!(loaded.settings.force_dark);
+    assert!(loaded.issues.is_empty());
+    let _ = std::fs::remove_file(path);
+}
