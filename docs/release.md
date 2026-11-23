@@ -48,6 +48,9 @@ commit, the Rune revision, and the toolchain used.
 - macOS builds target Apple Silicon only. Intel Macs are not supported for the alpha, and Linux ARM64 is not built.
 - The minimum macOS version is 14.4, the lowest version Ladybird supports.
 - Linux needs a Vulkan driver at run time, which the system's GPU driver or Mesa provides.
-- The Linux x86_64 build runs in Ladybird's CI image. Local verification was done on arm64 under Docker, so the first
-  run of the workflow is the first x86_64 check.
+- The Linux x86_64 build runs in Ladybird's CI image, which is Ubuntu 26.04 with glibc 2.43. The bundle therefore needs
+  glibc 2.43 or newer at run time, so older distributions such as Ubuntu 24.04, Debian 12 and RHEL 9 cannot run it yet.
+  The target is all major distributions, which needs the Linux build moved to an older glibc base. Local verification
+  was done on arm64 under Docker, so the first run of the workflow is the first x86_64 check.
+- Linux support targets both Wayland and X11 sessions. Neither has been tested on a real desktop yet.
 - The pinned Ladybird and Rune revisions are recorded in `BUILD-INFO.txt`. Both must be pinned before tagging.
