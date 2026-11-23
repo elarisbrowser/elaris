@@ -52,14 +52,11 @@ pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
     }
 }
 
-/// Whether the Linux row shows its window controls and holds the page below it: always with
-/// the sidebar closed or on the right, since the row then has the page's room anyway.
+/// Whether the Linux row shows its window controls and holds the page below it: with the sidebar
+/// closed, or while the pointer is at the top edge or in the row.
 #[cfg(elaris_ui = "linux")]
 pub(crate) fn header_revealed(state: &AppState) -> bool {
-    state.sidebar.collapsed
-        || state.sidebar_on_right()
-        || state.titlebar.is_visible()
-        || state.zoom_menu.is_some()
+    state.sidebar.collapsed || state.titlebar.is_visible() || state.zoom_menu.is_some()
 }
 
 /// A passive hit target that sits at the window's top edge while the toolbar is closed.
@@ -83,8 +80,13 @@ fn titlebar_visibility_changed(tx: &mut rune::Tx) {
 }
 
 /// `revealed` spans the row across the window and adds the Linux window controls.
-fn header_content(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>, revealed: bool) -> El {
+fn header_content(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>, revealed: bool) -> El {
     let collapsed = state.sidebar.collapsed;
+    // Linux mirrors a right-hand sidebar: the buttons take its column and the controls the left.
+    #[cfg(elaris_ui = "linux")]
+    let flipped = state.sidebar_on_right() && !collapsed;
+    #[cfg(not(elaris_ui = "linux"))]
+    let flipped = false;
     let toggle_label = if collapsed {
         "Show sidebar"
     } else {
@@ -108,10 +110,13 @@ fn header_content(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>, revea
         .center_y();
     #[cfg(not(elaris_ui = "linux"))]
     {
-        lead = lead.child(window_controls(_cx.titlebar_inset(), theme));
+        lead = lead.child(window_controls(cx.titlebar_inset(), theme));
+    }
+    if flipped {
+        lead = lead.child(spacer());
     }
     #[cfg(elaris_ui = "linux")]
-    {
+    if !flipped {
         lead = lead.pl(theme::SIDEBAR_PADDING);
     }
     lead = lead.child(toggle);
@@ -127,7 +132,9 @@ fn header_content(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>, revea
     // A right-hand sidebar leaves the window controls over the page, so the row spans the window
     // as it does with the sidebar hidden.
     let spans_window = collapsed || state.sidebar_on_right();
-    lead = if spans_window {
+    lead = if flipped {
+        lead.w(state.sidebar.width).pr(theme::SIDEBAR_PADDING)
+    } else if spans_window {
         lead.child(el().w(theme::HEADER_GROUP_GAP))
     } else {
         lead.w(state.sidebar.width)
@@ -135,6 +142,11 @@ fn header_content(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>, revea
             .child(spacer())
     };
     lead = lead.children(navigation(state, theme));
+
+    #[cfg(elaris_ui = "linux")]
+    if flipped {
+        return flipped_header(state, lead, revealed, cx, theme);
+    }
 
     let mut header = row()
         .key("header")
@@ -149,18 +161,51 @@ fn header_content(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>, revea
     }
     #[cfg(elaris_ui = "linux")]
     if revealed {
-        let fade = if _cx.system_reduced_motion() || _cx.is_reduced_motion() {
-            Transition::none()
-        } else {
-            Transition::opacity().springs(motion::pair::SNAP)
-        };
-        header = header.children(
-            linux_window_controls(state, theme)
-                .into_iter()
-                .map(|control| control.transition(fade)),
-        );
+        header = header.children(fading_window_controls(state, theme, cx));
     }
     header
+}
+
+/// The Linux row with a right-hand sidebar: the buttons hold the sidebar's column at the window's
+/// right edge, and the window controls, when revealed, take the left.
+#[cfg(elaris_ui = "linux")]
+fn flipped_header(
+    state: &AppState,
+    lead: El,
+    revealed: bool,
+    cx: &mut Cx<AppState>,
+    theme: &Theme,
+) -> El {
+    let header = row()
+        .key("header")
+        .h(theme::HEADER_HEIGHT)
+        .gap(theme::NAV_GAP)
+        .center_y()
+        .absolute(0.0, 0.0)
+        .w_full();
+    if !revealed {
+        // Only the buttons drag the window, so the page keeps its top edge.
+        return header.child(spacer()).child(lead.window_drag());
+    }
+    header
+        .window_drag()
+        .pl(theme::SIDEBAR_PADDING)
+        .children(fading_window_controls(state, theme, cx))
+        .child(spacer())
+        .child(lead)
+}
+
+#[cfg(elaris_ui = "linux")]
+fn fading_window_controls(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> Vec<El> {
+    let fade = if cx.system_reduced_motion() || cx.is_reduced_motion() {
+        Transition::none()
+    } else {
+        Transition::opacity().springs(motion::pair::SNAP)
+    };
+    linux_window_controls(state, theme)
+        .into_iter()
+        .map(|control| control.transition(fade))
+        .collect()
 }
 
 pub(in crate::ui) fn navigation(state: &AppState, theme: &Theme) -> impl Iterator<Item = El> {

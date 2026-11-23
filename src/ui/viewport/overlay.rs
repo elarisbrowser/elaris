@@ -17,13 +17,16 @@ pub(super) fn indicator(theme: &Theme, radius: f32) -> El {
 }
 
 /// Whether the header row sits over the page's column, so the page starts below it: with the
-/// sidebar hidden or on the right, or on Linux while the row shows its window controls.
+/// sidebar hidden or on the right on macOS, or on Linux while the row is revealed.
 pub(super) fn header_above_page(state: &AppState) -> bool {
     #[cfg(elaris_ui = "linux")]
-    let revealed = crate::ui::sidebar::header::header_revealed(state);
+    {
+        crate::ui::sidebar::header::header_revealed(state)
+    }
     #[cfg(not(elaris_ui = "linux"))]
-    let revealed = false;
-    state.sidebar.collapsed || state.sidebar_on_right() || revealed
+    {
+        state.sidebar.collapsed || state.sidebar_on_right()
+    }
 }
 
 /// The webpage's top-left origin in the window, used to anchor its native find overlay.
