@@ -88,7 +88,7 @@ fn configure_app(app: App<app::AppState>) -> App<app::AppState> {
         .window_options(WindowOptions {
             transparent: true,
             #[cfg(elaris_ui = "linux")]
-            borderless: true,
+            borderless: app::LinuxDecorations::current() == app::LinuxDecorations::Elaris,
             ..WindowOptions::default()
         })
         // The tab strip shares the native titlebar band. Rune owns window dragging so

@@ -244,6 +244,10 @@ pub(in crate::ui) fn history_menu(state: &AppState, theme: &Theme, layer: &mut V
 #[cfg(elaris_ui = "linux")]
 pub(in crate::ui) fn linux_window_controls(state: &AppState, theme: &Theme) -> Vec<El> {
     let mut controls = Vec::new();
+    // The compositor owns the frame, or the window manager tiles it and wants no controls.
+    if crate::app::LinuxDecorations::current() == crate::app::LinuxDecorations::System {
+        return controls;
+    }
     if state.titlebar.can_minimize() {
         controls.push(
             icon_button(

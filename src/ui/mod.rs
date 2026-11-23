@@ -143,7 +143,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     sidebar::context_menu(state, &theme, &mut overlays);
     sidebar::header::history_menu(state, &theme, &mut overlays);
     #[cfg(elaris_ui = "linux")]
-    if !horizontal {
+    if !horizontal && state.titlebar.reveals_on_hover() {
         overlays.push(sidebar::header::hover_zone());
     }
     let height = cx

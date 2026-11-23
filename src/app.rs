@@ -45,10 +45,78 @@ pub(crate) enum LinuxTitlebarMode {
 #[cfg(elaris_ui = "linux")]
 impl LinuxTitlebarMode {
     fn from_environment() -> Self {
+        // With a system frame there is no edge to reveal from, so the toolbar stays put.
+        if LinuxDecorations::current() == LinuxDecorations::System {
+            return Self::Always;
+        }
         match std::env::var("ELARIS_LINUX_TITLEBAR") {
             Ok(mode) if mode.eq_ignore_ascii_case("always") => Self::Always,
             _ => Self::Hover,
         }
+    }
+}
+
+/// Who draws the Linux window frame and its controls.
+#[cfg(elaris_ui = "linux")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LinuxDecorations {
+    /// The compositor's frame, or none at all on tiling window managers.
+    System,
+    /// A borderless window with Elaris's own controls.
+    Elaris,
+}
+
+/// Desktops that tile windows and draw no titlebar, where custom window controls only get in the way.
+#[cfg(elaris_ui = "linux")]
+const TILING_DESKTOPS: &[&str] = &[
+    "sway",
+    "hyprland",
+    "i3",
+    "niri",
+    "river",
+    "bspwm",
+    "dwm",
+    "qtile",
+    "awesome",
+    "herbstluftwm",
+    "xmonad",
+    "wayfire",
+    "labwc",
+    "cosmic",
+];
+
+#[cfg(elaris_ui = "linux")]
+impl LinuxDecorations {
+    /// The mode for this process, chosen once since a window's frame is fixed when it opens.
+    pub(crate) fn current() -> Self {
+        static MODE: std::sync::OnceLock<LinuxDecorations> = std::sync::OnceLock::new();
+        *MODE.get_or_init(|| {
+            let var = |name| std::env::var(name).ok();
+            Self::resolve(
+                var("ELARIS_LINUX_DECORATIONS").as_deref(),
+                var("XDG_CURRENT_DESKTOP").as_deref(),
+                var("XDG_SESSION_DESKTOP").as_deref(),
+            )
+        })
+    }
+
+    /// `setting` is `system`, `elaris`, or anything else for auto-detection from the desktop.
+    fn resolve(setting: Option<&str>, current: Option<&str>, session: Option<&str>) -> Self {
+        match setting.map(str::to_ascii_lowercase).as_deref() {
+            Some("system") => return Self::System,
+            Some("elaris") => return Self::Elaris,
+            _ => {}
+        }
+        let tiling = [current, session]
+            .into_iter()
+            .flatten()
+            .flat_map(|desktops| desktops.split(':'))
+            .any(|desktop| {
+                TILING_DESKTOPS
+                    .iter()
+                    .any(|tiling| desktop.eq_ignore_ascii_case(tiling))
+            });
+        if tiling { Self::System } else { Self::Elaris }
     }
 }
 
@@ -100,6 +168,11 @@ impl LinuxTitlebar {
     /// macOS, where the native traffic lights do the job, so the `linux-ui` preview there has none.
     pub(crate) fn can_minimize(&self) -> bool {
         !cfg!(target_os = "macos")
+    }
+
+    /// Whether the thin strip at the top edge reveals the toolbar.
+    pub(crate) fn reveals_on_hover(&self) -> bool {
+        self.mode == LinuxTitlebarMode::Hover
     }
 }
 
@@ -817,3 +890,40 @@ pub(crate) use lifecycle::{
     new_tab, omnibox_input_key, on_reopen, on_window_focus, open_from_launcher, open_history,
     open_settings, poll, setup_headless, shut_down, start_workers, submit_omnibox, window_closed,
 };
+
+#[cfg(all(test, elaris_ui = "linux"))]
+mod linux_decorations_tests {
+    use super::LinuxDecorations;
+
+    #[test]
+    fn explicit_setting_wins() {
+        assert_eq!(
+            LinuxDecorations::resolve(Some("SYSTEM"), Some("GNOME"), None),
+            LinuxDecorations::System
+        );
+        assert_eq!(
+            LinuxDecorations::resolve(Some("elaris"), Some("sway"), None),
+            LinuxDecorations::Elaris
+        );
+    }
+
+    #[test]
+    fn auto_detects_tiling_desktops() {
+        assert_eq!(
+            LinuxDecorations::resolve(None, Some("Hyprland"), None),
+            LinuxDecorations::System
+        );
+        assert_eq!(
+            LinuxDecorations::resolve(Some("auto"), Some("ubuntu:GNOME"), Some("sway")),
+            LinuxDecorations::System
+        );
+        assert_eq!(
+            LinuxDecorations::resolve(None, Some("KDE"), None),
+            LinuxDecorations::Elaris
+        );
+        assert_eq!(
+            LinuxDecorations::resolve(None, None, None),
+            LinuxDecorations::Elaris
+        );
+    }
+}
