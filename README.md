@@ -78,7 +78,7 @@ Run `./elaris check` before opening a pull request. See [CONTRIBUTING.md](CONTRI
 
 ## Support
 
-If you find Elaris useful, you can support its development.
+If you find Elaris useful, you can support its development through [GitHub Sponsors](https://github.com/sponsors/elarisbrowser) or Ko-fi:
 
 <a href='https://ko-fi.com/F8O123TMDU' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi5.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
 
