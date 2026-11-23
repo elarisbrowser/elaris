@@ -11,6 +11,7 @@ mod shortcuts;
 mod site_controls;
 mod storage;
 mod tab;
+mod toast;
 mod ui;
 
 use std::sync::Arc;

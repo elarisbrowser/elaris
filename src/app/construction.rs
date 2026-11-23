@@ -198,6 +198,7 @@ impl AppState {
             window_title: None,
             zoom_menu: None,
             zoom_chip: None,
+            toasts: Default::default(),
             navigation_menu: None,
             context_menu: None,
             recently_closed: Vec::new(),

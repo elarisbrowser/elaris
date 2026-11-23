@@ -432,6 +432,24 @@ pub(crate) const FIND_SHADOW_Y: f32 = 3.0;
 pub(crate) const FIND_SHADOW_BLUR: f32 = 12.0;
 pub(crate) const FIND_INPUT_TEXT: rune::TextStyle = rune::TextStyle::new(14.0, 400.0);
 
+/// Toasts: short confirmations that float over the window's bottom edge.
+pub(crate) const TOAST_WIDTH: f32 = 320.0;
+pub(crate) const TOAST_INSET: f32 = 16.0;
+pub(crate) const TOAST_GAP: f32 = 10.0;
+pub(crate) const TOAST_LINE_GAP: f32 = 2.0;
+pub(crate) const TOAST_RADIUS: f32 = radius::LG;
+pub(crate) const TOAST_ICON: f32 = 16.0;
+pub(crate) const TOAST_SHADOW_Y: f32 = 6.0;
+pub(crate) const TOAST_SHADOW_BLUR: f32 = 18.0;
+/// How far a toast starts below its place and how much it shrinks, as it rises in and falls out.
+pub(crate) const TOAST_RISE: f32 = 12.0;
+pub(crate) const TOAST_SCALE: f32 = 0.96;
+/// The spring a toast enters and leaves on: a little bounce, so it seems to land.
+pub(crate) const TOAST_PRESENCE: SpringPair =
+    SpringPair::new(Spring::new(0.32, 0.14), Spring::new(0.18, 0.0));
+/// The spring that slides the rest of the stack into the gap a leaving toast leaves.
+pub(crate) const TOAST_REFLOW: Spring = Spring::new(0.3, 0.0);
+
 /// Menus, context menus and popovers: a rounded panel whose rows sit in an inset container, as the
 /// Settings category list does. Each highlight is concentric with the panel's corners.
 pub(crate) const MENU_RADIUS: f32 = radius::LG;

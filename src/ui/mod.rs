@@ -8,7 +8,7 @@ mod downloads;
 mod find;
 pub(crate) mod form_picker;
 pub(crate) mod horizontal_tabs;
-mod icons;
+pub(crate) mod icons;
 pub(crate) mod internal;
 mod mini;
 mod omnibox;
@@ -17,6 +17,7 @@ pub(crate) mod peek;
 pub(crate) mod permission_prompt;
 mod sidebar;
 mod tab_preview;
+mod toast;
 pub(crate) use sidebar::hover::{
     dismiss as dismiss_tab_preview, displayed as displayed_tab_preview, poll as poll_tab_preview,
 };
@@ -154,6 +155,12 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         reduced_motion,
     ));
     overlays.extend(tab_switcher::view(state, &theme, height, reduced_motion));
+    overlays.extend(toast::view(
+        &state.toasts,
+        &theme,
+        window_size[0],
+        reduced_motion,
+    ));
     site_permissions::view(state, cx, &theme, &mut overlays, reduced_motion);
     overlays.extend(permission_prompt::view(
         state,

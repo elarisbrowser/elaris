@@ -151,6 +151,8 @@ pub(crate) struct AppState {
     pub(crate) zoom_menu: Option<TabId>,
     /// The tab whose zoom chip shows, and the clock time it hides.
     pub(crate) zoom_chip: Option<(TabId, f64)>,
+    /// The toasts on screen, shown over the window.
+    pub(crate) toasts: crate::toast::Toasts,
     pub(crate) navigation_menu: Option<(TabId, PointerPress)>,
     pub(super) context_menu: Option<(Option<TabId>, PointerPress)>,
     pub(super) recently_closed: Vec<RecentlyClosedTab>,
