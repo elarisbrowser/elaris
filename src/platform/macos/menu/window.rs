@@ -123,6 +123,7 @@ fn menu_command(action: Action) -> Option<MenuCommand> {
             | Shortcut::ZoomOut
             | Shortcut::ResetZoom,
         ) => MenuCommand::WebPage,
+        Action::Shortcut(Shortcut::CopyAddress) => MenuCommand::WebPage,
         Action::Shortcut(Shortcut::ToggleSidebar) => MenuCommand::ToggleSidebar,
         Action::Shortcut(Shortcut::OpenHistory) => MenuCommand::History,
         Action::Shortcut(Shortcut::NextTab) => MenuCommand::NextTab,

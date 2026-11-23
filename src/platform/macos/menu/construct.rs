@@ -180,6 +180,12 @@ pub(crate) fn install(app: rune::AppHandle<AppState>) {
             separator(),
             edit("Cut", EditAction::Cut, "x", false),
             edit("Copy", EditAction::Copy, "c", false),
+            item(
+                "Copy Address",
+                Action::Shortcut(Shortcut::CopyAddress),
+                "c",
+                true,
+            ),
             edit("Paste", EditAction::Paste, "v", false),
             edit("Select All", EditAction::SelectAll, "a", false),
             separator(),
