@@ -232,7 +232,6 @@ pub(super) fn view(state: &AppState, theme: &Theme, overlays: &mut Vec<El>, redu
                     &mut state
                         .form_picker
                         .as_mut()
-                        // Invariant: the picker's input is only mounted while that picker is active.
                         .expect("picker input is mounted only for an active picker")
                         .input
                 }),

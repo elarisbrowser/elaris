@@ -214,7 +214,6 @@ fn native_selector(title: &str) -> Sel {
 pub(crate) fn install(app: rune::AppHandle<AppState>) {
     let _ = app;
     rune::set_quit_guard(quit_guard);
-    //     // Invariant: AppKit installs menus on the main thread.
     let mtm = MainThreadMarker::new().expect("AppKit menus install on the main thread");
     let application = NSApplication::sharedApplication(mtm);
     let target: Retained<ProtocolObject<dyn NSMenuDelegate>> =
@@ -592,7 +591,6 @@ fn perform_action(state: &mut AppState, action: Action, tx: &mut Tx) {
                     EditAction::SelectAll => sel!(selectAll:),
                 };
                 let mtm =
-                    //                     // Invariant: AppKit delivers menu actions on the main thread.
                     MainThreadMarker::new().expect("menu actions run on AppKit's main thread");
                 let application = NSApplication::sharedApplication(mtm);
                 // SAFETY: AppKit resolves a nil target through the active native responder chain.
@@ -626,7 +624,6 @@ fn menu_target_class() -> &'static AnyClass {
         return class;
     }
     let mut builder = ClassBuilder::new(NAME, objc2_05::runtime::NSObject::class())
-        //         // Invariant: the class name is unique, and this runs once at launch, so registration succeeds.
         .expect("register Elaris menu target");
     if let Some(protocol) = AnyProtocol::get("NSMenuDelegate") {
         builder.add_protocol(protocol);

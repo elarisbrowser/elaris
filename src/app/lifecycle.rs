@@ -126,7 +126,6 @@ pub(crate) fn open_history(state: &mut AppState, tx: &mut Tx) {
             state
                 .browser
                 .open_tab(InternalPage::History.address())
-                // Invariant: the History route is a constant that always parses.
                 .expect("valid built-in History route")
         });
     state.activate(tab);

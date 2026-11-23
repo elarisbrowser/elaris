@@ -88,7 +88,6 @@ impl super::AppState {
         }
         self.browser
             .open_tab(InternalPage::Settings.address())
-            // Invariant: the settings route is a constant that always parses.
             .expect("the built-in settings route is valid")
     }
 

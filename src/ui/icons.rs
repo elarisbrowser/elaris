@@ -176,7 +176,6 @@ fn search_engine_pixels(engine: SearchEngine) -> &'static Pixels {
         for image in &images {
             image
                 .wait()
-                // Invariant: the search engine icons are bundled assets that the tests decode.
                 .expect("bundled search engine icon must decode");
         }
         images
