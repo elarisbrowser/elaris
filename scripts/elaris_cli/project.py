@@ -9,7 +9,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import dependencies, engine, packaging
+from . import dependencies, engine, packaging, ui
 from .common import (
     CPP_BUILD_DIR,
     ROOT,
@@ -18,6 +18,7 @@ from .common import (
     prepare_ladybird_paths,
     require,
     run,
+    run_step,
     vcpkg_triplet,
 )
 
@@ -67,20 +68,22 @@ def setup(args: argparse.Namespace) -> None:
     prepare_ladybird_paths()
     dependencies.verify_ladybird_compiler()
     dependencies.install_ladybird_toolchain()
-    print("\nSetup is complete.")
-    print("Next: ./elaris build  # build Ladybird and Elaris")
-    print("      ./elaris run    # build if needed, then launch")
-    print("The first engine build can take a while. See CONTRIBUTING.md for the full workflow.")
+    ui.success("Setup is complete")
+    ui.next_steps([
+        ("./elaris build", "Build Ladybird and Elaris"),
+        ("./elaris run", "Build if needed, then launch"),
+    ])
+    ui.muted("\nThe first engine build can take a while. See CONTRIBUTING.md for the full workflow.")
 
 
 def build(args: argparse.Namespace) -> None:
     release = ["--release"] if _profile(args) == "release" else []
     if args.ui:
-        run("cargo", "+stable", "build", "--locked", *release)
+        run_step("Elaris interface", "cargo", "+stable", "build", "--locked", *release)
         return
     engine.build_for_elaris(args.jobs)
     _configure_bridge_environment(bridge_lib_dir())
-    run("cargo", "+stable", "build", "--locked", *release, "--features", "ladybird-bridge")
+    run_step("Elaris browser", "cargo", "+stable", "build", "--locked", *release, "--features", "ladybird-bridge")
 
 
 def format_sources(_args: argparse.Namespace) -> None:
@@ -122,12 +125,12 @@ def bundle(_args: argparse.Namespace) -> None:
     executable = _executable("release")
     if sys.platform == "darwin":
         bundled = packaging.macos_release_bundle(executable)
-        print(f"\nBundled {bundled.parents[2]}")
+        ui.success(f"Bundled {bundled.parents[2]}")
     elif sys.platform.startswith("linux"):
         prefix = ROOT / "build" / "linux" / "Elaris"
         packaging.linux_prefix_bundle(executable, prefix)
-        print(f"\nBundled {prefix}")
-        print(f"Install with: cp -R {prefix}/. ~/.local/  (then run update-desktop-database ~/.local/share/applications)")
+        ui.success(f"Bundled {prefix}")
+        ui.info(f"Install with: cp -R {prefix}/. ~/.local/  (then run update-desktop-database ~/.local/share/applications)")
     else:
         raise SystemExit("elaris: bundle supports macOS and Linux")
 
@@ -326,10 +329,19 @@ def hot_reload(args: argparse.Namespace) -> None:
 
 
 def check(_args: argparse.Namespace) -> None:
-    run("cargo", "+stable", "fmt", "--check")
-    run("cargo", "+stable", "check", "--locked")
-    run("cargo", "+stable", "clippy", "--locked", "--", "-D", "warnings")
-    run("cargo", "+stable", "test", "--locked")
+    steps = (
+        ("Formatting", "cargo", "+stable", "fmt", "--check"),
+        ("Type checking", "cargo", "+stable", "check", "--locked"),
+        ("Clippy lints", "cargo", "+stable", "clippy", "--locked", "--", "-D", "warnings"),
+        ("Rust tests", "cargo", "+stable", "test", "--locked"),
+        (
+            "Developer CLI tests",
+            sys.executable, "-m", "unittest", "discover", "-s", str(ROOT / "scripts" / "tests"), "-t", str(ROOT / "scripts"),
+        ),
+    )
+    for number, (title, *command) in enumerate(steps, start=1):
+        run_step(title, *command, position=(number, len(steps)))
+    ui.success("All checks passed")
 
 
 def register_commands(commands) -> None:

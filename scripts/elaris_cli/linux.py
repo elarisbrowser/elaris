@@ -10,7 +10,7 @@ import socket
 import subprocess
 from pathlib import Path
 
-from . import engine
+from . import engine, ui
 from .common import ENGINE, ROOT, require, run
 
 DEVCONTAINER_DIR = ROOT / ".devcontainer"
@@ -100,7 +100,7 @@ def _run_in_container(
     for directory in (ROOT / "build", ROOT / "target", ENGINE / "Build", ladybird_main_dir / "Build"):
         directory.mkdir(parents=True, exist_ok=True)
 
-    print(f"Building the {architecture} container image. Docker output follows.", flush=True)
+    ui.info(f"Building the {architecture} container image. Docker output follows.")
     run(
         "docker",
         "build",
@@ -135,7 +135,7 @@ def _run_in_container(
     for target, source in volumes.items():
         mounts.extend(["--mount", f"type=volume,source={source},target={target},volume-nocopy"])
 
-    print("Preparing the container's build cache volumes.", flush=True)
+    ui.info("Preparing the container's build cache volumes.")
     run(
         "docker",
         "run",
@@ -170,9 +170,9 @@ def _run_in_container(
         container.extend(["--env", f"{name}={value}"])
     container.extend(["--workdir", str(ROOT), image, *command])
 
-    print(f"Running on {architecture}. Container output follows.", flush=True)
+    ui.info(f"Running on {architecture}. Container output follows.")
     if announce:
-        print(announce, flush=True)
+        ui.info(announce)
     try:
         run(*container)
     except (KeyboardInterrupt, SystemExit):

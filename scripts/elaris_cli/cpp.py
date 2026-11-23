@@ -15,6 +15,7 @@ from .common import (
     prepare_ladybird_paths,
     require,
     run,
+    run_step,
     vcpkg_triplet,
 )
 
@@ -60,8 +61,8 @@ def cpp_configure(_args: argparse.Namespace) -> None:
         raise SystemExit(f"elaris: HarfBuzz libraries are missing from {prefix}")
     cmake_prefixes = [str(prefix)]
     cmake_prefixes.extend(path for path in os.environ.get("CMAKE_PREFIX_PATH", "").split(os.pathsep) if path)
-    run(
-        "cmake", "-S", str(ENGINE), "-B", str(CPP_BUILD_DIR), "-G", "Ninja",
+    run_step(
+        "Bridge configuration", "cmake", "-S", str(ENGINE), "-B", str(CPP_BUILD_DIR), "-G", "Ninja",
         # Ladybird's own Release preset; without a build type everything compiles unoptimised.
         "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON", "-DENABLE_GUI_TARGETS=ON",

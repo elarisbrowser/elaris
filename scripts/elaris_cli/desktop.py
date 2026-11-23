@@ -4,6 +4,7 @@ import argparse
 import os
 import platform
 
+from . import ui
 from .common import ROOT, require, run
 from .linux import require_docker_daemon
 
@@ -19,7 +20,7 @@ def desktop(args: argparse.Namespace) -> None:
     require("docker")
     require_docker_daemon()
 
-    print("Building the desktop image. Docker output follows.", flush=True)
+    ui.info("Building the desktop image. Docker output follows.")
     run(
         "docker",
         "build",
@@ -34,7 +35,7 @@ def desktop(args: argparse.Namespace) -> None:
         str(DESKTOP_DIR),
     )
 
-    print(f"Open {VIEWER_URL} in a browser once Elaris starts.", flush=True)
+    ui.info(f"Open {VIEWER_URL} in a browser once Elaris starts.")
     command = [
         "docker",
         "run",

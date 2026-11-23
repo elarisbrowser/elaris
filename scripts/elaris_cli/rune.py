@@ -4,6 +4,7 @@ import argparse
 import re
 import subprocess
 
+from . import ui
 from .common import ROOT, require, run
 
 RUNE_GIT = "https://github.com/elarisbrowser/rune"
@@ -54,7 +55,7 @@ def pin(args: argparse.Namespace) -> None:
     # Resolving re-locks only the sources whose revision changed; every other package keeps its lock.
     quiet("cargo", "metadata", "--format-version", "1")
     quiet("cargo", "metadata", "--locked", "--no-deps", "--format-version", "1")
-    print(f"elaris: Rune is pinned to {revision} (was {', '.join(sorted(pins))})")
+    ui.success(f"Rune is pinned to {revision} (was {', '.join(sorted(pins))})")
     if not args.no_check:
         run("cargo", "+stable", "check", "--locked")
 

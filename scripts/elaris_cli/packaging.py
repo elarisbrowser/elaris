@@ -7,6 +7,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from . import ui
 from .common import ENGINE, ROOT, VCPKG_INSTALLED, run, vcpkg_triplet
 
 ASSETS = ROOT / "assets"
@@ -128,14 +129,14 @@ def macos_release_bundle(executable: Path) -> Path:
     previous = RELEASE_BUNDLE_STAMP.read_text().split() if RELEASE_BUNDLE_STAMP.is_file() else []
     if bundled_executable.is_file() and len(previous) == 2 and previous[0] == engine:
         if previous[1] != elaris:
-            print("Updating Elaris in Elaris.app…", flush=True)
+            ui.info("Updating Elaris in Elaris.app…")
             shutil.copy2(executable, bundled_executable)
             tool.fix_rpaths(app)
             tool.resign(app, ENGINE_BUILD)
             RELEASE_BUNDLE_STAMP.write_text(f"{engine} {elaris}")
         return bundled_executable
 
-    print("Bundling Elaris.app with Ladybird's engine (about 30 seconds)…", flush=True)
+    ui.info("Bundling Elaris.app with Ladybird's engine (about 30 seconds)…")
     RELEASE_BUNDLE_STAMP.unlink(missing_ok=True)
     if app.exists():
         shutil.rmtree(app)
@@ -164,7 +165,7 @@ def macos_release_bundle(executable: Path) -> Path:
     tool.fix_rpaths(app)
     tool.resign(app, ENGINE_BUILD)
     tool.verify(app)
-    print(f"copied {len(copied)} libraries into {app.name}/Contents/lib")
+    ui.info(f"copied {len(copied)} libraries into {app.name}/Contents/lib")
     RELEASE_BUNDLE_STAMP.write_text(f"{engine} {elaris}")
     return bundled_executable
 

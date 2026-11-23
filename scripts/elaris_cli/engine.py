@@ -7,8 +7,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from . import cpp, dependencies
-from .common import CPP_BUILD_DIR, ENGINE, ROOT, prepare_ladybird_paths, require, run
+from . import cpp, dependencies, ui
+from .common import CPP_BUILD_DIR, ENGINE, ROOT, prepare_ladybird_paths, require, run_step
 
 BUILD_DIR = Path(os.environ.get("LADYBIRD_BUILD_DIR", ENGINE / "Build" / "release"))
 BUILD_TARGETS = (
@@ -42,10 +42,17 @@ def build_for_elaris(jobs: Optional[str] = None) -> None:
     dependencies.install_rust_toolchain()
     dependencies.install_ladybird_toolchain()
     ladybird_script = str(ENGINE / "Meta" / "ladybird.py")
-    run(sys.executable, ladybird_script, "vcpkg", "--preset", "Release", "--jobs", jobs, cwd=ENGINE)
-    run(sys.executable, ladybird_script, "deps", "--preset", "Release", "--jobs", jobs, cwd=ENGINE)
+    run_step(
+        "Ladybird vcpkg packages", sys.executable, ladybird_script, "vcpkg", "--preset", "Release", "--jobs", jobs,
+        cwd=ENGINE,
+    )
+    run_step(
+        "Ladybird dependencies", sys.executable, ladybird_script, "deps", "--preset", "Release", "--jobs", jobs,
+        cwd=ENGINE,
+    )
     cpp.cpp_configure(argparse.Namespace())
-    run(
+    run_step(
+        "Elaris bridge and helpers",
         "cmake",
         "--build",
         str(CPP_BUILD_DIR),
@@ -87,11 +94,15 @@ def engine_status(_args: argparse.Namespace) -> None:
         ["git", "status", "--porcelain"], cwd=ENGINE,
         check=True, capture_output=True, text=True,
     ).stdout.strip()
-    print(f"Pinned revision: {revision}")
-    print(f"Checked out:     {checked}")
-    print(f"Revision status: {'matches pin' if revision == checked else 'differs from pin'}")
-    print(f"Build artifacts: {'present' if BUILD_DIR.is_dir() else 'absent'} ({BUILD_DIR})")
-    print(f"Checkout status: {'modified' if dirty else 'clean'}")
+    matches = revision == checked
+    ui.heading("Ladybird engine")
+    ui.table([
+        ("Pinned revision", revision, None),
+        ("Checked out", checked, None),
+        ("Revision status", "matches pin" if matches else "differs from pin", "success" if matches else "warning"),
+        ("Build artifacts", f"{'present' if BUILD_DIR.is_dir() else 'absent'} ({BUILD_DIR})", None),
+        ("Checkout status", "modified" if dirty else "clean", "warning" if dirty else "success"),
+    ])
 
 
 def register_commands(commands) -> None:
