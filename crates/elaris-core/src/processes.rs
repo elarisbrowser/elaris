@@ -315,23 +315,58 @@ fn contains(haystack: &str, lowercase_needle: &str) -> bool {
     haystack.to_lowercase().contains(lowercase_needle)
 }
 
-/// The memory each browser tab's page holds, in bytes, by the tab's view ID. A process shared by
-/// several tabs of one site is split evenly between them, and the helpers it owns, such as its
-/// media server, count towards it.
-pub fn tab_memory(processes: &[Process]) -> std::collections::HashMap<u64, u64> {
-    let mut memory = std::collections::HashMap::new();
+/// What one browser tab's page uses: its share of the processes that host it.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct TabUsage {
+    /// Percent of one core.
+    pub cpu: f64,
+    /// Bytes.
+    pub memory: u64,
+}
+
+/// What each browser tab's page uses, by the tab's view ID. A process shared by several tabs of
+/// one site is split evenly between them, and the helpers it owns, such as its media server, count
+/// towards it.
+pub fn tab_usage(processes: &[Process]) -> std::collections::HashMap<u64, TabUsage> {
+    let mut usage = std::collections::HashMap::<u64, TabUsage>::new();
     for process in processes.iter().filter(|process| !process.tabs.is_empty()) {
-        let helpers: u64 = processes
+        let helpers = processes
             .iter()
-            .filter(|helper| helper.owner == Some(process.id))
-            .map(|helper| helper.memory)
-            .sum();
-        let share = (process.memory + helpers) / process.tabs.len() as u64;
+            .filter(|helper| helper.owner == Some(process.id));
+        let (cpu, memory) = helpers.fold((process.cpu, process.memory), |(cpu, memory), helper| {
+            (cpu + helper.cpu, memory + helper.memory)
+        });
+        let tabs = process.tabs.len();
         for tab in process.tabs.iter().filter(|tab| tab.view != 0) {
-            *memory.entry(tab.view).or_default() += share;
+            let entry = usage.entry(tab.view).or_default();
+            entry.cpu += cpu / tabs as f64;
+            entry.memory += memory / tabs as u64;
         }
     }
-    memory
+    usage
+}
+
+/// The memory each browser tab's page holds, in bytes, by the tab's view ID, as [`tab_usage`]
+/// shares it out.
+pub fn tab_memory(processes: &[Process]) -> std::collections::HashMap<u64, u64> {
+    tab_usage(processes)
+        .into_iter()
+        .map(|(view, usage)| (view, usage.memory))
+        .collect()
+}
+
+impl Overview {
+    /// What each browser tab's page uses, by the tab's view ID.
+    pub fn tab_usage(&self) -> std::collections::HashMap<u64, TabUsage> {
+        let processes: Vec<Process> = self
+            .browser
+            .iter()
+            .chain(self.sites.iter().flat_map(|site| &site.processes))
+            .chain(&self.spare)
+            .cloned()
+            .collect();
+        tab_usage(&processes)
+    }
 }
 
 #[cfg(test)]
@@ -372,6 +407,26 @@ mod tests {
         assert_eq!(memory[&8], 300);
         assert_eq!(memory[&9], 150);
         assert_eq!(memory.len(), 3);
+    }
+
+    #[test]
+    fn tab_usage_shares_cpu_as_memory_and_reads_from_an_overview() {
+        let tab = |view| ProcessTab {
+            view,
+            title: String::new(),
+        };
+        let mut page = process(2, "WebContent", "a.example", 400);
+        page.cpu = 4.0;
+        page.tabs = vec![tab(7), tab(8)];
+        let usage = Overview::new(vec![process(1, "Browser", "", 999), page]).tab_usage();
+        assert_eq!(
+            usage[&7],
+            TabUsage {
+                cpu: 2.0,
+                memory: 200
+            }
+        );
+        assert_eq!(usage.len(), 2);
     }
 
     #[test]
