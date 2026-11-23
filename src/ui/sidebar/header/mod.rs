@@ -169,8 +169,8 @@ fn header_content(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>, reveal
     header
 }
 
-/// The Linux row with a right-hand sidebar: the window controls take the left, and the buttons
-/// hold the sidebar's column at the window's right edge.
+/// The Linux row with a right-hand sidebar: the buttons hold the sidebar's column, and the window
+/// controls keep their usual place at the window's right edge.
 #[cfg(elaris_ui = "linux")]
 fn flipped_header(state: &AppState, lead: El, cx: &mut Cx<AppState>, theme: &Theme) -> El {
     row()
@@ -181,10 +181,10 @@ fn flipped_header(state: &AppState, lead: El, cx: &mut Cx<AppState>, theme: &The
         .absolute(0.0, 0.0)
         .w_full()
         .window_drag()
-        .pl(theme::SIDEBAR_PADDING)
-        .children(fading_window_controls(state, theme, cx))
+        .pr(theme::SIDEBAR_PADDING)
         .child(spacer())
         .child(lead)
+        .children(fading_window_controls(state, theme, cx))
 }
 
 #[cfg(elaris_ui = "linux")]
