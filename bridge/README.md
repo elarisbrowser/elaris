@@ -75,6 +75,8 @@ Automatic runs can be added later by defining `push` and `pull_request` path fil
 ./elaris patches check --ref <commit> # a revision already fetched into vendor/ladybird
 ```
 
+`./elaris patches refresh` regenerates every fuzzy patch against the checkout so it applies cleanly again; conflicts still need fixing by hand.
+
 The weekly `Ladybird patches` workflow runs the `--upstream` check so drift shows up before a bump.
 
 Elaris also applies [disable-reporting.patch](patches/disable-reporting.patch) to LibWebView. It keeps Ladybird's crash capture running but never keeps or submits crash reports, and it makes web-compatibility report submissions fail before any network request. The two switches are `reporting_enabled` in `ReportSubmission.cpp` and the `crash_report_sending()` getter in `Settings.h`.

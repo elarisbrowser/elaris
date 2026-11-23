@@ -38,26 +38,56 @@ def _source(path: str, ref: Optional[str]) -> Optional[bytes]:
     return result.stdout if result.returncode == 0 else None
 
 
+def _stage(patch: Path, ref: Optional[str], staging: Path) -> Optional[str]:
+    """Copy a patch's upstream files into `staging`; return the first missing path, if any."""
+    for path in targets(patch):
+        contents = _source(path, ref)
+        if contents is None:
+            return path
+        staged = staging / path
+        staged.parent.mkdir(parents=True, exist_ok=True)
+        staged.write_bytes(contents)
+    return None
+
+
+def _apply(patch: Path, staging: Path, dry_run: bool) -> subprocess.CompletedProcess:
+    command = ["patch", "--verbose", "--batch", "--forward", "--no-backup-if-mismatch", "-p1", "-i", str(patch)]
+    if dry_run:
+        command.insert(1, "--dry-run")
+    return subprocess.run(command, cwd=staging, capture_output=True, text=True, check=False)
+
+
 def check_patch(patch: Path, ref: Optional[str]) -> Result:
     with tempfile.TemporaryDirectory() as staging:
-        for path in targets(patch):
-            contents = _source(path, ref)
-            if contents is None:
-                return Result(patch.stem, "conflict", f"{path} no longer exists")
-            staged = Path(staging) / path
-            staged.parent.mkdir(parents=True, exist_ok=True)
-            staged.write_bytes(contents)
-        result = subprocess.run(
-            ("patch", "--verbose", "--dry-run", "--batch", "--forward", "-p1", "-i", str(patch)),
-            cwd=staging, capture_output=True, text=True, check=False,
-        )
+        missing = _stage(patch, ref, Path(staging))
+        if missing:
+            return Result(patch.stem, "conflict", f"{missing} no longer exists")
+        result = _apply(patch, Path(staging), dry_run=True)
     output = result.stdout + result.stderr
-    if result.returncode:
-        failed = [line.strip() for line in output.splitlines() if re.search(r"failed|reversed", line, re.I)]
+    # Some `patch` builds exit 0 after skipping a reversed or already-applied section.
+    failed = [line.strip() for line in output.splitlines() if re.search(r"failed|reversed|ignored", line, re.I)]
+    if result.returncode or failed:
         return Result(patch.stem, "conflict", "; ".join(failed) or "does not apply")
     if "fuzz" in output or "offset" in output:
         return Result(patch.stem, "fuzzy", "applies with offset or fuzz; refresh it")
     return Result(patch.stem, "clean")
+
+
+def refresh_patch(patch: Path) -> None:
+    """Regenerate a patch against the checkout, keeping its changes and dropping offsets and fuzz."""
+    with tempfile.TemporaryDirectory() as staging:
+        _stage(patch, None, Path(staging))
+        if _apply(patch, Path(staging), dry_run=False).returncode:
+            raise SystemExit(f"elaris: {patch.name} does not apply; resolve it by hand")
+        hunks = []
+        # A patch may change one file in several sections; diff each file once.
+        for path in dict.fromkeys(targets(patch)):
+            diff = subprocess.run(
+                ("diff", "-u", "--label", f"a/{path}", "--label", f"b/{path}", str(ENGINE / path), path),
+                cwd=staging, capture_output=True, text=True, check=False,
+            )
+            hunks.append(diff.stdout)
+    patch.write_text("".join(hunks))
 
 
 def check_all(ref: Optional[str] = None) -> list:
@@ -79,7 +109,7 @@ def ensure_patches_apply() -> None:
     results = check_all()
     if any(r.status == "conflict" for r in results):
         report(results, "the checkout")
-        raise SystemExit("elaris: Ladybird patches conflict; refresh them in bridge/patches")
+        raise SystemExit("elaris: Ladybird patches conflict; fix them by hand in bridge/patches")
 
 
 def _upstream_ref() -> str:
@@ -105,6 +135,14 @@ def patches_check(args: argparse.Namespace) -> None:
         raise SystemExit("elaris: some Ladybird patches no longer apply")
 
 
+def patches_refresh(_args: argparse.Namespace) -> None:
+    require("patch", "diff")
+    fuzzy = [r.name for r in check_all() if r.status == "fuzzy"]
+    for name in fuzzy:
+        refresh_patch(PATCH_DIR / f"{name}.patch")
+    ui.success(f"Refreshed {', '.join(fuzzy)}" if fuzzy else "Every patch already applies cleanly")
+
+
 def register_commands(commands) -> None:
     patches = commands.add_parser("patches", help="Ladybird patch commands")
     subcommands = patches.add_subparsers(dest="patches_command", required=True)
@@ -113,3 +151,5 @@ def register_commands(commands) -> None:
     target.add_argument("--ref", help="Ladybird commit, tag or branch (default: the checkout)")
     target.add_argument("--upstream", action="store_true", help=f"Fetch and check upstream {UPSTREAM_BRANCH}")
     check.set_defaults(handler=patches_check)
+    refresh = subcommands.add_parser("refresh", help="Regenerate patches that apply with offset or fuzz")
+    refresh.set_defaults(handler=patches_refresh)

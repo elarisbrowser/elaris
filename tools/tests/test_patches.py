@@ -56,6 +56,20 @@ class CheckPatchTests(unittest.TestCase):
         self.write_source("zero\nzero\nzero\nzero\none\ntwo\nthree\n")
         self.assertEqual(patches.check_patch(self.patch, None).status, "fuzzy")
 
+    def test_refresh_removes_offset(self) -> None:
+        self.write_source("zero\nzero\nzero\nzero\none\ntwo\nthree\n")
+        patches.refresh_patch(self.patch)
+        self.assertNotIn("@@ -1,3", self.patch.read_text())
+        self.assertEqual(patches.check_patch(self.patch, None).status, "clean")
+
+    def test_refresh_merges_repeated_file(self) -> None:
+        self.write_source("zero\none\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\n")
+        self.patch.write_text(PATCH.replace("-1,3 +1,3", "-2,3 +2,3") + PATCH.replace("-1,3 +1,3", "-8,3 +8,3")
+                              .replace("one", "six").replace("two", "seven").replace("TWO", "SEVEN").replace("three", "eight"))
+        patches.refresh_patch(self.patch)
+        self.assertEqual(self.patch.read_text().count("+++ b/"), 1)
+        self.assertEqual(patches.check_patch(self.patch, None).status, "clean")
+
 
 if __name__ == "__main__":
     unittest.main()
