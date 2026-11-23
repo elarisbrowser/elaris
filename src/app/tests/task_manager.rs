@@ -95,3 +95,50 @@ fn task_manager_reports_a_missing_engine() {
     runtime.frame(0.0);
     assert!(runtime.state.task_manager.load_error.is_some());
 }
+
+#[test]
+fn task_manager_lists_tabs_with_their_usage_and_sleeps_one() {
+    let mut state = AppState::new(Some("elaris://processes"));
+    let manager = state.browser.active_tab().unwrap().id();
+    let (engine, fake) = crate::engine::Engine::fake();
+    state.browser.connect(engine);
+    let page = state.browser.open_tab("https://example.com/").unwrap();
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::ui::view,
+        (1280.0, 800.0),
+        rune::Env::default(),
+    );
+    runtime.poll = Some(crate::app::poll);
+    runtime.frame(0.0);
+    let mut content = process(2, "WebContent", "example.com");
+    content.tabs.push(elaris_core::processes::ProcessTab {
+        view: page.raw(),
+        title: "Example".into(),
+    });
+    fake.updates
+        .send(Update::Processes(manager, Ok(vec![content])))
+        .unwrap();
+    runtime.frame(0.016);
+    runtime.frame(0.032);
+    let row = format!("task-manager-tab:{}", page.raw());
+    assert!(runtime.presented(&row).is_some(), "the tab is listed");
+    fake.commands.try_iter().count();
+
+    runtime.update(|state, _| state.sleep_now(page));
+    assert!(fake.commands.try_iter().any(|command| command
+        == Command::View(
+            page,
+            crate::engine::ViewCommand::Discard {
+                memory_pressure: true
+            }
+        )));
+
+    // A sleeping tab stays listed, without figures.
+    runtime.update(|state, _| state.browser.tab_mut(page).unwrap().asleep = true);
+    runtime.frame(0.048);
+    assert!(
+        runtime.presented(&row).is_some(),
+        "a sleeping tab is listed"
+    );
+}

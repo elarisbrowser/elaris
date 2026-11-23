@@ -21,6 +21,8 @@ use super::widgets;
 use super::{PageAction, PageContext};
 
 const SEARCH_WIDTH: f32 = 420.0;
+/// Shown for a figure a sleeping tab doesn't have.
+const NONE: &str = "—";
 
 pub(super) const ACTIONS: &[PageAction] = &[PageAction {
     label: "End Process",
@@ -84,11 +86,13 @@ pub(super) fn view(cx: &mut PageContext) -> PageLayout {
     };
     content = content.child(summary(overview, theme));
     let shown = overview.filtered(&page.input.text);
-    if shown.is_empty() {
+    let columns = Columns { pid: !cx.compact };
+    let tab_rows = tab_rows(state, overview, &page.input.text, columns, kit, theme);
+    if shown.is_empty() && tab_rows.is_empty() {
         content = content.child(
             widgets::message(
                 &icons::SEARCH,
-                "No matching processes",
+                "No matching tabs or processes",
                 "Try another search.",
                 theme,
             )
@@ -101,7 +105,15 @@ pub(super) fn view(cx: &mut PageContext) -> PageLayout {
         );
     }
     let searching = !page.input.text.trim().is_empty();
-    let columns = Columns { pid: !cx.compact };
+    if !tab_rows.is_empty() {
+        content = content.child(section(
+            "task-manager-tabs",
+            "Tabs",
+            columns,
+            theme,
+            tab_rows,
+        ));
+    }
     if !shown.browser.is_empty() {
         let rows = shown
             .browser
@@ -143,6 +155,85 @@ pub(super) fn view(cx: &mut PageContext) -> PageLayout {
         content = content.child(section("task-manager-spare", "Spare", columns, theme, rows));
     }
     PageLayout::new(TASK_MANAGER_SCROLL, &icons::ACTIVITY, content).toolbar(toolbar)
+}
+
+/// This window's web pages, with what each uses and whether Memory Saver lets it sleep.
+fn tab_rows(
+    state: &AppState,
+    overview: &Overview,
+    query: &str,
+    columns: Columns,
+    kit: &rune_kit::Kit,
+    theme: &Theme,
+) -> Vec<El> {
+    let query = query.trim().to_lowercase();
+    let usage = overview.tab_usage();
+    let shown = state.browser.visible_tabs();
+    state
+        .browser
+        .tabs()
+        .iter()
+        .filter(|tab| !tab.is_internal())
+        .filter(|tab| {
+            query.is_empty()
+                || tab.label().to_lowercase().contains(&query)
+                || tab.url.to_lowercase().contains(&query)
+        })
+        .map(|tab| {
+            let id = tab.id();
+            let status = if tab.asleep {
+                "Sleeping".to_owned()
+            } else {
+                let reasons = state.awake_reasons(tab);
+                if !reasons.is_empty() {
+                    let reasons: Vec<_> = reasons.iter().map(|reason| reason.label()).collect();
+                    format!("Stays awake: {}", reasons.join(", "))
+                } else if state.settings.memory_saver == elaris_memory_saver::MemorySaver::Off {
+                    String::new()
+                } else {
+                    "Can sleep".to_owned()
+                }
+            };
+            let leading = if tab.asleep {
+                glyph(&icons::BED, theme)
+            } else {
+                favicon(state, id.raw()).unwrap_or_else(|| glyph(&icons::PAGE, theme))
+            };
+            let sleep = (!tab.asleep && !shown.contains(&Some(id))).then(|| {
+                Button::new("Sleep")
+                    .variant(ButtonVariant::Ghost)
+                    .on_press(move |state: &mut AppState| state.sleep_now(id))
+                    .build(kit)
+            });
+            let name = row()
+                .grow(1.0)
+                .min_w(0.0)
+                .gap(space::S2)
+                .center_y()
+                .child(leading)
+                .child(name_and_note(tab.label(), &status, false, theme))
+                .children(sleep);
+            let used = (!tab.asleep)
+                .then(|| usage.get(&id.raw()))
+                .flatten()
+                .map(|usage| (usage.cpu, usage.memory));
+            metrics_row(
+                format!("task-manager-tab:{}", id.raw()),
+                name,
+                used,
+                None,
+                columns,
+                theme,
+            )
+            .fill(Color::TRANSPARENT)
+            .opacity(if tab.asleep {
+                theme::ASLEEP_OPACITY
+            } else {
+                1.0
+            })
+            .label(format!("{}, {status}", tab.label()))
+        })
+        .collect()
 }
 
 /// Which of the optional columns fit.
@@ -266,8 +357,7 @@ fn site_row(state: &AppState, site: &Site, expanded: bool, columns: Columns, the
     metrics_row(
         format!("task-manager-site:{key}"),
         name,
-        site.cpu,
-        site.memory,
+        Some((site.cpu, site.memory)),
         None,
         columns,
         theme,
@@ -344,8 +434,7 @@ fn process_row(
     metrics_row(
         format!("task-manager-process:{id}"),
         content,
-        process.cpu,
-        process.memory,
+        Some((process.cpu, process.memory)),
         Some(process.pid),
         columns,
         theme,
@@ -386,8 +475,7 @@ fn process_row(
 fn metrics_row(
     key: String,
     name: El,
-    cpu: f64,
-    memory: u64,
+    usage: Option<(f64, u64)>,
     pid: Option<i64>,
     columns: Columns,
     theme: &Theme,
@@ -410,11 +498,14 @@ fn metrics_row(
         .focus_ring(theme::FOCUS_WIDTH, -1.0, theme.focus)
         .child(name)
         .child(figure(
-            processes::format_cpu(cpu),
+            usage.map_or_else(|| NONE.to_owned(), |(cpu, _)| processes::format_cpu(cpu)),
             theme::TASK_MANAGER_METRIC_WIDTH,
         ))
         .child(figure(
-            processes::format_memory(memory),
+            usage.map_or_else(
+                || NONE.to_owned(),
+                |(_, memory)| processes::format_memory(memory),
+            ),
             theme::TASK_MANAGER_METRIC_WIDTH,
         ))
         .children(columns.pid.then(|| {
