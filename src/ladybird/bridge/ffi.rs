@@ -198,6 +198,7 @@ unsafe extern "C" {
         default_policy: i32,
         json: *const c_char,
     ) -> i32;
+    pub(super) fn elaris_ladybird_set_force_dark(bridge: *mut RawBridge, enabled: i32) -> i32;
     pub(super) fn elaris_ladybird_set_content_blocking(
         bridge: *mut RawBridge,
         enabled: i32,

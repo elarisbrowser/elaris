@@ -2030,6 +2030,18 @@ extern "C" int32_t elaris_ladybird_set_autoplay(ElarisLadybird* bridge, int32_t 
     return succeed();
 }
 
+extern "C" int32_t elaris_ladybird_set_force_dark(ElarisLadybird* bridge, int32_t enabled) {
+    if (!bridge || !s_application || !on_owner_thread(bridge))
+        return fail("force dark requires the bridge owner thread");
+    auto& settings = WebView::Application::settings();
+    auto content_settings = settings.content_settings();
+    if (content_settings.enable_force_dark != (enabled != 0)) {
+        content_settings.enable_force_dark = enabled != 0;
+        settings.set_content_settings(move(content_settings));
+    }
+    return succeed();
+}
+
 extern "C" int32_t elaris_ladybird_set_content_blocking(ElarisLadybird* bridge, int32_t enabled, char const* json) {
     if (!bridge || !s_application || !on_owner_thread(bridge) || !json)
         return fail("content blocking requires the bridge owner thread");

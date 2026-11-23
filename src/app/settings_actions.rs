@@ -267,6 +267,23 @@ impl super::AppState {
         }
     }
 
+    /// Turns force dark mode on or off, and sends the engine its state.
+    pub(crate) fn set_force_dark(&mut self, enabled: bool) {
+        if self.settings.force_dark == enabled {
+            return;
+        }
+        self.settings.force_dark = enabled;
+        self.sync_engine_force_dark();
+        self.save_setting(SettingsChange::ForceDark(enabled));
+    }
+
+    pub(crate) fn sync_engine_force_dark(&self) {
+        self.browser
+            .send_engine(crate::engine::Command::SetForceDark(
+                self.settings.force_dark,
+            ));
+    }
+
     /// Turns content blocking on or off, and sends the engine its state.
     pub(crate) fn set_content_blocking(&mut self, enabled: bool) {
         if self.settings.content_blocking.enabled == enabled {
@@ -382,6 +399,7 @@ impl super::AppState {
         super::publish_permissions(&self.permission_store);
         self.sync_engine_autoplay();
         self.sync_engine_content_blocking();
+        self.sync_engine_force_dark();
         let download_directory = self.engine_download_directory();
         if previous_download_directory != download_directory {
             self.browser.set_download_directory(download_directory);

@@ -193,6 +193,14 @@ impl Ladybird {
         })
     }
 
+    /// Turns force dark mode on or off for every page without a per-site choice.
+    pub fn set_force_dark(&mut self, enabled: bool) -> Result<(), String> {
+        // SAFETY: The bridge is live on its owner thread.
+        status_result(unsafe {
+            elaris_ladybird_set_force_dark(self.owner.raw.as_ptr(), i32::from(enabled))
+        })
+    }
+
     /// Turns the content blocker on or off and enables the built-in lists named by identifier.
     pub fn set_content_blocking(&mut self, enabled: bool, lists: &[&str]) -> Result<(), String> {
         let json = serde_json::to_string(lists).map_err(|error| error.to_string())?;

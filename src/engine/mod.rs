@@ -154,6 +154,8 @@ pub(crate) enum Command {
         elaris_core::permissions::AutoplayPolicy,
         Vec<(String, elaris_core::permissions::AutoplayPolicy)>,
     ),
+    /// Turns force dark mode on or off for pages without a dark theme of their own.
+    SetForceDark(bool),
     /// Turns the content blocker on or off, and enables the built-in filter lists named by identifier.
     SetContentBlocking(bool, Vec<&'static str>),
     /// Clears engine data last used at or after the Unix millisecond time, or for all time.

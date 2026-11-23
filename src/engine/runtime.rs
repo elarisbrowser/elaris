@@ -154,6 +154,11 @@ impl Runtime {
                     .err()
                     .map(Update::Failed)
             }
+            Command::SetForceDark(enabled) => self
+                .ladybird
+                .set_force_dark(enabled)
+                .err()
+                .map(Update::Failed),
             Command::SetContentBlocking(enabled, lists) => self
                 .ladybird
                 .set_content_blocking(enabled, &lists)
@@ -327,6 +332,7 @@ impl Runtime {
             | Command::ClearBrowsingData(..)
             | Command::SetAutoplay(..)
             | Command::SetContentBlocking(..)
+            | Command::SetForceDark(_)
             | Command::SetPermissionDefault(..)
             | Command::SetPermissions(_)
             | Command::SetPermission(..)

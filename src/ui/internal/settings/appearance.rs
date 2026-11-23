@@ -66,6 +66,12 @@ fn appearance(cx: &mut PageContext) -> El {
         state.set_appearance(appearance);
     })
     .build(&cx.kit);
+    let force_dark = rune_kit::Switch::new(state.settings.force_dark)
+        .standard()
+        .label("Force dark mode")
+        .hide_label()
+        .on_toggle(|state: &mut AppState| state.set_force_dark(!state.settings.force_dark))
+        .build(&switch_kit(&cx.kit));
     let tab_layout = SegmentedControl::new(
         &TabLayout::ALL.map(TabLayout::label),
         TabLayout::ALL
@@ -114,6 +120,12 @@ fn appearance(cx: &mut PageContext) -> El {
             "Theme",
             "Choose how Elaris and webpages look.",
             theme_control,
+        ),
+        setting(
+            cx,
+            "Force dark mode",
+            "Darken web pages that don’t provide a dark theme of their own.",
+            force_dark,
         ),
         setting(
             cx,

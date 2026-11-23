@@ -312,6 +312,8 @@ void elaris_ladybird_free_string(char*);
 /* Replaces the autoplay default and site exceptions. Policies are 0 allow, 1 block audio, 2 block all;
  * json is an array of [origin, policy] rows. */
 int32_t elaris_ladybird_set_autoplay(ElarisLadybird*, int32_t default_policy, char const* json);
+/* Turns force dark mode on or off: pages without a dark theme of their own are darkened. */
+int32_t elaris_ladybird_set_force_dark(ElarisLadybird*, int32_t enabled);
 /* Turns the content blocker on or off. Filter lists refresh while it is on, so turning it on fetches them. json is an
  * array of the built-in list identifiers to enable; the others are disabled. Enabling a list while the blocker is on
  * fetches it straight away. */
