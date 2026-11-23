@@ -19,7 +19,8 @@ use super::section;
 const ACCENT_SWATCH_SIZE: f32 = 36.0;
 const ACCENT_DOT_SIZE: f32 = 20.0;
 const ACCENT_GAP: f32 = 5.0;
-const PAGE_STYLE_WIDTH: f32 = 76.0;
+/// Each choice takes an equal share of the control column.
+const PAGE_STYLE_WIDTH: f32 = (theme::PAGE_CONTROL_WIDTH - PAGE_STYLE_GAP) / 2.0;
 const PAGE_STYLE_HEIGHT: f32 = 50.0;
 const PAGE_STYLE_GAP: f32 = rune::tok::space::S3;
 const PAGE_STYLE_SIDEBAR: f32 = 22.0;
@@ -304,6 +305,7 @@ fn page_style_control(selected: PageStyle, theme: &Theme) -> El {
         .key("page-style-options")
         .role("radiogroup")
         .label("Page style")
+        .w(theme::PAGE_CONTROL_WIDTH)
         .gap(PAGE_STYLE_GAP);
     for (index, style) in PageStyle::ALL.into_iter().enumerate() {
         let is_selected = selected == style;
@@ -323,11 +325,17 @@ fn page_style_control(selected: PageStyle, theme: &Theme) -> El {
             );
         }
         let mut page = el().key("page").grow(1.0).h_full().fill(theme.page);
-        page = if card {
-            page.radius(rune::tok::radius::SM)
-        } else {
-            page.border(1.0, theme.control_border)
-        };
+        if card {
+            // Concentric with the sketch's corners, one inset in.
+            page = page.radius(rune::tok::radius::MD - PAGE_STYLE_INSET);
+        }
+        // Edge to edge, only a hairline parts the sidebar from the page.
+        let divider = (!card).then(|| {
+            el().key("divider")
+                .w(1.0)
+                .h_full()
+                .fill(theme.control_border)
+        });
         let sketch = row()
             .key("sketch")
             .size(PAGE_STYLE_WIDTH, PAGE_STYLE_HEIGHT)
@@ -345,10 +353,12 @@ fn page_style_control(selected: PageStyle, theme: &Theme) -> El {
             )
             .a11y_hidden()
             .child(lines)
+            .children(divider)
             .child(page);
         choices = choices.child(
             col()
                 .key(format!("page-style-{}", style.config_key()))
+                .w(PAGE_STYLE_WIDTH)
                 .role("radio")
                 .label(style.label())
                 .checked(is_selected)
