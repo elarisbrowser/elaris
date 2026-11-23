@@ -24,7 +24,7 @@ Run the project's standard Rust checks:
 ./elaris check
 ```
 
-This runs `cargo fmt --check`, `cargo check --locked`, `cargo clippy --locked -- -D warnings`, and `cargo test --locked`. If you changed bridge C++, also run:
+This runs `cargo fmt --check`, `cargo check --locked`, `cargo clippy --locked -- -D warnings`, `cargo test --locked`, and the developer CLI's unit tests. Each step shows its progress and the check stops at the first failure. If you changed bridge C++, also run:
 
 ```sh
 ./elaris cpp-format
@@ -32,6 +32,8 @@ This runs `cargo fmt --check`, `cargo check --locked`, `cargo clippy --locked --
 ```
 
 `cpp-tidy` uses the compilation database from the Ladybird bridge build. Bridge integration and FFI checks are documented in [bridge/README.md](bridge/README.md); the full Linux bridge workflow is available as a manual GitHub Actions workflow.
+
+Commands show live progress in an interactive terminal. In CI, or when output is piped, they print plain lines as they run. Pass `--verbose` before the command (`./elaris --verbose build`) to see every build line, and set `NO_COLOR=1` or pass `--no-color` to turn off colour. A build step's full output is kept in `build/logs/`.
 
 In the pull request description, summarize the user-visible or internal change and list the checks you ran. Include screenshots for visible UI changes when useful. Call out platform-specific behavior or limitations.
 
