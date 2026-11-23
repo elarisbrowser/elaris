@@ -1,11 +1,12 @@
-"""Pin Elaris to a commit of the Rune fork."""
+"""Pin Elaris to a commit of the Rune fork and record the Ladybird submodule's revision."""
 
 import argparse
 import re
 import subprocess
+from typing import Optional
 
-from . import ui
-from .common import ROOT, require, run
+from . import patches, ui
+from .common import ENGINE, ROOT, require, run
 
 RUNE_GIT = "https://github.com/elarisbrowser/rune"
 DEFAULT_BRANCH = "dev"
@@ -56,8 +57,32 @@ def pin(args: argparse.Namespace) -> None:
     quiet("cargo", "metadata", "--format-version", "1")
     quiet("cargo", "metadata", "--locked", "--no-deps", "--format-version", "1")
     ui.success(f"Rune is pinned to {revision} (was {', '.join(sorted(pins))})")
+    pin_ladybird(args.ladybird)
     if not args.no_check:
         run("cargo", "+stable", "check", "--locked")
+
+
+def git(*command: str, cwd=ENGINE) -> str:
+    result = subprocess.run(("git", *command), cwd=cwd, capture_output=True, text=True, check=False)
+    if result.returncode:
+        raise SystemExit(f"elaris: git {' '.join(command)} failed:\n{result.stderr.strip()}")
+    return result.stdout.strip()
+
+
+def pin_ladybird(ref: Optional[str]) -> None:
+    """Stage the Ladybird submodule at `ref` (fetched from upstream) or at its current checkout."""
+    if not (ENGINE / ".git").exists():
+        raise SystemExit("elaris: Ladybird submodule is missing; run ./elaris setup")
+    if git("status", "--porcelain"):
+        raise SystemExit(f"elaris: {ENGINE} has local changes; commit or discard them before pinning")
+    previous = git("ls-tree", "HEAD", "vendor/ladybird", cwd=ROOT).split()[2]
+    if ref:
+        git("fetch", "--quiet", "origin", ref)
+        git("checkout", "--quiet", "--detach", "FETCH_HEAD")
+    patches.ensure_patches_apply()
+    revision = git("rev-parse", "HEAD")
+    git("add", "vendor/ladybird", cwd=ROOT)
+    ui.success(f"Ladybird is pinned to {revision} (was {previous})")
 
 
 def quiet(*command: str) -> None:
@@ -68,12 +93,17 @@ def quiet(*command: str) -> None:
 
 
 def register_commands(commands) -> None:
-    command = commands.add_parser("pin", help="Pin Rune and its patches to a fork commit")
+    command = commands.add_parser("pin", help="Pin Rune to a fork commit and Ladybird to its checkout")
     command.add_argument(
         "ref",
         nargs="?",
         default=DEFAULT_BRANCH,
         help=f"Fork branch, tag or full commit (default: the {DEFAULT_BRANCH} branch's head)",
+    )
+    command.add_argument(
+        "--ladybird",
+        metavar="REF",
+        help="Upstream Ladybird branch, tag or commit to pin (default: the submodule's current checkout)",
     )
     command.add_argument("--no-check", action="store_true", help="Skip cargo check after pinning")
     command.set_defaults(handler=pin)

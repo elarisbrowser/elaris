@@ -40,7 +40,11 @@ After the fork's `dev` branch passes both projects' checks, pin it:
 It rewrites the shared revision of `rune`, `rune-kit` and every Rune-owned
 `[patch.crates-io]` entry in `Cargo.toml`, re-locks only those sources, verifies
 `cargo metadata --locked`, and runs `cargo check --locked` (skip with `--no-check`). It
-refuses while a local `.cargo/config.toml` patches Rune. Then run the remaining checks:
+refuses while a local `.cargo/config.toml` patches Rune.
+
+It also pins Ladybird: it stages `vendor/ladybird` at its current checkout, or at an
+upstream ref fetched with `--ladybird <branch|tag|commit>`, after checking the checkout
+is clean and Elaris's patches in `bridge/patches` still apply. Then run the remaining checks:
 
 ```sh
 cargo fmt --check
