@@ -12,7 +12,7 @@ use crate::ui::theme::{self, MENU_SCALE_FROM, Theme};
 
 /// Rows rise and fade in after the panel, one after another; they keep their place under reduced
 /// motion, where the stagger is dropped.
-pub(super) fn item_transition(reduced: bool) -> Transition {
+pub(crate) fn item_transition(reduced: bool) -> Transition {
     if reduced {
         Transition::none()
     } else {
@@ -21,7 +21,7 @@ pub(super) fn item_transition(reduced: bool) -> Transition {
 }
 
 /// What a menu or popover shares with its trigger: where it sits and how it is dismissed.
-pub(super) struct Anchored {
+pub(crate) struct Anchored {
     pub(super) key: String,
     pub(super) trigger: Option<El>,
     pub(super) open: bool,
@@ -73,7 +73,7 @@ impl Anchored {
 }
 
 /// A scrim that closes the menu on a press outside it, and the Escape handler for its panel.
-pub(super) fn dismissal<S: 'static>(
+pub(crate) fn dismissal<S: 'static>(
     key: &str,
     close: impl Fn(&mut S) + Clone + 'static,
 ) -> (El, Apply) {
@@ -98,7 +98,7 @@ pub(super) fn dismissal<S: 'static>(
 }
 
 /// The rounded container every menu, popover and dropdown panel draws.
-pub(super) fn surface(
+pub(crate) fn surface(
     key: &str,
     role: &'static str,
     min_width: f32,
@@ -129,7 +129,7 @@ pub(super) fn surface(
 
 /// Where a panel grows from: the edge that touches its trigger, and the side of that edge it
 /// aligns to. Matches Rune's overlay origin so a menu opens from its trigger.
-pub(super) fn origin(side: Side, align: Align) -> Vec2 {
+pub(crate) fn origin(side: Side, align: Align) -> Vec2 {
     let along = match align {
         Align::Start => 0.0,
         Align::Center => 0.5,
@@ -145,7 +145,7 @@ pub(super) fn origin(side: Side, align: Align) -> Vec2 {
 
 /// A panel scales in from 0.97 at its trigger edge while it fades in, and fades out in place.
 /// The rows follow it, so the two move the same way.
-pub(super) fn reveal(reduced: bool, origin: Vec2) -> Transition {
+pub(crate) fn reveal(reduced: bool, origin: Vec2) -> Transition {
     if reduced {
         return Transition::none();
     }

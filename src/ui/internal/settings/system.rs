@@ -7,9 +7,9 @@ use rune::{El, col, text};
 use rune_kit::{Button, ButtonVariant};
 
 use crate::app::AppState;
+use crate::ui::components::menu::Dropdown;
+use crate::ui::components::widgets::{actions, row_title, setting};
 use crate::ui::internal::PageContext;
-use crate::ui::internal::widgets::{actions, row_title, setting};
-use crate::ui::menu::Dropdown;
 use crate::ui::theme;
 use elaris_core::settings::StartupMode;
 

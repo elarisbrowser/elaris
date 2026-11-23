@@ -11,7 +11,7 @@ use crate::app::AppState;
 use crate::ui::theme::{self, Theme};
 
 /// The row keys of the open menu that draws a sliding highlight, or "" when none is open.
-fn scope(state: &AppState) -> &'static str {
+pub(crate) fn scope(state: &AppState) -> &'static str {
     if state.context_menu().is_some() {
         "sidebar-context-menu-item"
     } else if state.page_menu.open() {
@@ -61,7 +61,7 @@ pub(crate) fn poll(state: &mut AppState, tx: &mut Tx) -> bool {
 }
 
 /// The pointer entering a row asks the next poll to move the highlight there.
-pub(super) fn hover_row(state: &mut AppState, key: &str, inside: bool, tx: &mut Tx) {
+pub(crate) fn hover_row(state: &mut AppState, key: &str, inside: bool, tx: &mut Tx) {
     let scope = scope(state);
     if inside
         && !scope.is_empty()
@@ -74,7 +74,7 @@ pub(super) fn hover_row(state: &mut AppState, key: &str, inside: bool, tx: &mut 
 }
 
 /// Leaving the panel clears the pointer's highlight, and moving over it wakes the poll.
-pub(super) fn track(panel: El) -> El {
+pub(crate) fn track(panel: El) -> El {
     panel
         .on_hover_change(|state: &mut AppState, inside, tx| {
             if !inside && state.context_menu_highlight.take().is_some() {
@@ -88,7 +88,7 @@ pub(super) fn track(panel: El) -> El {
 }
 
 /// The highlight under a row `top` points down the menu keyed `key`.
-pub(super) fn view(key: &str, top: f32, reduced: bool, theme: &Theme) -> El {
+pub(crate) fn view(key: &str, top: f32, reduced: bool, theme: &Theme) -> El {
     el().key(format!("{key}-highlight"))
         .pin(Some(0.0), Some(0.0), Some(0.0), None)
         .h(theme::MENU_ROW_HEIGHT)
@@ -107,7 +107,7 @@ pub(super) fn view(key: &str, top: f32, reduced: bool, theme: &Theme) -> El {
 
 /// The row of the menu keyed `key` that its sliding highlight sits on, if the highlight is in
 /// this menu.
-pub(super) fn sliding_row(state: &AppState, key: &str) -> Option<String> {
+pub(crate) fn sliding_row(state: &AppState, key: &str) -> Option<String> {
     state
         .context_menu_highlight
         .clone()

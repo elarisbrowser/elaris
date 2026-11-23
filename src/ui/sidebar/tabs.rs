@@ -9,7 +9,8 @@ use super::drag::{PreviewItem, favourite_columns, favourite_row_ranges, favourit
 use crate::app::{self, AppState};
 use crate::tab::{Tab, TabId, TabSection};
 use crate::ui::TabDragMoveResult;
-use crate::ui::controls::{icon_button_style, row_button};
+use crate::ui::components::controls::{icon_button_style, row_button};
+use crate::ui::components::rule::hairline;
 use crate::ui::icons;
 use crate::ui::theme::{self, Theme};
 use elaris_core::settings::NewTabPosition;
@@ -280,7 +281,7 @@ fn divider(key: &'static str, theme: &Theme) -> El {
         .w_full()
         .px(theme::SIDEBAR_PADDING)
         .py(theme::SIDEBAR_DIVIDER_PADDING)
-        .child(el().w_full().h(1.0).fill(theme.overlay_border))
+        .child(hairline(theme.overlay_border))
 }
 
 /// The button that opens a new tab, at the top or bottom of the tab list.

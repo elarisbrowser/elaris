@@ -6,9 +6,10 @@
 use rune::tok::type_;
 use rune::{Cx, El, row, text};
 
+use super::components::controls;
 use super::sidebar::header;
 use super::theme::{self, Theme};
-use super::{controls, icons, page_dialog, peek, permission_prompt, viewport};
+use super::{icons, page_dialog, peek, permission_prompt, viewport};
 use crate::app::{AppState, open_in_browser};
 use elaris_core::address::compact_address;
 

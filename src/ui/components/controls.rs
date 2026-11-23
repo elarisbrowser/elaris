@@ -7,8 +7,8 @@ use rune::tok::type_;
 use rune::{Color, El, Icon, Transition, el, icon, row, text};
 
 use super::hover_highlight::{self, Group};
-use super::icons;
-use super::theme::{self, Theme};
+use crate::ui::icons;
+use crate::ui::theme::{self, Theme};
 
 /// A square button showing `glyph`, labelled for assistive technology and its tooltip.
 pub(crate) fn icon_button(
@@ -25,7 +25,7 @@ pub(crate) fn icon_button(
     )
 }
 
-pub(super) fn icon_button_style(
+pub(crate) fn icon_button_style(
     key: &str,
     label: &str,
     glyph: &'static Icon,
@@ -36,7 +36,7 @@ pub(super) fn icon_button_style(
 }
 
 /// An icon button's surface without its glyph, for a caller that stacks its own.
-pub(super) fn icon_button_frame(key: &str, label: &str, size: f32, theme: &Theme) -> El {
+pub(crate) fn icon_button_frame(key: &str, label: &str, size: f32, theme: &Theme) -> El {
     el().key(key)
         .size(size, size)
         .center()

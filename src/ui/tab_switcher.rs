@@ -173,17 +173,16 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32, _reduced: bool)
         .iter()
         .position(|&id| id == switcher.selected)?;
     let motion = Spring::NONE;
-    let mut items = col()
-        .key("quick-tab-items")
-        .w_full()
-        .child(super::hover_highlight::selection(
+    let mut items = col().key("quick-tab-items").w_full().child(
+        crate::ui::components::hover_highlight::selection(
             "quick-tab-highlight",
             index as f32 * ROW,
             ROW,
             radius::MD,
             theme,
             true,
-        ));
+        ),
+    );
     for &id in &switcher.candidates {
         if let Some(tab) = state.browser.tab(id) {
             items = items.child(entry(tab, id == switcher.selected, theme));

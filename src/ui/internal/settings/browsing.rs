@@ -9,9 +9,9 @@ use rune::{El, text};
 use rune_kit::{Button, ButtonVariant, SegmentedControl};
 
 use crate::app::AppState;
+use crate::ui::components::menu::Dropdown;
+use crate::ui::components::widgets::{actions, setting, setting_with};
 use crate::ui::internal::PageContext;
-use crate::ui::internal::widgets::{actions, setting, setting_with};
-use crate::ui::menu::Dropdown;
 use elaris_core::address::SearchEngine;
 use elaris_core::permissions::AutoplayPolicy;
 use elaris_core::settings::DownloadDirectory;

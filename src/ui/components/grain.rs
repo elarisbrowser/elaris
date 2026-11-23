@@ -8,9 +8,9 @@ use std::cell::RefCell;
 use rune::{El, Pixels, el};
 
 /// The opacity of the grain at full strength.
-const MAX_OPACITY: f32 = 0.08;
+pub(crate) const MAX_OPACITY: f32 = 0.08;
 /// A fixed seed, so the grain is the same on every launch and never moves.
-const SEED: u32 = 0x2545_F491;
+pub(crate) const SEED: u32 = 0x2545_F491;
 
 thread_local! {
     /// The last noise made, with its device size: a resize regenerates it, a repaint reuses it.
@@ -28,13 +28,13 @@ pub(crate) fn layer(grain: u8, width: f32, height: f32, scale: f32) -> El {
         .pixels(&noise(device_size(width, height, scale)))
 }
 
-fn device_size(width: f32, height: f32, scale: f32) -> (u32, u32) {
+pub(crate) fn device_size(width: f32, height: f32, scale: f32) -> (u32, u32) {
     let device = |logical: f32| (logical * scale).round().max(1.0) as u32;
     (device(width), device(height))
 }
 
 /// The noise at `size`, reused while the size holds.
-fn noise(size: (u32, u32)) -> Pixels {
+pub(crate) fn noise(size: (u32, u32)) -> Pixels {
     NOISE.with(|cache| {
         let mut cache = cache.borrow_mut();
         if let Some((cached, pixels)) = cache.as_ref()
@@ -50,7 +50,7 @@ fn noise(size: (u32, u32)) -> Pixels {
 
 /// Black and white pixels from a xorshift generator, taking each pixel's shade from the top bit:
 /// the low bits of xorshift repeat patterns.
-fn noise_pixels((width, height): (u32, u32)) -> Pixels {
+pub(crate) fn noise_pixels((width, height): (u32, u32)) -> Pixels {
     let mut state = SEED;
     let mut rgba = Vec::with_capacity((width * height * 4) as usize);
     for _ in 0..width * height {

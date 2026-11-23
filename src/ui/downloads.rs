@@ -6,10 +6,10 @@ use rune::tok::type_;
 use rune::{Align, El, LoopSpec, ScrollSpec, Side, col, el, row, text};
 
 use crate::app::AppState;
-use crate::ui::animated_icon;
-use crate::ui::controls;
-use crate::ui::hover_highlight::{self, Group};
-use crate::ui::menu::Popover;
+use crate::ui::components::animated_icon;
+use crate::ui::components::controls;
+use crate::ui::components::hover_highlight::{self, Group};
+use crate::ui::components::menu::Popover;
 use crate::ui::theme::{self, Theme};
 use elaris_core::downloads::{Download, DownloadId, Status};
 

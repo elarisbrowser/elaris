@@ -9,7 +9,7 @@ use super::Apply;
 use super::highlight;
 use super::surface::item_transition;
 use crate::app::AppState;
-use crate::ui::animated_icon::{self, AnimatedIcon};
+use crate::ui::components::animated_icon::{self, AnimatedIcon};
 use crate::ui::theme::{self, Theme};
 
 pub(crate) struct MenuItem {

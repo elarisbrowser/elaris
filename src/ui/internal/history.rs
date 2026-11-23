@@ -9,8 +9,9 @@ use rune_kit::{Button, ButtonVariant, Checkbox, Dialog, Kit};
 
 use crate::app::{AppState, HistoryConfirm};
 use crate::storage::HistoryMutation;
+use crate::ui::components::controls;
 use crate::ui::{
-    HISTORY_SCROLL, HISTORY_SEARCH, controls, icons,
+    HISTORY_SCROLL, HISTORY_SEARCH, icons,
     theme::{self, Theme},
 };
 use elaris_core::address::compact_address;

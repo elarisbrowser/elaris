@@ -3,17 +3,13 @@
 //! The window's interface: a sidebar beside the active tab's page. Each part is its own module;
 //! colours and measurements live in `theme`.
 
-pub(crate) mod animated_icon;
-mod controls;
+pub(crate) mod components;
 mod downloads;
 mod find;
 pub(crate) mod form_picker;
-mod grain;
 pub(crate) mod horizontal_tabs;
-pub(crate) mod hover_highlight;
 mod icons;
 pub(crate) mod internal;
-pub(crate) mod menu;
 mod mini;
 mod omnibox;
 mod page_dialog;
@@ -149,7 +145,12 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     let height = cx
         .layout_size("window")
         .map_or(WINDOW_MIN_SIZE.1, |size| size[1]);
-    overlays.extend(hover_highlight::view(state, cx, &theme, reduced_motion));
+    overlays.extend(components::hover_highlight::view(
+        state,
+        cx,
+        &theme,
+        reduced_motion,
+    ));
     overlays.extend(tab_switcher::view(state, &theme, height, reduced_motion));
     site_permissions::view(state, cx, &theme, &mut overlays, reduced_motion);
     overlays.extend(permission_prompt::view(
@@ -196,7 +197,7 @@ fn window_surface(
                     .fill(theme.window),
             );
         if state.settings.grain > 0 {
-            window = window.child(grain::layer(
+            window = window.child(components::grain::layer(
                 state.settings.grain,
                 window_size[0],
                 window_size[1],

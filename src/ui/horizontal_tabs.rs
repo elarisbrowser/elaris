@@ -4,10 +4,9 @@
 
 use std::collections::HashMap;
 
-use crate::ui::menu::{Menu, MenuItem};
+use crate::ui::components::menu::{Menu, MenuItem};
 use rune::{Align, Cx, El, Side, Spring, Transition, Tx, col, el, row};
 
-use super::controls::{icon_button, icon_button_style, row_button};
 use super::sidebar::drag::PreviewItem;
 use super::sidebar::tabs::{drag_overlay, tab_drag_handler, tab_icon};
 use super::sidebar::{header, hover};
@@ -15,6 +14,7 @@ use super::theme::{self, Theme};
 use super::{downloads, icons};
 use crate::app::{self, AppState};
 use crate::tab::{Tab, TabId, TabSection};
+use crate::ui::components::controls::{icon_button, icon_button_style, row_button};
 
 pub(crate) const SCROLL: &str = "horizontal-tabs-scroll";
 

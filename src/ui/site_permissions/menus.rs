@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use crate::ui::menu::{MenuItem, context_menu};
+use crate::ui::components::menu::{MenuItem, context_menu};
 use rune::{El, Key, KeyEvent, PointerPress, Tx, el};
 
 use crate::app::AppState;

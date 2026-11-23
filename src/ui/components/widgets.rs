@@ -12,16 +12,17 @@ use rune_kit::Kit;
 use crate::app::AppState;
 use crate::ui::theme::{self, Theme};
 
-use super::PageContext;
+use crate::ui::components::rule::hairline;
+use crate::ui::internal::PageContext;
 
 /// One destination in a page's [`nav`]: a category of sections.
-pub(super) struct NavItem {
+pub(crate) struct NavItem {
     /// Unique within the page; stored in [`AppState::page_category`] while selected.
-    pub(super) key: &'static str,
-    pub(super) title: &'static str,
+    pub(crate) key: &'static str,
+    pub(crate) title: &'static str,
     /// The label in the narrow, equal-width row under the title.
-    pub(super) short: &'static str,
-    pub(super) icon: &'static Icon,
+    pub(crate) short: &'static str,
+    pub(crate) icon: &'static Icon,
 }
 
 /// Category navigation for [`PageLayout::nav`](super::layout::PageLayout::nav), in a container
@@ -29,7 +30,7 @@ pub(super) struct NavItem {
 /// hover highlight glides between items under the pointer. It is a vertical list beside the
 /// content in wide panes and an equal-width row under the title in narrow ones. Choosing an
 /// item shows that category and returns `scroll_key` to the top.
-pub(super) fn nav(
+pub(crate) fn nav(
     label: &str,
     scroll_key: &'static str,
     items: &[&'static NavItem],
@@ -162,7 +163,7 @@ pub(super) fn nav(
 }
 
 /// The heading and sections of the category a page's [`nav`] selected.
-pub(super) fn category(key: &'static str, title: &str, sections: Vec<El>, theme: &Theme) -> El {
+pub(crate) fn category(key: &'static str, title: &str, sections: Vec<El>, theme: &Theme) -> El {
     col()
         .key(key)
         .w_full()
@@ -179,7 +180,7 @@ pub(super) fn category(key: &'static str, title: &str, sections: Vec<El>, theme:
 }
 
 /// A titled block of a native page: a muted heading above its grouped content.
-pub(super) fn section(key: impl Into<String>, title: &str, theme: &Theme, content: El) -> El {
+pub(crate) fn section(key: impl Into<String>, title: &str, theme: &Theme, content: El) -> El {
     col()
         .key(key)
         .w_full()
@@ -195,7 +196,7 @@ pub(super) fn section(key: impl Into<String>, title: &str, theme: &Theme, conten
 }
 
 /// The rounded surface that groups a native page's rows.
-pub(super) fn group(theme: &Theme) -> El {
+pub(crate) fn group(theme: &Theme) -> El {
     col()
         .w_full()
         .fill(theme.settings_surface)
@@ -205,7 +206,7 @@ pub(super) fn group(theme: &Theme) -> El {
 
 /// A [`group`] of padded rows divided by inset hairlines. The group's height eases as rows come
 /// and go, so a row that a setting shows or hides resizes the surface around it.
-pub(super) fn rows(theme: &Theme, rows: impl IntoIterator<Item = El>) -> El {
+pub(crate) fn rows(theme: &Theme, rows: impl IntoIterator<Item = El>) -> El {
     let mut group = group(theme).growth(GrowthSpec::default());
     for (index, content) in rows.into_iter().enumerate() {
         if index > 0 {
@@ -225,15 +226,15 @@ pub(super) fn rows(theme: &Theme, rows: impl IntoIterator<Item = El>) -> El {
 }
 
 /// A hairline between rows of a [`group`], inset to line up with the rows' content.
-pub(super) fn separator(theme: &Theme) -> El {
+pub(crate) fn separator(theme: &Theme) -> El {
     el().w_full()
         .h(1.0)
         .px(theme::PAGE_GROUP_PADDING)
-        .child(el().w_full().h_full().fill(theme.separator))
+        .child(hairline(theme.separator))
 }
 
 /// A labelled control: title and wrapping description, with the control trailing.
-pub(super) fn setting(cx: &PageContext, title: &str, description: &str, control: El) -> El {
+pub(crate) fn setting(cx: &PageContext, title: &str, description: &str, control: El) -> El {
     let detail = text(description)
         .font(type_::BODY)
         .color(cx.theme.text_muted)
@@ -244,7 +245,7 @@ pub(super) fn setting(cx: &PageContext, title: &str, description: &str, control:
 /// A [`setting`] whose secondary line is custom, such as a truncated path.
 ///
 /// In a compact pane the control drops under the copy, on the same leading edge.
-pub(super) fn setting_with(cx: &PageContext, title: &str, detail: El, control: El) -> El {
+pub(crate) fn setting_with(cx: &PageContext, title: &str, detail: El, control: El) -> El {
     let copy = col()
         .key("setting-copy")
         .grow(1.0)
@@ -270,7 +271,7 @@ pub(super) fn setting_with(cx: &PageContext, title: &str, detail: El, control: E
 }
 
 /// A [`setting`] led by an icon tile.
-pub(super) fn setting_icon(
+pub(crate) fn setting_icon(
     cx: &PageContext,
     glyph: &'static Icon,
     title: &str,
@@ -295,18 +296,18 @@ pub(super) fn setting_icon(
         )
 }
 
-pub(super) fn row_title(title: &str, theme: &Theme) -> El {
+pub(crate) fn row_title(title: &str, theme: &Theme) -> El {
     text(title).font(theme::PAGE_ROW_TITLE).color(theme.text)
 }
 
 /// Buttons laid side by side as one trailing control.
-pub(super) fn actions(buttons: impl IntoIterator<Item = El>) -> El {
+pub(crate) fn actions(buttons: impl IntoIterator<Item = El>) -> El {
     row().gap(space::S2).center_y().children(buttons)
 }
 
 /// A centred inline state inside a page's content column: empty, unavailable or unknown.
 /// Append a button with `.child(..)` to offer a way forward.
-pub(super) fn message(glyph: &'static Icon, title: &str, detail: &str, theme: &Theme) -> El {
+pub(crate) fn message(glyph: &'static Icon, title: &str, detail: &str, theme: &Theme) -> El {
     group(theme)
         .items_center()
         .gap(space::S2)
@@ -339,7 +340,7 @@ pub(super) fn message(glyph: &'static Icon, title: &str, detail: &str, theme: &T
 
 /// Rune Kit's standard switch draws its checked track with the strong icon token; page
 /// switches use the accent instead.
-pub(super) fn switch_kit(kit: &Kit) -> Kit {
+pub(crate) fn switch_kit(kit: &Kit) -> Kit {
     let mut kit = kit.clone();
     kit.c.std_icon_strong = kit.c.bg_accent;
     kit

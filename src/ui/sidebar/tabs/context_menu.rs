@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use crate::ui::menu::{Menu, MenuItem, context_menu as menu_at};
+use crate::ui::components::menu::{Menu, MenuItem, context_menu as menu_at};
 use rune::{El, Tx, el};
 
 use crate::app::{self, AppState};
 use crate::tab::{Tab, TabSection};
-use crate::ui::animated_icon;
+use crate::ui::components::animated_icon;
 use crate::ui::theme::{self, Theme};
 use elaris_core::settings::TabLayout;
 

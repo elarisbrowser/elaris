@@ -280,7 +280,7 @@ pub(crate) struct AppState {
     pub(crate) page_menu: crate::ui::PageMenuState,
     pub(crate) form_picker: Option<crate::ui::form_picker::ActivePicker>,
     pub(crate) sidebar: SidebarState,
-    pub(crate) hover_highlight: Option<crate::ui::hover_highlight::Target>,
+    pub(crate) hover_highlight: Option<crate::ui::components::hover_highlight::Target>,
     /// The animated icon under the pointer, which plays its motion glyph.
     pub(crate) animated_icon_hover: Option<String>,
     pub(crate) context_menu_highlight: Option<String>,

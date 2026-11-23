@@ -232,7 +232,7 @@ pub(crate) fn view(
 fn add_split_pane_button(state: &AppState, theme: &Theme) -> Option<El> {
     let split = state.browser.displayed_split()?;
     (split.pane_count < state.browser.split_view_limit.min(split::MAX_PANES)).then(|| {
-        super::controls::floating_icon_button(
+        crate::ui::components::controls::floating_icon_button(
             "add-split-pane",
             "Add Pane",
             &super::icons::PLUS,

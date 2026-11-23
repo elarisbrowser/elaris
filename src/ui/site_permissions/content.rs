@@ -5,7 +5,8 @@ use rune::{El, PointerPress, Spring, Transition, Tx, el, icon, row, text};
 
 use crate::app::{self, AppState};
 use crate::site_controls::{SiteControlAction, SiteControlPresentation, SiteControlsPage};
-use crate::ui::controls;
+use crate::ui::components::controls;
+use crate::ui::components::rule::hairline;
 use crate::ui::icons;
 use crate::ui::site_control_style as design;
 use crate::ui::theme::{self, Theme};
@@ -122,7 +123,7 @@ fn security_page(theme: &Theme, presentation: &SiteControlPresentation) -> El {
         .gap(8.0)
         .center_y()
         .child(
-            crate::ui::controls::icon_button(
+            crate::ui::components::controls::icon_button(
                 "site-security-back",
                 "Back to site settings",
                 &icons::BACK,
@@ -151,7 +152,7 @@ fn security_page(theme: &Theme, presentation: &SiteControlPresentation) -> El {
                 ),
         )
         .child(
-            crate::ui::controls::icon_button(
+            crate::ui::components::controls::icon_button(
                 "site-security-close",
                 "Close site controls",
                 &icons::CLOSE,
@@ -440,7 +441,7 @@ fn footer(theme: &Theme, presentation: &SiteControlPresentation) -> El {
                 }),
         )
         .child(
-            crate::ui::controls::icon_button(
+            crate::ui::components::controls::icon_button(
                 "site-controls-overflow",
                 "More site actions",
                 &icons::MORE,
@@ -459,8 +460,5 @@ fn footer(theme: &Theme, presentation: &SiteControlPresentation) -> El {
 }
 
 fn separator(theme: &Theme) -> El {
-    el().key("site-controls-separator")
-        .w_full()
-        .h(1.0)
-        .fill(theme.overlay_border)
+    hairline(theme.overlay_border).key("site-controls-separator")
 }

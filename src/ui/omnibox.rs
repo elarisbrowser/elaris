@@ -2,7 +2,7 @@
 
 //! The shared omnibox editor and results, hosted by the active tab layout.
 
-use crate::ui::menu::{Menu, MenuItem};
+use crate::ui::components::menu::{Menu, MenuItem};
 use rune::tok::type_;
 use rune::{Cx, El, ScrollSpec, Transition, Tx, col, el, icon, row, text, text_input};
 
@@ -186,7 +186,7 @@ fn results(state: &AppState, suggestions: &[Suggestion], theme: &Theme, results_
         .w_full()
         .gap(theme::TAB_GAP);
     if let Some(y) = selected_y {
-        content = content.child(super::hover_highlight::selection(
+        content = content.child(crate::ui::components::hover_highlight::selection(
             "omnibox-result-highlight",
             y,
             height,

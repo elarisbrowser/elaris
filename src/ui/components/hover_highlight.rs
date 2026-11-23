@@ -4,11 +4,11 @@
 
 use rune::{Color, Cx, El, Spring, Tx, el};
 
-use super::theme::{self, Theme};
 use crate::app::AppState;
+use crate::ui::theme::{self, Theme};
 
 #[derive(Clone, Copy, PartialEq)]
-pub(super) enum Group {
+pub(crate) enum Group {
     Controls,
     Tabs,
     Favourites,
@@ -22,12 +22,12 @@ pub(crate) struct Target {
 
 /// The shared highlight is the control's background, so the control drops its own press overlay;
 /// otherwise the overlay shrinks with `press_scale` inside the highlight and reads as a second one.
-pub(super) fn attach(element: El, key: &str, group: Group) -> El {
+pub(crate) fn attach(element: El, key: &str, group: Group) -> El {
     attach_with(element, key, group, |_, _, _| {})
 }
 
 /// [`attach`], also running `also` on each hover change, for a control with its own hover state.
-pub(super) fn attach_with(
+pub(crate) fn attach_with(
     element: El,
     key: &str,
     group: Group,
@@ -42,7 +42,7 @@ pub(super) fn attach_with(
         })
 }
 
-pub(super) fn update(
+pub(crate) fn update(
     state: &mut AppState,
     key: &str,
     group: Group,
@@ -67,7 +67,7 @@ pub(super) fn update(
     true
 }
 
-pub(super) fn view(
+pub(crate) fn view(
     state: &AppState,
     cx: &Cx<AppState>,
     theme: &Theme,
@@ -113,7 +113,7 @@ pub(super) fn view(
         ),
         Group::HorizontalTabs => (
             "horizontal-tabs-hover".into(),
-            Some(super::horizontal_tabs::SCROLL),
+            Some(crate::ui::horizontal_tabs::SCROLL),
             theme::ROW_RADIUS,
         ),
     };
@@ -150,7 +150,7 @@ pub(super) fn view(
     )
 }
 
-pub(super) fn selection(
+pub(crate) fn selection(
     key: &str,
     y: f32,
     height: f32,

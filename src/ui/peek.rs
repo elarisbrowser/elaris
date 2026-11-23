@@ -15,7 +15,8 @@ use crate::browser::peek::{self, Destination};
 use crate::engine::Surface;
 use crate::tab::{Tab, TabId};
 
-use super::{controls, icons, theme};
+use super::components::controls;
+use super::{icons, theme};
 
 use animation::{AnimationKind, PeekAnimation, ease_out, opening_pose, promote};
 pub(crate) use animation::{Presentation, advance, dismiss};

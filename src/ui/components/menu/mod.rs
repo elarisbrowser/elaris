@@ -25,8 +25,8 @@ use rune::tok::type_;
 use rune::{Align, El, PointerPress, Side, Stagger, Vec2, col, el, row, text};
 use rune_kit::popover as kit_popover;
 
-use super::theme::{self, Theme};
 use crate::app::AppState;
+use crate::ui::theme::{self, Theme};
 
 pub(crate) use dropdown::Dropdown;
 pub(crate) use highlight::poll as poll_highlight;
@@ -36,7 +36,7 @@ use surface::{Anchored, dismissal, reveal, surface};
 
 /// Applies a stored handler to a row or panel. Keeps the state type out of [`Menu`] and
 /// [`MenuItem`], which take closures over any state.
-type Apply = Box<dyn FnOnce(El) -> El>;
+pub(crate) type Apply = Box<dyn FnOnce(El) -> El>;
 
 pub(crate) struct Menu {
     key: String,
@@ -54,7 +54,7 @@ pub(crate) struct Menu {
     header: Option<(El, El)>,
 }
 
-enum Entry {
+pub(crate) enum Entry {
     Item(Box<MenuItem>),
     Separator,
     Label(String),
@@ -173,7 +173,7 @@ impl Menu {
 }
 
 /// The rows' panel: a rounded container whose content sits inset inside it.
-fn panel(
+pub(crate) fn panel(
     entries: Vec<Entry>,
     header: Option<(El, El)>,
     key: &str,
@@ -291,7 +291,7 @@ pub(crate) fn escape(state: &mut AppState) -> bool {
     } else if state.settings_picker_open {
         state.settings_picker_open = false;
     } else {
-        return super::form_picker::cancel(state);
+        return crate::ui::form_picker::cancel(state);
     }
     true
 }

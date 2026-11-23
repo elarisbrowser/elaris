@@ -3,8 +3,8 @@
 //! The context menu for native pages: navigation, the page's own actions, and shortcuts to the
 //! other internal pages.
 
-use crate::ui::animated_icon::{self, AnimatedIcon};
-use crate::ui::menu::{Menu, MenuItem, context_menu as menu};
+use crate::ui::components::animated_icon::{self, AnimatedIcon};
+use crate::ui::components::menu::{Menu, MenuItem, context_menu as menu};
 use rune::{El, PointerPress, Tx, el};
 
 use crate::app::{self, AppState};

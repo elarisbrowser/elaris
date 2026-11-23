@@ -7,9 +7,9 @@ use rune::{Drag, El, Phase, col, el, row, text};
 use rune_kit::SegmentedControl;
 
 use crate::app::AppState;
+use crate::ui::components::widgets::{setting, setting_icon, switch_kit};
 use crate::ui::icons;
 use crate::ui::internal::PageContext;
-use crate::ui::internal::widgets::{setting, setting_icon, switch_kit};
 use crate::ui::theme::{self, Theme};
 use elaris_core::appearance::{AccentColor, Appearance, GlassStyle};
 use elaris_core::settings::{NewTabPosition, PageStyle, SidebarSide, TabLayout};
