@@ -9,7 +9,7 @@ fn history_shortcut_restores_native_tab_and_keyboard_opens_a_result() {
     use crate::engine::Command;
 
     let url = "https://example.org/guide";
-    let db = elaris::history::History::open(std::path::Path::new(":memory:")).unwrap();
+    let db = elaris_core::history::History::open(std::path::Path::new(":memory:")).unwrap();
     db.record_visit(url, "Example guide").unwrap();
     let mut state = AppState::new(Some("elaris://history"));
     let restored = state.session_snapshot();
@@ -81,7 +81,7 @@ fn history_shortcut_restores_native_tab_and_keyboard_opens_a_result() {
 #[test]
 fn removing_a_history_row_collapses_with_motion_and_snaps_with_reduced_motion() {
     for reduced_motion in [false, true] {
-        let db = elaris::history::History::open(std::path::Path::new(":memory:")).unwrap();
+        let db = elaris_core::history::History::open(std::path::Path::new(":memory:")).unwrap();
         db.record_visit("https://older.example/", "Older").unwrap();
         db.record_visit("https://recent.example/", "Recent")
             .unwrap();

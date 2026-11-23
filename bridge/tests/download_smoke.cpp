@@ -1,5 +1,4 @@
 #include <algorithm>
-#include "dev_options.h"
 #include <arpa/inet.h>
 #include <atomic>
 #include <cctype>
@@ -21,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "dev_options.h"
 #include "private_session.h"
 
 using namespace std::chrono_literals;
@@ -413,7 +413,8 @@ static bool test_private_session(ElarisLadybird* bridge, HttpFixture const& fixt
                "start private download"))
         return false;
     // The file and its private-download event arrive on separate pumps, so wait for both.
-    if (!pump_until(bridge, [&] { return std::filesystem::exists(private_download) && !events.private_downloads.empty(); })) {
+    if (!pump_until(bridge,
+                    [&] { return std::filesystem::exists(private_download) && !events.private_downloads.empty(); })) {
         std::cerr << "Private download did not finish or was not reported as private\n";
         return false;
     }

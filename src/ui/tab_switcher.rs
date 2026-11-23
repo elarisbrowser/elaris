@@ -6,9 +6,9 @@ use rune::{
 };
 
 use crate::app::AppState;
-use crate::internal::{InternalPage, InternalRoute};
 use crate::tab::{Tab, TabId};
 use crate::ui::{VIEWPORT, icons, theme::Theme};
+use elaris_core::internal::{InternalPage, InternalRoute};
 
 const PANEL: &str = "quick-tab-switcher";
 const LIST: &str = "quick-tab-list";
@@ -173,17 +173,16 @@ pub(crate) fn view(state: &AppState, theme: &Theme, height: f32, _reduced: bool)
         .iter()
         .position(|&id| id == switcher.selected)?;
     let motion = Spring::NONE;
-    let mut items = col()
-        .key("quick-tab-items")
-        .w_full()
-        .child(super::hover_highlight::selection(
+    let mut items = col().key("quick-tab-items").w_full().child(
+        crate::ui::components::hover_highlight::selection(
             "quick-tab-highlight",
             index as f32 * ROW,
             ROW,
             radius::MD,
             theme,
             true,
-        ));
+        ),
+    );
     for &id in &switcher.candidates {
         if let Some(tab) = state.browser.tab(id) {
             items = items.child(entry(tab, id == switcher.selected, theme));
@@ -270,7 +269,7 @@ pub(in crate::ui) fn tab_labels(tab: &Tab) -> (&str, &str) {
     let address = if tab.is_internal() {
         &tab.url
     } else {
-        crate::address::host_for_address(&tab.url)
+        elaris_core::address::host_for_address(&tab.url)
     };
     let title = if !tab.title.trim().is_empty() {
         &tab.title

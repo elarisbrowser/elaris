@@ -122,7 +122,7 @@ native windows remain unverified.
 
 Each page has one route and one renderer:
 
-1. Add the slug and tab title to `internal_pages!` in `src/internal.rs`.
+1. Add the slug and tab title to `internal_pages!` in `crates/elaris-core/src/internal.rs`.
 2. Add a module under `src/ui/internal/` with `fn view(cx: &mut PageContext) -> PageLayout`.
 3. Register it in `page` in `src/ui/internal/mod.rs`. The match is exhaustive, so a route
    without a renderer does not compile. List any `PageAction`s the page offers there too.
@@ -159,7 +159,7 @@ one module per category under `src/ui/internal/settings/`; add a category by lis
 
 ## Animated icons
 
-`src/ui/animated_icon.rs` holds icons that play a motion glyph while hovered. Each `AnimatedIcon`
+`src/ui/components/animated_icon.rs` holds icons that play a motion glyph while hovered. Each `AnimatedIcon`
 pairs a static rest glyph with a motion glyph whose SMIL `<animate>`/`<animateTransform>` elements
 Rune plays on mount. To adopt one:
 
@@ -178,7 +178,7 @@ to SMIL by hand and check each source's licence before copying artwork.
 
 ## Menus
 
-`src/ui/menu/` builds every menu, context menu, popover and dropdown: sidebar and page context
+`src/ui/components/menu/` builds every menu, context menu, popover and dropdown: sidebar and page context
 menus, the tab overflow and history menus, zoom, the omnibox search engine, site permission
 choices, `<select>` lists, the Downloads popover and the Settings dropdowns (`Dropdown`). Its panel is a rounded container with rows inset inside it, as the Settings
 category list is. Each highlight is concentric with the panel, so `MENU_ITEM_RADIUS` is

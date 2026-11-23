@@ -187,9 +187,15 @@ fn button(
     on_press: impl Fn(&mut AppState, &mut Tx) + 'static,
 ) -> El {
     let button = if disabled {
-        super::controls::icon_button_style(key, label, glyph, theme::FIND_BUTTON, theme)
+        crate::ui::components::controls::icon_button_style(
+            key,
+            label,
+            glyph,
+            theme::FIND_BUTTON,
+            theme,
+        )
     } else {
-        super::controls::icon_button(key, label, glyph, theme::FIND_BUTTON, theme)
+        crate::ui::components::controls::icon_button(key, label, glyph, theme::FIND_BUTTON, theme)
     };
     button
         .role("button")

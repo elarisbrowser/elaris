@@ -2,11 +2,12 @@
 // that panel is open.
 
 #include <elaris_ladybird.h>
-#include "dev_options.h"
 
 #include <chrono>
 #include <iostream>
 #include <string>
+
+#include "dev_options.h"
 
 namespace {
 

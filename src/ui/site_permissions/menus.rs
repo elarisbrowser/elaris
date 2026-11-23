@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use crate::ui::menu::{MenuItem, context_menu};
+use crate::ui::components::menu::{MenuItem, context_menu};
 use rune::{El, Key, KeyEvent, PointerPress, Tx, el};
 
 use crate::app::AppState;
-use crate::permissions::{AutoplayPolicy, PermissionState};
 use crate::site_controls::SiteControlPresentation;
 use crate::site_controls::SiteControlsPage;
 use crate::ui::theme::Theme;
+use elaris_core::permissions::{AutoplayPolicy, PermissionState};
 
 pub(super) fn permission_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
     let Some(kind) = state.permission_menu else {

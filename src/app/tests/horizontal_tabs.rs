@@ -3,8 +3,8 @@
 use rune::{Env, Mods, Runtime};
 
 use super::*;
-use crate::settings::TabLayout;
 use crate::ui::{horizontal_tabs, theme};
+use elaris_core::settings::TabLayout;
 
 fn runtime(state: AppState, width: f32) -> Runtime<AppState> {
     let mut runtime = Runtime::new(state, crate::ui::view, (width, 640.0), Env::new(false, 1.0));
@@ -137,7 +137,7 @@ fn layout_switch_preserves_split_tabs_and_window_state() {
     assert!(rect(&other, "page-layout")[0] > 0.0);
     other.update(|state, _| {
         state.apply_config_load(
-            crate::config::parse("[appearance]\ntab_layout = 'horizontal'").unwrap(),
+            elaris_core::config::parse("[appearance]\ntab_layout = 'horizontal'").unwrap(),
         );
     });
     other.frame(1.0);
@@ -424,7 +424,7 @@ fn url_bar_edits_in_place_and_anchors_results_below_the_toolbar() {
     settle(&mut window);
     assert_eq!(
         window.state.settings.search_engine,
-        crate::address::SearchEngine::Google
+        elaris_core::address::SearchEngine::Google
     );
     assert!(!window.state.omnibox.search_engine_menu_open);
     assert_eq!(window.state.omnibox.input.text, "example.org");
@@ -745,7 +745,7 @@ fn escape_cancels_only_the_extra_split_picker() {
 
 #[test]
 fn sidebar_moves_to_the_right_edge_and_back() {
-    use crate::settings::SidebarSide;
+    use elaris_core::settings::SidebarSide;
 
     let mut window = runtime(AppState::new(Some("one.example")), 960.0);
     window.update(|state, _| state.set_sidebar_side(SidebarSide::Right));

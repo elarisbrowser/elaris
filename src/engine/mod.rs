@@ -27,8 +27,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use elaris::downloads::{DownloadId, Request as DownloadRequest, Update as DownloadUpdate};
 use elaris::ladybird::{Favicon, KeyEvent, MediaAction, MouseEvent};
+use elaris_core::downloads::{DownloadId, Request as DownloadRequest, Update as DownloadUpdate};
 use rune::Pixels;
 
 use crate::tab::TabId;
@@ -151,20 +151,20 @@ pub(crate) enum Command {
     SetDownloadDirectory(Option<std::path::PathBuf>),
     /// Replaces the autoplay default and its site exceptions.
     SetAutoplay(
-        crate::permissions::AutoplayPolicy,
-        Vec<(String, crate::permissions::AutoplayPolicy)>,
+        elaris_core::permissions::AutoplayPolicy,
+        Vec<(String, elaris_core::permissions::AutoplayPolicy)>,
     ),
     /// Turns the content blocker on or off, and enables the built-in filter lists named by identifier.
     SetContentBlocking(bool, Vec<&'static str>),
     /// Clears engine data last used at or after the Unix millisecond time, or for all time.
     ClearBrowsingData(Option<i64>, elaris::ladybird::BrowsingData),
     #[cfg(feature = "ladybird-bridge")]
-    SetPermissions(crate::permissions::PermissionStore),
-    SetPermissionDefault(crate::permissions::PermissionKind, bool),
+    SetPermissions(elaris_core::permissions::PermissionStore),
+    SetPermissionDefault(elaris_core::permissions::PermissionKind, bool),
     SetPermission(
         String,
-        crate::permissions::PermissionKind,
-        crate::permissions::PermissionState,
+        elaris_core::permissions::PermissionKind,
+        elaris_core::permissions::PermissionState,
     ),
     /// Closes every view and stops the engine.
     Shutdown,
@@ -305,8 +305,8 @@ pub(crate) enum Update {
     DownloadDirectoryFailed(String),
     PermissionSaved(
         String,
-        crate::permissions::PermissionKind,
-        crate::permissions::PermissionState,
+        elaris_core::permissions::PermissionKind,
+        elaris_core::permissions::PermissionState,
     ),
     /// The engine could not start or stopped; no tab will hear from it again.
     Failed(String),
@@ -373,7 +373,7 @@ pub(crate) enum TabUpdate {
     WebFullscreen(bool),
     /// Whether the page cancelled a wheel event; a cancelled wheel keeps its gesture from becoming a swipe.
     WheelResult(bool),
-    PermissionUse(crate::permissions::PermissionKind, bool),
+    PermissionUse(elaris_core::permissions::PermissionKind, bool),
     Error(String),
 }
 

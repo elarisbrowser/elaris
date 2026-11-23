@@ -6,9 +6,9 @@ use super::AppState;
 mod poll;
 #[cfg(feature = "ladybird-bridge")]
 use crate::engine::Engine;
-use crate::internal::InternalPage;
 use crate::omnibox;
 use crate::ui::viewport::focus_key;
+use elaris_core::internal::InternalPage;
 pub(crate) use poll::poll;
 
 /// Connect worker notifications once Rune can schedule a poll.
@@ -47,7 +47,7 @@ fn start_engine(state: &mut AppState) {
             engine.send(crate::engine::Command::SetPermissions(
                 state.permission_store.clone(),
             ));
-            for kind in crate::permissions::PermissionKind::ALL {
+            for kind in elaris_core::permissions::PermissionKind::ALL {
                 if state.permission_store.default_blocked(kind) {
                     engine.send(crate::engine::Command::SetPermissionDefault(kind, true));
                 }
@@ -161,14 +161,14 @@ pub(crate) fn on_window_focus(state: &mut AppState, focused: bool, tx: &mut Tx) 
         super::activate_window(state.window_id);
     }
     #[cfg(target_os = "macos")]
-    crate::menu_macos::set_active_window(state.window_id, focused);
+    crate::platform::macos::menu::set_active_window(state.window_id, focused);
     state.browser.set_window_focus(focused);
     if !focused {
         crate::ui::dismiss_tab_preview(state);
         crate::ui::tab_switcher::finish(state, None, tx);
     }
     #[cfg(target_os = "macos")]
-    let deactivated = !focused && !crate::window_macos::application_active();
+    let deactivated = !focused && !crate::platform::macos::window::application_active();
     #[cfg(not(target_os = "macos"))]
     let deactivated = false;
     if deactivated {
@@ -191,7 +191,7 @@ pub(super) fn cancel_deactivated_drag(state: &mut AppState, tx: &mut Tx) -> bool
 
 pub(crate) fn shut_down(state: &mut AppState, _: &mut Tx) {
     #[cfg(target_os = "macos")]
-    crate::drag_overlay_macos::hide(state.window_id);
+    crate::platform::macos::drag_overlay::hide(state.window_id);
     super::detach::closing(state);
     super::cross_window_drag::clear(state.window_id);
     state.closing_tab_transfer();
@@ -201,7 +201,7 @@ pub(crate) fn shut_down(state: &mut AppState, _: &mut Tx) {
         storage.history().forget_window(state.window_id);
     }
     #[cfg(target_os = "macos")]
-    crate::menu_macos::unregister_window(state.window_id);
+    crate::platform::macos::menu::unregister_window(state.window_id);
     state.persist_session();
     state.browser.shut_down();
     if let Some(storage) = &state.storage
@@ -228,7 +228,7 @@ pub(crate) fn window_closed(state: &mut AppState, _: &mut Tx) {
         return;
     }
     #[cfg(target_os = "macos")]
-    crate::drag_overlay_macos::hide(state.window_id);
+    crate::platform::macos::drag_overlay::hide(state.window_id);
     super::detach::closing(state);
     let others_remain = super::open_window_count() > 1;
     super::cross_window_drag::clear(state.window_id);
@@ -243,7 +243,7 @@ pub(crate) fn window_closed(state: &mut AppState, _: &mut Tx) {
         storage.history().forget_window(state.window_id);
     }
     #[cfg(target_os = "macos")]
-    crate::menu_macos::unregister_window(state.window_id);
+    crate::platform::macos::menu::unregister_window(state.window_id);
     state.persist_session();
     state.browser.close_window_views();
     if !state.pending_detach

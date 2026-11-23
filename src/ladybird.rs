@@ -241,7 +241,7 @@ pub enum Event {
         text: String,
     },
     /// A copied download snapshot raised by Ladybird's application-level downloader.
-    Download(crate::downloads::Update),
+    Download(elaris_core::downloads::Update),
 }
 
 /// A favicon copied from Ladybird as tightly packed, straight-alpha RGBA8 pixels.

@@ -3,8 +3,9 @@
 //! The shared frame around every native page: header, optional toolbar and scrolling content.
 
 use rune::tok::space;
-use rune::{El, Icon, ScrollSpec, Transition, col, el, icon, row, text};
+use rune::{El, Icon, ScrollSpec, Transition, col, icon, row, text};
 
+use crate::ui::components::rule::hairline;
 use crate::ui::theme::{self, Theme};
 
 /// What a page renderer returns; the frame supplies the title, alignment and scrolling.
@@ -80,7 +81,7 @@ impl PageLayout {
             .child(title_row(self.icon, title, theme))
             .children(top)
             .children(self.toolbar)
-            .child(el().w_full().h(1.0).fill(theme.separator));
+            .child(hairline(theme.separator));
         col()
             .key("internal-page")
             .w_full()

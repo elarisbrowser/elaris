@@ -7,11 +7,11 @@ use rune::{El, col, text};
 use rune_kit::{Button, ButtonVariant};
 
 use crate::app::AppState;
-use crate::settings::StartupMode;
+use crate::ui::components::menu::Dropdown;
+use crate::ui::components::widgets::{actions, row_title, setting};
 use crate::ui::internal::PageContext;
-use crate::ui::internal::widgets::{actions, row_title, setting};
-use crate::ui::menu::Dropdown;
 use crate::ui::theme;
+use elaris_core::settings::StartupMode;
 
 use super::section;
 
@@ -26,7 +26,7 @@ pub(super) fn sections(cx: &mut PageContext) -> Vec<El> {
 #[cfg(elaris_ui = "linux")]
 fn window_frame(cx: &mut PageContext) -> El {
     use crate::app::LinuxDecorations;
-    use crate::settings::WindowDecorations;
+    use elaris_core::settings::WindowDecorations;
 
     let select = Dropdown::new("settings-window-frame", "Window frame")
         .options(WindowDecorations::ALL.map(|mode| (mode, mode.label())))

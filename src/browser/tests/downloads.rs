@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::engine::{DownloadAction, Update};
-use elaris::downloads::{self, Request as DownloadRequest, Status as DownloadStatus};
+use elaris_core::downloads::{self, Request as DownloadRequest, Status as DownloadStatus};
 
 #[test]
 fn download_directory_updates_are_engine_commands_and_report_without_failing_the_browser() {

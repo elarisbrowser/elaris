@@ -23,8 +23,8 @@ built in the container, so its vcpkg metadata is staged out of the container's v
 1. Build the x86_64 bundle with `./elaris linux-build --arch amd64`, or `./elaris linux-test --arch amd64`.
 2. Stage its library list and vcpkg metadata into `build/notices-inputs/x64-linux-dynamic` (read-only from the build
    volumes; see the commit that added the Linux notices for the exact `docker run` command).
-3. Regenerate the notices on the host with `./elaris bundle` run on macOS and `python3 scripts/notices.py`, then check
-   that `python3 scripts/notices.py --check` passes.
+3. Regenerate the notices on the host with `./elaris bundle` run on macOS and `python3 tools/notices.py`, then check
+   that `python3 tools/notices.py --check` passes.
 
 ## Versions
 

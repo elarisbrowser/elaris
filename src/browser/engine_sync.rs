@@ -5,9 +5,9 @@ use std::time::Instant;
 use super::{Browser, Polled, peek, split};
 use crate::engine::{Command, Update, ViewCommand};
 use crate::input;
-use crate::internal::InternalRoute;
-use crate::perf::{self, Stage};
 use crate::tab::Tab;
+use elaris_core::internal::InternalRoute;
+use elaris_core::perf::{self, Stage};
 
 impl Browser {
     /// Forwards what changed to the engine and takes in what it reported. Rune calls it at the

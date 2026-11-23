@@ -1,0 +1,9 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
+use super::icon;
+use rune::Icon;
+
+pub(crate) static FORWARD: Icon = icon(
+    "forward",
+    r#"<path d="M6 3.5L10.5 8L6 12.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>"#,
+);

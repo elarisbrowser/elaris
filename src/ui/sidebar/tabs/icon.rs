@@ -5,10 +5,10 @@
 use rune::{El, el, icon};
 
 use crate::app::AppState;
-use crate::internal::{InternalPage, InternalRoute};
 use crate::tab::Tab;
 use crate::ui::icons;
 use crate::ui::theme::{self, Theme};
+use elaris_core::internal::{InternalPage, InternalRoute};
 
 pub(in crate::ui) fn tab_icon(
     state: &AppState,

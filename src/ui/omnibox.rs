@@ -2,14 +2,14 @@
 
 //! The shared omnibox editor and results, hosted by the active tab layout.
 
-use crate::ui::menu::{Menu, MenuItem};
+use crate::ui::components::menu::{Menu, MenuItem};
 use rune::tok::type_;
 use rune::{Cx, El, ScrollSpec, Transition, Tx, col, el, icon, row, text, text_input};
 
-use crate::address::SearchEngine;
 use crate::app::{self, AppState};
 use crate::omnibox::{Action, Glyph, Section, Suggestion};
 use crate::ui::theme::{self, Theme};
+use elaris_core::address::SearchEngine;
 
 pub(crate) fn view(
     state: &AppState,
@@ -186,7 +186,7 @@ fn results(state: &AppState, suggestions: &[Suggestion], theme: &Theme, results_
         .w_full()
         .gap(theme::TAB_GAP);
     if let Some(y) = selected_y {
-        content = content.child(super::hover_highlight::selection(
+        content = content.child(crate::ui::components::hover_highlight::selection(
             "omnibox-result-highlight",
             y,
             height,
@@ -298,7 +298,7 @@ pub(super) fn address_bar(
         overlays.extend(engine_menu);
     } else {
         let label = address
-            .map(crate::address::compact_address)
+            .map(elaris_core::address::compact_address)
             .unwrap_or("Search or type a URL");
         let zoom = super::sidebar::header::zoom_indicator(state, theme, overlays);
         let activity = state

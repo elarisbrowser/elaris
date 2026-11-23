@@ -132,10 +132,10 @@ impl Browser {
         if !self.accepts_pointer(id) {
             return false;
         }
-        let step = self
-            .input
-            .swipes
-            .wheel(id, &wheel, crate::trackpad::natural_scrolling());
+        let step =
+            self.input
+                .swipes
+                .wheel(id, &wheel, crate::platform::trackpad::natural_scrolling());
         match step {
             Step::Page => {}
             Step::Swallowed { armed_now } => return armed_now,

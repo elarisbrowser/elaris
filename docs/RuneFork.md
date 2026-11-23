@@ -56,7 +56,7 @@ rune = { path = "../rune/crates/rune" }
 rune-kit = { path = "../rune/crates/rune-kit" }
 ```
 
-The hot-reload launcher lookup in `scripts/elaris_cli/project.py` reads the pinned
+The hot-reload launcher lookup in `tools/elaris_cli/project.py` reads the pinned
 revision from `cargo metadata`, so it follows the pin.
 
 ## Window API investigation

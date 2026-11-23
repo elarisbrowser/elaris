@@ -9,8 +9,8 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use elaris::downloads::{Download, DownloadId};
 use elaris::ladybird::{Event, Ladybird, Waker, WebView};
+use elaris_core::downloads::{Download, DownloadId};
 
 use super::frames::{FrameGate, Verdict};
 use super::thumbnails;
@@ -22,8 +22,8 @@ use presentation::{RETAINED_HIDDEN_FRAMES, Timing, evict_frame, eviction_enabled
 #[cfg(test)]
 mod tests;
 use super::{Command, FindResult, Surface, TabUpdate, Thumbnail, Update, ViewCommand};
-use crate::perf::{self, Stage};
 use crate::tab::TabId;
+use elaris_core::perf::{self, Stage};
 
 /// How long closing keeps running Ladybird so helper processes see the views close.
 const CLOSE_GRACE: Duration = Duration::from_millis(100);
@@ -103,7 +103,7 @@ impl Runtime {
                 thumbnails: thumbnails::Cache::default(),
                 display,
                 hidden_order: eviction_enabled(
-                    crate::dev::var("ELARIS_EVICT_HIDDEN_FRAMES").as_deref(),
+                    elaris_core::dev::var("ELARIS_EVICT_HIDDEN_FRAMES").as_deref(),
                 )
                 .then(Vec::new),
                 hidden_frames_dirty: false,
@@ -471,7 +471,7 @@ impl Runtime {
                 allowed,
             } = event
             {
-                use crate::permissions::{PermissionKind, PermissionState};
+                use elaris_core::permissions::{PermissionKind, PermissionState};
                 if let Some(kind) = PermissionKind::from_key(&key) {
                     let state = if allowed {
                         PermissionState::Allow
@@ -518,7 +518,8 @@ impl Runtime {
                 Event::ExternalUrl(request) => TabUpdate::ExternalUrl(request),
                 Event::Accessibility(event) => TabUpdate::Accessibility(event),
                 Event::PermissionUse { key, visible } => {
-                    let Some(kind) = crate::permissions::PermissionKind::from_key(&key) else {
+                    let Some(kind) = elaris_core::permissions::PermissionKind::from_key(&key)
+                    else {
                         continue;
                     };
                     TabUpdate::PermissionUse(kind, visible)

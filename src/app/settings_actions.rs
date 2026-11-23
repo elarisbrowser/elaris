@@ -2,20 +2,20 @@
 
 use std::path::PathBuf;
 
-use crate::address::SearchEngine;
-use crate::appearance::{AccentColor, Appearance, GlassStyle};
-use crate::config::ConfigLoad;
-use crate::internal::InternalPage;
-use crate::permissions::{
+use crate::tab::TabId;
+use elaris_core::address::SearchEngine;
+use elaris_core::appearance::{AccentColor, Appearance, GlassStyle};
+use elaris_core::config::ConfigLoad;
+use elaris_core::internal::InternalPage;
+use elaris_core::permissions::{
     AutoplayPolicy, PermissionDecision, PermissionKind, PermissionState, PermissionStore,
 };
 #[cfg(elaris_ui = "linux")]
-use crate::settings::WindowDecorations;
-use crate::settings::{
+use elaris_core::settings::WindowDecorations;
+use elaris_core::settings::{
     ContentBlockList, DownloadDirectory, NewTabPosition, PageStyle, SettingsChange, SidebarSide,
     StartupMode, TabLayout,
 };
-use crate::tab::TabId;
 
 impl super::AppState {
     pub(crate) fn horizontal_tabs(&self) -> bool {
@@ -136,11 +136,11 @@ impl super::AppState {
     }
 
     pub(crate) fn refresh_default_browser(&mut self) {
-        self.default_browser = crate::default_browser::is_default();
+        self.default_browser = crate::platform::default_browser::is_default();
     }
 
     pub(crate) fn make_default_browser(&mut self) {
-        self.default_browser_error = crate::default_browser::make_default().err();
+        self.default_browser_error = crate::platform::default_browser::make_default().err();
         self.refresh_default_browser();
     }
 

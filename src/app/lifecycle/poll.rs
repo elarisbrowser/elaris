@@ -14,14 +14,14 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     }
     #[cfg(target_os = "macos")]
     let deactivated_drag = super::super::transfer::in_progress()
-        && !crate::window_macos::application_active()
+        && !crate::platform::macos::window::application_active()
         && super::cancel_deactivated_drag(state, tx);
     #[cfg(not(target_os = "macos"))]
     let deactivated_drag = false;
     let incoming_drag = super::super::cross_window_drag::poll(state, tx);
     let transferred = state.advance_tab_transfer(tx);
     #[cfg(target_os = "macos")]
-    let native_preview_changed = crate::drag_overlay_macos::poll(state, tx);
+    let native_preview_changed = crate::platform::macos::drag_overlay::poll(state, tx);
     #[cfg(not(target_os = "macos"))]
     let native_preview_changed = false;
     super::super::detach::poll(state, tx);
@@ -54,7 +54,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     let peek_changed = update_peek(state, previous_peek, clock, tx);
     close_site_controls_after_navigation(state, &polled);
 
-    let context_menu_changed = crate::ui::menu::poll_highlight(state, tx);
+    let context_menu_changed = crate::ui::components::menu::poll_highlight(state, tx);
     let switcher_changed = crate::ui::tab_switcher::reconcile(state, tx);
     state.sync_find_tab();
     update_find_selection(state, &polled);
@@ -63,7 +63,9 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     let shared_settings_changed = state.sync_shared_settings();
     let shared_permissions_changed = state.sync_shared_permissions();
     for (origin, kind, permission) in std::mem::take(&mut polled.permission_choices) {
-        if state.permission_store.state(&origin, kind) == crate::permissions::PermissionState::Ask {
+        if state.permission_store.state(&origin, kind)
+            == elaris_core::permissions::PermissionState::Ask
+        {
             state.save_permission_choice(origin, kind, permission);
         }
     }

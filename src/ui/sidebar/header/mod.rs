@@ -3,7 +3,7 @@
 //! The toolbar above the sidebar and page: the sidebar toggle, navigation buttons, and platform
 //! window controls. On Linux the window controls appear when the pointer reaches the top edge.
 
-use crate::ui::menu::{MenuItem, context_menu};
+use crate::ui::components::menu::{MenuItem, context_menu};
 #[cfg(not(elaris_ui = "linux"))]
 use rune::Chrome;
 #[cfg(elaris_ui = "linux")]
@@ -16,7 +16,7 @@ use crate::app::AppState;
 use crate::browser::Browser;
 use crate::engine::ViewCommand;
 use crate::tab::TabId;
-use crate::ui::controls::icon_button;
+use crate::ui::components::controls::icon_button;
 use crate::ui::icons;
 use crate::ui::theme::{self, Theme};
 
@@ -284,7 +284,7 @@ pub(in crate::ui) fn linux_window_controls(state: &AppState, theme: &Theme) -> V
 }
 
 /// Plain circles under the native window controls, which stay transparent until the pointer
-/// reaches them (`titlebar_controls`). `inset` is where the zoom button ends; with no controls
+/// reaches them (`platform::macos::titlebar`). `inset` is where the zoom button ends; with no controls
 /// over the content, as in full screen, it is zero and nothing is drawn.
 #[cfg(not(elaris_ui = "linux"))]
 pub(in crate::ui) fn window_controls(inset: f32, theme: &Theme) -> El {
@@ -320,8 +320,14 @@ fn nav_button(
         icon_button(&key, label, glyph, theme::ICON_BUTTON, theme)
             .on_press(move |state: &mut AppState| state.with_active_tab(navigate))
     } else {
-        crate::ui::controls::icon_button_style(&key, label, glyph, theme::ICON_BUTTON, theme)
-            .disabled(true)
-            .opacity(theme.disabled_opacity)
+        crate::ui::components::controls::icon_button_style(
+            &key,
+            label,
+            glyph,
+            theme::ICON_BUTTON,
+            theme,
+        )
+        .disabled(true)
+        .opacity(theme.disabled_opacity)
     }
 }

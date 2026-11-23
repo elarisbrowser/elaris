@@ -1,6 +1,6 @@
 # Architecture
 
-Elaris is one Rust package. Rune owns the window and interface on the UI thread. Ladybird runs on
+Elaris is a Cargo workspace: the `elaris` package and the UI-free `crates/elaris-core` library. Rune owns the window and interface on the UI thread. Ladybird runs on
 its own thread behind the Elaris-owned C++ bridge. A separate storage worker owns the SQLite
 connection and writes session files, so neither page work nor browser-data writes block Rune.
 
@@ -8,35 +8,30 @@ connection and writes session files, so neither page work nor browser-data write
 
 | Module | Responsibility |
 |---|---|
+| `crates/elaris-core/` | UI-free core: settings, TOML configuration, permissions, address rules, the history and download stores, internal routes, storage paths and development timing. Builds and tests without Rune or the engine. |
 | `src/main.rs` | Builds the Rune app and installs its lifecycle hooks. |
-| `src/app.rs` | `AppState`, construction and startup policy. |
-| `src/app/` | Omnibox, settings, tab, find and session actions; `lifecycle/poll.rs` coordinates per-frame updates. |
-| `src/browser.rs` | Ordered web and native tabs, section ordering, activation and browser state. |
-| `src/browser/` | Download commands, engine polling and synchronization, input routing, Peek and Split View. |
-| `src/browser/tests/` | Browser regressions grouped by downloads, engine lifecycle, find, navigation, tabs and views. |
+| `src/app.rs` and `src/app/` | `AppState`, construction and startup policy, window registry and per-window helpers; `lifecycle/poll.rs` coordinates per-frame updates. |
+| `src/browser.rs` and `src/browser/` | Ordered web and native tabs, section ordering, selection, navigation, find, lifecycle, engine connection and display state; download commands, engine polling and synchronization, input routing, Peek and Split View. |
 | `src/tab.rs` | Per-tab address, committed address, title, favicon, section, page state, native route, engine state and transient find query/results. |
 | `src/omnibox.rs` | Omnibox state, local suggestion ranking and typed actions. |
-| `src/history.rs` | Synchronous SQLite history API used by the storage worker. |
 | `src/app/history.rs` | Native History search, pagination, mutation acknowledgements and navigation. |
-| `src/storage.rs` | Asynchronous history/configuration API, storage worker and command protocol. |
-| `src/storage/` | Platform paths, session JSON validation and atomic replacement, and storage regressions. |
-| `src/config.rs` | Typed TOML loading, validation, comment-preserving edits and atomic configuration writes. |
-| `src/settings.rs` | The single typed settings model shared by the app, settings page and TOML file. |
-| `src/permissions.rs` | Per-origin permission overrides, defaults and decisions used by the app and site controls. |
-| `src/internal.rs` | Explicit `elaris://` route parsing for Elaris-owned native pages. |
+| `src/storage.rs` and `src/storage/` | Asynchronous history and configuration API, the storage worker and its command protocol, session JSON validation and atomic replacement, and storage regressions. |
+| `src/platform/` | Operating-system integration. Shared facades (default browser, trackpad) select the implementation in `macos/` or `linux/`. |
 | `src/engine/` | The engine thread and everything it owns (see below). |
 | `src/ui/sidebar/drag.rs` and `drag/` | Shared tab drag state transitions, axis-specific drop geometry and behavior tests. |
 | `src/ui/horizontal_tabs.rs` | Horizontal tab strip, overflow scrolling and navigation toolbar. |
 | `src/ui/sidebar/tabs.rs` and `tabs/` | Tab section rendering and sidebar tab context actions. |
+| `src/ui/components/` | Shared controls: icon buttons and rows, menus and popovers, the hover highlight, animated icons, the hairline rule, page building blocks and the grain texture. |
+| `src/ui/icons/` | One module per interface icon, plus the search providers' brand marks. |
 | `src/input.rs` | Translates Rune pointer, wheel and key input into Ladybird input. |
-| `src/address.rs` | Classifies omnibox input and builds navigation or search URLs. |
-| `src/appearance.rs` | System, light and dark appearance preference. |
-| `src/perf.rs` | Development timing, printed when `ELARIS_PERF=1`. |
-| `src/ui/` | Rune components for the toolbar, sidebar, omnibox, floating find and site permissions popovers, viewport, native pages and shared theme. |
-| `src/ladybird/` (library) | Safe Rust wrappers around the bridge's C ABI. Plain event, frame and input types build without the bridge feature. |
+| `src/ui/` | Rune views for the toolbar, sidebar, omnibox, floating find and site permissions popovers, viewport, native pages and shared theme. |
+| `src/ladybird/` (library) | Safe Rust wrappers around the bridge's C ABI, split into `ffi`, `app`, `view` and `callback` modules. Plain event, frame and input types build without the bridge feature. |
 | `bridge/` | The C++ bridge and its headless Ladybird views. |
+| `tools/` | The `./elaris` CLI, notices generation, the Linux test runner and the desktop container. |
+| `packaging/` | macOS `Info.plist` and the Linux desktop entry and icons used by bundling. |
 
-The main dependency direction is `ui` → `app` → `browser` → `engine` → `ladybird` → bridge.
+The main dependency direction is `ui` → `app` → `browser` → `engine` → `ladybird` → bridge, with `elaris-core`
+below all of them and depending on none of them.
 Storage is an app-owned boundary: the app queues committed visits and session snapshots, and the
 storage worker handles disk access. The UI knows tabs and pixels, not SQLite or C++.
 

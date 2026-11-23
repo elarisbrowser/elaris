@@ -99,7 +99,7 @@ pub(in crate::ui) fn eligible(state: &AppState, id: TabId) -> bool {
 
 pub(in crate::ui) fn attach(tab: El, id: TabId) -> El {
     use crate::tab::TabSection;
-    use crate::ui::hover_highlight::{self, Group};
+    use crate::ui::components::hover_highlight::{self, Group};
     tab.on_hover_change(move |state: &mut AppState, inside, tx| {
         let changed = state
             .browser
