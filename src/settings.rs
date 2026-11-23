@@ -134,6 +134,46 @@ impl PageStyle {
     }
 }
 
+/// Who draws the window frame on Linux. It is read once at launch, so a change applies after a
+/// restart.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum WindowDecorations {
+    /// System decorations on tiling window managers, Elaris's own elsewhere.
+    #[default]
+    Auto,
+    /// The compositor's frame, or none at all on tiling window managers.
+    System,
+    /// A borderless window with Elaris's own controls.
+    Elaris,
+}
+
+impl WindowDecorations {
+    pub(crate) const ALL: [Self; 3] = [Self::Auto, Self::System, Self::Elaris];
+
+    #[cfg_attr(not(elaris_ui = "linux"), allow(dead_code))]
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::Auto => "Automatic",
+            Self::System => "System",
+            Self::Elaris => "Elaris",
+        }
+    }
+
+    pub(crate) fn config_key(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::System => "system",
+            Self::Elaris => "elaris",
+        }
+    }
+
+    pub(crate) fn from_config_key(value: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|mode| mode.config_key().eq_ignore_ascii_case(value))
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) enum DownloadDirectory {
     #[default]
@@ -233,6 +273,7 @@ pub(crate) struct Settings {
     pub(crate) sidebar_side: SidebarSide,
     pub(crate) new_tab_position: NewTabPosition,
     pub(crate) page_style: PageStyle,
+    pub(crate) window_decorations: WindowDecorations,
     pub(crate) split_view_limit: usize,
     pub(crate) appearance: Appearance,
     pub(crate) accent_color: AccentColor,
@@ -259,6 +300,7 @@ impl Default for Settings {
             sidebar_side: SidebarSide::default(),
             new_tab_position: NewTabPosition::default(),
             page_style: PageStyle::default(),
+            window_decorations: WindowDecorations::default(),
             split_view_limit: 2,
             appearance: Appearance::System,
             accent_color: AccentColor::Blue,
@@ -332,6 +374,8 @@ pub(crate) enum SettingsChange {
     SidebarSide(SidebarSide),
     NewTabPosition(NewTabPosition),
     PageStyle(PageStyle),
+    #[cfg_attr(not(elaris_ui = "linux"), allow(dead_code))]
+    WindowDecorations(WindowDecorations),
     Appearance(Appearance),
     AccentColor(AccentColor),
     SearchEngine(SearchEngine),

@@ -9,6 +9,8 @@ use crate::internal::InternalPage;
 use crate::permissions::{
     AutoplayPolicy, PermissionDecision, PermissionKind, PermissionState, PermissionStore,
 };
+#[cfg(elaris_ui = "linux")]
+use crate::settings::WindowDecorations;
 use crate::settings::{
     ContentBlockList, DownloadDirectory, NewTabPosition, PageStyle, SettingsChange, SidebarSide,
     StartupMode, TabLayout,
@@ -38,6 +40,22 @@ impl super::AppState {
             self.settings.sidebar_side = side;
             self.save_setting(SettingsChange::SidebarSide(side));
         }
+    }
+
+    /// Saves the Linux window frame. The open windows keep theirs, so a change that would give a
+    /// different frame asks for a restart.
+    #[cfg(elaris_ui = "linux")]
+    pub(crate) fn set_window_decorations(&mut self, mode: WindowDecorations) {
+        if self.settings.window_decorations == mode {
+            return;
+        }
+        self.settings.window_decorations = mode;
+        self.save_setting(SettingsChange::WindowDecorations(mode));
+        let running = super::LinuxDecorations::current();
+        let next = super::LinuxDecorations::for_setting(
+            super::LinuxDecorations::override_setting().unwrap_or(mode),
+        );
+        self.restart_notice = next != running;
     }
 
     pub(crate) fn set_new_tab_position(&mut self, position: NewTabPosition) {

@@ -22,6 +22,8 @@ use std::sync::{Mutex, OnceLock, RwLock};
 use crate::browser::Browser;
 use crate::omnibox;
 use crate::permissions::{PermissionKind, PermissionStore};
+#[cfg(elaris_ui = "linux")]
+use crate::settings::WindowDecorations;
 use crate::settings::{Settings, StartupMode};
 use crate::storage;
 use crate::storage::{Session, Storage};
@@ -66,6 +68,20 @@ pub(crate) enum LinuxDecorations {
     Elaris,
 }
 
+/// The frame saved in config.toml. The first window opens before storage loads, so this reads
+/// the file directly.
+#[cfg(elaris_ui = "linux")]
+fn saved_window_decorations() -> WindowDecorations {
+    #[cfg(not(test))]
+    if let Ok(paths) = storage::Paths::resolve()
+        && let Ok(contents) = std::fs::read_to_string(&paths.config_file)
+        && let Ok(load) = crate::config::parse(&contents)
+    {
+        return load.settings.window_decorations;
+    }
+    WindowDecorations::Auto
+}
+
 /// Desktops that tile windows and draw no titlebar, where custom window controls only get in the way.
 #[cfg(elaris_ui = "linux")]
 const TILING_DESKTOPS: &[&str] = &[
@@ -93,19 +109,33 @@ impl LinuxDecorations {
         *MODE.get_or_init(|| {
             let var = |name| std::env::var(name).ok();
             Self::resolve(
-                var("ELARIS_LINUX_DECORATIONS").as_deref(),
+                Self::override_setting().unwrap_or_else(saved_window_decorations),
                 var("XDG_CURRENT_DESKTOP").as_deref(),
                 var("XDG_SESSION_DESKTOP").as_deref(),
             )
         })
     }
 
-    /// `setting` is `system`, `elaris`, or anything else for auto-detection from the desktop.
-    fn resolve(setting: Option<&str>, current: Option<&str>, session: Option<&str>) -> Self {
-        match setting.map(str::to_ascii_lowercase).as_deref() {
-            Some("system") => return Self::System,
-            Some("elaris") => return Self::Elaris,
-            _ => {}
+    /// The `ELARIS_LINUX_DECORATIONS` choice, which wins over the saved setting.
+    pub(crate) fn override_setting() -> Option<WindowDecorations> {
+        WindowDecorations::from_config_key(&std::env::var("ELARIS_LINUX_DECORATIONS").ok()?)
+    }
+
+    /// The mode `setting` would give on this desktop.
+    pub(crate) fn for_setting(setting: WindowDecorations) -> Self {
+        let var = |name| std::env::var(name).ok();
+        Self::resolve(
+            setting,
+            var("XDG_CURRENT_DESKTOP").as_deref(),
+            var("XDG_SESSION_DESKTOP").as_deref(),
+        )
+    }
+
+    fn resolve(setting: WindowDecorations, current: Option<&str>, session: Option<&str>) -> Self {
+        match setting {
+            WindowDecorations::System => return Self::System,
+            WindowDecorations::Elaris => return Self::Elaris,
+            WindowDecorations::Auto => {}
         }
         let tiling = [current, session]
             .into_iter()
@@ -270,6 +300,11 @@ pub(crate) struct AppState {
     pub(crate) page_nav_hover: Option<usize>,
     pub(crate) settings_picker_open: bool,
     pub(crate) startup_picker_open: bool,
+    #[cfg(elaris_ui = "linux")]
+    pub(crate) decorations_picker_open: bool,
+    /// The window frame setting changed and applies the next time Elaris opens.
+    #[cfg(elaris_ui = "linux")]
+    pub(crate) restart_notice: bool,
     #[cfg(elaris_ui = "linux")]
     pub(crate) titlebar: LinuxTitlebar,
     storage: Option<std::sync::Arc<Storage>>,
@@ -459,6 +494,10 @@ impl AppState {
             page_nav_hover: None,
             settings_picker_open: false,
             startup_picker_open: false,
+            #[cfg(elaris_ui = "linux")]
+            decorations_picker_open: false,
+            #[cfg(elaris_ui = "linux")]
+            restart_notice: false,
             #[cfg(elaris_ui = "linux")]
             titlebar: LinuxTitlebar::default(),
             storage,
@@ -894,15 +933,16 @@ pub(crate) use lifecycle::{
 #[cfg(all(test, elaris_ui = "linux"))]
 mod linux_decorations_tests {
     use super::LinuxDecorations;
+    use crate::settings::WindowDecorations::{Auto, Elaris, System};
 
     #[test]
     fn explicit_setting_wins() {
         assert_eq!(
-            LinuxDecorations::resolve(Some("SYSTEM"), Some("GNOME"), None),
+            LinuxDecorations::resolve(System, Some("GNOME"), None),
             LinuxDecorations::System
         );
         assert_eq!(
-            LinuxDecorations::resolve(Some("elaris"), Some("sway"), None),
+            LinuxDecorations::resolve(Elaris, Some("sway"), None),
             LinuxDecorations::Elaris
         );
     }
@@ -910,19 +950,19 @@ mod linux_decorations_tests {
     #[test]
     fn auto_detects_tiling_desktops() {
         assert_eq!(
-            LinuxDecorations::resolve(None, Some("Hyprland"), None),
+            LinuxDecorations::resolve(Auto, Some("Hyprland"), None),
             LinuxDecorations::System
         );
         assert_eq!(
-            LinuxDecorations::resolve(Some("auto"), Some("ubuntu:GNOME"), Some("sway")),
+            LinuxDecorations::resolve(Auto, Some("ubuntu:GNOME"), Some("sway")),
             LinuxDecorations::System
         );
         assert_eq!(
-            LinuxDecorations::resolve(None, Some("KDE"), None),
+            LinuxDecorations::resolve(Auto, Some("KDE"), None),
             LinuxDecorations::Elaris
         );
         assert_eq!(
-            LinuxDecorations::resolve(None, None, None),
+            LinuxDecorations::resolve(Auto, None, None),
             LinuxDecorations::Elaris
         );
     }

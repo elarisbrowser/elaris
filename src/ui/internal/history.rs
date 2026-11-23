@@ -25,7 +25,7 @@ const ROW_HEIGHT: f32 = 48.0;
 const TIME_WIDTH: f32 = 72.0;
 
 const SECTION_GAP: f32 = theme::PAGE_SECTION_GAP;
-const DIALOG_WIDTH: f32 = 400.0;
+const DIALOG_WIDTH: f32 = theme::PAGE_DIALOG_WIDTH;
 
 pub(super) const ACTIONS: &[PageAction] = &[
     PageAction {

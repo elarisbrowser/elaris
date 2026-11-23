@@ -14,7 +14,7 @@ use crate::appearance::{AccentColor, Appearance, GlassStyle};
 use crate::permissions::{AutoplayPolicy, PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{
     ContentBlockList, DownloadDirectory, NewTabPosition, PageStyle, Settings, SettingsChange,
-    SidebarSide, StartupMode, TabLayout,
+    SidebarSide, StartupMode, TabLayout, WindowDecorations,
 };
 
 const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\ntheme = \"system\"\naccent = \"blue\"\nglass = true\nglass_style = \"liquid\"\ntint_opacity = 100\ngrain = 0\ntab_layout = \"vertical\"\nsidebar_side = \"left\"\nnew_tab_position = \"top\"\npage_style = \"card\"\n\n[split_view]\nmax_panes = 2\n\n[search]\nengine = \"duckduckgo\"\n\n[downloads]\ndirectory = \"default\"\n\n[startup]\nmode = \"restore\"\n\n[pages]\nzoom = 100\n\n[performance]\nreduce_motion = false\n";
@@ -99,6 +99,15 @@ pub(crate) fn parse(contents: &str) -> Result<ConfigLoad, String> {
         } else {
             issues.push(format!(
                 "Invalid value for [appearance].page_style: {value:?}; expected card or edge_to_edge"
+            ));
+        }
+    }
+    if let Some(value) = string_value(&document, "linux", "decorations", &mut issues) {
+        if let Some(mode) = WindowDecorations::from_config_key(&value) {
+            settings.window_decorations = mode;
+        } else {
+            issues.push(format!(
+                "Invalid value for [linux].decorations: {value:?}; expected auto, system or elaris"
             ));
         }
     }
@@ -469,6 +478,9 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
         SettingsChange::PageStyle(value) => {
             ("appearance", "page_style", value.config_key().to_owned())
         }
+        SettingsChange::WindowDecorations(value) => {
+            ("linux", "decorations", value.config_key().to_owned())
+        }
         SettingsChange::SplitViewLimit(value) => {
             ("split_view", "max_panes", (*value).clamp(2, 64).to_string())
         }
@@ -642,6 +654,34 @@ mod tests {
         }
         let invalid = parse("[appearance]\nsidebar_side = 'middle'").unwrap();
         assert_eq!(invalid.settings.sidebar_side, SidebarSide::Left);
+        assert_eq!(invalid.issues.len(), 1);
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn window_decorations_default_to_auto_and_round_trip() {
+        let directory = std::env::temp_dir().join(format!(
+            "elaris-config-decorations-{}-{}",
+            std::process::id(),
+            NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed)
+        ));
+        let path = directory.join("config.toml");
+        assert_eq!(
+            parse("").unwrap().settings.window_decorations,
+            WindowDecorations::Auto
+        );
+        for mode in WindowDecorations::ALL {
+            write_change(&path, &SettingsChange::WindowDecorations(mode)).unwrap();
+            assert_eq!(
+                parse(&fs::read_to_string(&path).unwrap())
+                    .unwrap()
+                    .settings
+                    .window_decorations,
+                mode
+            );
+        }
+        let invalid = parse("[linux]\ndecorations = 'fancy'").unwrap();
+        assert_eq!(invalid.settings.window_decorations, WindowDecorations::Auto);
         assert_eq!(invalid.issues.len(), 1);
         fs::remove_dir_all(directory).unwrap();
     }

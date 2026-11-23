@@ -342,6 +342,8 @@ pub(crate) const PAGE_HEADER_ICON: f32 = 32.0;
 /// Space between sections, and the larger space between categories (twice as wide, so each
 /// category reads as one group).
 pub(crate) const PAGE_SECTION_GAP: f32 = space::S6;
+/// Width of confirmation and notice dialogs on internal pages.
+pub(crate) const PAGE_DIALOG_WIDTH: f32 = 400.0;
 pub(crate) const PAGE_CATEGORY_GAP: f32 = PAGE_SECTION_GAP * 2.0;
 /// Vertical padding of a grouped row, the gap between its copy and control, and the copy's
 /// line gap.

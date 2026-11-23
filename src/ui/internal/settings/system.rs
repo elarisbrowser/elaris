@@ -16,7 +16,82 @@ use crate::ui::theme;
 use super::section;
 
 pub(super) fn sections(cx: &mut PageContext) -> Vec<El> {
-    vec![startup(cx), default_browser(cx), configuration(cx)]
+    let mut sections = vec![startup(cx)];
+    #[cfg(elaris_ui = "linux")]
+    sections.push(window_frame(cx));
+    sections.extend([default_browser(cx), configuration(cx)]);
+    sections
+}
+
+#[cfg(elaris_ui = "linux")]
+fn window_frame(cx: &mut PageContext) -> El {
+    use crate::app::LinuxDecorations;
+    use crate::settings::WindowDecorations;
+
+    let select = Dropdown::new("settings-window-frame", "Window frame")
+        .options(WindowDecorations::ALL.map(|mode| (mode, mode.label())))
+        .current(cx.state.settings.window_decorations)
+        .open(cx.state.decorations_picker_open)
+        .on_toggle(|state| state.decorations_picker_open = !state.decorations_picker_open)
+        .on_close(|state| state.decorations_picker_open = false)
+        .on_choose(|state, mode| {
+            state.set_window_decorations(mode);
+            state.decorations_picker_open = false;
+        })
+        .build(cx.state, cx.theme, cx.overlays);
+    let description = match LinuxDecorations::override_setting() {
+        Some(mode) => format!(
+            "ELARIS_LINUX_DECORATIONS is set, so Elaris uses the {} frame.",
+            mode.label().to_lowercase()
+        ),
+        None => "Automatic uses the system frame on tiling window managers, where Elaris \
+                 hides its window controls. Changes apply after a restart."
+            .to_owned(),
+    };
+    if cx.state.restart_notice {
+        restart_notice(cx);
+    }
+    section(
+        "Window",
+        cx.theme,
+        [setting(cx, "Window frame", &description, select)],
+    )
+}
+
+/// Tells the user the new frame needs a restart. Open windows keep the frame they opened with.
+#[cfg(elaris_ui = "linux")]
+fn restart_notice(cx: &mut PageContext) {
+    use rune::tok::space;
+    use rune_kit::Dialog;
+
+    let kit = cx.theme.kit(cx.theme.overlay_panel);
+    let dismiss = |state: &mut AppState| state.restart_notice = false;
+    let ok = Button::new("OK")
+        .variant(ButtonVariant::Neutral)
+        .on_press(dismiss)
+        .build(&kit)
+        .key("restart-notice-ok")
+        .autofocus();
+    Dialog::new("restart-notice", "Restart to apply")
+        .open(true)
+        .fit()
+        .width(theme::PAGE_DIALOG_WIDTH)
+        .on_close(dismiss)
+        .child(
+            col()
+                .w_full()
+                .px(theme::PAGE_SECTION_GAP)
+                .pb(theme::PAGE_SECTION_GAP)
+                .gap(theme::PAGE_SECTION_GAP)
+                .child(
+                    text("Elaris will use the new window frame the next time it opens.")
+                        .font(type_::BODY)
+                        .color(cx.theme.text_muted)
+                        .wrap(),
+                )
+                .child(rune::row().w_full().gap(space::S2).justify_end().child(ok)),
+        )
+        .build(&kit, cx.overlays);
 }
 
 fn startup(cx: &mut PageContext) -> El {
