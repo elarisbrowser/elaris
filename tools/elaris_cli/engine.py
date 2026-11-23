@@ -52,6 +52,9 @@ def build_for_elaris(jobs: Optional[str] = None) -> None:
         cwd=ENGINE,
     )
     cpp.cpp_configure(argparse.Namespace())
+    # A build stopped mid-write leaves a torn deps log. Ninja then drops every record after the tear on each
+    # load, marks those objects stale, and rebuilds most of LibWeb on every run. Recompacting rewrites it cleanly.
+    subprocess.run(["ninja", "-C", str(CPP_BUILD_DIR), "-t", "recompact"], check=False, capture_output=True)
     run_step(
         "Elaris bridge and helpers",
         "cmake",
