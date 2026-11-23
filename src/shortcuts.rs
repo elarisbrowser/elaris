@@ -38,6 +38,8 @@ pub(crate) enum Shortcut {
     ToggleSidebar,
     OpenSettings,
     OpenHistory,
+    /// Has no key of its own; the menu bar and the internal pages' menu open it.
+    OpenTaskManager,
 }
 
 /// Rune's hook for keys nothing focused took: runs the shortcut the key is, if any.
@@ -145,6 +147,7 @@ pub(crate) fn dispatch(state: &mut AppState, shortcut: Shortcut, tx: &mut Tx) {
         Shortcut::ToggleSidebar => {}
         Shortcut::OpenSettings => app::open_settings(state, tx),
         Shortcut::OpenHistory => app::open_history(state, tx),
+        Shortcut::OpenTaskManager => app::open_task_manager(state, tx),
         Shortcut::PreviousTab
         | Shortcut::NextTab
         | Shortcut::SelectTab(_)

@@ -272,6 +272,13 @@ pub(crate) fn install(app: rune::AppHandle<AppState>) {
             native("Minimize", "m", false),
             native("Zoom", "", false),
             separator(),
+            item(
+                "Task Manager",
+                Action::Shortcut(Shortcut::OpenTaskManager),
+                "",
+                false,
+            ),
+            separator(),
             native("Bring All to Front", "", false),
         ],
         mtm,

@@ -127,7 +127,9 @@ fn menu_command(action: Action) -> Option<MenuCommand> {
         Action::Shortcut(Shortcut::OpenHistory) => MenuCommand::History,
         Action::Shortcut(Shortcut::NextTab) => MenuCommand::NextTab,
         Action::Shortcut(Shortcut::PreviousTab) => MenuCommand::PreviousTab,
-        Action::Shortcut(Shortcut::OpenSettings) => MenuCommand::Settings,
+        Action::Shortcut(Shortcut::OpenSettings | Shortcut::OpenTaskManager) => {
+            MenuCommand::Settings
+        }
         _ => return None,
     })
 }

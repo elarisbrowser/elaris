@@ -212,6 +212,7 @@ fn internal_pages_open_a_native_context_menu_with_page_actions() {
             "Reload config.toml",
             "Copy Page Address",
             "History",
+            "Task Manager",
         ]
     );
 
@@ -227,6 +228,7 @@ fn internal_pages_open_a_native_context_menu_with_page_actions() {
     assert_eq!(history[0], "Refresh");
     assert!(history.contains(&"Settings".to_owned()));
     assert!(!history.contains(&"History".to_owned()));
+    assert!(history.contains(&"Task Manager".to_owned()));
 }
 
 /// The menu highlight lives inside the panel's rows, not in a window overlay placed from last

@@ -157,6 +157,7 @@ pub(super) fn action_from_id(id: isize) -> Option<Action> {
         113 => Action::Shortcut(Shortcut::ZoomOut),
         114 => Action::Shortcut(Shortcut::ResetZoom),
         115 => Action::Shortcut(Shortcut::NewPrivateWindow),
+        116 => Action::Shortcut(Shortcut::OpenTaskManager),
         _ => return None,
     })
 }
@@ -179,6 +180,7 @@ fn shortcut_id(shortcut: Shortcut) -> isize {
         Shortcut::ZoomOut => 13,
         Shortcut::ResetZoom => 14,
         Shortcut::NewPrivateWindow => 15,
+        Shortcut::OpenTaskManager => 16,
         _ => -1,
     }
 }

@@ -287,6 +287,7 @@ pub(in crate::ui) fn tab_symbol(tab: &Tab, size: f32, theme: &Theme) -> El {
         Some(InternalRoute::Page(InternalPage::History)) => &icons::HISTORY,
         Some(InternalRoute::Page(InternalPage::Downloads)) => &icons::DOWNLOAD,
         Some(InternalRoute::Page(InternalPage::Settings)) => &icons::SYSTEM,
+        Some(InternalRoute::Page(InternalPage::TaskManager)) => &icons::ACTIVITY,
         _ => &icons::PAGE,
     };
     tab.favicon.as_ref().map_or_else(

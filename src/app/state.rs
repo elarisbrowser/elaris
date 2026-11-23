@@ -8,6 +8,7 @@ use super::MiniStart;
 use super::clear_data;
 use super::history::HistoryPage;
 use super::tabs;
+use super::task_manager::TaskManagerPage;
 use crate::browser::Browser;
 use crate::omnibox;
 use crate::storage::{Session, Storage};
@@ -143,6 +144,7 @@ pub(crate) struct AppState {
     pub(super) restored_windows: Vec<Session>,
     pub(super) history_revision: u64,
     pub(crate) history_page: HistoryPage,
+    pub(crate) task_manager: TaskManagerPage,
     /// The page title the window shows.
     pub(super) window_title: Option<String>,
     pub(crate) zoom_menu: Option<TabId>,

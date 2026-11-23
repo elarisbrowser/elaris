@@ -29,10 +29,10 @@ pub(in crate::ui) fn tab_icon(
             mark.looping(rune::LoopSpec::rotation(theme::LOADING_PERIOD))
         };
     }
-    let glyph = if tab.internal == Some(InternalRoute::Page(InternalPage::History)) {
-        &icons::HISTORY
-    } else {
-        &icons::PAGE
+    let glyph = match tab.internal {
+        Some(InternalRoute::Page(InternalPage::History)) => &icons::HISTORY,
+        Some(InternalRoute::Page(InternalPage::TaskManager)) => &icons::ACTIVITY,
+        _ => &icons::PAGE,
     };
     icon(glyph, size).color(color)
 }

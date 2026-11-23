@@ -193,6 +193,7 @@ impl AppState {
             restored_windows,
             history_revision: 0,
             history_page: HistoryPage::default(),
+            task_manager: Default::default(),
             window_title: None,
             zoom_menu: None,
             zoom_chip: None,

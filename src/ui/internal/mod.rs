@@ -14,6 +14,7 @@ mod history;
 mod layout;
 mod placeholders;
 mod settings;
+mod task_manager;
 use crate::ui::components::widgets;
 
 use rune::El;
@@ -70,6 +71,10 @@ fn page(page: InternalPage) -> Page {
         InternalPage::Downloads => Page {
             view: placeholders::downloads,
             actions: &[],
+        },
+        InternalPage::TaskManager => Page {
+            view: task_manager::view,
+            actions: task_manager::ACTIONS,
         },
         InternalPage::About => Page {
             view: placeholders::about,

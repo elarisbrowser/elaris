@@ -37,6 +37,7 @@ internal_pages! {
     Settings => ("settings", "Settings"),
     History => ("history", "History"),
     Downloads => ("downloads", "Downloads"),
+    TaskManager => ("processes", "Task Manager"),
     About => ("about", "About Elaris"),
 }
 
@@ -81,6 +82,7 @@ mod tests {
             ("elaris://settings", InternalPage::Settings),
             ("elaris://history", InternalPage::History),
             ("elaris://downloads", InternalPage::Downloads),
+            ("elaris://processes", InternalPage::TaskManager),
             ("elaris://about", InternalPage::About),
             ("ELARIS://settings", InternalPage::Settings),
         ] {

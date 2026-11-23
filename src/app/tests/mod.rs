@@ -15,3 +15,4 @@ mod settings;
 mod sidebar;
 mod startup;
 mod tabs;
+mod task_manager;

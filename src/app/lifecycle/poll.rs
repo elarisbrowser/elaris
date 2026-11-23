@@ -87,6 +87,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     refresh_find_after_navigation(state, &polled);
     state.persist_session_if_changed();
     let (history_page_changed, history_changed) = poll_history(state, &polled, tx);
+    let task_manager_changed = state.poll_task_manager(&mut polled, tx);
     apply_page_updates(state, &mut polled, tx);
     let preview_changed = crate::ui::poll_tab_preview(state, clock, tx)
         || crate::ui::displayed_tab_preview(state)
@@ -102,6 +103,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         || preview_changed
         || history_changed
         || history_page_changed
+        || task_manager_changed
         || settling
         || link_copy_settled
         || site_action_settled

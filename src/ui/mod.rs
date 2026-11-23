@@ -47,6 +47,8 @@ use elaris_core::appearance::GlassStyle;
 pub(crate) const VIEWPORT: &str = "viewport";
 pub(crate) const HISTORY_SEARCH: &str = "history-search";
 pub(crate) const HISTORY_SCROLL: &str = "history-scroll";
+pub(crate) const TASK_MANAGER_SEARCH: &str = "task-manager-search";
+pub(crate) const TASK_MANAGER_SCROLL: &str = "task-manager-scroll";
 pub(crate) const FIND_INPUT: &str = "find-input";
 #[cfg(target_os = "macos")]
 pub(crate) use sidebar::tabs::floating_drag_preview;

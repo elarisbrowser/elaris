@@ -190,6 +190,12 @@ impl Runtime {
                 .set_permission(&origin, kind.key(), state.choice())
                 .err()
                 .map(Update::Failed),
+            Command::Processes(tab) => Some(Update::Processes(tab, self.ladybird.processes())),
+            Command::EndProcess(tab, id) => self
+                .ladybird
+                .end_process(id)
+                .err()
+                .map(|error| Update::EndProcessFailed(tab, error)),
             Command::SetDownloadDirectory(path) => {
                 configure_download_directory(&mut self.ladybird, path.as_deref())
                     .err()
@@ -323,7 +329,9 @@ impl Runtime {
             | Command::SetContentBlocking(..)
             | Command::SetPermissionDefault(..)
             | Command::SetPermissions(_)
-            | Command::SetPermission(..) => {
+            | Command::SetPermission(..)
+            | Command::Processes(_)
+            | Command::EndProcess(..) => {
                 return None;
             }
         };

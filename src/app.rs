@@ -56,6 +56,7 @@ mod omnibox_actions;
 mod session;
 mod settings_actions;
 mod tabs;
+mod task_manager;
 pub(crate) mod termination;
 mod transfer;
 
@@ -66,3 +67,4 @@ pub(crate) use lifecycle::{
     new_tab, omnibox_input_key, on_reopen, on_window_focus, open_from_launcher, open_history,
     open_settings, poll, setup_headless, shut_down, start_workers, submit_omnibox, window_closed,
 };
+pub(crate) use task_manager::open_task_manager;

@@ -166,6 +166,10 @@ pub(crate) enum Command {
         elaris_core::permissions::PermissionKind,
         elaris_core::permissions::PermissionState,
     ),
+    /// Describes every engine process for the Task Manager in this tab.
+    Processes(TabId),
+    /// Ends the engine process with this Ladybird child ID, for the Task Manager in this tab.
+    EndProcess(TabId, u64),
     /// Closes every view and stops the engine.
     Shutdown,
 }
@@ -308,6 +312,10 @@ pub(crate) enum Update {
         elaris_core::permissions::PermissionKind,
         elaris_core::permissions::PermissionState,
     ),
+    /// The engine's processes, for the Task Manager in this tab.
+    Processes(TabId, Result<Vec<elaris_core::processes::Process>, String>),
+    /// A process the Task Manager in this tab asked to end could not be ended.
+    EndProcessFailed(TabId, String),
     /// The engine could not start or stopped; no tab will hear from it again.
     Failed(String),
 }
@@ -506,7 +514,9 @@ fn update_tab(update: &Update) -> Option<TabId> {
         | Update::ContextMenu(id, _)
         | Update::Clipboard(id, _)
         | Update::CloseDecision(id, _)
-        | Update::FormPicker(id, _) => Some(*id),
+        | Update::FormPicker(id, _)
+        | Update::Processes(id, _)
+        | Update::EndProcessFailed(id, _) => Some(*id),
         _ => None,
     }
 }

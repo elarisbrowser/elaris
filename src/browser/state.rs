@@ -41,6 +41,10 @@ pub(crate) struct Polled {
     pub(crate) download_directory_error: Option<String>,
     /// Popups pages opened, as (opener, request, activate), for the app to give a window.
     pub(crate) popups: Vec<(TabId, u64, bool)>,
+    /// The engine's processes, for the Task Manager in this tab.
+    pub(crate) processes: Option<(TabId, Result<Vec<elaris_core::processes::Process>, String>)>,
+    /// Why a process the Task Manager in this tab asked to end could not be ended.
+    pub(crate) processes_error: Option<(TabId, String)>,
 }
 
 pub(crate) struct Browser {

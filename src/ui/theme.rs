@@ -373,6 +373,12 @@ pub(crate) const PAGE_NAV_INSET: f32 = space::S1;
 pub(crate) const PAGE_NAV_GAP: f32 = space::S1 / 2.0;
 /// Width shared by field-style controls (selects, segmented controls, sliders) in page rows.
 pub(crate) const PAGE_CONTROL_WIDTH: f32 = 220.0;
+/// Task Manager rows, and the width of each figure column after the name.
+pub(crate) const TASK_MANAGER_ROW_HEIGHT: f32 = 36.0;
+pub(crate) const TASK_MANAGER_METRIC_WIDTH: f32 = 84.0;
+pub(crate) const TASK_MANAGER_PID_WIDTH: f32 = 64.0;
+/// How far a site's processes sit inside its row.
+pub(crate) const TASK_MANAGER_INDENT: f32 = space::S6;
 
 /// The address field.
 pub(crate) const FOCUS_WIDTH: f32 = 2.0;

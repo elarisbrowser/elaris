@@ -5,7 +5,7 @@ use std::time::Instant;
 use super::{Browser, Polled, peek, split};
 use crate::engine::{Command, Update, ViewCommand};
 use crate::input;
-use crate::tab::Tab;
+use crate::tab::{Tab, TabId};
 use elaris_core::internal::InternalRoute;
 use elaris_core::perf::{self, Stage};
 
@@ -215,6 +215,14 @@ impl Browser {
                     polled.download_directory_error = Some(error);
                     polled.changed = true;
                 }
+                Update::Processes(id, processes) => {
+                    polled.processes = Some((id, processes));
+                    polled.changed = true;
+                }
+                Update::EndProcessFailed(id, error) => {
+                    polled.processes_error = Some((id, error));
+                    polled.changed = true;
+                }
             }
         }
         for id in self.visible_tabs().into_iter().flatten() {
@@ -234,6 +242,22 @@ impl Browser {
             polled.downloads_changed = true;
         }
         polled
+    }
+
+    /// Asks the engine to describe its processes for the Task Manager in `tab`. Returns false
+    /// without an engine, which has no processes to describe.
+    pub(crate) fn request_processes(&self, tab: TabId) -> bool {
+        self.engine
+            .as_ref()
+            .map(|engine| engine.send(Command::Processes(tab)))
+            .is_some()
+    }
+
+    /// Ends the engine process with Ladybird's child ID `id`, for the Task Manager in `tab`.
+    pub(crate) fn end_process(&self, tab: TabId, id: u64) {
+        if let Some(engine) = &self.engine {
+            engine.send(Command::EndProcess(tab, id));
+        }
     }
 
     pub(super) fn send_color_scheme(&self) {
