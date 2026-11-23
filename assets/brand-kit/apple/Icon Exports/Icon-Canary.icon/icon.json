@@ -15,17 +15,19 @@
               0,
               0
             ]
-          }
+          },
+          "glass" : false
         }
       ],
       "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
+        "kind" : "none",
+        "opacity" : 0
       },
       "translucency" : {
         "enabled" : false,
         "value" : 0
-      }
+      },
+      "specular" : false
     },
     {
       "layers" : [
