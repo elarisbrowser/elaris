@@ -48,32 +48,41 @@ def needs_review(expression: str) -> bool:
 
 
 VCPKG_ROOT = ROOT / "vendor" / "ladybird" / "Build" / "release" / "vcpkg_installed"
-VCPKG_INFO = VCPKG_ROOT / "vcpkg" / "info"
-BUNDLE_LIBRARY_DIRS = [ROOT / "build" / "Elaris.app" / "Contents" / "lib", ROOT / "build" / "linux" / "Elaris" / "lib"]
+# Each shipped platform: its vcpkg triplet, its app bundle's library directory, and where its vcpkg metadata is read from.
+# The Linux inputs are staged under build/notices-inputs (see docs/release.md) because the Linux bundle is built in the
+# container; the macOS inputs come straight from the host's vcpkg installation.
+PLATFORMS = {
+    "arm64-osx-dynamic": {
+        "libs": ROOT / "build" / "Elaris.app" / "Contents" / "lib",
+        "info": VCPKG_ROOT / "vcpkg" / "info",
+        "share": VCPKG_ROOT / "arm64-osx-dynamic" / "share",
+    },
+    "x64-linux-dynamic": {
+        "libs": ROOT / "build" / "notices-inputs" / "x64-linux-dynamic" / "libs.txt",
+        "info": ROOT / "build" / "notices-inputs" / "x64-linux-dynamic" / "info",
+        "share": ROOT / "build" / "notices-inputs" / "x64-linux-dynamic" / "share",
+    },
+}
 # Ladybird's own libraries are BSD-2-Clause; Elaris's bridge is part of this project.
 LADYBIRD_PREFIXES = ("liblagom-",)
 ELARIS_LIBRARIES = ("libelaris_ladybird",)
 
 
-def host_triplet() -> str:
-    system = {"Darwin": "osx", "Linux": "linux"}.get(platform.system(), "unknown")
-    arch = "arm64" if platform.machine().lower() in {"arm64", "aarch64"} else "x64"
-    return f"{arch}-{system}-dynamic"
-
-
-def bundled_library_names() -> set[str]:
-    names: set[str] = set()
-    for directory in BUNDLE_LIBRARY_DIRS:
-        if directory.is_dir():
-            names.update(path.name for path in directory.iterdir())
-    return names
+def bundled_library_names(triplet: str) -> set[str]:
+    source = PLATFORMS[triplet]["libs"]
+    if source.is_file():
+        return {line.strip() for line in source.read_text().splitlines() if line.strip()}
+    if source.is_dir():
+        return {path.name for path in source.iterdir()}
+    return set()
 
 
 def vcpkg_packages(triplet: str) -> dict[str, tuple[str, str]]:
     """Maps each library file name vcpkg installed for `triplet` to (package, version)."""
     owners: dict[str, tuple[str, str]] = {}
     suffix = f"_{triplet}.list"
-    for listing in sorted(VCPKG_INFO.glob(f"*{suffix}")):
+    info = PLATFORMS[triplet]["info"]
+    for listing in sorted(info.glob(f"*{suffix}")) if info.is_dir() else []:
         stem = listing.name[: -len(suffix)]
         package, _, version = stem.partition("_")
         for line in listing.read_text().splitlines():
@@ -83,37 +92,41 @@ def vcpkg_packages(triplet: str) -> dict[str, tuple[str, str]]:
     return owners
 
 
-def copyright_text(package: str) -> str | None:
-    path = VCPKG_ROOT / host_triplet() / "share" / package / "copyright"
+def copyright_text(triplet: str, package: str) -> str | None:
+    path = PLATFORMS[triplet]["share"] / package / "copyright"
     return path.read_text(errors="replace") if path.is_file() else None
 
 
 def cpp_section() -> list[str]:
-    names = bundled_library_names()
     lines = ["", "## C++ components", ""]
-    if not names:
+    triplets = [triplet for triplet in PLATFORMS if bundled_library_names(triplet)]
+    if not triplets:
         return lines + ["No app bundle is built yet, so the bundled C++ components cannot be listed. Run `./elaris bundle`.", ""]
-    owners = vcpkg_packages(host_triplet())
-    found: dict[str, str] = {}
+
+    found: dict[str, tuple[str, str]] = {}  # component label -> (package or "", triplet)
     unmatched: list[str] = []
-    for name in sorted(names):
-        if name.startswith(ELARIS_LIBRARIES):
-            continue
-        if name.startswith(LADYBIRD_PREFIXES):
-            found.setdefault("Ladybird", "")
-        elif name in owners:
-            package, version = owners[name]
-            found.setdefault(f"{package} {version}", package)
-        else:
-            unmatched.append(name)
+    for triplet in triplets:
+        owners = vcpkg_packages(triplet)
+        for name in sorted(bundled_library_names(triplet)):
+            if name.startswith(ELARIS_LIBRARIES):
+                continue
+            if name.startswith(LADYBIRD_PREFIXES):
+                found.setdefault("Ladybird", ("", triplet))
+            elif name in owners:
+                package, version = owners[name]
+                found.setdefault(f"{package} {version}", (package, triplet))
+            else:
+                unmatched.append(f"{name} ({triplet})")
 
     lines += [
         "Ladybird, the engine Elaris embeds, is BSD-2-Clause. Its licence text is in the appendix.",
         "",
+        "Platforms covered: " + ", ".join(triplets) + ".",
+        "",
         "| Component | Licence source |",
         "| --- | --- |",
     ]
-    for label, package in sorted(found.items()):
+    for label, (package, _) in sorted(found.items()):
         source = f"vcpkg `{package}`" if package else "Ladybird `LICENSE`"
         lines.append(f"| {label} | {source} |")
     if unmatched:
@@ -124,8 +137,8 @@ def cpp_section() -> list[str]:
     ladybird = ROOT / "vendor" / "ladybird" / "LICENSE"
     if ladybird.is_file():
         lines += ["#### Ladybird", "", "```text", ladybird.read_text(errors="replace").rstrip(), "```", ""]
-    for package in sorted({package for package in found.values() if package}):
-        text = copyright_text(package)
+    for package, triplet in sorted({(package, triplet) for package, triplet in found.values() if package}):
+        text = copyright_text(triplet, package)
         lines.append(f"#### {package}")
         lines.append("")
         if text is None:

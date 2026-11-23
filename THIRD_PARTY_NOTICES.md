@@ -494,6 +494,8 @@ These crates declare only copyleft licences:
 
 Ladybird, the engine Elaris embeds, is BSD-2-Clause. Its licence text is in the appendix.
 
+Platforms covered: arm64-osx-dynamic.
+
 | Component | Licence source |
 | --- | --- |
 | Ladybird | Ladybird `LICENSE` |
