@@ -16,7 +16,7 @@ The shared highlight spring is used for pointer hover highlights and selection c
 pub(super) const HIGHLIGHT_MOTION: Spring = Spring::new(0.14, 0.0);
 ```
 
-The token is used by `src/ui/hover_highlight.rs` for the moving control/tab highlight and selection highlight, and by `src/ui/tab_switcher.rs` for quick-switch selection feedback.
+The token is used by `src/ui/components/hover_highlight.rs` for the moving control/tab highlight and selection highlight, and by `src/ui/tab_switcher.rs` for quick-switch selection feedback.
 
 ## Target
 
