@@ -139,11 +139,17 @@ fn clear_button(theme: &Theme) -> El {
         .press_scale(theme::PRESS_SCALE)
         .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
         .label("Clear tabs")
-        .child(icon(&icons::ARROW_DOWN, theme::SIDEBAR_CLEAR_ICON).color(theme.text_muted))
+        .hover_group()
+        .child(
+            icon(&icons::ARROW_DOWN, theme::SIDEBAR_CLEAR_ICON)
+                .color(theme.text_muted)
+                .group_color(theme.text),
+        )
         .child(
             text("Clear")
                 .font(type_::LABEL)
                 .color(theme.text_muted)
+                .group_color(theme.text)
                 .single_line(),
         )
         .on_press(|state: &mut AppState| state.clear_regular_tabs())
