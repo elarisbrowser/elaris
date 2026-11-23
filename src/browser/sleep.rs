@@ -21,6 +21,7 @@ impl Tab {
             || self.page_dialog.is_some()
             || self.permission_prompt.is_some()
             || self.external_url.is_some()
+            || self.id().has_open_popup()
     }
 }
 
@@ -47,6 +48,7 @@ impl Browser {
                 idle: now.saturating_duration_since(tab.last_seen),
                 favourite: tab.section() == TabSection::Favourite,
                 busy: tab.busy(),
+                memory: None,
             })
             .collect()
     }

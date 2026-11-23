@@ -100,8 +100,9 @@ impl Browser {
     ) -> TabId {
         let id = self.next_page_id();
         let mut tab = Tab::new(id, url);
-        if popup.is_some() {
+        if let Some((source, _)) = popup {
             tab.engine.pending_load = None;
+            id.set_opener(source);
         }
         tab.section = section;
         tab.title = title;

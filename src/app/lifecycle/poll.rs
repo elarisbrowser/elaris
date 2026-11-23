@@ -87,6 +87,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     refresh_find_after_navigation(state, &polled);
     state.persist_session_if_changed();
     let (history_page_changed, history_changed) = poll_history(state, &polled, tx);
+    state.note_tab_memory(&polled);
     let task_manager_changed = state.poll_task_manager(&mut polled, tx);
     let memory_saver_changed = state.poll_memory_saver(tx);
     apply_page_updates(state, &mut polled, tx);

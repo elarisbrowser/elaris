@@ -194,7 +194,7 @@ impl AppState {
             history_revision: 0,
             history_page: HistoryPage::default(),
             task_manager: Default::default(),
-            memory_saver_check: None,
+            memory_saver: Default::default(),
             window_title: None,
             zoom_menu: None,
             zoom_chip: None,

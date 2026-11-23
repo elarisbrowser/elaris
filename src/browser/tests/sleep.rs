@@ -61,3 +61,25 @@ fn private_windows_never_sleep_tabs() {
     browser.poll();
     assert!(browser.sleep_candidates(Instant::now()).is_empty());
 }
+
+#[test]
+fn a_tab_with_an_open_popup_stays_awake_until_the_popup_closes() {
+    let (mut browser, _fake) = ready();
+    let opener = browser.open_tab("example.com").unwrap();
+    browser.open_tab("example.org").unwrap();
+    browser.insert_popup(opener, 1, false);
+    browser.poll();
+    let busy = |browser: &Browser| {
+        browser
+            .sleep_candidates(Instant::now())
+            .iter()
+            .find(|candidate| candidate.id == opener)
+            .unwrap()
+            .busy
+    };
+    browser.activate_tab(browser.tabs()[1].id());
+    assert!(busy(&browser));
+    let popup = browser.tabs().last().unwrap().id();
+    browser.close_tab(popup);
+    assert!(!busy(&browser));
+}

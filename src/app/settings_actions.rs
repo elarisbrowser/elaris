@@ -232,7 +232,7 @@ impl super::AppState {
         }
         self.settings.memory_saver = mode;
         // The next poll checks at once under the new mode.
-        self.memory_saver_check = None;
+        self.memory_saver.check_now();
         self.save_setting(SettingsChange::MemorySaver(mode));
     }
 

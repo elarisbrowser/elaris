@@ -32,6 +32,14 @@ pub(crate) struct TabId(u64);
 
 static NEXT_TAB_ID: AtomicU64 = AtomicU64::new(1);
 static LIVE_TAB_IDS: OnceLock<Mutex<HashSet<u64>>> = OnceLock::new();
+/// Each open popup with the tab that opened it, across every window, as (popup, opener).
+static OPENERS: Mutex<Vec<(u64, u64)>> = Mutex::new(Vec::new());
+
+fn openers() -> std::sync::MutexGuard<'static, Vec<(u64, u64)>> {
+    OPENERS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
 
 impl TabId {
     /// The number Ladybird tags the tab's view and events with.
@@ -55,11 +63,23 @@ impl TabId {
     }
 
     pub(crate) fn release(self) {
+        openers().retain(|&(popup, opener)| popup != self.0 && opener != self.0);
         if let Some(ids) = LIVE_TAB_IDS.get() {
             ids.lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .remove(&self.0);
         }
+    }
+
+    /// Records that `opener` opened this popup, which may talk back to it through
+    /// `window.opener`, as a sign-in window does.
+    pub(crate) fn set_opener(self, opener: TabId) {
+        openers().push((self.0, opener.0));
+    }
+
+    /// Whether a popup this tab opened is still open.
+    pub(crate) fn has_open_popup(self) -> bool {
+        openers().iter().any(|&(_, opener)| opener == self.0)
     }
 
     pub(crate) fn is_live(self) -> bool {
