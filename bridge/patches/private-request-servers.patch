@@ -1,6 +1,6 @@
 --- a/Libraries/LibWebView/Application.cpp
 +++ b/Libraries/LibWebView/Application.cpp
-@@ -1376,8 +1376,11 @@
+@@ -1404,8 +1404,11 @@
  
      // NB: Those views own the session until they are deleted, so let go of it here. The private window opened next
      //     starts a new one rather than picking up what this was asked to clear.
@@ -14,7 +14,7 @@
  Web::CompositorContextId Application::allocate_compositor_context_id()
 --- a/Libraries/LibWebView/RequestServerManager.h
 +++ b/Libraries/LibWebView/RequestServerManager.h
-@@ -93,6 +93,7 @@
+@@ -94,6 +94,7 @@
  
      ErrorOr<RequestServerClientConnection> connect_new_client(RequestServerInstance&, BrowsingSession&, RequestServer::SiteBinding);
  
@@ -24,7 +24,7 @@
  
 --- a/Libraries/LibWebView/RequestServerManager.cpp
 +++ b/Libraries/LibWebView/RequestServerManager.cpp
-@@ -35,6 +35,10 @@
+@@ -34,6 +34,10 @@
  
  static constexpr size_t site_cache_key_size = 32;
  
@@ -35,7 +35,7 @@
  RequestServerInstance::RequestServerInstance(NonnullRefPtr<BrowsingSession> session, Optional<Utf16String> site, ByteString cache_path)
      : m_session(move(session))
      , m_site(move(site))
-@@ -120,6 +124,8 @@
+@@ -116,6 +120,8 @@
  
  ErrorOr<NonnullRefPtr<RequestServerInstance>> RequestServerManager::launch(NonnullRefPtr<BrowsingSession> session, Optional<Utf16String> site)
  {
@@ -44,7 +44,7 @@
      auto cache_path = site.has_value() ? cache_path_for_site(*site) : Application::request_server_options().cache_path;
      auto instance = adopt_ref(*new RequestServerInstance(session, move(site), move(cache_path)));
      TRY(launch_process(*instance));
-@@ -206,7 +212,7 @@
+@@ -217,7 +223,7 @@
  
  void RequestServerManager::did_lose_process(RequestServerInstance& instance)
  {
@@ -53,12 +53,10 @@
          return;
  
      // The process took every client with it; nothing will report their disconnection.
-@@ -245,6 +251,25 @@
- 
-     if (m_dormant_site_caches.has_value() && instance.site().has_value() && instance.session().is_private() == IsPrivate::No && !is_live_cache_path(instance.cache_path()))
+@@ -258,6 +264,25 @@
          m_dormant_site_caches->set(instance.cache_path(), { .last_use = UnixDateTime::now(), .size = instance.m_disk_cache_size });
-+}
-+
+ }
+ 
 +void RequestServerManager::retire_private_session(BrowsingSession& session)
 +{
 +    VERIFY(session.is_private() == IsPrivate::Yes);
@@ -76,6 +74,8 @@
 +        instance->ui_client().shutdown();
 +        instance->control_client().shutdown();
 +    }
- }
- 
++}
++
  void RequestServerManager::retire_idle_instances()
+ {
+     for (auto& instance : Vector { m_instances }) {

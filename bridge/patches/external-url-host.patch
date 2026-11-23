@@ -1,6 +1,6 @@
 --- a/Libraries/LibWebView/ViewImplementation.cpp
 +++ b/Libraries/LibWebView/ViewImplementation.cpp
-@@ -1216,7 +1216,8 @@
+@@ -1497,7 +1497,8 @@
      if (action == ExternalURLAction::Block)
          return;
  

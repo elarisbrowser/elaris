@@ -46,7 +46,7 @@
  }
 --- a/Libraries/LibWebView/Settings.h
 +++ b/Libraries/LibWebView/Settings.h
-@@ -332,7 +332,9 @@
+@@ -350,7 +350,9 @@
      GlobalPrivacyControl global_privacy_control() const { return m_global_privacy_control; }
      void set_global_privacy_control(GlobalPrivacyControl);
  

@@ -1,6 +1,6 @@
---- a/Libraries/LibWebView/HelperProcess.cpp	2026-11-21 14:43:59
-+++ b/Libraries/LibWebView/HelperProcess.cpp	2026-11-21 14:44:01
-@@ -474,8 +474,8 @@
+--- a/Libraries/LibWebView/HelperProcess.cpp
++++ b/Libraries/LibWebView/HelperProcess.cpp
+@@ -473,8 +473,8 @@
      auto const& browser_options = WebView::Application::browser_options();
  
      Vector<ByteString> arguments;
