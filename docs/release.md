@@ -15,6 +15,17 @@ publishes the draft by hand.
 
 `workflow_dispatch` runs the same jobs for a chosen branch and uploads the artifacts without creating a release.
 
+## Before tagging: third-party notices
+
+`THIRD_PARTY_NOTICES.md` covers the Rust crates and the bundled C++ components of both platforms. The Linux bundle is
+built in the container, so its vcpkg metadata is staged out of the container's volumes first:
+
+1. Build the x86_64 bundle with `./elaris linux-build --arch amd64`, or `./elaris linux-test --arch amd64`.
+2. Stage its library list and vcpkg metadata into `build/notices-inputs/x64-linux-dynamic` (read-only from the build
+   volumes; see the commit that added the Linux notices for the exact `docker run` command).
+3. Regenerate the notices on the host with `./elaris bundle` run on macOS and `python3 scripts/notices.py`, then check
+   that `python3 scripts/notices.py --check` passes.
+
 ## Versions
 
 Releases use SemVer pre-release tags such as `v0.1.0-alpha.1`. `Cargo.toml` carries the same version, and the release

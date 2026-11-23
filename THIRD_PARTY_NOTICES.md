@@ -494,7 +494,7 @@ These crates declare only copyleft licences:
 
 Ladybird, the engine Elaris embeds, is BSD-2-Clause. Its licence text is in the appendix.
 
-Platforms covered: arm64-osx-dynamic.
+Platforms covered: arm64-osx-dynamic, x64-linux-dynamic.
 
 | Component | Licence source |
 | --- | --- |
@@ -505,6 +505,7 @@ Platforms covered: arm64-osx-dynamic.
 | cpptrace 1.0.4 | vcpkg `cpptrace` |
 | curl 8.23.0 | vcpkg `curl` |
 | dav1d 1.5.4 | vcpkg `dav1d` |
+| dbus 1.16.4 | vcpkg `dbus` |
 | expat 2.10.0 | vcpkg `expat` |
 | ffmpeg 9.0.2 | vcpkg `ffmpeg` |
 | fontconfig 2.17.1 | vcpkg `fontconfig` |
@@ -2786,6 +2787,34 @@ EVEX_INSTR vrcpps,         vrcp14ps,   1 ; EVEX versions have higher precision
 EVEX_INSTR vrcpss,         vrcp14ss,   1
 EVEX_INSTR vrsqrtps,       vrsqrt14ps, 1
 EVEX_INSTR vrsqrtss,       vrsqrt14ss, 1
+```
+
+#### dbus
+
+```text
+dbus is licensed to you under your choice of the Academic Free
+License version 2.1, or the GNU General Public License version 2
+(or, at your option any later version).
+The full text of these licenses can be found in LICENSES/AFL-2.1.txt
+and LICENSES/GPL-2.0-or-later.txt.
+
+Some source files are under more permissive BSD-/MIT-style licenses
+that are compatible with the AFL and GPL.
+
+When contributing new code, our preferred license for new code is the
+version of the MIT/X11 license used by the Expat library, referred to
+as "MIT" by SPDX, which can be found in LICENSES/MIT.txt.
+
+Some of the standalone binaries are under the GPL only; in particular,
+but not limited to, tools/dbus-cleanup-sockets.c and test/decode-gcov.c.
+
+Each source code file is marked with the proper copyright information -
+if you find a file that isn't marked please bring it to our attention.
+
+Some files contain a SPDX-License-Identifier marker. These markers
+indicate the license of that file, consistent with the SPDX and REUSE
+specifications: see <https://reuse.software/>. dbus is not yet fully
+REUSE-compliant, and not all files carry these markers.
 ```
 
 #### expat
