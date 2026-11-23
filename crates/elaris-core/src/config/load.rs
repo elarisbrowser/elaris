@@ -10,6 +10,7 @@ use toml_edit::{DocumentMut, Item};
 
 use crate::address::SearchEngine;
 use crate::appearance::{AccentColor, Appearance, GlassStyle};
+use crate::memory_saver::MemorySaver;
 use crate::permissions::{AutoplayPolicy, PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{
     ContentBlockList, DownloadDirectory, NewTabPosition, PageStyle, Settings, SidebarSide,
@@ -188,6 +189,15 @@ pub fn parse(contents: &str) -> Result<ConfigLoad, String> {
     }
     if let Some(value) = bool_value(&document, "performance", "reduce_motion", &mut issues) {
         settings.reduce_motion = value;
+    }
+    if let Some(value) = string_value(&document, "performance", "memory_saver", &mut issues) {
+        if let Some(mode) = MemorySaver::from_config_key(&value) {
+            settings.memory_saver = mode;
+        } else {
+            issues.push(format!(
+                "Invalid value for [performance].memory_saver: {value:?}; expected off, balanced or maximum"
+            ));
+        }
     }
     if let Some(value) = bool_value(&document, "content_blocking", "enabled", &mut issues) {
         settings.content_blocking.enabled = value;

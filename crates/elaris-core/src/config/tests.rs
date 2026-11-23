@@ -121,6 +121,35 @@ fn page_style_defaults_to_card_and_round_trips() {
 }
 
 #[test]
+fn memory_saver_defaults_to_balanced_and_round_trips() {
+    use crate::memory_saver::MemorySaver;
+    let directory = std::env::temp_dir().join(format!(
+        "elaris-config-memory-saver-{}-{}",
+        std::process::id(),
+        NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed)
+    ));
+    let path = directory.join("config.toml");
+    assert_eq!(
+        parse("").unwrap().settings.memory_saver,
+        MemorySaver::Balanced
+    );
+    for mode in MemorySaver::ALL {
+        write_change(&path, &SettingsChange::MemorySaver(mode)).unwrap();
+        assert_eq!(
+            parse(&fs::read_to_string(&path).unwrap())
+                .unwrap()
+                .settings
+                .memory_saver,
+            mode
+        );
+    }
+    let invalid = parse("[performance]\nmemory_saver = 'eco'").unwrap();
+    assert_eq!(invalid.settings.memory_saver, MemorySaver::Balanced);
+    assert_eq!(invalid.issues.len(), 1);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn new_tab_position_defaults_to_top_and_round_trips() {
     let directory = std::env::temp_dir().join(format!(
         "elaris-config-new-tab-{}-{}",

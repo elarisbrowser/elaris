@@ -161,6 +161,9 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
         SettingsChange::TintOpacity(value) => ("appearance", "tint_opacity", value.to_string()),
         SettingsChange::Grain(value) => ("appearance", "grain", value.to_string()),
         SettingsChange::ReduceMotion(value) => ("performance", "reduce_motion", value.to_string()),
+        SettingsChange::MemorySaver(value) => {
+            ("performance", "memory_saver", value.config_key().to_owned())
+        }
         SettingsChange::ContentBlocking(value) => {
             ("content_blocking", "enabled", value.to_string())
         }

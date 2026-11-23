@@ -287,6 +287,7 @@ pub struct Settings {
     /// How strong the still noise over the glass is, 0 through 100.
     pub grain: u8,
     pub reduce_motion: bool,
+    pub memory_saver: crate::memory_saver::MemorySaver,
     pub content_blocking: ContentBlocking,
 }
 
@@ -311,6 +312,7 @@ impl Default for Settings {
             tint_opacity: 100,
             grain: 0,
             reduce_motion: false,
+            memory_saver: crate::memory_saver::MemorySaver::default(),
             content_blocking: ContentBlocking::default(),
         }
     }
@@ -384,6 +386,7 @@ pub enum SettingsChange {
     TintOpacity(u8),
     Grain(u8),
     ReduceMotion(bool),
+    MemorySaver(crate::memory_saver::MemorySaver),
     SplitViewLimit(usize),
     ContentBlocking(bool),
     ContentBlockingList(ContentBlockList, bool),
