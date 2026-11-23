@@ -152,7 +152,13 @@ def launch(args: argparse.Namespace) -> None:
         extra = [*([args.url] if args.url else []), *args.rune_args]
         # Launch Services detaches the app's output, so keep it in a log beside the build.
         log = str(ROOT / "build" / "elaris-run.log")
-        run("open", "-W", "-a", str(app), "--stdout", log, "--stderr", log, *(["--args", *extra] if extra else []))
+        # Launch Services does not pass this shell's environment on, so forward the Elaris variables explicitly.
+        environment = [item for name, value in sorted(os.environ.items()) if name.startswith("ELARIS_") for item in ("--env", f"{name}={value}")]
+        run(
+            "open", "-W", "-a", str(app), *environment,
+            "--stdout", log, "--stderr", log,
+            *(["--args", *extra] if extra else []),
+        )
         return
     if not args.linux_ui and _run_artifacts_are_current(ui_only, profile):
         executable = _executable(profile)
