@@ -170,9 +170,6 @@ fn editor(state: &AppState, suggestions: &[Suggestion], theme: &Theme) -> El {
     if !suggestions.is_empty() {
         field = field.active_descendant(format!("omnibox-result-{}", state.omnibox.selected));
     }
-    if !state.toolbar_address_bar() {
-        field = field.focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus);
-    }
     field
         .key("omnibox-input")
         .single_line()
