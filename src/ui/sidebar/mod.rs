@@ -21,6 +21,7 @@ use super::icons;
 use super::permission_prompt;
 use super::theme::{self, Theme};
 use crate::app::{self, AppState};
+use crate::platform::haptics::{self, Haptic};
 use crate::ui::components::animated_icon;
 use crate::ui::components::controls::row_button;
 use crate::ui::components::hover_highlight;
@@ -236,6 +237,7 @@ fn copy_link(state: &AppState, url: &str, theme: &Theme, reduced: bool) -> El {
             .help(if copied { "Copied" } else { "Copy link" })
             .on_press_tx(move |state: &mut AppState, tx| {
                 tx.copy(url.clone());
+                haptics::play(Haptic::Tap);
                 state.sidebar.link_copied_until = Some(tx.clock() + theme::COPY_LINK_CONFIRM);
                 tx.wake_after(std::time::Duration::from_secs_f64(theme::COPY_LINK_CONFIRM));
                 tx.animated();

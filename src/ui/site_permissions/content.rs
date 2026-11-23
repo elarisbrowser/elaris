@@ -4,6 +4,7 @@ use rune::tok::type_;
 use rune::{El, PointerPress, Spring, Transition, Tx, el, icon, row, text};
 
 use crate::app::{self, AppState};
+use crate::platform::haptics::{self, Haptic};
 use crate::site_controls::{SiteControlAction, SiteControlPresentation, SiteControlsPage};
 use crate::ui::components::controls;
 use crate::ui::components::rule::hairline;
@@ -272,6 +273,7 @@ fn action_tiles(
                     SiteControlAction::Settings => app::open_settings(state, tx),
                 }
                 if action.confirmation().is_some() {
+                    haptics::play(Haptic::Tap);
                     state.site_action_done = Some((action, tx.clock() + theme::COPY_LINK_CONFIRM));
                     tx.wake_after(std::time::Duration::from_secs_f64(theme::COPY_LINK_CONFIRM));
                 }
