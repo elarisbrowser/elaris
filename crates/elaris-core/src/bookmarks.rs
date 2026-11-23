@@ -45,6 +45,9 @@ pub struct Bookmark {
     /// When it was added, in seconds since the Unix epoch.
     #[serde(default)]
     pub added: u64,
+    /// The page's icon, kept so lists can show it without the page open.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub favicon: Option<Favicon>,
     #[serde(flatten)]
     pub kind: Kind,
 }
@@ -75,12 +78,17 @@ impl Bookmark {
         matches!(self.kind, Kind::Folder { .. })
     }
 
-    /// What the bar and lists call it: its title, or its address until it has one.
+    /// What the bar and lists call it: its title, or its site until it has one.
     pub fn label(&self) -> &str {
         match (self.title.trim(), self.url()) {
-            ("", Some(url)) => url,
+            ("", Some(url)) => crate::address::compact_address(url),
             (title, _) => title,
         }
+    }
+
+    /// A link still without a title or icon, which loading its page would give it.
+    pub fn missing_details(&self) -> bool {
+        self.url().is_some() && (self.title.trim().is_empty() || self.favicon.is_none())
     }
 
     fn children_mut(&mut self) -> Option<&mut Vec<Bookmark>> {
@@ -88,6 +96,73 @@ impl Bookmark {
             Kind::Folder { children } => Some(children),
             Kind::Link { .. } => None,
         }
+    }
+}
+
+/// A page icon, at most [`Favicon::MAX`] pixels on a side, as RGBA rows.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Favicon {
+    pub width: u32,
+    pub height: u32,
+    #[serde(with = "hex")]
+    pub rgba: Vec<u8>,
+}
+
+impl Favicon {
+    /// Larger icons are scaled down to this, which lists never draw bigger.
+    pub const MAX: u32 = 32;
+
+    /// An icon from a page's RGBA pixels, scaled down if larger than [`Favicon::MAX`]; none if
+    /// the pixels don't fill the size.
+    pub fn new(width: u32, height: u32, rgba: &[u8]) -> Option<Self> {
+        let expected = (width as usize)
+            .checked_mul(height as usize)?
+            .checked_mul(4)?;
+        if width == 0 || height == 0 || rgba.len() != expected {
+            return None;
+        }
+        let scale = (width.max(height) as f32 / Self::MAX as f32).max(1.0);
+        let (new_width, new_height) = (
+            ((width as f32 / scale).round() as u32).max(1),
+            ((height as f32 / scale).round() as u32).max(1),
+        );
+        let mut scaled = Vec::with_capacity(new_width as usize * new_height as usize * 4);
+        for y in 0..new_height {
+            let source_y = ((y as f32 * scale) as u32).min(height - 1);
+            for x in 0..new_width {
+                let source_x = ((x as f32 * scale) as u32).min(width - 1);
+                let at = (source_y as usize * width as usize + source_x as usize) * 4;
+                scaled.extend_from_slice(&rgba[at..at + 4]);
+            }
+        }
+        Some(Self {
+            width: new_width,
+            height: new_height,
+            rgba: scaled,
+        })
+    }
+}
+
+/// Bytes as lowercase hex, which keeps icons compact in the JSON.
+mod hex {
+    use serde::{Deserialize, Deserializer, Serializer, de::Error};
+
+    pub(super) fn serialize<S: Serializer>(bytes: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
+        let text: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+        serializer.serialize_str(&text)
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Vec<u8>, D::Error> {
+        let text = String::deserialize(deserializer)?;
+        if text.len() % 2 != 0 {
+            return Err(D::Error::custom("hex has an odd length"));
+        }
+        (0..text.len())
+            .step_by(2)
+            .map(|at| u8::from_str_radix(&text[at..at + 2], 16).map_err(D::Error::custom))
+            .collect()
     }
 }
 
@@ -127,6 +202,7 @@ impl Default for Bookmarks {
             id,
             title: title.to_owned(),
             added: 0,
+            favicon: None,
             kind: Kind::Folder {
                 children: Vec::new(),
             },
@@ -283,10 +359,50 @@ impl Bookmarks {
             id,
             title: title.trim().to_owned(),
             added,
+            favicon: None,
             kind,
         });
         self.next_id += 1;
         Ok(id)
+    }
+
+    /// Fills in what bookmarks of `url` lack: an empty title from `title`, a missing icon from
+    /// `favicon`. Reports whether any changed; a title the user gave is never replaced.
+    pub fn fill_details(
+        &mut self,
+        url: &str,
+        title: Option<&str>,
+        favicon: Option<&Favicon>,
+    ) -> bool {
+        fn walk(
+            node: &mut Bookmark,
+            url: &str,
+            title: Option<&str>,
+            favicon: Option<&Favicon>,
+        ) -> bool {
+            let mut changed = false;
+            if node.url() == Some(url) {
+                if let Some(title) = title.map(str::trim).filter(|title| !title.is_empty())
+                    && node.title.trim().is_empty()
+                {
+                    node.title = title.to_owned();
+                    changed = true;
+                }
+                if node.favicon.is_none()
+                    && let Some(favicon) = favicon
+                {
+                    node.favicon = Some(favicon.clone());
+                    changed = true;
+                }
+            }
+            if let Some(children) = node.children_mut() {
+                for child in children {
+                    changed |= walk(child, url, title, favicon);
+                }
+            }
+            changed
+        }
+        walk(&mut self.bar, url, title, favicon) | walk(&mut self.other, url, title, favicon)
     }
 
     /// Renames a bookmark, and changes a link's address when `url` is given.
@@ -424,7 +540,7 @@ mod tests {
             .add_link(BookmarkId::OTHER, "", "https://e.com/", 4)
             .unwrap();
         assert!(next.get() > docs.get());
-        assert_eq!(bookmarks.get(next).unwrap().label(), "https://e.com/");
+        assert_eq!(bookmarks.get(next).unwrap().label(), "e.com");
     }
 
     #[test]
@@ -485,9 +601,58 @@ mod tests {
     }
 
     #[test]
+    fn page_details_fill_only_what_is_missing() {
+        let mut bookmarks = Bookmarks::default();
+        let blank = bookmarks
+            .add_link(BookmarkId::BAR, "", "https://www.google.com/search?q=hi", 0)
+            .unwrap();
+        let named = bookmarks
+            .add_link(
+                BookmarkId::OTHER,
+                "Mine",
+                "https://www.google.com/search?q=hi",
+                0,
+            )
+            .unwrap();
+        assert_eq!(bookmarks.get(blank).unwrap().label(), "google.com");
+        assert!(bookmarks.get(blank).unwrap().missing_details());
+        let icon = Favicon::new(1, 1, &[1, 2, 3, 4]).unwrap();
+        assert!(bookmarks.fill_details(
+            "https://www.google.com/search?q=hi",
+            Some("hi - Google Search"),
+            Some(&icon)
+        ));
+        assert_eq!(bookmarks.get(blank).unwrap().title, "hi - Google Search");
+        assert_eq!(bookmarks.get(named).unwrap().title, "Mine");
+        assert_eq!(bookmarks.get(named).unwrap().favicon, Some(icon.clone()));
+        assert!(!bookmarks.get(blank).unwrap().missing_details());
+        assert!(!bookmarks.fill_details(
+            "https://www.google.com/search?q=hi",
+            Some("x"),
+            Some(&icon)
+        ));
+    }
+
+    #[test]
+    fn large_icons_are_scaled_down_and_short_pixels_refused() {
+        let big = Favicon::new(64, 64, &[7; 64 * 64 * 4]).unwrap();
+        assert_eq!(
+            (big.width, big.height, big.rgba.len()),
+            (32, 32, 32 * 32 * 4)
+        );
+        assert_eq!(Favicon::new(2, 2, &[0; 3]), None);
+        assert_eq!(Favicon::new(0, 2, &[]), None);
+    }
+
+    #[test]
     fn the_file_round_trips_and_a_newer_one_is_refused() {
-        let (bookmarks, ..) = sample();
-        assert_eq!(Bookmarks::decode(&bookmarks.encode()).unwrap(), bookmarks);
+        let (mut bookmarks, _, bbc, _) = sample();
+        let icon = Favicon::new(1, 1, &[255, 0, 16, 128]).unwrap();
+        bookmarks.fill_details("https://bbc.co.uk/", None, Some(&icon));
+        assert!(bookmarks.encode().contains("\"ff001080\""));
+        let decoded = Bookmarks::decode(&bookmarks.encode()).unwrap();
+        assert_eq!(decoded, bookmarks);
+        assert_eq!(decoded.get(bbc).unwrap().favicon, Some(icon));
         let newer = bookmarks
             .encode()
             .replace("\"version\": 1", "\"version\": 9");
