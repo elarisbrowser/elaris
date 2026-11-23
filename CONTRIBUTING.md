@@ -51,7 +51,7 @@ Useful entry points:
 | --- | --- |
 | `src/` | Rust application, Rune UI, browser state, and engine-thread integration |
 | `bridge/` | Elaris-owned C ABI bridge to Ladybird |
-| `scripts/elaris_cli/` | `./elaris` setup, build, check, and development commands |
+| `tools/elaris_cli/` | `./elaris` setup, build, check, and development commands |
 | `docs/architecture.md` | Module map and UI-to-engine data flow |
 | `docs/ladybird-embedding.md` | Ladybird integration notes and constraints |
 

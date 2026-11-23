@@ -35,7 +35,7 @@ def linux_test(args: argparse.Namespace) -> None:
     emulated = (args.arch or _host_architecture()) == "amd64" and _host_architecture() == "arm64"
     _run_in_container(
         args,
-        ["/bin/sh", "scripts/linux-test.sh"],
+        ["/bin/sh", "tools/linux-test.sh"],
         extra_env={"ELARIS_TEST_DISABLE_SANDBOX": "1"} if emulated else None,
     )
 

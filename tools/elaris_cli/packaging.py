@@ -11,7 +11,8 @@ from . import ui
 from .common import ENGINE, ROOT, VCPKG_INSTALLED, run, vcpkg_triplet
 
 ASSETS = ROOT / "assets"
-LINUX_ASSETS = ASSETS / "linux"
+PACKAGING = ROOT / "packaging"
+LINUX_ASSETS = PACKAGING / "linux"
 # Compiled from the brand kit's Icon Composer document, so the designer's layers and gradient carry over.
 APP_ICON_SOURCE = ASSETS / "brand-kit" / "apple" / "Icon Exports" / "Icon.icon"
 APP_ID = "org.elarisbrowser.Elaris"
@@ -68,7 +69,7 @@ def _macos_bundle_metadata(contents: Path) -> None:
     """Copy the Info.plist and the compiled icon into an app's Contents."""
     icon = _macos_app_icon()
     for source, destination in (
-        (ASSETS / "Info.plist", contents / "Info.plist"),
+        (PACKAGING / "macos" / "Info.plist", contents / "Info.plist"),
         (icon / "Assets.car", contents / "Resources" / "Assets.car"),
         (icon / "Icon.icns", contents / "Resources" / "Icon.icns"),
     ):

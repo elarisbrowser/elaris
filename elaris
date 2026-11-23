@@ -13,4 +13,4 @@ if ! "$ELARIS_PYTHON" -c 'import sys; sys.exit(sys.version_info < (3, 9))'; then
     exit 1
 fi
 
-exec "$ELARIS_PYTHON" "$(dirname "$0")/scripts/cli.py" "$@"
+exec "$ELARIS_PYTHON" "$(dirname "$0")/tools/cli.py" "$@"

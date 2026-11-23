@@ -8,7 +8,7 @@ from . import ui
 from .common import ROOT, require, run
 from .linux import require_docker_daemon
 
-DESKTOP_DIR = ROOT / "docker" / "desktop"
+DESKTOP_DIR = ROOT / "tools" / "desktop"
 IMAGE = "elaris-desktop:latest"
 CONTAINER = "elaris-desktop"
 VIEWER_URL = "http://127.0.0.1:6080/vnc.html?autoconnect=1&resize=scale"

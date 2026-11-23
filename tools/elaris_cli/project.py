@@ -41,7 +41,7 @@ def _run_artifacts_are_current(ui_only: bool, profile: str = "debug") -> bool:
     if not executable.is_file():
         return False
 
-    source_roots = [ROOT / "src", ROOT / "scripts", ROOT / "assets"]
+    source_roots = [ROOT / name for name in ("src", "crates", "tools", "assets", "packaging")]
     inputs = [ROOT / name for name in ("Cargo.toml", "Cargo.lock", "build.rs", "rust-toolchain.toml")]
     inputs.extend(path for source_root in source_roots if source_root.is_dir() for path in source_root.rglob("*"))
     if not ui_only:
@@ -342,7 +342,7 @@ def check(_args: argparse.Namespace) -> None:
         ("Rust tests", "cargo", "+stable", "test", "--locked"),
         (
             "Developer CLI tests",
-            sys.executable, "-m", "unittest", "discover", "-s", str(ROOT / "scripts" / "tests"), "-t", str(ROOT / "scripts"),
+            sys.executable, "-m", "unittest", "discover", "-s", str(ROOT / "tools" / "tests"), "-t", str(ROOT / "tools"),
         ),
     )
     for number, (title, *command) in enumerate(steps, start=1):
