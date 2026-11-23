@@ -45,6 +45,9 @@ pub(crate) struct SidebarState {
     pub(in crate::ui) pointer_inside: bool,
     /// When the copy-link button stops showing its tick, on the window clock.
     pub(in crate::ui) link_copied_until: Option<f64>,
+    /// The copy-link button showed its tick since the buttons appeared, so its chain morphs back;
+    /// otherwise it arrives with the other buttons.
+    pub(in crate::ui) link_tick_shown: bool,
 }
 
 impl Default for SidebarState {
@@ -60,6 +63,7 @@ impl Default for SidebarState {
             hover: hover::Hover::default(),
             pointer_inside: false,
             link_copied_until: None,
+            link_tick_shown: false,
         }
     }
 }
@@ -98,6 +102,9 @@ pub(crate) fn view(
         .on_hover_change(|state: &mut AppState, inside, tx| {
             if state.sidebar.pointer_inside != inside {
                 state.sidebar.pointer_inside = inside;
+                if !inside {
+                    state.sidebar.link_tick_shown = false;
+                }
                 tx.animated();
             }
         })
@@ -231,6 +238,8 @@ fn search_field(
 /// Copies the page's address, then morphs its chain into a tick that draws itself on.
 fn copy_link(state: &AppState, url: &str, theme: &Theme, reduced: bool) -> El {
     let copied = state.sidebar.link_copied_until.is_some();
+    // The chain only morphs back from the tick; arriving, it fades in with the other buttons.
+    let morph = !reduced && (copied || state.sidebar.link_tick_shown);
     let size = theme::ICON_BUTTON;
     let inset = (size - theme::ICON) / 2.0;
     let glyph = crate::ui::components::controls::confirm_glyph(
@@ -239,7 +248,7 @@ fn copy_link(state: &AppState, url: &str, theme: &Theme, reduced: bool) -> El {
         theme::ICON,
         copied,
         theme,
-        reduced,
+        !morph,
     );
     let url = url.to_owned();
     crate::ui::components::hover_highlight::attach(
@@ -258,6 +267,7 @@ fn copy_link(state: &AppState, url: &str, theme: &Theme, reduced: bool) -> El {
                 state.toasts.copy_url(tx, &url);
                 haptics::play(Haptic::Tap);
                 state.sidebar.link_copied_until = Some(tx.clock() + theme::COPY_LINK_CONFIRM);
+                state.sidebar.link_tick_shown = true;
                 tx.wake_after(std::time::Duration::from_secs_f64(theme::COPY_LINK_CONFIRM));
                 tx.animated();
             })
