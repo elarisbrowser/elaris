@@ -9,8 +9,8 @@ use rune::{Cx, El, row, text};
 use super::sidebar::header;
 use super::theme::{self, Theme};
 use super::{controls, icons, page_dialog, peek, permission_prompt, viewport};
-use crate::address::compact_address;
 use crate::app::{AppState, open_in_browser};
+use elaris_core::address::compact_address;
 
 pub(super) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     let dark = state.settings.appearance.is_dark(cx.system_dark());

@@ -163,7 +163,7 @@ pub(crate) fn open_file(tx: &mut Tx) {
     };
     tx.open_file(options, |state: &mut AppState, result, tx| match result {
         Ok(Some(path)) => {
-            let url = crate::address::file_url(&path);
+            let url = elaris_core::address::file_url(&path);
             match state.browser.open_tab(&url) {
                 Ok(tab) => {
                     state.omnibox.close();

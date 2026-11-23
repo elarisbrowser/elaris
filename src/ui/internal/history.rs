@@ -2,18 +2,18 @@
 
 //! The native latest-visited list and its history-only controls.
 
-use elaris::history::{Page, PageEntry};
+use elaris_core::history::{Page, PageEntry};
 use rune::tok::{space, type_};
 use rune::{El, GrowthSpec, Key, Transition, col, el, icon, row, text, text_input};
 use rune_kit::{Button, ButtonVariant, Checkbox, Dialog, Kit};
 
-use crate::address::compact_address;
 use crate::app::{AppState, HistoryConfirm};
 use crate::storage::HistoryMutation;
 use crate::ui::{
     HISTORY_SCROLL, HISTORY_SEARCH, controls, icons,
     theme::{self, Theme},
 };
+use elaris_core::address::compact_address;
 
 use super::clear_data;
 use super::layout::PageLayout;

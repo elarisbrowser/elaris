@@ -4,9 +4,9 @@
 
 use rune::TextEdit;
 
-use crate::address::{self, Destination, SearchEngine};
 use crate::tab::{Tab, TabId};
-use elaris::history::Entry as HistoryEntry;
+use elaris_core::address::{self, Destination, SearchEngine};
+use elaris_core::history::Entry as HistoryEntry;
 
 const MAX_TAB_SUGGESTIONS: usize = 4;
 const MAX_HISTORY_SUGGESTIONS: usize = 3;

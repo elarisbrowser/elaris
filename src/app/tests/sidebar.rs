@@ -438,7 +438,7 @@ fn new_tab_at_top_lands_below_the_button_and_pushes_tabs_down() {
     use rune::{Env, Key, KeyEvent, Mods, Runtime};
 
     let mut state = AppState::new(Some("one.example"));
-    state.settings.new_tab_position = crate::settings::NewTabPosition::Top;
+    state.settings.new_tab_position = elaris_core::settings::NewTabPosition::Top;
     let first = state.browser.active_tab().unwrap().id();
     state.browser.open_tab("two.example").unwrap();
     let mut runtime = Runtime::new(state, crate::ui::view, (960.0, 640.0), Env::new(false, 1.0));

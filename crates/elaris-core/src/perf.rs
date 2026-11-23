@@ -5,7 +5,6 @@
 //! Off, each call is a branch on a cached flag. Each thread keeps and prints its own timings:
 //! the UI thread's polls, and the engine thread's work and frames.
 // Most stages are timed on the engine thread, which a build without an engine lacks.
-#![cfg_attr(not(feature = "ladybird-bridge"), allow(dead_code))]
 
 use std::cell::RefCell;
 use std::sync::OnceLock;
@@ -15,7 +14,7 @@ use std::time::{Duration, Instant};
 const REPORT_EVERY: Duration = Duration::from_secs(5);
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub(crate) enum Stage {
+pub enum Stage {
     /// Handling one batch of Ladybird work on the engine thread.
     Pump,
     /// Between two frames Rune drew: what reaches the screen.
@@ -46,7 +45,7 @@ pub(crate) enum Stage {
 
 /// Counters that are not durations.
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum Count {
+pub enum Count {
     /// Frames shown.
     Shown,
     /// Ready-to-paint events with no new frame behind them.
@@ -68,13 +67,13 @@ thread_local! {
     static RECORDER: RefCell<Recorder> = RefCell::default();
 }
 
-pub(crate) fn enabled() -> bool {
+pub fn enabled() -> bool {
     static ON: OnceLock<bool> = OnceLock::new();
     *ON.get_or_init(|| crate::dev::var("ELARIS_PERF").is_some_and(|v| v != "0"))
 }
 
 /// Times `work` as `stage`.
-pub(crate) fn time<T>(stage: Stage, work: impl FnOnce() -> T) -> T {
+pub fn time<T>(stage: Stage, work: impl FnOnce() -> T) -> T {
     if !enabled() {
         return work();
     }
@@ -84,7 +83,7 @@ pub(crate) fn time<T>(stage: Stage, work: impl FnOnce() -> T) -> T {
     result
 }
 
-pub(crate) fn record(stage: Stage, duration: Duration) {
+pub fn record(stage: Stage, duration: Duration) {
     if enabled() {
         RECORDER.with_borrow_mut(|r| r.samples.push((stage, duration)));
         report_if_due();
@@ -92,7 +91,7 @@ pub(crate) fn record(stage: Stage, duration: Duration) {
 }
 
 /// Rune drew a frame: records the time since the last one.
-pub(crate) fn frame_drawn() {
+pub fn frame_drawn() {
     thread_local! {
         static LAST: std::cell::Cell<Option<Instant>> = const { std::cell::Cell::new(None) };
     }
@@ -104,7 +103,7 @@ pub(crate) fn frame_drawn() {
     }
 }
 
-pub(crate) fn count(counter: Count, by: u64) {
+pub fn count(counter: Count, by: u64) {
     if enabled() {
         RECORDER.with_borrow_mut(|r| r.counts[counter as usize] += by);
     }

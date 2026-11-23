@@ -45,7 +45,7 @@ use rune::SystemMaterial;
 use rune::{Cx, El, col, row};
 
 use crate::app::AppState;
-use crate::appearance::GlassStyle;
+use elaris_core::appearance::GlassStyle;
 
 /// The focus key of the page viewport.
 pub(crate) const VIEWPORT: &str = "viewport";

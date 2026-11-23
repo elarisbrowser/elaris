@@ -6,7 +6,7 @@ use std::{fmt::Write as _, net::IpAddr, path::Path};
 
 /// A provider used for text that is not an address.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum SearchEngine {
+pub enum SearchEngine {
     Google,
     Bing,
     #[default]
@@ -16,9 +16,9 @@ pub(crate) enum SearchEngine {
 
 impl SearchEngine {
     /// The providers shown in the omnibox menu.
-    pub(crate) const ALL: [Self; 4] = [Self::Google, Self::Bing, Self::DuckDuckGo, Self::Brave];
+    pub const ALL: [Self; 4] = [Self::Google, Self::Bing, Self::DuckDuckGo, Self::Brave];
 
-    pub(crate) fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
             Self::Google => "Google",
             Self::Bing => "Bing",
@@ -27,7 +27,7 @@ impl SearchEngine {
         }
     }
 
-    pub(crate) fn config_key(self) -> &'static str {
+    pub fn config_key(self) -> &'static str {
         match self {
             Self::Google => "google",
             Self::Bing => "bing",
@@ -36,7 +36,7 @@ impl SearchEngine {
         }
     }
 
-    pub(crate) fn from_config_key(key: &str) -> Option<Self> {
+    pub fn from_config_key(key: &str) -> Option<Self> {
         match key {
             "google" => Some(Self::Google),
             "bing" => Some(Self::Bing),
@@ -58,12 +58,12 @@ impl SearchEngine {
 
 /// What the omnibox should do with its input.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Destination {
+pub enum Destination {
     Url(String),
     Search(String),
 }
 
-pub(crate) fn destination_for_input(input: &str) -> Result<Destination, &'static str> {
+pub fn destination_for_input(input: &str) -> Result<Destination, &'static str> {
     let input = input.trim();
     if input.is_empty() {
         return Err("Enter a search or address");
@@ -96,7 +96,7 @@ pub(crate) fn destination_for_input(input: &str) -> Result<Destination, &'static
 }
 
 /// The URL Browser should load for submitted omnibox input.
-pub(crate) fn url_for_address(input: &str) -> Result<String, &'static str> {
+pub fn url_for_address(input: &str) -> Result<String, &'static str> {
     match destination_for_input(input)? {
         Destination::Url(url) => Ok(url),
         Destination::Search(query) => Ok(search_url(SearchEngine::default(), &query)),
@@ -104,7 +104,7 @@ pub(crate) fn url_for_address(input: &str) -> Result<String, &'static str> {
 }
 
 /// Builds a URL for a search without sending the query until it is submitted.
-pub(crate) fn search_url(engine: SearchEngine, query: &str) -> String {
+pub fn search_url(engine: SearchEngine, query: &str) -> String {
     let prefix = engine.search_prefix();
     let mut url = String::with_capacity(prefix.len() + query.len() * 3);
     url.push_str(prefix);
@@ -113,7 +113,7 @@ pub(crate) fn search_url(engine: SearchEngine, query: &str) -> String {
 }
 
 /// Encodes an absolute local path without treating filename punctuation as URL syntax.
-pub(crate) fn file_url(path: &Path) -> String {
+pub fn file_url(path: &Path) -> String {
     let mut url = String::from("file://");
     encode_url_bytes(&mut url, path.as_os_str().as_encoded_bytes(), true);
     url
@@ -133,7 +133,7 @@ fn encode_url_bytes(url: &mut String, bytes: &[u8], preserve_slashes: bool) {
 }
 
 /// A compact sidebar label for web pages. Keep the port and subdomains that identify the site.
-pub(crate) fn compact_address(url: &str) -> &str {
+pub fn compact_address(url: &str) -> &str {
     let Some((scheme, rest)) = url.split_once("://") else {
         return url;
     };
@@ -151,7 +151,7 @@ pub(crate) fn compact_address(url: &str) -> &str {
 }
 
 /// The host portion used for local-address detection and tab matching.
-pub(crate) fn host_for_address(input: &str) -> &str {
+pub fn host_for_address(input: &str) -> &str {
     let input = input.split_once("://").map_or(input, |(_, rest)| rest);
     let authority = input.split(['/', '?', '#']).next().unwrap_or_default();
     if let Some(end) = authority

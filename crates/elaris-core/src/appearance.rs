@@ -3,7 +3,7 @@
 //! Whether the interface is light or dark: following the system, or fixed either way.
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum Appearance {
+pub enum Appearance {
     #[default]
     System,
     Light,
@@ -12,7 +12,7 @@ pub(crate) enum Appearance {
 
 /// The material behind the window when glass is on.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum GlassStyle {
+pub enum GlassStyle {
     /// The popover vibrancy material.
     Frosted,
     /// The Liquid Glass material on macOS 26 and later.
@@ -22,23 +22,23 @@ pub(crate) enum GlassStyle {
 
 impl GlassStyle {
     /// Every style, in the order the settings page shows them.
-    pub(crate) const ALL: [Self; 2] = [Self::Frosted, Self::Liquid];
+    pub const ALL: [Self; 2] = [Self::Frosted, Self::Liquid];
 
-    pub(crate) fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
             Self::Frosted => "Frosted",
             Self::Liquid => "Liquid",
         }
     }
 
-    pub(crate) fn config_key(self) -> &'static str {
+    pub fn config_key(self) -> &'static str {
         match self {
             Self::Frosted => "frosted",
             Self::Liquid => "liquid",
         }
     }
 
-    pub(crate) fn from_config_key(value: &str) -> Option<Self> {
+    pub fn from_config_key(value: &str) -> Option<Self> {
         match value {
             "frosted" => Some(Self::Frosted),
             "liquid" => Some(Self::Liquid),
@@ -49,7 +49,7 @@ impl GlassStyle {
 
 /// The interface accent used for focus, selection and emphasized controls.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum AccentColor {
+pub enum AccentColor {
     #[default]
     Blue,
     Purple,
@@ -61,7 +61,7 @@ pub(crate) enum AccentColor {
 
 impl AccentColor {
     /// Every available accent, in the order the settings page shows them.
-    pub(crate) const ALL: [Self; 6] = [
+    pub const ALL: [Self; 6] = [
         Self::Blue,
         Self::Purple,
         Self::Pink,
@@ -70,7 +70,7 @@ impl AccentColor {
         Self::Gray,
     ];
 
-    pub(crate) fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
             Self::Blue => "Blue",
             Self::Purple => "Purple",
@@ -81,7 +81,7 @@ impl AccentColor {
         }
     }
 
-    pub(crate) fn config_key(self) -> &'static str {
+    pub fn config_key(self) -> &'static str {
         match self {
             Self::Blue => "blue",
             Self::Purple => "purple",
@@ -92,7 +92,7 @@ impl AccentColor {
         }
     }
 
-    pub(crate) fn from_config_key(value: &str) -> Option<Self> {
+    pub fn from_config_key(value: &str) -> Option<Self> {
         match value {
             "blue" => Some(Self::Blue),
             "purple" => Some(Self::Purple),
@@ -108,7 +108,7 @@ impl AccentColor {
 impl Appearance {
     /// Every choice, in the order the picker shows them.
     /// The appearance after this one, for a control that cycles through them.
-    pub(crate) fn next(self) -> Self {
+    pub fn next(self) -> Self {
         match self {
             Self::System => Self::Light,
             Self::Light => Self::Dark,
@@ -116,7 +116,7 @@ impl Appearance {
         }
     }
 
-    pub(crate) fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
             Self::System => "System",
             Self::Light => "Light",
@@ -125,7 +125,7 @@ impl Appearance {
     }
 
     /// Whether to draw dark, given whether the system is dark.
-    pub(crate) fn is_dark(self, system_dark: bool) -> bool {
+    pub fn is_dark(self, system_dark: bool) -> bool {
         match self {
             Self::System => system_dark,
             Self::Light => false,

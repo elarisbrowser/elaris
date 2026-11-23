@@ -30,12 +30,12 @@ pub(crate) mod peek;
 pub(crate) mod split;
 pub(crate) mod swipe;
 
-use crate::address::url_for_address;
 use crate::engine::{Command, Engine, Surface, ViewCommand};
-use crate::internal::{InternalPage, InternalRoute};
 use crate::tab::{Tab, TabId, TabSection};
-use elaris::downloads as download_types;
-use elaris::downloads::Download;
+use elaris_core::address::url_for_address;
+use elaris_core::downloads as download_types;
+use elaris_core::downloads::Download;
+use elaris_core::internal::{InternalPage, InternalRoute};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Error {
@@ -79,8 +79,8 @@ pub(crate) struct Polled {
     pub(crate) downloads_changed: bool,
     pub(crate) permission_choices: Vec<(
         String,
-        crate::permissions::PermissionKind,
-        crate::permissions::PermissionState,
+        elaris_core::permissions::PermissionKind,
+        elaris_core::permissions::PermissionState,
     )>,
     pub(crate) clipboard: Option<String>,
     pub(crate) close_decisions: Vec<(TabId, bool)>,

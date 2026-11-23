@@ -11,8 +11,8 @@ use rune::{
 };
 
 use crate::app::{AppState, cross_window_drag::DragAppearance};
-use crate::settings::Settings;
 use crate::ui::{DragVisual, theme};
+use elaris_core::settings::Settings;
 
 const PADDING: f32 = theme::TAB_DRAG_SHADOW_BLUR * 2.0;
 

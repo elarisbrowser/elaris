@@ -8,7 +8,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, UNIX_EPOCH};
 
-use elaris::downloads::{Download, DownloadId, Request, Status};
+use crate::downloads::{Download, DownloadId, Request, Status};
 use serde::{Deserialize, Serialize};
 
 /// The most records kept; older ones fall off.
@@ -35,7 +35,7 @@ enum RecordStatus {
 }
 
 /// The records to keep from `downloads`, newest last, as the JSON the storage worker writes.
-pub(crate) fn encode(downloads: &[Download]) -> String {
+pub fn encode(downloads: &[Download]) -> String {
     let records: Vec<Record> = downloads
         .iter()
         .filter(|download| !download.private)
@@ -46,7 +46,7 @@ pub(crate) fn encode(downloads: &[Download]) -> String {
 }
 
 /// Reads the kept records as finished downloads with fresh ids. A missing file is no history.
-pub(crate) fn load(path: &Path) -> io::Result<Vec<Download>> {
+pub fn load(path: &Path) -> io::Result<Vec<Download>> {
     let contents = match std::fs::read_to_string(path) {
         Ok(contents) => contents,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),

@@ -1,21 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-mod address;
 mod app;
-mod appearance;
 mod browser;
-mod config;
-mod dev;
-mod download_history;
 mod engine;
 mod input;
-mod internal;
 mod omnibox;
 mod page_accessibility;
-mod perf;
-mod permissions;
 mod platform;
-mod settings;
 mod shortcuts;
 mod site_controls;
 mod storage;
@@ -24,6 +15,7 @@ mod ui;
 
 use std::sync::Arc;
 
+use elaris_core::perf;
 use rune::{App, AppSpec, Chrome, WindowOptions, WindowSpec};
 
 #[cfg(target_os = "macos")]

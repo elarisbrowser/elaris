@@ -8,9 +8,9 @@ use crate::ui::menu::{Menu, MenuItem, context_menu as menu};
 use rune::{El, PointerPress, Tx, el};
 
 use crate::app::{self, AppState};
-use crate::internal::{InternalPage, InternalRoute};
 use crate::tab::TabId;
 use crate::ui::theme::Theme;
+use elaris_core::internal::{InternalPage, InternalRoute};
 
 use crate::ui::viewport::menu::{KEY, with_header};
 

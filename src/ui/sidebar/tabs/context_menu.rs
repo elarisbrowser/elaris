@@ -4,10 +4,10 @@ use crate::ui::menu::{Menu, MenuItem, context_menu as menu_at};
 use rune::{El, Tx, el};
 
 use crate::app::{self, AppState};
-use crate::settings::TabLayout;
 use crate::tab::{Tab, TabSection};
 use crate::ui::animated_icon;
 use crate::ui::theme::{self, Theme};
+use elaris_core::settings::TabLayout;
 
 pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
     let Some((tab, point)) = state.context_menu() else {

@@ -17,18 +17,17 @@ use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, Once, OnceLock, RwLock};
 use std::thread::JoinHandle;
 
-use elaris::history::{Cursor, Entry, History, Page};
+use elaris_core::history::{Cursor, Entry, History, Page};
 
-mod paths;
 mod session;
 
-pub(crate) use paths::{Paths, default_download_directory, display_path};
+pub(crate) use elaris_core::paths::{Paths, default_download_directory, display_path};
 use session::write_sessions_atomic;
 pub(crate) use session::{Session, SessionFavicon, SessionSplit, SessionTab};
 
-use crate::config::{self, ConfigLoad};
-use crate::permissions::{PermissionKind, PermissionState};
-use crate::settings::SettingsChange;
+use elaris_core::config::{self, ConfigLoad};
+use elaris_core::permissions::{PermissionKind, PermissionState};
+use elaris_core::settings::SettingsChange;
 
 const HISTORY_CACHE_LIMIT: usize = 100;
 const HISTORY_SEARCH_CACHE_LIMIT: usize = 32;
@@ -302,7 +301,7 @@ impl HistoryHandle {
 
 pub(crate) struct Storage {
     session: Mutex<Option<Vec<Session>>>,
-    download_history: Mutex<Option<Vec<elaris::downloads::Download>>>,
+    download_history: Mutex<Option<Vec<elaris_core::downloads::Download>>>,
     config_load: Mutex<Option<Result<ConfigLoad, String>>>,
     commands: Sender<Command>,
     metrics: Arc<QueueMetrics>,
@@ -340,7 +339,7 @@ impl Storage {
         };
         let (commands, receiver) = mpsc::channel();
         let metrics = Arc::new(QueueMetrics {
-            report: crate::dev::var("ELARIS_STORAGE_PERF").is_some(),
+            report: elaris_core::dev::var("ELARIS_STORAGE_PERF").is_some(),
             ..QueueMetrics::default()
         });
         let shared = Arc::new(SharedHistory::default());
@@ -349,7 +348,7 @@ impl Storage {
         let worker_config_events = Arc::clone(&config_events);
         let worker_metrics = Arc::clone(&metrics);
         let worker_paths = paths.clone();
-        let download_history = crate::download_history::load(&paths.download_history_file)
+        let download_history = elaris_core::download_history::load(&paths.download_history_file)
             .unwrap_or_else(|error| {
                 eprintln!(
                     "Elaris: ignoring unreadable download history {}: {error}",
@@ -385,7 +384,7 @@ impl Storage {
     }
 
     /// The download history read at launch, once.
-    pub(crate) fn take_download_history(&self) -> Option<Vec<elaris::downloads::Download>> {
+    pub(crate) fn take_download_history(&self) -> Option<Vec<elaris_core::downloads::Download>> {
         self.download_history
             .lock()
             .expect("download history lock poisoned")
@@ -433,7 +432,7 @@ impl Storage {
     pub(crate) fn save_autoplay(
         &self,
         origin: String,
-        policy: Option<crate::permissions::AutoplayPolicy>,
+        policy: Option<elaris_core::permissions::AutoplayPolicy>,
     ) -> Result<(), String> {
         self.metrics
             .enqueue(&self.commands, Command::SaveAutoplay(origin, policy))
@@ -544,7 +543,7 @@ enum Command {
     ),
     SaveSetting(SettingsChange),
     SavePermission(String, PermissionKind, PermissionState),
-    SaveAutoplay(String, Option<crate::permissions::AutoplayPolicy>),
+    SaveAutoplay(String, Option<elaris_core::permissions::AutoplayPolicy>),
     /// The download history as `download_history::encode` wrote it.
     SaveDownloads(String),
     ReloadConfig,

@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 
 /// A permission that a website can request from Elaris.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum PermissionKind {
+pub enum PermissionKind {
     Microphone,
     Camera,
     Location,
@@ -14,14 +14,14 @@ pub(crate) enum PermissionKind {
 }
 
 impl PermissionKind {
-    pub(crate) const ALL: [Self; 4] = [
+    pub const ALL: [Self; 4] = [
         Self::Microphone,
         Self::Camera,
         Self::Location,
         Self::Notifications,
     ];
 
-    pub(crate) fn key(self) -> &'static str {
+    pub fn key(self) -> &'static str {
         match self {
             Self::Microphone => "microphone",
             Self::Camera => "camera",
@@ -30,7 +30,7 @@ impl PermissionKind {
         }
     }
 
-    pub(crate) fn index(self) -> usize {
+    pub fn index(self) -> usize {
         match self {
             Self::Microphone => 0,
             Self::Camera => 1,
@@ -39,7 +39,7 @@ impl PermissionKind {
         }
     }
 
-    pub(crate) fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
             Self::Microphone => "Microphone",
             Self::Camera => "Camera",
@@ -48,14 +48,14 @@ impl PermissionKind {
         }
     }
 
-    pub(crate) fn from_key(key: &str) -> Option<Self> {
+    pub fn from_key(key: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|kind| kind.key() == key)
     }
 }
 
 /// A saved choice for one permission on one origin.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum PermissionState {
+pub enum PermissionState {
     #[default]
     Ask,
     Allow,
@@ -64,7 +64,7 @@ pub(crate) enum PermissionState {
 
 impl PermissionState {
     #[cfg(feature = "ladybird-bridge")]
-    pub(crate) fn choice(self) -> Option<bool> {
+    pub fn choice(self) -> Option<bool> {
         match self {
             Self::Ask => None,
             Self::Allow => Some(true),
@@ -72,7 +72,7 @@ impl PermissionState {
         }
     }
 
-    pub(crate) fn key(self) -> &'static str {
+    pub fn key(self) -> &'static str {
         match self {
             Self::Ask => "ask",
             Self::Allow => "allow",
@@ -80,7 +80,7 @@ impl PermissionState {
         }
     }
 
-    pub(crate) fn from_key(key: &str) -> Option<Self> {
+    pub fn from_key(key: &str) -> Option<Self> {
         match key {
             "ask" => Some(Self::Ask),
             "allow" => Some(Self::Allow),
@@ -92,7 +92,7 @@ impl PermissionState {
 
 /// The outcome an engine request should apply without making UI decisions itself.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum PermissionDecision {
+pub enum PermissionDecision {
     Prompt,
     Allow,
     Block,
@@ -100,7 +100,7 @@ pub(crate) enum PermissionDecision {
 
 /// Whether pages may start media playback on their own.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum AutoplayPolicy {
+pub enum AutoplayPolicy {
     Allow,
     /// Silent or muted media may still play, matching Ladybird's default.
     #[default]
@@ -109,9 +109,9 @@ pub(crate) enum AutoplayPolicy {
 }
 
 impl AutoplayPolicy {
-    pub(crate) const ALL: [Self; 3] = [Self::Allow, Self::BlockAudio, Self::Block];
+    pub const ALL: [Self; 3] = [Self::Allow, Self::BlockAudio, Self::Block];
 
-    pub(crate) fn key(self) -> &'static str {
+    pub fn key(self) -> &'static str {
         match self {
             Self::Allow => "allow",
             Self::BlockAudio => "block-audio",
@@ -119,7 +119,7 @@ impl AutoplayPolicy {
         }
     }
 
-    pub(crate) fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
             Self::Allow => "Allow",
             Self::BlockAudio => "Block audio",
@@ -127,13 +127,13 @@ impl AutoplayPolicy {
         }
     }
 
-    pub(crate) fn from_key(key: &str) -> Option<Self> {
+    pub fn from_key(key: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|policy| policy.key() == key)
     }
 
     /// The bridge's policy number, in Ladybird's order.
     #[cfg(feature = "ladybird-bridge")]
-    pub(crate) fn engine_value(self) -> i32 {
+    pub fn engine_value(self) -> i32 {
         match self {
             Self::Allow => 0,
             Self::BlockAudio => 1,
@@ -144,7 +144,7 @@ impl AutoplayPolicy {
 
 /// Persistent site permission overrides keyed by normalized HTTP(S) origin.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct PermissionStore {
+pub struct PermissionStore {
     sites: BTreeMap<String, BTreeMap<PermissionKind, PermissionState>>,
     blocked_by_default: std::collections::BTreeSet<PermissionKind>,
     /// Sites whose autoplay differs from the browser default.
@@ -152,33 +152,33 @@ pub(crate) struct PermissionStore {
 }
 
 impl PermissionStore {
-    pub(crate) fn autoplay(&self, origin: &str) -> Option<AutoplayPolicy> {
+    pub fn autoplay(&self, origin: &str) -> Option<AutoplayPolicy> {
         self.autoplay.get(origin).copied()
     }
 
     /// Sets a site's autoplay exception; `None` returns it to the browser default.
-    pub(crate) fn set_autoplay(&mut self, origin: &str, policy: Option<AutoplayPolicy>) {
+    pub fn set_autoplay(&mut self, origin: &str, policy: Option<AutoplayPolicy>) {
         match policy {
             Some(policy) => self.autoplay.insert(origin.to_owned(), policy),
             None => self.autoplay.remove(origin),
         };
     }
 
-    pub(crate) fn autoplay_entries(&self) -> impl Iterator<Item = (&str, AutoplayPolicy)> {
+    pub fn autoplay_entries(&self) -> impl Iterator<Item = (&str, AutoplayPolicy)> {
         self.autoplay
             .iter()
             .map(|(origin, &policy)| (origin.as_str(), policy))
     }
 
-    pub(crate) fn default_blocked(&self, kind: PermissionKind) -> bool {
+    pub fn default_blocked(&self, kind: PermissionKind) -> bool {
         self.blocked_by_default.contains(&kind)
     }
 
-    pub(crate) fn block_by_default(&mut self, kind: PermissionKind) {
+    pub fn block_by_default(&mut self, kind: PermissionKind) {
         self.blocked_by_default.insert(kind);
     }
 
-    pub(crate) fn entries(&self) -> impl Iterator<Item = (&str, PermissionKind, PermissionState)> {
+    pub fn entries(&self) -> impl Iterator<Item = (&str, PermissionKind, PermissionState)> {
         self.sites.iter().flat_map(|(origin, permissions)| {
             permissions
                 .iter()
@@ -186,7 +186,7 @@ impl PermissionStore {
         })
     }
 
-    pub(crate) fn origin(url: &str) -> Option<String> {
+    pub fn origin(url: &str) -> Option<String> {
         let (scheme, rest) = url.trim().split_once("://")?;
         let scheme = scheme.to_ascii_lowercase();
         if scheme != "http" && scheme != "https" {
@@ -210,7 +210,7 @@ impl PermissionStore {
         Some(format!("{scheme}://{authority}"))
     }
 
-    pub(crate) fn state(&self, origin: &str, kind: PermissionKind) -> PermissionState {
+    pub fn state(&self, origin: &str, kind: PermissionKind) -> PermissionState {
         self.sites
             .get(origin)
             .and_then(|permissions| permissions.get(&kind))
@@ -218,7 +218,7 @@ impl PermissionStore {
             .unwrap_or_default()
     }
 
-    pub(crate) fn decision(&self, origin: &str, kind: PermissionKind) -> PermissionDecision {
+    pub fn decision(&self, origin: &str, kind: PermissionKind) -> PermissionDecision {
         match self.state(origin, kind) {
             PermissionState::Ask => PermissionDecision::Prompt,
             PermissionState::Allow => PermissionDecision::Allow,
@@ -226,7 +226,7 @@ impl PermissionStore {
         }
     }
 
-    pub(crate) fn set(&mut self, origin: &str, kind: PermissionKind, state: PermissionState) {
+    pub fn set(&mut self, origin: &str, kind: PermissionKind, state: PermissionState) {
         if state == PermissionState::Ask {
             if let Some(site) = self.sites.get_mut(origin) {
                 site.remove(&kind);
@@ -242,7 +242,7 @@ impl PermissionStore {
         }
     }
 
-    pub(crate) fn reset(&mut self, origin: &str) {
+    pub fn reset(&mut self, origin: &str) {
         self.sites.remove(origin);
         self.autoplay.remove(origin);
     }

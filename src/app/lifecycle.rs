@@ -6,9 +6,9 @@ use super::AppState;
 mod poll;
 #[cfg(feature = "ladybird-bridge")]
 use crate::engine::Engine;
-use crate::internal::InternalPage;
 use crate::omnibox;
 use crate::ui::viewport::focus_key;
+use elaris_core::internal::InternalPage;
 pub(crate) use poll::poll;
 
 /// Connect worker notifications once Rune can schedule a poll.
@@ -47,7 +47,7 @@ fn start_engine(state: &mut AppState) {
             engine.send(crate::engine::Command::SetPermissions(
                 state.permission_store.clone(),
             ));
-            for kind in crate::permissions::PermissionKind::ALL {
+            for kind in elaris_core::permissions::PermissionKind::ALL {
                 if state.permission_store.default_blocked(kind) {
                     engine.send(crate::engine::Command::SetPermissionDefault(kind, true));
                 }

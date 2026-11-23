@@ -6,7 +6,7 @@
 mod history;
 
 #[cfg(test)]
-use crate::config::ConfigLoad;
+use elaris_core::config::ConfigLoad;
 pub(crate) use history::HistoryConfirm;
 use history::HistoryPage;
 #[cfg(test)]
@@ -21,16 +21,16 @@ use std::sync::{Mutex, OnceLock, RwLock};
 
 use crate::browser::Browser;
 use crate::omnibox;
-use crate::permissions::{PermissionKind, PermissionStore};
-#[cfg(elaris_ui = "linux")]
-use crate::settings::WindowDecorations;
-use crate::settings::{Settings, StartupMode};
 use crate::storage;
 use crate::storage::{Session, Storage};
 use crate::tab::{Tab, TabId, TabSection};
 use crate::ui::SidebarState;
 #[cfg(test)]
 use crate::ui::VIEWPORT;
+use elaris_core::permissions::{PermissionKind, PermissionStore};
+#[cfg(elaris_ui = "linux")]
+use elaris_core::settings::WindowDecorations;
+use elaris_core::settings::{Settings, StartupMode};
 pub(crate) use mini::{MiniStart, is_mini_window, open_external_url, open_in_browser};
 
 /// How the Linux toolbar stays visible while browsing.
@@ -75,7 +75,7 @@ fn saved_window_decorations() -> WindowDecorations {
     #[cfg(not(test))]
     if let Ok(paths) = storage::Paths::resolve()
         && let Ok(contents) = std::fs::read_to_string(&paths.config_file)
-        && let Ok(load) = crate::config::parse(&contents)
+        && let Ok(load) = elaris_core::config::parse(&contents)
     {
         return load.settings.window_decorations;
     }
@@ -661,7 +661,8 @@ static SESSION_REGISTRY: OnceLock<Mutex<BTreeMap<u64, Session>>> = OnceLock::new
 static SHARED_SETTINGS: OnceLock<RwLock<Settings>> = OnceLock::new();
 static SHARED_PERMISSIONS: OnceLock<RwLock<PermissionStore>> = OnceLock::new();
 #[cfg(not(test))]
-static SHARED_DOWNLOADS: OnceLock<Arc<Mutex<Vec<elaris::downloads::Download>>>> = OnceLock::new();
+static SHARED_DOWNLOADS: OnceLock<Arc<Mutex<Vec<elaris_core::downloads::Download>>>> =
+    OnceLock::new();
 static ACTIVE_WINDOW: AtomicU64 = AtomicU64::new(0);
 
 #[cfg(not(test))]
@@ -693,7 +694,9 @@ pub(crate) fn publish_settings(settings: &Settings) {
 
 /// The process's download list, seeded once with the history kept from earlier runs.
 #[cfg(not(test))]
-fn shared_downloads(storage: Option<&Storage>) -> Arc<Mutex<Vec<elaris::downloads::Download>>> {
+fn shared_downloads(
+    storage: Option<&Storage>,
+) -> Arc<Mutex<Vec<elaris_core::downloads::Download>>> {
     Arc::clone(SHARED_DOWNLOADS.get_or_init(|| {
         let history = storage
             .and_then(Storage::take_download_history)
@@ -705,10 +708,10 @@ fn shared_downloads(storage: Option<&Storage>) -> Arc<Mutex<Vec<elaris::download
 /// Saves the download history when the finished, non-private downloads changed.
 pub(crate) fn persist_download_history(
     storage: &Storage,
-    downloads: &[elaris::downloads::Download],
+    downloads: &[elaris_core::downloads::Download],
 ) {
     static SAVED: Mutex<Option<String>> = Mutex::new(None);
-    let encoded = crate::download_history::encode(downloads);
+    let encoded = elaris_core::download_history::encode(downloads);
     let mut saved = SAVED.lock().expect("download history guard poisoned");
     if saved.as_deref() == Some(encoded.as_str()) {
         return;
@@ -933,7 +936,7 @@ pub(crate) use lifecycle::{
 #[cfg(all(test, elaris_ui = "linux"))]
 mod linux_decorations_tests {
     use super::LinuxDecorations;
-    use crate::settings::WindowDecorations::{Auto, Elaris, System};
+    use elaris_core::settings::WindowDecorations::{Auto, Elaris, System};
 
     #[test]
     fn explicit_setting_wins() {

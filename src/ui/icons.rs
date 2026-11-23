@@ -6,7 +6,7 @@ use std::sync::{Arc, OnceLock};
 
 use rune::{El, Icon, Image, ImageCache, Pixels, el};
 
-use crate::address::SearchEngine;
+use elaris_core::address::SearchEngine;
 
 const fn icon(name: &'static str, body: &'static str) -> Icon {
     Icon {

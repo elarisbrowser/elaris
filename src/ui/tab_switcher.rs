@@ -6,9 +6,9 @@ use rune::{
 };
 
 use crate::app::AppState;
-use crate::internal::{InternalPage, InternalRoute};
 use crate::tab::{Tab, TabId};
 use crate::ui::{VIEWPORT, icons, theme::Theme};
+use elaris_core::internal::{InternalPage, InternalRoute};
 
 const PANEL: &str = "quick-tab-switcher";
 const LIST: &str = "quick-tab-list";
@@ -270,7 +270,7 @@ pub(in crate::ui) fn tab_labels(tab: &Tab) -> (&str, &str) {
     let address = if tab.is_internal() {
         &tab.url
     } else {
-        crate::address::host_for_address(&tab.url)
+        elaris_core::address::host_for_address(&tab.url)
     };
     let title = if !tab.title.trim().is_empty() {
         &tab.title

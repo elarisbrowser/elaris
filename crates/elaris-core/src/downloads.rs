@@ -167,7 +167,7 @@ pub struct Update {
     pub can_resume: bool,
     /// Waiting to retry a lost connection.
     pub retrying: bool,
-    pub(crate) native_id: u64,
+    pub native_id: u64,
 }
 
 impl Update {

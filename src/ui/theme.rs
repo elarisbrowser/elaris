@@ -9,7 +9,7 @@ use rune::{Anim, Curve, Easing, Spring, SpringPair, Transition};
 use rune::{Color, oklch, oklcha};
 use rune_kit::{Kit, PaletteFocus, PaletteSeed};
 
-use crate::appearance::AccentColor;
+use elaris_core::appearance::AccentColor;
 
 /// The hue every neutral leans toward, a cool grey.
 const HUE: f32 = 265.0;

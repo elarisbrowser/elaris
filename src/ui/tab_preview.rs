@@ -5,11 +5,11 @@ use rune::{Anim, Curve, Cx, El, SurfaceFit, Transition, col, el, icon, row, text
 
 use super::sidebar::hover::{self, FADE_DURATION};
 use super::{icons, theme::Theme};
-use crate::address::host_for_address;
 use crate::app::AppState;
 use crate::engine::THUMBNAIL_ASPECT;
-use crate::internal::{InternalPage, InternalRoute};
 use crate::tab::{Tab, TabSection};
+use elaris_core::address::host_for_address;
+use elaris_core::internal::{InternalPage, InternalRoute};
 
 const WIDTH: f32 = 266.0;
 const MIN_WIDTH: f32 = 250.0;
@@ -267,7 +267,7 @@ mod tests {
     fn horizontal_preview_anchors_below_a_tab_and_honours_reduced_motion() {
         let (mut runtime, [_, second, _]) = runtime(true);
         runtime.update(|state, _| {
-            state.set_tab_layout(crate::settings::TabLayout::Horizontal);
+            state.set_tab_layout(elaris_core::settings::TabLayout::Horizontal);
         });
         runtime.frame(1.0);
         hover(&mut runtime, second, "horizontal-tab", 0.0);

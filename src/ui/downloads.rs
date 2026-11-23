@@ -11,7 +11,7 @@ use crate::ui::controls;
 use crate::ui::hover_highlight::{self, Group};
 use crate::ui::menu::Popover;
 use crate::ui::theme::{self, Theme};
-use elaris::downloads::{Download, DownloadId, Status};
+use elaris_core::downloads::{Download, DownloadId, Status};
 
 /// Adds the Downloads trigger and its anchored panel to the sidebar.
 pub(crate) fn trigger(state: &AppState, theme: &Theme, layer: &mut Vec<El>) -> El {

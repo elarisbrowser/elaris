@@ -11,7 +11,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use super::{DisplayMetadata, Event, Favicon, Frame, GpuFrame, GpuPoll, Key, KeyEvent, MouseEvent};
-use crate::downloads::{Status as DownloadStatus, Update as DownloadUpdate};
+use elaris_core::downloads::{Status as DownloadStatus, Update as DownloadUpdate};
 
 #[repr(C)]
 struct RawBridge {
@@ -143,9 +143,9 @@ const DEV_TEST_LOCATION: u32 = 2;
 const DEV_MICROPHONE_DENIED: u32 = 4;
 const DEV_GPU_FRAMES: u32 = 8;
 
-/// The switches the environment sets. Only debug builds read them (see `crate::dev`).
+/// The switches the environment sets. Only debug builds read them (see `elaris_core::dev`).
 fn dev_options() -> u32 {
-    let enabled = |name: &str| crate::dev::var(name).is_some_and(|value| value == "1");
+    let enabled = |name: &str| elaris_core::dev::var(name).is_some_and(|value| value == "1");
     let mut options = 0;
     if enabled("ELARIS_TEST_DISABLE_SANDBOX") {
         options |= DEV_SANDBOX_OFF;
@@ -156,7 +156,7 @@ fn dev_options() -> u32 {
     if enabled("ELARIS_TEST_MICROPHONE_DENIED") {
         options |= DEV_MICROPHONE_DENIED;
     }
-    if crate::dev::var("ELARIS_GPU_FRAMES").is_some_and(|value| value != "0") {
+    if elaris_core::dev::var("ELARIS_GPU_FRAMES").is_some_and(|value| value != "0") {
         options |= DEV_GPU_FRAMES;
     }
     options

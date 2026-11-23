@@ -9,7 +9,7 @@ use std::thread::JoinHandle;
 
 use super::runtime::Runtime;
 use super::{Command, Engine, Notify, Update, Wake, drain};
-use crate::perf::{self, Stage};
+use elaris_core::perf::{self, Stage};
 
 /// What the process needs to finish the engine as it exits. Rune ends the process from within
 /// its event loop once the window has gone, so the only place left to wait for the engine

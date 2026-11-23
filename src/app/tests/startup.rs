@@ -36,7 +36,7 @@ fn blank_window_startup_does_not_create_a_web_tab() {
 #[test]
 fn horizontal_session_startup_opens_a_new_tab_without_discarding_restored_tabs() {
     let mut state = AppState::new(None);
-    state.settings.tab_layout = crate::settings::TabLayout::Horizontal;
+    state.settings.tab_layout = elaris_core::settings::TabLayout::Horizontal;
     let session = Session::new(
         vec![SessionTab {
             url: "https://restored.example/".into(),

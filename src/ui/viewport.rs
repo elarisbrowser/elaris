@@ -563,7 +563,7 @@ pub(super) fn page_hover(page: El, tab: &crate::tab::Tab, theme: &Theme) -> El {
             .inert()
             .a11y_hidden()
             .child(
-                rune::text(crate::address::compact_address(&tab.hovered_link))
+                rune::text(elaris_core::address::compact_address(&tab.hovered_link))
                     .min_w(0.0)
                     .truncate()
                     .font(type_::LABEL)

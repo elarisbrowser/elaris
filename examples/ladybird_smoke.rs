@@ -1,5 +1,5 @@
-use elaris::downloads::{Status as DownloadStatus, Update as DownloadUpdate};
 use elaris::ladybird::{Event, Ladybird};
+use elaris_core::downloads::{Status as DownloadStatus, Update as DownloadUpdate};
 use std::cell::Cell;
 use std::env;
 use std::io::{Read, Write};

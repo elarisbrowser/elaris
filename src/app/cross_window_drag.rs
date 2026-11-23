@@ -413,8 +413,8 @@ mod tests {
     }
     #[test]
     fn horizontal_destination_uses_its_own_drop_geometry() {
-        use crate::settings::TabLayout;
         use crate::tab::{Tab, TabSection};
+        use elaris_core::settings::TabLayout;
 
         let source = AppState::new(Some("source.example"));
         let mut destination = AppState::new(Some("destination.example"));

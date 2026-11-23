@@ -4,13 +4,13 @@
 
 use std::collections::BTreeSet;
 
-use elaris::history::{Cursor, Page};
+use elaris_core::history::{Cursor, Page};
 use rune::{TextEdit, Tx};
 
 use super::AppState;
-use crate::internal::{InternalPage, InternalRoute};
 use crate::storage::{HistoryEvent, HistoryMutation};
 use crate::tab::TabId;
+use elaris_core::internal::{InternalPage, InternalRoute};
 
 /// The destructive action awaiting confirmation in a modal.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -249,7 +249,7 @@ impl AppState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use elaris::history::History;
+    use elaris_core::history::History;
 
     #[test]
     fn stale_results_cannot_replace_the_active_search() {

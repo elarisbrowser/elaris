@@ -3,10 +3,10 @@
 //! The presentation data shared by native and Rune site controls.
 
 use crate::app::AppState;
-use crate::permissions::{
+use crate::tab::TabId;
+use elaris_core::permissions::{
     AutoplayPolicy, PermissionDecision, PermissionKind, PermissionState, PermissionStore,
 };
-use crate::tab::TabId;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum SiteControlsPage {

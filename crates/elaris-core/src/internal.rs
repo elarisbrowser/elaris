@@ -6,18 +6,18 @@
 macro_rules! internal_pages {
     ($($page:ident => ($slug:literal, $title:literal)),+ $(,)?) => {
         #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-        pub(crate) enum InternalPage {
+        pub enum InternalPage {
             $($page),+
         }
 
         impl InternalPage {
-            pub(crate) fn address(self) -> &'static str {
+            pub fn address(self) -> &'static str {
                 match self {
                     $(Self::$page => concat!("elaris://", $slug)),+
                 }
             }
 
-            pub(crate) fn title(self) -> &'static str {
+            pub fn title(self) -> &'static str {
                 match self {
                     $(Self::$page => $title),+
                 }
@@ -41,14 +41,14 @@ internal_pages! {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum InternalRoute {
+pub enum InternalRoute {
     Page(InternalPage),
     NotFound(String),
 }
 
 impl InternalRoute {
     /// Parses every `elaris:` URL as native, but only recognizes registered routes.
-    pub(crate) fn parse(address: &str) -> Option<Self> {
+    pub fn parse(address: &str) -> Option<Self> {
         let address = address.trim();
         let (scheme, rest) = address.split_once(':')?;
         if !scheme.eq_ignore_ascii_case("elaris") {
@@ -59,14 +59,14 @@ impl InternalRoute {
         Some(page.map_or_else(|| Self::NotFound(address.to_owned()), Self::Page))
     }
 
-    pub(crate) fn title(&self) -> &str {
+    pub fn title(&self) -> &str {
         match self {
             Self::Page(page) => page.title(),
             Self::NotFound(_) => "Page Not Found",
         }
     }
 
-    pub(crate) fn is_internal_address(address: &str) -> bool {
+    pub fn is_internal_address(address: &str) -> bool {
         Self::parse(address).is_some()
     }
 }

@@ -63,7 +63,9 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     let shared_settings_changed = state.sync_shared_settings();
     let shared_permissions_changed = state.sync_shared_permissions();
     for (origin, kind, permission) in std::mem::take(&mut polled.permission_choices) {
-        if state.permission_store.state(&origin, kind) == crate::permissions::PermissionState::Ask {
+        if state.permission_store.state(&origin, kind)
+            == elaris_core::permissions::PermissionState::Ask
+        {
             state.save_permission_choice(origin, kind, permission);
         }
     }

@@ -7,12 +7,12 @@ use rune::{El, GrowthSpec, ScrollSpec, Spring, col, el, icon, row, text};
 
 use super::drag::{PreviewItem, favourite_columns, favourite_row_ranges, favourite_tile_width};
 use crate::app::{self, AppState};
-use crate::settings::NewTabPosition;
 use crate::tab::{Tab, TabId, TabSection};
 use crate::ui::TabDragMoveResult;
 use crate::ui::controls::{icon_button_style, row_button};
 use crate::ui::icons;
 use crate::ui::theme::{self, Theme};
+use elaris_core::settings::NewTabPosition;
 
 mod context_menu;
 mod icon;

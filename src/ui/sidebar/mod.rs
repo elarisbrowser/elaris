@@ -27,9 +27,9 @@ use super::icons;
 use super::permission_prompt;
 use super::theme::{self, Theme};
 use crate::app::{self, AppState};
-use crate::appearance::Appearance;
 pub(crate) use drag::MoveResult as TabDragMoveResult;
 pub(crate) use drag::{DragVisual, TabDragState, TabDropTarget};
+use elaris_core::appearance::Appearance;
 
 /// How the sidebar is laid out: what the window shows of it, not of the browser.
 pub(crate) struct SidebarState {
@@ -163,7 +163,7 @@ fn search_field(state: &AppState, theme: &Theme, reduced: bool, marks: Vec<El>) 
         .map(|tab| tab.url.as_str())
         .filter(|url| !url.is_empty() && *url != "about:blank");
     let label = address
-        .map(crate::address::compact_address)
+        .map(elaris_core::address::compact_address)
         .unwrap_or("Search or type a URL");
     let launcher = row_button(
         "omnibox-launcher",

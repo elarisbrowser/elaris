@@ -20,11 +20,11 @@ use rune::El;
 use rune_kit::Kit;
 
 use crate::app::AppState;
-use crate::internal::{InternalPage, InternalRoute};
 use crate::ui::{
     icons,
     theme::{self, Theme},
 };
+use elaris_core::internal::{InternalPage, InternalRoute};
 
 use self::layout::PageLayout;
 

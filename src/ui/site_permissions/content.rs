@@ -4,12 +4,12 @@ use rune::tok::type_;
 use rune::{El, PointerPress, Spring, Transition, Tx, el, icon, row, text};
 
 use crate::app::{self, AppState};
-use crate::permissions::{AutoplayPolicy, PermissionKind, PermissionState};
 use crate::site_controls::{SiteControlAction, SiteControlPresentation, SiteControlsPage};
 use crate::ui::controls;
 use crate::ui::icons;
 use crate::ui::site_control_style as design;
 use crate::ui::theme::{self, Theme};
+use elaris_core::permissions::{AutoplayPolicy, PermissionKind, PermissionState};
 
 use super::menus::permission_label;
 

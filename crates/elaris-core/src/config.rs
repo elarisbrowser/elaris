@@ -21,34 +21,34 @@ const DEFAULT_CONFIG: &str = "# Elaris Browser configuration\n\n[appearance]\nth
 static NEXT_TEMP_FILE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct ConfigLoad {
-    pub(crate) settings: Settings,
-    pub(crate) permissions: PermissionStore,
-    pub(crate) issues: Vec<String>,
+pub struct ConfigLoad {
+    pub settings: Settings,
+    pub permissions: PermissionStore,
+    pub issues: Vec<String>,
 }
 
 /// Loads `config.toml`, creating a default file only when it does not yet exist.
-pub(crate) fn load_or_create(path: &Path) -> Result<ConfigLoad, String> {
+pub fn load_or_create(path: &Path) -> Result<ConfigLoad, String> {
     match fs::read_to_string(path) {
         Ok(contents) => parse(&contents),
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
             write_atomic(path, DEFAULT_CONFIG.as_bytes()).map_err(|error| {
                 format!(
                     "cannot create configuration {}: {error}",
-                    crate::storage::display_path(path)
+                    crate::paths::display_path(path)
                 )
             })?;
             parse(DEFAULT_CONFIG)
         }
         Err(error) => Err(format!(
             "cannot read configuration {}: {error}",
-            crate::storage::display_path(path)
+            crate::paths::display_path(path)
         )),
     }
 }
 
 /// Parses valid settings independently so one invalid value does not discard other preferences.
-pub(crate) fn parse(contents: &str) -> Result<ConfigLoad, String> {
+pub fn parse(contents: &str) -> Result<ConfigLoad, String> {
     let document = contents
         .parse::<DocumentMut>()
         .map_err(|error| format!("malformed TOML: {error}"))?;
@@ -313,7 +313,7 @@ fn parse_permissions(document: &DocumentMut, issues: &mut Vec<String>) -> Permis
 const AUTOPLAY_KEY: &str = "autoplay";
 
 /// Saves or removes one site's permission override while preserving other config values.
-pub(crate) fn write_permission(
+pub fn write_permission(
     path: &Path,
     origin: &str,
     kind: PermissionKind,
@@ -324,7 +324,7 @@ pub(crate) fn write_permission(
 }
 
 /// Saves or removes one site's autoplay exception while preserving other config values.
-pub(crate) fn write_autoplay(
+pub fn write_autoplay(
     path: &Path,
     origin: &str,
     policy: Option<AutoplayPolicy>,
@@ -378,7 +378,7 @@ fn write_site_setting(
     write_atomic(path, document.to_string().as_bytes()).map_err(|error| {
         format!(
             "cannot save configuration {}: {error}",
-            crate::storage::display_path(path)
+            crate::paths::display_path(path)
         )
     })
 }
@@ -451,7 +451,7 @@ fn integer_value(
 }
 
 /// Updates one known setting while preserving unrelated keys, comments and formatting.
-pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> {
+pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> {
     let mut document = match fs::read_to_string(path) {
         Ok(contents) => contents
             .parse::<DocumentMut>()
@@ -561,7 +561,7 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
     write_atomic(path, document.to_string().as_bytes()).map_err(|error| {
         format!(
             "cannot save configuration {}: {error}",
-            crate::storage::display_path(path)
+            crate::paths::display_path(path)
         )
     })
 }
