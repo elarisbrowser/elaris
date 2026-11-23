@@ -210,14 +210,14 @@ fn window_surface(
                     .h_full()
                     .fill(theme.window),
             );
-        if state.settings.grain > 0 {
-            window = window.child(components::grain::layer(
-                state.settings.grain,
-                window_size[0],
-                window_size[1],
-                scale,
-            ));
-        }
+    }
+    if state.settings.grain_enabled {
+        window = window.child(components::grain::layer(
+            state.settings.grain,
+            window_size[0],
+            window_size[1],
+            scale,
+        ));
     }
     window
 }

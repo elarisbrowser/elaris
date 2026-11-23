@@ -39,6 +39,7 @@ pub(super) fn sections(cx: &mut PageContext) -> Vec<El> {
     if !cfg!(elaris_ui = "linux") {
         sections.push(glass(cx));
     }
+    sections.push(grain(cx));
     sections.push(split_view(cx));
     sections.push(motion(cx));
     sections
@@ -211,22 +212,46 @@ fn glass(cx: &mut PageContext) -> El {
                 |state, value| state.set_tint_opacity(100u8.saturating_sub(value)),
             ),
         ));
+    }
+    section("Glass", cx.theme, rows)
+}
+
+fn grain(cx: &mut PageContext) -> El {
+    let state = cx.state;
+    let grain = rune_kit::Switch::new(state.settings.grain_enabled)
+        .standard()
+        .label("Grain")
+        .hide_label()
+        .on_toggle_tx(|state: &mut AppState, tx| {
+            state.set_grain_enabled(!state.settings.grain_enabled);
+            tx.animated();
+        })
+        .build(&switch_kit(&cx.kit));
+    let mut rows = vec![setting_icon(
+        cx,
+        &icons::GRAIN,
+        "Grain",
+        "A still noise over the window",
+        grain,
+    )];
+    // The intensity only shows while grain is on, like the other glass settings.
+    if state.settings.grain_enabled {
         rows.push(setting_icon(
             cx,
-            &icons::GRAIN,
-            "Grain",
-            "A still noise over the glass",
+            &icons::CONTRAST,
+            "Intensity",
+            "How strong the noise is",
             percent_slider(
                 state,
                 cx.theme,
                 "grain-slider",
-                "Grain",
+                "Intensity",
                 |state| state.settings.grain,
                 |state, value| state.set_grain(value),
             ),
         ));
     }
-    section("Glass", cx.theme, rows)
+    section("Grain", cx.theme, rows)
 }
 
 fn split_view(cx: &mut PageContext) -> El {
