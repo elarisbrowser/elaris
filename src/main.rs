@@ -10,6 +10,7 @@ mod default_browser;
 mod default_browser_linux;
 #[cfg(target_os = "macos")]
 mod default_browser_macos;
+mod dev;
 mod download_history;
 #[cfg(target_os = "macos")]
 mod drag_overlay_macos;

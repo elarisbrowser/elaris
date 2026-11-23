@@ -59,7 +59,7 @@ development or tests; it must be absolute and bypasses the platform default and 
 The default Ladybird profile is `profile/` under the selected data root. The existing
 `ELARIS_LADYBIRD_PROFILE_DIR` override still selects Ladybird's profile directory independently;
 history and session files remain under `ELARIS_DATA_DIR` or the native application-data root.
-`ELARIS_LADYBIRD_RESOURCE_DIR` optionally overrides Ladybird's resources; by default Ladybird finds them beside its helper processes, in the app bundle or the build tree.
+Development and test variables such as `ELARIS_PERF`, `ELARIS_GPU_FRAMES` and `ELARIS_TEST_*` are read only in debug builds, so a release build ignores them. `ELARIS_LADYBIRD_RESOURCE_DIR` optionally overrides Ladybird's resources; by default Ladybird finds them beside its helper processes, in the app bundle or the build tree.
 
 Elaris stores:
 

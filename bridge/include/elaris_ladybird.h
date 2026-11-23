@@ -260,6 +260,14 @@ typedef struct {
     int32_t repeat;
 } ElarisLadybirdKeyEvent;
 
+/* Development and test switches as bit flags. The Rust host sets them only in debug builds, and tests set them from their own
+ * environment; release builds never set them, so the bridge reads no environment variables of its own. */
+#define ELARIS_LADYBIRD_DEV_SANDBOX_OFF 1u
+#define ELARIS_LADYBIRD_DEV_TEST_LOCATION 2u
+#define ELARIS_LADYBIRD_DEV_MICROPHONE_DENIED 4u
+#define ELARIS_LADYBIRD_DEV_GPU_FRAMES 8u
+/* Call before elaris_ladybird_create. */
+void elaris_ladybird_set_dev_options(uint32_t options);
 /* All calls, including callbacks, run on the thread that initializes the bridge. resource_dir may be NULL to use
  * the resources Ladybird finds beside its helper processes. */
 int32_t elaris_ladybird_create(const char* resource_dir, const char* profile_dir, ElarisLadybirdEventCallback callback,

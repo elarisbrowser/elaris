@@ -3,6 +3,7 @@
 // blocker call reaches the engine's settings.
 
 #include <elaris_ladybird.h>
+#include "dev_options.h"
 
 #include <AK/JsonValue.h>
 
@@ -140,6 +141,7 @@ bool content_blocker_settings_apply(ElarisLadybird* bridge) {
 } // namespace
 
 int main(int argc, char** argv) {
+    apply_dev_options_from_environment();
     if (argc != 4) {
         std::cerr << "usage: elaris_ladybird_engine_features RESOURCE_DIR PROFILE_DIR PDF_FILE\n";
         return 2;

@@ -38,13 +38,13 @@ pub(super) fn enabled() -> bool {
     {
         static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
         *ENABLED
-            .get_or_init(|| std::env::var_os(CPU_FRAMES_VARIABLE).is_none_or(|value| value == "0"))
+            .get_or_init(|| crate::dev::var(CPU_FRAMES_VARIABLE).is_none_or(|value| value == "0"))
     }
     #[cfg(target_os = "linux")]
     {
         static ENABLED: OnceLock<bool> = OnceLock::new();
         *ENABLED
-            .get_or_init(|| std::env::var_os(GPU_FRAMES_VARIABLE).is_some_and(|value| value != "0"))
+            .get_or_init(|| crate::dev::var(GPU_FRAMES_VARIABLE).is_some_and(|value| value != "0"))
     }
 }
 

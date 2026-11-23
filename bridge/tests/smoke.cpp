@@ -1,4 +1,5 @@
 #include <charconv>
+#include "dev_options.h"
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -551,6 +552,7 @@ static bool two_views(ElarisLadybird* bridge, EventsByView& events, std::string 
 }
 
 int main(int argc, char** argv) {
+    apply_dev_options_from_environment();
     bool form_pickers_only = argc == 5 && std::string_view(argv[4]) == "--form-pickers";
     if (argc != 4 && !form_pickers_only) {
         std::cerr << "usage: elaris_ladybird_smoke RESOURCE_DIR PROFILE_DIR HTML_FILE [--form-pickers]\n";

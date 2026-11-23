@@ -2,6 +2,7 @@
 // that panel is open.
 
 #include <elaris_ladybird.h>
+#include "dev_options.h"
 
 #include <chrono>
 #include <iostream>
@@ -29,6 +30,7 @@ bool check(int32_t result, char const* operation) {
 } // namespace
 
 int main(int argc, char** argv) {
+    apply_dev_options_from_environment();
     if (argc != 5) {
         std::cerr << "usage: elaris_ladybird_picture_in_picture <resource-dir> <profile-dir> <page> <video>\n";
         return 2;

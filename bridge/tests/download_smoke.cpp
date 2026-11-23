@@ -1,4 +1,5 @@
 #include <algorithm>
+#include "dev_options.h"
 #include <arpa/inet.h>
 #include <atomic>
 #include <cctype>
@@ -470,6 +471,7 @@ static bool test_private_session(ElarisLadybird* bridge, HttpFixture const& fixt
 }
 
 int main(int argc, char** argv) {
+    apply_dev_options_from_environment();
     if (argc != 3) {
         std::cerr << "usage: elaris_ladybird_download_smoke RESOURCE_DIR ISOLATED_TEST_ROOT\n";
         return 2;

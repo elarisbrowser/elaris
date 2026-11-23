@@ -99,7 +99,7 @@ impl Runtime {
                 thumbnails: thumbnails::Cache::default(),
                 display,
                 hidden_order: eviction_enabled(
-                    std::env::var_os("ELARIS_EVICT_HIDDEN_FRAMES").as_deref(),
+                    crate::dev::var("ELARIS_EVICT_HIDDEN_FRAMES").as_deref(),
                 )
                 .then(Vec::new),
                 hidden_frames_dirty: false,

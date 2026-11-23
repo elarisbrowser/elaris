@@ -88,7 +88,7 @@ ELARIS_TEST_LOCATION=1 cargo run --locked --features ladybird-bridge \
   "$(mktemp -d)" http://127.0.0.1:41729/permissions.html
 ```
 
-The fixture selects a deterministic position source for the process. To check the
+These switches, like the other `ELARIS_*` development and test variables, are read only in debug builds. A release build ignores them. The fixture selects a deterministic position source for the process. To check the
 browser UI with an isolated profile, launch with `ELARIS_TEST_LOCATION=1`,
 `ELARIS_DATA_DIR` set to a new absolute directory, and
 `./elaris run http://127.0.0.1:41729/permissions.html`. Request location, allow

@@ -340,7 +340,7 @@ impl Storage {
         };
         let (commands, receiver) = mpsc::channel();
         let metrics = Arc::new(QueueMetrics {
-            report: std::env::var_os("ELARIS_STORAGE_PERF").is_some(),
+            report: crate::dev::var("ELARIS_STORAGE_PERF").is_some(),
             ..QueueMetrics::default()
         });
         let shared = Arc::new(SharedHistory::default());

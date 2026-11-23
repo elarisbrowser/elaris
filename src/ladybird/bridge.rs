@@ -137,7 +137,33 @@ const SELECTED_TEXT: i32 = 14;
 
 type EventCallback = unsafe extern "C" fn(*mut c_void, *const RawEvent);
 
+// The bridge's development and test switches, matching `ELARIS_LADYBIRD_DEV_*` in `elaris_ladybird.h`.
+const DEV_SANDBOX_OFF: u32 = 1;
+const DEV_TEST_LOCATION: u32 = 2;
+const DEV_MICROPHONE_DENIED: u32 = 4;
+const DEV_GPU_FRAMES: u32 = 8;
+
+/// The switches the environment sets. Only debug builds read them (see `crate::dev`).
+fn dev_options() -> u32 {
+    let enabled = |name: &str| crate::dev::var(name).is_some_and(|value| value == "1");
+    let mut options = 0;
+    if enabled("ELARIS_TEST_DISABLE_SANDBOX") {
+        options |= DEV_SANDBOX_OFF;
+    }
+    if enabled("ELARIS_TEST_LOCATION") {
+        options |= DEV_TEST_LOCATION;
+    }
+    if enabled("ELARIS_TEST_MICROPHONE_DENIED") {
+        options |= DEV_MICROPHONE_DENIED;
+    }
+    if crate::dev::var("ELARIS_GPU_FRAMES").is_some_and(|value| value != "0") {
+        options |= DEV_GPU_FRAMES;
+    }
+    options
+}
+
 unsafe extern "C" {
+    fn elaris_ladybird_set_dev_options(options: u32);
     fn elaris_ladybird_create(
         resource_dir: *const c_char,
         profile_dir: *const c_char,
@@ -601,6 +627,8 @@ impl Ladybird {
             panicked: false,
         })));
         let mut raw = std::ptr::null_mut();
+        // SAFETY: The setter only stores a value, and it runs before the bridge is created.
+        unsafe { elaris_ladybird_set_dev_options(dev_options()) };
         // SAFETY: Paths are valid for the call; the callback context lives until `Owner` drops.
         let status = unsafe {
             elaris_ladybird_create(

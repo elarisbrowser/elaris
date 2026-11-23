@@ -131,11 +131,13 @@ class TestLocationProvider final : public Core::GeolocationProvider {
     std::map<RequestId, NonnullRefPtr<Core::Timer>> m_pending;
 };
 
+// The development and test switches the host set, if any. The bridge reads no environment variables itself.
+static uint32_t s_dev_options = 0;
+
 #if defined(AK_OS_LINUX)
-// Whether the host asked for frames in GPU memory (`ELARIS_GPU_FRAMES`, which the engine reads as well).
+// Whether the host asked for frames in GPU memory.
 static bool gpu_frames_requested() {
-    auto const* value = getenv("ELARIS_GPU_FRAMES");
-    return value && std::string_view(value) != "0";
+    return (s_dev_options & ELARIS_LADYBIRD_DEV_GPU_FRAMES) != 0;
 }
 #endif
 
@@ -1288,6 +1290,10 @@ static Optional<AK::ByteString> helper_directory()
     return Optional<AK::ByteString>{ELARIS_LADYBIRD_HELPER_DIR};
 }
 
+extern "C" void elaris_ladybird_set_dev_options(uint32_t options) {
+    s_dev_options = options;
+}
+
 extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* profile_dir,
                                           ElarisLadybirdEventCallback callback, void* context,
                                           ElarisLadybird** out_bridge) {
@@ -1307,7 +1313,7 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
     if (resource_dir)
         WebView::s_ladybird_resource_root = resource_dir;
     s_download_directory_override.clear();
-    if (auto* fixture = std::getenv("ELARIS_TEST_LOCATION"); fixture && std::string_view(fixture) == "1") {
+    if (s_dev_options & ELARIS_LADYBIRD_DEV_TEST_LOCATION) {
         Core::GeolocationProvider::set_provider_functions(
             []() -> ErrorOr<NonnullOwnPtr<Core::GeolocationProvider>> { return make<TestLocationProvider>(); },
             [] { return true; });
@@ -1320,7 +1326,7 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
         "--profile-path"sv,
         AK::StringView(profile_dir, std::char_traits<char>::length(profile_dir)),
     };
-    // Test-only: emulated x86_64 containers cannot start the sandbox's file broker, so their tests opt out of it.
+    // Emulated x86_64 containers cannot start the sandbox's file broker, so their tests opt out of it.
     AK::StringView sandbox_free_arguments[]{
         "elaris"sv,
         "--headless=manual"sv,
@@ -1328,8 +1334,7 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
         AK::StringView(profile_dir, std::char_traits<char>::length(profile_dir)),
         "--disable-sandbox"sv,
     };
-    auto const* disable_sandbox = std::getenv("ELARIS_TEST_DISABLE_SANDBOX");
-    bool const sandbox_free = disable_sandbox && std::string_view(disable_sandbox) == "1";
+    bool const sandbox_free = (s_dev_options & ELARIS_LADYBIRD_DEV_SANDBOX_OFF) != 0;
     Main::Arguments main_arguments{0, nullptr, sandbox_free ? Span<AK::StringView>{sandbox_free_arguments} : Span<AK::StringView>{arguments}};
     auto application = ElarisApplication::create(main_arguments, helper_directory());
     if (application.is_error()) {
@@ -1481,7 +1486,7 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
                                           {},     {},      FormPicker::None, 0,  {}, {}, false};
     bridge->views.push_back(handle);
     // The callbacks live in the view, which the handle owns, so they never outlive it.
-    if (auto* fixture = std::getenv("ELARIS_TEST_MICROPHONE_DENIED"); fixture && std::string_view(fixture) == "1") {
+    if (s_dev_options & ELARIS_LADYBIRD_DEV_MICROPHONE_DENIED) {
         using Authorization = WebView::MicrophoneAuthorization;
         handle->view->set_microphone_authorization_for_testing(Authorization::Denied, Authorization::Denied, false);
     }
