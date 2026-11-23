@@ -14,6 +14,8 @@ pub struct Paths {
     pub session_file: PathBuf,
     /// Finished downloads kept across restarts (`download_history`).
     pub download_history_file: PathBuf,
+    /// The user's bookmarks (`bookmarks`).
+    pub bookmarks_file: PathBuf,
     pub config_file: PathBuf,
 }
 
@@ -84,6 +86,7 @@ impl Paths {
             history_file: application_dir.join("history.sqlite"),
             session_file: application_dir.join("session.json"),
             download_history_file: application_dir.join("downloads.json"),
+            bookmarks_file: application_dir.join("bookmarks.json"),
             config_file: config_dir.join("config.toml"),
             application_dir,
             profile_dir,

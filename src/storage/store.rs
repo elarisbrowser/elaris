@@ -27,6 +27,7 @@ static PROCESS_STORAGE: OnceLock<Result<Arc<Storage>, String>> = OnceLock::new()
 pub(crate) struct Storage {
     session: Mutex<Option<Vec<Session>>>,
     download_history: Mutex<Option<Vec<elaris_core::downloads::Download>>>,
+    bookmarks: Mutex<Option<elaris_core::bookmarks::Bookmarks>>,
     config_load: Mutex<Option<Result<ConfigLoad, String>>>,
     commands: Sender<Command>,
     metrics: Arc<QueueMetrics>,
@@ -81,6 +82,7 @@ impl Storage {
                 );
                 Vec::new()
             });
+        let bookmarks = load_bookmarks(&paths.bookmarks_file);
         let worker = std::thread::Builder::new()
             .name("elaris-storage".to_owned())
             .spawn(move || {
@@ -96,6 +98,7 @@ impl Storage {
         Ok(Self {
             session: Mutex::new(session),
             download_history: Mutex::new(Some(download_history)),
+            bookmarks: Mutex::new(Some(bookmarks)),
             config_load: Mutex::new(config_load),
             commands: commands.clone(),
             metrics: Arc::clone(&metrics),
@@ -120,6 +123,20 @@ impl Storage {
         self.metrics
             .enqueue(&self.commands, Command::SaveDownloads(encoded))
             .map_err(|_| "download history storage worker has stopped".to_owned())
+    }
+
+    /// The bookmarks read at launch, once.
+    pub(crate) fn take_bookmarks(&self) -> Option<elaris_core::bookmarks::Bookmarks> {
+        self.bookmarks
+            .lock()
+            .expect("bookmarks lock poisoned")
+            .take()
+    }
+
+    pub(crate) fn save_bookmarks(&self, encoded: String) -> Result<(), String> {
+        self.metrics
+            .enqueue(&self.commands, Command::SaveBookmarks(encoded))
+            .map_err(|_| "bookmarks storage worker has stopped".to_owned())
     }
 
     pub(crate) fn take_sessions(&self) -> Option<Vec<Session>> {
@@ -252,4 +269,24 @@ impl Drop for Storage {
             }
         }
     }
+}
+
+/// Reads the bookmarks file. One that can't be read is moved aside rather than overwritten, so
+/// nothing the user saved is lost to an empty list.
+fn load_bookmarks(path: &std::path::Path) -> elaris_core::bookmarks::Bookmarks {
+    elaris_core::bookmarks::Bookmarks::load(path).unwrap_or_else(|error| {
+        let aside = path.with_file_name("bookmarks.unreadable.json");
+        match std::fs::rename(path, &aside) {
+            Ok(()) => eprintln!(
+                "Elaris: bookmarks {} could not be read ({error}); kept as {}",
+                display_path(path),
+                display_path(&aside)
+            ),
+            Err(rename) => eprintln!(
+                "Elaris: bookmarks {} could not be read ({error}) or kept aside ({rename})",
+                display_path(path)
+            ),
+        }
+        elaris_core::bookmarks::Bookmarks::default()
+    })
 }

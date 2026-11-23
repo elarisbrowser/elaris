@@ -40,6 +40,8 @@ pub(super) enum Command {
     SaveAutoplay(String, Option<elaris_core::permissions::AutoplayPolicy>),
     /// The download history as `download_history::encode` wrote it.
     SaveDownloads(String),
+    /// The bookmarks as `Bookmarks::encode` wrote them.
+    SaveBookmarks(String),
     ReloadConfig,
     Flush(Sender<()>),
     Shutdown,
@@ -102,6 +104,7 @@ pub(super) fn run_worker(
         session_file,
         config_file,
         download_history_file,
+        bookmarks_file,
         ..
     } = paths;
     let mut history = match History::open(&history_file) {
@@ -251,6 +254,13 @@ pub(super) fn run_worker(
                     .expect("configuration event lock poisoned")
                     .push(ConfigEvent::Saved(result));
                 notify(&shared);
+            }
+            Command::SaveBookmarks(encoded) => {
+                if let Err(error) =
+                    session::write_private_atomic(&bookmarks_file, encoded.as_bytes(), "bookmarks")
+                {
+                    eprintln!("Elaris: could not save bookmarks: {error}");
+                }
             }
             Command::SaveDownloads(encoded) => {
                 if let Err(error) = session::write_private_atomic(
