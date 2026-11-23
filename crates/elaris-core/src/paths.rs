@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
+//! Where Elaris keeps its data and config on each platform, and how paths appear in messages.
+
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};

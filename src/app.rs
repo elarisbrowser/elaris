@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Application state and the hooks Rune calls: starting the engine, each frame's poll, window
-//! focus and shutdown. What the interface does with tabs goes through the [`Browser`].
+//! focus and shutdown. What the interface does with tabs goes through the [`crate::browser::Browser`].
 
 mod construction;
 mod history;

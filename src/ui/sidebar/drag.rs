@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The short-lived pointer gesture and preview used to reorder tabs across sidebar sections.
+//! Tab drag for the sidebar: the shared drag state, its gestures, drop geometry, edge scrolling and the settle
+//! animation.
 
 mod geometry;
 mod gesture;

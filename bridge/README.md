@@ -36,7 +36,7 @@ DYLD_LIBRARY_PATH="$PWD/build/cpp-ladybird/lib:$prefix/lib" \
   "$PWD/bridge/tests/smoke.html"
 ```
 
-The C ABI unsafe code is isolated in `src/ladybird/bridge.rs`. Its owner is neither `Send` nor `Sync`, views borrow that owner, and Rust callback panics are caught before returning through C. The example tests navigation/title/frame delivery, resize and an application reinitialization. Normal Cargo builds remain independent of the bridge.
+The C ABI unsafe code is isolated in `src/ladybird/bridge/`, with the raw declarations in `ffi.rs`. Its owner is neither `Send` nor `Sync`, views borrow that owner, and Rust callback panics are caught before returning through C. The example tests navigation/title/frame delivery, resize and an application reinitialization. Normal Cargo builds remain independent of the bridge.
 
 The callback panic boundary regression test can be run with:
 

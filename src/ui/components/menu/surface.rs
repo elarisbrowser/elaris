@@ -12,7 +12,7 @@ use crate::ui::theme::{self, MENU_SCALE_FROM, Theme};
 
 /// Rows rise and fade in after the panel, one after another; they keep their place under reduced
 /// motion, where the stagger is dropped.
-pub(crate) fn item_transition(reduced: bool) -> Transition {
+pub(super) fn item_transition(reduced: bool) -> Transition {
     if reduced {
         Transition::none()
     } else {
@@ -21,7 +21,7 @@ pub(crate) fn item_transition(reduced: bool) -> Transition {
 }
 
 /// What a menu or popover shares with its trigger: where it sits and how it is dismissed.
-pub(crate) struct Anchored {
+pub(super) struct Anchored {
     pub(super) key: String,
     pub(super) trigger: Option<El>,
     pub(super) open: bool,

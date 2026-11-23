@@ -2,7 +2,7 @@
 
 //! Native Rune pages for routes owned by Elaris.
 //!
-//! To add a page: declare its route in `src/internal.rs`, add a module here whose `view`
+//! To add a page: declare its route in `crates/elaris-core/src/internal.rs`, add a module here whose `view`
 //! takes a [`PageContext`] and returns a [`PageLayout`], and register it in [`page`]. The match
 //! is exhaustive, so a route without a renderer fails to compile. A page can also list
 //! [`PageAction`]s, which its context menu offers.

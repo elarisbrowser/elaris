@@ -25,7 +25,7 @@ pub(crate) struct NavItem {
     pub(crate) icon: &'static Icon,
 }
 
-/// Category navigation for [`PageLayout::nav`](super::layout::PageLayout::nav), in a container
+/// Category navigation for `PageLayout::nav`, in a container
 /// like the omnibox and tab switcher: a raised highlight slides to the selected item and a
 /// hover highlight glides between items under the pointer. It is a vertical list beside the
 /// content in wide panes and an equal-width row under the title in narrow ones. Choosing an

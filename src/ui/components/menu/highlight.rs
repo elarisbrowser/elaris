@@ -61,7 +61,7 @@ pub(crate) fn poll(state: &mut AppState, tx: &mut Tx) -> bool {
 }
 
 /// The pointer entering a row asks the next poll to move the highlight there.
-pub(crate) fn hover_row(state: &mut AppState, key: &str, inside: bool, tx: &mut Tx) {
+pub(super) fn hover_row(state: &mut AppState, key: &str, inside: bool, tx: &mut Tx) {
     let scope = scope(state);
     if inside
         && !scope.is_empty()
@@ -107,7 +107,7 @@ pub(crate) fn view(key: &str, top: f32, reduced: bool, theme: &Theme) -> El {
 
 /// The row of the menu keyed `key` that its sliding highlight sits on, if the highlight is in
 /// this menu.
-pub(crate) fn sliding_row(state: &AppState, key: &str) -> Option<String> {
+pub(super) fn sliding_row(state: &AppState, key: &str) -> Option<String> {
     state
         .context_menu_highlight
         .clone()
