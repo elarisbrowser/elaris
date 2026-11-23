@@ -274,6 +274,10 @@ impl Runtime {
                     None => Some(Update::CloseDecision(tab, true)),
                 };
             }
+            Command::ForgetSleep(tab) => {
+                self.ladybird.forget_discarded(tab.raw());
+                return None;
+            }
             Command::Close(tab) => {
                 let closed_private = self.views.remove(&tab).is_some_and(|view| view.private);
                 if closed_private && !self.views.values().any(|view| view.private) {
@@ -530,6 +534,7 @@ impl Runtime {
                 Event::PlayingAudio(playing) => TabUpdate::PlayingAudio(playing),
                 Event::Crashed(crash) => TabUpdate::Crashed(crash),
                 Event::Translation(translation) => TabUpdate::Translation(translation),
+                Event::Discarded(kept) => TabUpdate::Discarded(kept),
                 Event::WheelResult { cancelled } => TabUpdate::WheelResult(cancelled),
                 Event::PermissionPrompt(prompt) => TabUpdate::PermissionPrompt(prompt),
                 Event::ExternalUrl(request) => TabUpdate::ExternalUrl(request),
@@ -704,6 +709,11 @@ fn apply_to_view(view: &mut View, command: ViewCommand, timing: &mut Timing) -> 
         } => web.reply_to_dialog(request_id, response.as_deref()),
         ViewCommand::SelectedText { request_id } => web.selected_text(request_id),
         ViewCommand::Screenshot { full } => web.take_screenshot(full),
+        ViewCommand::Discard { memory_pressure } => web.discard(memory_pressure),
+        ViewCommand::Restore(url) => match web.restore_discarded() {
+            Ok(true) => Ok(()),
+            _ => web.load(&url),
+        },
         ViewCommand::Translate { language, download } => web.translate(&language, download),
         ViewCommand::Edit(edit) => web.edit(&edit),
         ViewCommand::Load(url) => web.load(&url),

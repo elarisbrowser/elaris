@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Sleeping tabs. A sleeping tab keeps its place, address, title, favicon and zoom, but its view
-//! is closed, so the engine frees the page's memory. It loads its page again when next shown.
+//! Sleeping tabs. Elaris decides which tabs sleep; Ladybird keeps what each holds. A sleeping tab
+//! keeps its place, address, title, favicon and zoom, and Ladybird its session history and
+//! sessionStorage, but its view is closed, so the engine frees the page's memory. When next shown
+//! it gets its history back and loads its current page again.
 
 use std::time::Instant;
 
 use super::Browser;
-use crate::engine::Command;
+use crate::engine::{Command, ViewCommand};
 use crate::tab::{Applied, Tab, TabId, TabSection};
 use elaris_memory_saver::Candidate;
 
@@ -40,6 +42,7 @@ impl Browser {
             .filter(|tab| {
                 !tab.is_internal()
                     && !tab.asleep
+                    && !tab.engine.sleep_requested
                     && Some(tab.id()) != self.active
                     && !visible.contains(&Some(tab.id()))
                     // A tab that has never loaded holds nothing to free.
@@ -55,17 +58,43 @@ impl Browser {
             .collect()
     }
 
-    /// Closes the tab's view and remembers its page, to load again when the tab is next shown.
-    pub(crate) fn sleep_tab(&mut self, id: TabId) -> bool {
+    /// Asks the engine to put the tab to sleep. Ladybird has the tab's pages save their state,
+    /// checks once more that nothing would break, and answers through [`Self::finish_sleep`].
+    pub(crate) fn sleep_tab(&mut self, id: TabId, memory_pressure: bool) -> bool {
         let Some(engine) = self.engine.clone() else {
             return false;
         };
         let Some(tab) = self
             .tab_mut(id)
-            .filter(|tab| !tab.is_internal() && !tab.asleep)
+            .filter(|tab| !tab.is_internal() && !tab.asleep && !tab.engine.sleep_requested)
         else {
             return false;
         };
+        tab.engine.sleep_requested = true;
+        engine.send(Command::View(id, ViewCommand::Discard { memory_pressure }));
+        true
+    }
+
+    /// Takes in Ladybird's answer to [`Self::sleep_tab`]. Once it has kept what the tab holds, its
+    /// history and sessionStorage among them, the view closes. A tab Ladybird kept loaded, or that
+    /// the user came back to meanwhile, stays awake and counts as just seen, so it isn't asked
+    /// about again until it has been idle as long once more.
+    pub(super) fn finish_sleep(&mut self, id: TabId, kept: bool) -> bool {
+        let Some(engine) = self.engine.clone() else {
+            return false;
+        };
+        let visible = self.visible_tabs().contains(&Some(id)) || self.active == Some(id);
+        let Some(tab) = self.tab_mut(id).filter(|tab| tab.engine.sleep_requested) else {
+            return false;
+        };
+        tab.engine.sleep_requested = false;
+        if !kept || visible {
+            if kept {
+                engine.send(Command::ForgetSleep(id));
+            }
+            tab.last_seen = Instant::now();
+            return false;
+        }
         engine.discard_tab_updates(id);
         engine.send(Command::Close(id));
         tab.asleep = true;
@@ -75,14 +104,11 @@ impl Browser {
         tab.find.invalidate();
         tab.accessibility = Default::default();
         tab.accessibility_events.clear();
-        // The page's session history goes with its view.
-        tab.navigation_items.clear();
-        tab.can_go_back = false;
-        tab.can_go_forward = false;
         tab.translation = Default::default();
         tab.engine = Applied {
             pending_load: Some(tab.url.clone()),
             deferred_load: true,
+            restore: true,
             ..Applied::default()
         };
         true

@@ -153,6 +153,10 @@ pub(crate) struct Applied {
     pub(crate) hidden: bool,
     /// The surface's frame count at the last poll.
     pub(crate) frames: u64,
+    /// Asked to sleep, and waiting for Ladybird's answer.
+    pub(crate) sleep_requested: bool,
+    /// The first page is a sleeping tab's, whose history Ladybird restores.
+    pub(crate) restore: bool,
 }
 
 pub(crate) struct PageDialog {
@@ -287,6 +291,8 @@ impl Tab {
             TabUpdate::WebFullscreen(active) => self.web_fullscreen = active,
             TabUpdate::PlayingAudio(playing) => self.playing_audio = playing,
             TabUpdate::Translation(translation) => self.translation = translation,
+            // The browser takes these before they reach a tab.
+            TabUpdate::Discarded(_) => return false,
             TabUpdate::Crashed(crash) => {
                 self.thumbnail = None;
                 self.loading = false;

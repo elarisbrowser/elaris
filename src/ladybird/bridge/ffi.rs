@@ -283,6 +283,9 @@ unsafe extern "C" {
     pub(super) fn elaris_ladybird_find_end(view: *mut RawView) -> i32;
     pub(super) fn elaris_ladybird_selected_text(view: *mut RawView, request_id: u64) -> i32;
     pub(super) fn elaris_ladybird_take_screenshot(view: *mut RawView, full: i32) -> i32;
+    pub(super) fn elaris_ladybird_discard(view: *mut RawView, memory_pressure: i32) -> i32;
+    pub(super) fn elaris_ladybird_restore_discarded(view: *mut RawView) -> i32;
+    pub(super) fn elaris_ladybird_forget_discarded(view_id: u64);
     pub(super) fn elaris_ladybird_translate(
         view: *mut RawView,
         language: *const c_char,

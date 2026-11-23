@@ -48,6 +48,7 @@
 #include <LibWebView/Settings.h>
 #include <LibWebView/Utilities.h>
 #include <LibWebView/PageTranslation.h>
+#include <LibWebView/SessionHistory.h>
 #include <LibUnicode/DisplayNames.h>
 #if defined(ELARIS_HAS_TRANSLATOR)
 #include <UI/Qt/TranslatorMac.h>
@@ -363,10 +364,22 @@ class ElarisWebView final : public WebView::HeadlessWebView {
         return nullptr;
     }
 
+    // Elaris decides which tabs sleep; Ladybird saves and restores what they hold.
+    Function<void()> on_discard_requested;
+
   private:
     void did_change_state() override {
         if (on_navigation_state_change)
             on_navigation_state_change();
+    }
+
+    bool supports_discarding() const override {
+        return true;
+    }
+
+    void did_request_discard() override {
+        if (on_discard_requested)
+            on_discard_requested();
     }
 
     ElarisWebView(Core::AnonymousBuffer theme, Web::DevicePixelSize size, WebView::IsPrivate mode)
@@ -492,7 +505,18 @@ struct ElarisLadybirdView {
     bool picture_in_picture{};
     // The translation state last reported, so only changes are sent.
     std::string translation_state{};
+    // Elaris asked to put the tab to sleep; any other discard request, such as from Ladybird's own discarder, is
+    // declined.
+    bool discard_requested_by_host{};
 };
+
+// What a sleeping tab had, kept until the tab wakes or closes: its session history, and the state Ladybird keeps for
+// it, such as its sessionStorage.
+struct DiscardedTab {
+    WebView::SessionHistorySnapshot history;
+    u64 state_id{};
+};
+static std::map<uint64_t, DiscardedTab> s_discarded_tabs;
 
 static AK::OwnPtr<ElarisApplication> s_application;
 static thread_local std::string s_last_error;
@@ -1737,6 +1761,23 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
     };
     handle->view->on_favicon_change = [handle](Optional<Gfx::Bitmap const&> favicon) { emit_favicon(handle, favicon); };
     handle->view->on_ready_to_paint = [handle] { emit(handle, ELARIS_LADYBIRD_FRAME); };
+    // A sleeping tab comes back from the session history it reports.
+    handle->view->set_reports_session_history(true);
+    handle->view->on_discard_requested = [handle] {
+        auto& view = *handle->view;
+        if (!std::exchange(handle->discard_requested_by_host, false)) {
+            view.did_decline_discard();
+            return;
+        }
+        // Ladybird has the final say, as the tab may have started to do something the user would miss.
+        auto state_id = view.keep_state_for_discarding();
+        if (!state_id.has_value()) {
+            emit(handle, ELARIS_LADYBIRD_DISCARD, {}, 0);
+            return;
+        }
+        s_discarded_tabs[handle->id] = DiscardedTab{view.session_history_snapshot(), *state_id};
+        emit(handle, ELARIS_LADYBIRD_DISCARD, {}, 1);
+    };
     handle->view->on_navigation_state_change = [handle] {
         emit_translation(*handle);
         auto const& view = *handle->view;
@@ -2448,6 +2489,45 @@ extern "C" int32_t elaris_ladybird_find_end(ElarisLadybirdView* handle) {
         return fail("find dismissal must run on the initialization thread");
     handle->view->find_in_page_end();
     return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_discard(ElarisLadybirdView* handle, int32_t memory_pressure) {
+    if (!handle)
+        return fail("view is required");
+    if (!on_owner_thread(handle->bridge))
+        return fail("tabs must be put to sleep on the initialization thread");
+    auto reason = memory_pressure ? WebView::ViewImplementation::DiscardReason::MemoryPressure
+                                  : WebView::ViewImplementation::DiscardReason::Inactivity;
+    if (handle->view->discard_blockers(reason, MonotonicTime::now()) != WebView::DiscardBlockers::None) {
+        emit(handle, ELARIS_LADYBIRD_DISCARD, {}, 0);
+        return succeed();
+    }
+    // The tab's pages save the state of their history entries first, then on_discard_requested runs.
+    handle->discard_requested_by_host = true;
+    handle->view->request_discard(reason);
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_restore_discarded(ElarisLadybirdView* handle) {
+    if (!handle)
+        return fail("view is required");
+    if (!on_owner_thread(handle->bridge))
+        return fail("tabs must wake on the initialization thread");
+    auto discarded = s_discarded_tabs.find(handle->id);
+    if (discarded == s_discarded_tabs.end())
+        return 0;
+    auto tab = AK::move(discarded->second);
+    s_discarded_tabs.erase(discarded);
+    handle->view->restore_state_of_discarded_tab(tab.state_id);
+    return handle->view->restore_session_history_from_snapshot(AK::move(tab.history)).is_error() ? 0 : 1;
+}
+
+extern "C" void elaris_ladybird_forget_discarded(uint64_t view_id) {
+    auto discarded = s_discarded_tabs.find(view_id);
+    if (discarded == s_discarded_tabs.end())
+        return;
+    WebView::ViewImplementation::forget_state_of_discarded_tab(discarded->second.state_id);
+    s_discarded_tabs.erase(discarded);
 }
 
 extern "C" int32_t elaris_ladybird_take_screenshot(ElarisLadybirdView* handle, int32_t full) {

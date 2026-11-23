@@ -54,6 +54,7 @@ struct Events {
     std::vector<FindResult> find_results;
     uint64_t selected_text_request{};
     std::string selected_text;
+    int discarded{-1};
 };
 
 // Each view's events, by the id the test gave it.
@@ -142,6 +143,9 @@ static void on_event(void* context, ElarisLadybirdEvent const* event) {
     case ELARIS_LADYBIRD_FIND_RESULT:
         events.find_results.push_back({event->request_id, event->current_match_index, event->total_match_count,
                                        event->has_total_match_count != 0});
+        break;
+    case ELARIS_LADYBIRD_DISCARD:
+        events.discarded = event->value;
         break;
     case ELARIS_LADYBIRD_SELECTED_TEXT:
         events.selected_text_request = event->request_id;
@@ -551,6 +555,58 @@ static bool two_views(ElarisLadybird* bridge, EventsByView& events, std::string 
     return passed;
 }
 
+// A hidden tab goes to sleep with Ladybird keeping its history, and a new view with its ID gets that history back.
+static bool sleep_and_wake(ElarisLadybird* bridge, EventsByView& events) {
+    constexpr uint64_t id = 20;
+    auto& tab = events[id];
+    ElarisLadybirdView* view = nullptr;
+    bool passed = check(elaris_ladybird_create_view(bridge, id, &view), "create sleeping view") &&
+                  check(elaris_ladybird_resize(view, 400, 300, 1), "resize sleeping view") &&
+                  check(elaris_ladybird_load(view, "data:text/html,<title>First</title>"), "load first page") &&
+                  pump_until(bridge, [&] { return tab.last_title == "First"; }) &&
+                  check(elaris_ladybird_load(view, "data:text/html,<title>Second</title>"), "load second page") &&
+                  pump_until(bridge, [&] {
+                      return tab.last_title == "Second" && tab.history == ELARIS_LADYBIRD_HISTORY_BACK &&
+                             tab.loading_finished >= 2;
+                  });
+    if (!passed) {
+        std::cerr << "the view to put to sleep should load two pages\n";
+        elaris_ladybird_destroy_view(view);
+        return false;
+    }
+
+    // A visible tab stays loaded.
+    passed = check(elaris_ladybird_discard(view, 0), "ask to sleep a visible tab") &&
+             pump_until(bridge, [&] { return tab.discarded == 0; });
+    if (!passed)
+        std::cerr << "a visible tab should not sleep\n";
+
+    tab.discarded = -1;
+    passed = passed && check(elaris_ladybird_set_visible(view, 0), "hide view") &&
+             check(elaris_ladybird_discard(view, 1), "put hidden tab to sleep") &&
+             pump_until(bridge, [&] { return tab.discarded == 1; });
+    elaris_ladybird_destroy_view(view);
+    view = nullptr;
+    if (!passed) {
+        std::cerr << "a hidden tab should sleep, observed answer " << tab.discarded << '\n';
+        return false;
+    }
+
+    tab = {};
+    passed = check(elaris_ladybird_create_view(bridge, id, &view), "wake view") &&
+             check(elaris_ladybird_resize(view, 400, 300, 1), "resize woken view") &&
+             elaris_ladybird_restore_discarded(view) == 1 &&
+             pump_until(bridge, [&] { return tab.last_title == "Second" && tab.history == ELARIS_LADYBIRD_HISTORY_BACK; });
+    if (!passed)
+        std::cerr << "a woken tab should show its page with its history, observed title '" << tab.last_title
+                  << "' and history " << tab.history << '\n';
+    // Its state was used up, so there is nothing more to restore, and forgetting it again does nothing.
+    passed = passed && elaris_ladybird_restore_discarded(view) == 0;
+    elaris_ladybird_forget_discarded(id);
+    elaris_ladybird_destroy_view(view);
+    return passed;
+}
+
 int main(int argc, char** argv) {
     apply_dev_options_from_environment();
     bool form_pickers_only = argc == 5 && std::string_view(argv[4]) == "--form-pickers";
@@ -689,6 +745,7 @@ int main(int argc, char** argv) {
         }
     }
     passed = passed && two_views(bridge, events_by_view, "file://" + std::filesystem::absolute(argv[3]).string());
+    passed = passed && sleep_and_wake(bridge, events_by_view);
     elaris_ladybird_destroy(bridge);
     bridge = nullptr;
     if (passed) {

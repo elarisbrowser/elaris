@@ -140,6 +140,8 @@ pub(crate) enum Command {
     View(TabId, ViewCommand),
     /// Destroys the tab's view. Nothing more is reported for it.
     Close(TabId),
+    /// Forgets what a sleeping tab had, as it closed without waking.
+    ForgetSleep(TabId),
     PreflightClose(TabId),
     /// Starts a browser-owned transfer through Ladybird (a retry, Save Link As).
     StartDownload(DownloadId, DownloadRequest),
@@ -261,6 +263,12 @@ pub(crate) enum ViewCommand {
         request_id: u64,
         response: Option<String>,
     },
+    /// Asks to put the hidden tab to sleep; the engine answers with [`TabUpdate::Discarded`].
+    Discard {
+        memory_pressure: bool,
+    },
+    /// Wakes a sleeping tab in its new view: the history it had, or the page loaded afresh.
+    Restore(String),
     /// Translates the page into `language`, or downloads what that needs; an empty language shows
     /// the page as it was.
     Translate {
@@ -397,6 +405,8 @@ pub(crate) enum TabUpdate {
     PlayingAudio(bool),
     Crashed(Option<elaris::ladybird::Crash>),
     Translation(elaris::ladybird::Translation),
+    /// Whether Ladybird kept what the tab holds, so its view may close.
+    Discarded(bool),
     /// Whether the page cancelled a wheel event; a cancelled wheel keeps its gesture from becoming a swipe.
     WheelResult(bool),
     PermissionUse(elaris_core::permissions::PermissionKind, bool),

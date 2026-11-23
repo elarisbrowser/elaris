@@ -158,7 +158,11 @@ impl Browser {
         if !tab.is_internal()
             && let Some(engine) = &self.engine
         {
-            engine.send(Command::Close(id));
+            engine.send(if tab.asleep {
+                Command::ForgetSleep(id)
+            } else {
+                Command::Close(id)
+            });
         }
     }
 
@@ -273,7 +277,11 @@ impl Browser {
                 && let Some(engine) = &self.engine
             {
                 engine.discard_tab_updates(id);
-                engine.send(Command::Close(id));
+                engine.send(if tab.asleep {
+                    Command::ForgetSleep(id)
+                } else {
+                    Command::Close(id)
+                });
             }
             id.release();
         }

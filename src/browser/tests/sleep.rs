@@ -3,16 +3,39 @@
 use super::*;
 use std::time::{Duration, Instant};
 
+fn answer(browser: &mut Browser, fake: &crate::engine::FakeEngine, id: TabId, kept: bool) {
+    fake.updates
+        .send(crate::engine::Update::Tab(
+            id,
+            crate::engine::TabUpdate::Discarded(kept),
+        ))
+        .unwrap();
+    browser.poll();
+}
+
 #[test]
-fn a_sleeping_tab_closes_its_view_and_reloads_its_page_when_shown() {
+fn a_sleeping_tab_closes_once_ladybird_keeps_its_state_and_restores_it_when_shown() {
     let (mut browser, fake) = ready();
     let first = browser.open_tab("example.com").unwrap();
     let second = browser.open_tab("example.org").unwrap();
     browser.poll();
     sent(&fake);
 
-    assert!(browser.sleep_tab(second));
-    assert!(!browser.sleep_tab(second));
+    assert!(browser.sleep_tab(second, true));
+    assert!(!browser.sleep_tab(second, true));
+    assert_eq!(
+        sent(&fake),
+        [view(
+            second,
+            ViewCommand::Discard {
+                memory_pressure: true
+            }
+        )]
+    );
+    assert!(!browser.tab(second).unwrap().asleep);
+
+    answer(&mut browser, &fake, second, true);
+    assert!(browser.tab(second).unwrap().asleep);
     assert_eq!(sent(&fake), [Command::Close(second)]);
     // A sleeping tab is told nothing while hidden.
     browser.set_viewport([120.0, 50.0]);
@@ -26,9 +49,44 @@ fn a_sleeping_tab_closes_its_view_and_reloads_its_page_when_shown() {
     assert!(commands.contains(&view(second, resize(120, 50, 1.0))));
     assert!(commands.contains(&view(
         second,
-        ViewCommand::Load("https://example.org".into())
+        ViewCommand::Restore("https://example.org".into())
     )));
     assert!(!browser.tab(second).unwrap().asleep);
+}
+
+#[test]
+fn a_tab_ladybird_keeps_loaded_stays_awake_and_counts_as_just_seen() {
+    let (mut browser, fake) = ready();
+    browser.open_tab("example.com").unwrap();
+    let second = browser.open_tab("example.org").unwrap();
+    browser.poll();
+    let later = Instant::now() + Duration::from_secs(600);
+    browser.sleep_tab(second, false);
+    assert!(browser.sleep_candidates(later).is_empty());
+    sent(&fake);
+
+    answer(&mut browser, &fake, second, false);
+    assert!(!browser.tab(second).unwrap().asleep);
+    assert!(sent(&fake).is_empty());
+    assert!(
+        browser
+            .sleep_candidates(Instant::now())
+            .iter()
+            .all(|c| c.idle < Duration::from_secs(1))
+    );
+}
+
+#[test]
+fn a_sleeping_tab_that_closes_forgets_its_kept_state() {
+    let (mut browser, fake) = ready();
+    browser.open_tab("example.com").unwrap();
+    let second = browser.open_tab("example.org").unwrap();
+    browser.poll();
+    browser.sleep_tab(second, false);
+    answer(&mut browser, &fake, second, true);
+    sent(&fake);
+    browser.close_tab(second);
+    assert_eq!(sent(&fake), [Command::ForgetSleep(second)]);
 }
 
 #[test]
@@ -48,7 +106,7 @@ fn only_idle_background_tabs_doing_nothing_may_sleep() {
     assert!(!candidates[0].busy && candidates[1].busy);
     assert!(candidates[0].idle >= Duration::from_secs(60));
 
-    browser.sleep_tab(quiet);
+    browser.sleep_tab(quiet, false);
     assert_eq!(browser.sleep_candidates(later).len(), 1);
 }
 

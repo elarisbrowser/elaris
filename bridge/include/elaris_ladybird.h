@@ -63,6 +63,9 @@ typedef enum {
     /* What the page can be translated into, as JSON in text: {"offered","translated","items":[{"language","label",
      * "checked","download","enabled"}]}. */
     ELARIS_LADYBIRD_TRANSLATION = 37,
+    /* Answers elaris_ladybird_discard: value 1 once the tab's state is kept and its view may close, 0 when the tab
+     * stays loaded. */
+    ELARIS_LADYBIRD_DISCARD = 38,
 } ElarisLadybirdEventKind;
 
 /* Permission event text is the origin and selection is the permission key.
@@ -408,6 +411,14 @@ int32_t elaris_ladybird_find_end(ElarisLadybirdView*);
 int32_t elaris_ladybird_selected_text(ElarisLadybirdView*, uint64_t request_id);
 /* Saves a PNG of the visible page, or of the whole page when full is nonzero, to the download directory. */
 int32_t elaris_ladybird_take_screenshot(ElarisLadybirdView*, int32_t full);
+/* Asks to put a hidden tab to sleep. Ladybird has its pages save their state, then answers with
+ * ELARIS_LADYBIRD_DISCARD. Once accepted, the host destroys the view. */
+int32_t elaris_ladybird_discard(ElarisLadybirdView*, int32_t memory_pressure);
+/* Gives a new view with the sleeping tab's ID the history and state it had. Returns 1 when restored, 0 when there is
+ * nothing to restore, and the host loads the page itself. */
+int32_t elaris_ladybird_restore_discarded(ElarisLadybirdView*);
+/* Forgets what a sleeping tab had, when it closes without waking. */
+void elaris_ladybird_forget_discarded(uint64_t view_id);
 /* Translates the page into language, or downloads what that needs when download is nonzero. An empty language shows
  * the page as it was. */
 int32_t elaris_ladybird_translate(ElarisLadybirdView*, char const* language, int32_t download);

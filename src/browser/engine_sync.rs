@@ -38,6 +38,9 @@ impl Browser {
                 Update::Tab(id, crate::engine::TabUpdate::WheelResult(cancelled)) => {
                     polled.changed |= self.wheel_result(id, cancelled);
                 }
+                Update::Tab(id, crate::engine::TabUpdate::Discarded(kept)) => {
+                    polled.changed |= self.finish_sleep(id, kept);
+                }
                 Update::Tab(id, update) => {
                     if matches!(update, crate::engine::TabUpdate::WebFullscreen(true))
                         && self.active != Some(id)
@@ -379,7 +382,11 @@ impl Browser {
                 && let Some(url) = applied.pending_load.take()
             {
                 tab.surface.request_preview_invalidation();
-                send(ViewCommand::Load(url));
+                send(if std::mem::take(&mut applied.restore) {
+                    ViewCommand::Restore(url)
+                } else {
+                    ViewCommand::Load(url)
+                });
             }
             let focused = active && window.focused && window.viewport_focused;
             if applied.focused != focused {

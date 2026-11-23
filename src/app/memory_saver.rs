@@ -38,18 +38,17 @@ impl AppState {
         }
     }
 
-    /// Puts the tabs Memory Saver chooses to sleep when a check is due, and reports whether any
-    /// slept.
-    pub(super) fn poll_memory_saver(&mut self, tx: &mut Tx) -> bool {
+    /// Asks to put the tabs Memory Saver chooses to sleep when a check is due.
+    pub(super) fn poll_memory_saver(&mut self, tx: &mut Tx) {
         let mode = self.settings.memory_saver;
         let now = Instant::now();
         if self.memory_saver.check.is_some_and(|due| now < due) {
-            return false;
+            return;
         }
         let pressure = Pressure::current();
         let Some(interval) = mode.check_interval(pressure) else {
             self.memory_saver.check = None;
-            return false;
+            return;
         };
         self.memory_saver.check = Some(now + interval);
         tx.wake_after(interval);
@@ -63,9 +62,11 @@ impl AppState {
             .into_iter()
             .map(|candidate| self.with_site_state(candidate))
             .collect();
-        mode.choose(pressure, &candidates)
-            .into_iter()
-            .fold(false, |slept, id| self.browser.sleep_tab(id) | slept)
+        let memory_pressure = pressure != Pressure::Normal;
+        for id in mode.choose(pressure, &candidates) {
+            self.browser.sleep_tab(id, memory_pressure);
+        }
+        // The tabs fall asleep once Ladybird answers, which a later poll takes in.
     }
 
     fn request_tab_memory(&self) {

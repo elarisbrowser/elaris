@@ -185,6 +185,26 @@ impl WebView {
         })
     }
 
+    /// Asks Ladybird to keep what this hidden tab holds so its view can close. It answers with
+    /// [`Event::Discarded`](crate::ladybird::Event::Discarded).
+    pub fn discard(&mut self, memory_pressure: bool) -> Result<(), String> {
+        // SAFETY: The view is live on its owner's thread.
+        status_result(unsafe {
+            elaris_ladybird_discard(self.raw.as_ptr(), i32::from(memory_pressure))
+        })
+    }
+
+    /// Gives this new view the history and state its tab had when it went to sleep. False when
+    /// there is none, and the page must be loaded instead.
+    pub fn restore_discarded(&mut self) -> Result<bool, String> {
+        // SAFETY: The view is live on its owner's thread.
+        match unsafe { elaris_ladybird_restore_discarded(self.raw.as_ptr()) } {
+            1 => Ok(true),
+            0 => Ok(false),
+            _ => Err(super::ffi::last_error()),
+        }
+    }
+
     pub fn load(&mut self, url: &str) -> Result<(), String> {
         let url = CString::new(url).map_err(|_| "URL contains an interior NUL byte".to_owned())?;
         // SAFETY: The view is live on its owner's thread.

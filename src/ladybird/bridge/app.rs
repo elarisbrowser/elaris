@@ -256,6 +256,12 @@ impl Ladybird {
         status_result(unsafe { elaris_ladybird_end_process(self.owner.raw.as_ptr(), id) })
     }
 
+    /// Forgets what the sleeping tab with this view ID had, as it closed without waking.
+    pub fn forget_discarded(&mut self, view_id: u64) {
+        // SAFETY: Runs on the bridge's owner thread, which keeps the discarded tabs.
+        unsafe { elaris_ladybird_forget_discarded(view_id) }
+    }
+
     /// Discards the private session once no private view remains, so the next one starts empty.
     pub fn reset_private_session(&mut self) -> Result<(), String> {
         // SAFETY: The bridge is live on its owner thread.
