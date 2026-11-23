@@ -106,9 +106,11 @@ RELEASE_BUNDLE_STAMP = ROOT / "build" / "Elaris.app.stamp"
 
 
 def _bundle_inputs(executable: Path) -> tuple[str, str]:
-    """When the engine's helpers and Elaris's executable last changed."""
-    helpers = (LADYBIRD_APP / "Contents" / "MacOS").iterdir()
-    engine = max(helper.stat().st_mtime_ns for helper in helpers if helper.is_file())
+    """When the engine (its helpers and Elaris's bridge library) and Elaris's executable last changed."""
+    helpers = [helper for helper in (LADYBIRD_APP / "Contents" / "MacOS").iterdir() if helper.is_file()]
+    # The bundle carries its own copy of the bridge, which must export what the executable was built against.
+    helpers += list((ENGINE_BUILD / "lib").glob("libelaris_ladybird.*"))
+    engine = max(helper.stat().st_mtime_ns for helper in helpers)
     return str(engine), str(executable.stat().st_mtime_ns)
 
 
