@@ -2,6 +2,7 @@
 
 import filecmp
 import importlib.util
+import plistlib
 import re
 import shutil
 import subprocess
@@ -15,11 +16,12 @@ PACKAGING = ROOT / "packaging"
 LINUX_ASSETS = PACKAGING / "linux"
 # Compiled from the brand kit's Icon Composer documents, so the designer's layers and gradient carry over.
 APP_ICONS = ASSETS / "brand-kit" / "apple" / "Icon Exports"
-# Stable releases wear the blue icon; dev runs and canary builds the yellow one with a DEV or CANARY tag.
+# Stable releases wear the blue icon; dev runs and canary builds the yellow one, so they are easy to tell apart.
+# The app reads the channel from Info.plist and adds a DEV or CANARY tag to its Dock icon.
 APP_ICON_SOURCES = {
     "stable": APP_ICONS / "Icon.icon",
     "dev": APP_ICONS / "Icon-Dev.icon",
-    "canary": APP_ICONS / "Icon-Canary.icon",
+    "canary": APP_ICONS / "Icon-Dev.icon",
 }
 APP_ID = "org.elarisbrowser.Elaris"
 ENGINE_BUILD = ROOT / "build" / "cpp-ladybird"
@@ -76,12 +78,25 @@ def _macos_app_icon(channel: str) -> Path:
     return output
 
 
+def _macos_info_plist(channel: str) -> Path:
+    """The Info.plist with the build's channel under `ElarisChannel`, rewritten only when it changes."""
+    with (PACKAGING / "macos" / "Info.plist").open("rb") as source:
+        info = plistlib.load(source)
+    info["ElarisChannel"] = channel
+    output = ROOT / "build" / "macos" / f"Info-{channel}.plist"
+    rendered = plistlib.dumps(info)
+    if not output.is_file() or output.read_bytes() != rendered:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(rendered)
+    return output
+
+
 def _macos_bundle_metadata(contents: Path, channel: str) -> bool:
-    """Copy the Info.plist and the channel's compiled icon into an app's Contents. Returns whether anything changed."""
+    """Copy the channel's Info.plist and compiled icon into an app's Contents. Returns whether anything changed."""
     icon = _macos_app_icon(channel)
     changed = False
     for source, destination in (
-        (PACKAGING / "macos" / "Info.plist", contents / "Info.plist"),
+        (_macos_info_plist(channel), contents / "Info.plist"),
         (icon / "Assets.car", contents / "Resources" / "Assets.car"),
         (icon / "Icon.icns", contents / "Resources" / "Icon.icns"),
     ):

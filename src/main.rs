@@ -38,7 +38,10 @@ fn main() {
     let app_handle = app.handle();
     let app = app.on_ready(move |_| {
         #[cfg(target_os = "macos")]
-        menu::install(app_handle.clone());
+        {
+            menu::install(app_handle.clone());
+            platform::macos::dock_tag::install();
+        }
         start_window_workers(app_handle.clone());
         let wake_handle = app_handle.clone();
         app::termination::install(move || wake_handle.wake());
