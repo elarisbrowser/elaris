@@ -237,7 +237,7 @@ fn copy_link(state: &AppState, url: &str, theme: &Theme, reduced: bool) -> El {
             .label("Copy link")
             .help(if copied { "Copied" } else { "Copy link" })
             .on_press_tx(move |state: &mut AppState, tx| {
-                tx.copy(url.clone());
+                state.toasts.copy_url(tx, &url);
                 haptics::play(Haptic::Tap);
                 state.sidebar.link_copied_until = Some(tx.clock() + theme::COPY_LINK_CONFIRM);
                 tx.wake_after(std::time::Duration::from_secs_f64(theme::COPY_LINK_CONFIRM));

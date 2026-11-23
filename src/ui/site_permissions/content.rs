@@ -257,7 +257,7 @@ fn action_tiles(
                 match action {
                     SiteControlAction::CopyUrl => {
                         if let Some(url) = url.as_deref() {
-                            tx.copy(url);
+                            state.toasts.copy_url(tx, url);
                         }
                     }
                     SiteControlAction::Reload => {

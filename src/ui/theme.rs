@@ -432,23 +432,29 @@ pub(crate) const FIND_SHADOW_Y: f32 = 3.0;
 pub(crate) const FIND_SHADOW_BLUR: f32 = 12.0;
 pub(crate) const FIND_INPUT_TEXT: rune::TextStyle = rune::TextStyle::new(14.0, 400.0);
 
-/// Toasts: short confirmations that float over the window's bottom edge.
-pub(crate) const TOAST_WIDTH: f32 = 320.0;
+/// Toasts: compact pills that rise over the window's bottom edge and stack behind one another.
+pub(crate) const TOAST_WIDTH: f32 = 300.0;
+pub(crate) const TOAST_HEIGHT: f32 = 52.0;
+pub(crate) const TOAST_RADIUS: f32 = TOAST_HEIGHT / 2.0;
 pub(crate) const TOAST_INSET: f32 = 16.0;
-pub(crate) const TOAST_GAP: f32 = 10.0;
-pub(crate) const TOAST_LINE_GAP: f32 = 2.0;
-pub(crate) const TOAST_RADIUS: f32 = radius::LG;
+/// The space between toasts when the stack is open.
+pub(crate) const TOAST_GAP: f32 = 8.0;
+/// How much of each older toast peeks out behind the newest, and how much smaller it sits.
+pub(crate) const TOAST_PEEK: f32 = 9.0;
+pub(crate) const TOAST_STACK_SHRINK: f32 = 0.05;
+pub(crate) const TOAST_LINE_GAP: f32 = 1.0;
 pub(crate) const TOAST_ICON: f32 = 16.0;
+pub(crate) const TOAST_PAD_X: f32 = 14.0;
 pub(crate) const TOAST_SHADOW_Y: f32 = 6.0;
 pub(crate) const TOAST_SHADOW_BLUR: f32 = 18.0;
 /// How far a toast starts below its place and how much it shrinks, as it rises in and falls out.
-pub(crate) const TOAST_RISE: f32 = 12.0;
-pub(crate) const TOAST_SCALE: f32 = 0.96;
+pub(crate) const TOAST_RISE: f32 = 14.0;
+pub(crate) const TOAST_SCALE: f32 = 0.92;
 /// The spring a toast enters and leaves on: a little bounce, so it seems to land.
 pub(crate) const TOAST_PRESENCE: SpringPair =
     SpringPair::new(Spring::new(0.32, 0.14), Spring::new(0.18, 0.0));
-/// The spring that slides the rest of the stack into the gap a leaving toast leaves.
-pub(crate) const TOAST_REFLOW: Spring = Spring::new(0.3, 0.0);
+/// The spring that moves the stack: its position, its spread when hovered, and each toast's depth.
+pub(crate) const TOAST_STACK: Spring = Spring::new(0.36, 0.08);
 
 /// Menus, context menus and popovers: a rounded panel whose rows sit in an inset container, as the
 /// Settings category list does. Each highlight is concentric with the panel's corners.

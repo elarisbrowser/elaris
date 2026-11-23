@@ -10,8 +10,7 @@ use rune::{FileDialogOptions, Key, KeyEvent, Tx};
 use crate::app::{self, AppState};
 use crate::browser::Browser;
 use crate::tab::{Tab, TabId};
-use crate::toast::Toast;
-use crate::ui::{self, icons};
+use crate::ui;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Shortcut {
@@ -213,15 +212,7 @@ fn copy_address(state: &mut AppState, tx: &mut Tx) {
         .filter(|url| !url.is_empty() && *url != "about:blank")
         .map(str::to_owned);
     match address {
-        Some(address) => {
-            tx.copy(address.clone());
-            state.toasts.show(
-                tx,
-                Toast::new("Copied address")
-                    .icon(&icons::COPY)
-                    .detail(address),
-            );
-        }
+        Some(address) => state.toasts.copy_url(tx, &address),
         None => state.toasts.show(tx, "No address to copy"),
     }
 }
