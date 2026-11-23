@@ -32,14 +32,15 @@ fn bar_shown(state: &AppState) -> bool {
     state.horizontal_tabs() && !state.bookmarks().bar().is_empty()
 }
 
-/// The star in the address field: filled when the active page is bookmarked. It opens the editor.
+/// The star in the address field, drawn like the field's other buttons and filled when the active
+/// page is bookmarked. It opens the editor.
 pub(in crate::ui) fn star(state: &AppState, theme: &Theme, overlays: &mut Vec<El>) -> Option<El> {
     let tab = state
         .browser
         .active_tab()
         .filter(|tab| !tab.is_internal() && !tab.url.is_empty() && tab.url != "about:blank")?;
     let bookmarked = state.bookmarks().find_url(&tab.url).is_some();
-    let trigger = controls::icon_button_frame(
+    let frame = controls::icon_button_frame(
         "bookmark-star",
         if bookmarked {
             "Edit bookmark"
@@ -64,7 +65,12 @@ pub(in crate::ui) fn star(state: &AppState, theme: &Theme, overlays: &mut Vec<El
             },
             theme::ICON,
         )
-        .color(if bookmarked { theme.accent } else { theme.icon }),
+        .color(theme.icon),
+    );
+    let trigger = crate::ui::components::hover_highlight::attach(
+        frame,
+        "bookmark-star",
+        crate::ui::components::hover_highlight::Group::Controls,
     )
     .on_press_tx(|state: &mut AppState, tx| {
         if state
@@ -645,6 +651,9 @@ mod tests {
     fn the_star_opens_the_editor_in_either_layout() {
         for layout in TabLayout::ALL {
             let mut runtime = runtime(layout, false);
+            // In the vertical sidebar the address field's buttons show under the pointer.
+            runtime.update(|state, _| state.sidebar.pointer_inside = true);
+            runtime.frame(0.01);
             let ([x, y, w, h], _) = runtime
                 .presented("bookmark-star")
                 .expect("the star shows for a web page");

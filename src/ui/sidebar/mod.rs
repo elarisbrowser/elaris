@@ -144,18 +144,24 @@ fn body(state: &AppState, theme: &Theme, overlays: &mut Vec<El>, reduced_motion:
 }
 
 fn search_launcher(state: &AppState, theme: &Theme, reduced: bool, overlays: &mut Vec<El>) -> El {
+    let star = super::bookmarks::star(state, theme, overlays);
     let mut marks = state
         .browser
         .active_tab()
         .map(|tab| permission_prompt::address_indicators(tab, theme))
         .unwrap_or_default();
     marks.extend(super::translate::button(state, theme, overlays));
-    marks.extend(super::bookmarks::star(state, theme, overlays));
     marks.extend(header::zoom_indicator(state, theme, overlays));
-    search_field(state, theme, reduced, marks)
+    search_field(state, theme, reduced, marks, star)
 }
 
-fn search_field(state: &AppState, theme: &Theme, reduced: bool, marks: Vec<El>) -> El {
+fn search_field(
+    state: &AppState,
+    theme: &Theme,
+    reduced: bool,
+    marks: Vec<El>,
+    star: Option<El>,
+) -> El {
     let address = state
         .browser
         .active_tab()
@@ -195,8 +201,14 @@ fn search_field(state: &AppState, theme: &Theme, reduced: bool, marks: Vec<El>) 
     .focusable(true)
     .on_press_tx(app::open_from_launcher)
     .children(marks);
-    // Keep the buttons while site controls are open, since the popover is anchored to them.
-    let revealed = state.sidebar.pointer_inside || state.site_permissions_open;
+    // Keep the buttons while site controls or the bookmark editor are open, since their popovers
+    // are anchored to them.
+    let editing_bookmark = state
+        .bookmarks
+        .editor
+        .as_ref()
+        .is_some_and(|editor| !editor.on_page);
+    let revealed = state.sidebar.pointer_inside || state.site_permissions_open || editing_bookmark;
     if state.browser.active_tab().is_none() || !revealed {
         return launcher;
     }
@@ -205,7 +217,11 @@ fn search_field(state: &AppState, theme: &Theme, reduced: bool, marks: Vec<El>) 
     } else {
         Transition::opacity()
     };
-    let mut buttons = row().key("omnibox-buttons").center_y().transition(fade);
+    let mut buttons = row()
+        .key("omnibox-buttons")
+        .center_y()
+        .transition(fade)
+        .children(star);
     if let Some(url) = address {
         buttons = buttons.child(copy_link(state, url, theme, reduced));
     }
