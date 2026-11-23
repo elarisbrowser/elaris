@@ -9,8 +9,10 @@
 
 use std::time::Duration;
 
+mod awake;
 mod pressure;
 
+pub use awake::{AwakeReason, keeps_awake, site_of};
 pub use pressure::Pressure;
 
 /// How eagerly Memory Saver puts background tabs to sleep.

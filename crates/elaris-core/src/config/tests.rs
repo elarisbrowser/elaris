@@ -150,6 +150,40 @@ fn memory_saver_defaults_to_balanced_and_round_trips() {
 }
 
 #[test]
+fn keep_awake_sites_round_trip_and_skip_what_names_no_site() {
+    let directory = std::env::temp_dir().join(format!(
+        "elaris-config-keep-awake-{}-{}",
+        std::process::id(),
+        NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed)
+    ));
+    let path = directory.join("config.toml");
+    assert!(parse("").unwrap().settings.keep_awake_sites.is_empty());
+    let sites = vec!["mail.example.com".to_owned(), "example.org".to_owned()];
+    write_change(&path, &SettingsChange::KeepAwakeSites(sites.clone())).unwrap();
+    let contents = fs::read_to_string(&path).unwrap();
+    assert_eq!(parse(&contents).unwrap().settings.keep_awake_sites, sites);
+    assert!(
+        contents.contains("reduce_motion"),
+        "other settings are kept"
+    );
+    write_change(&path, &SettingsChange::KeepAwakeSites(Vec::new())).unwrap();
+    assert!(
+        parse(&fs::read_to_string(&path).unwrap())
+            .unwrap()
+            .settings
+            .keep_awake_sites
+            .is_empty()
+    );
+    let mixed = parse(
+        "[performance]\nkeep_awake = ['https://www.Example.com/a', 'not a site', 'example.com']",
+    )
+    .unwrap();
+    assert_eq!(mixed.settings.keep_awake_sites, ["example.com"]);
+    assert_eq!(mixed.issues.len(), 1);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn new_tab_position_defaults_to_top_and_round_trips() {
     let directory = std::env::temp_dir().join(format!(
         "elaris-config-new-tab-{}-{}",

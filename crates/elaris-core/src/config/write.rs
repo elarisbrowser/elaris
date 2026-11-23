@@ -90,7 +90,7 @@ fn write_site_setting(
 
 /// Updates one known setting while preserving unrelated keys, comments and formatting.
 pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> {
-    let mut document = match fs::read_to_string(path) {
+    let document = match fs::read_to_string(path) {
         Ok(contents) => contents
             .parse::<DocumentMut>()
             .map_err(|error| format!("cannot update malformed TOML: {error}"))?,
@@ -99,7 +99,18 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
             .map_err(|error| format!("cannot parse built-in configuration: {error}"))?,
         Err(error) => return Err(format!("cannot read configuration: {error}")),
     };
+    if let SettingsChange::KeepAwakeSites(sites) = change {
+        let sites: toml_edit::Array = sites.iter().map(String::as_str).collect();
+        return put(
+            path,
+            document,
+            "performance",
+            "keep_awake",
+            Value::Array(sites),
+        );
+    }
     let (section, key, value) = match change {
+        SettingsChange::KeepAwakeSites(_) => unreachable!("lists are saved above"),
         SettingsChange::PageZoom(value) => ("pages", "zoom", value.to_string()),
         SettingsChange::Autoplay(value) => ("pages", "autoplay", value.key().to_owned()),
         SettingsChange::TabLayout(value) => {
@@ -172,14 +183,7 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
             ("content_blocking", list.config_key(), value.to_string())
         }
     };
-    let item = document
-        .as_table_mut()
-        .entry(section)
-        .or_insert(Item::Table(toml_edit::Table::new()));
-    let table = item
-        .as_table_mut()
-        .ok_or_else(|| format!("[{section}] must be a TOML table"))?;
-    let mut new_value = if section == "content_blocking"
+    let new_value = if section == "content_blocking"
         || key == "glass"
         || key == "reduce_motion"
         || key == "force_dark"
@@ -194,6 +198,24 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
     } else {
         Value::from(value)
     };
+    put(path, document, section, key, new_value)
+}
+
+/// Sets one value, keeping the comments and spacing around the one it replaces, and saves the file.
+fn put(
+    path: &Path,
+    mut document: DocumentMut,
+    section: &str,
+    key: &str,
+    mut new_value: Value,
+) -> Result<(), String> {
+    let item = document
+        .as_table_mut()
+        .entry(section)
+        .or_insert(Item::Table(toml_edit::Table::new()));
+    let table = item
+        .as_table_mut()
+        .ok_or_else(|| format!("[{section}] must be a TOML table"))?;
     if let Some(item) = table.get_mut(key) {
         if let Some(old_value) = item.as_value() {
             *new_value.decor_mut() = old_value.decor().clone();

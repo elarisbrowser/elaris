@@ -193,6 +193,24 @@ pub fn parse(contents: &str) -> Result<ConfigLoad, String> {
     if let Some(value) = bool_value(&document, "performance", "reduce_motion", &mut issues) {
         settings.reduce_motion = value;
     }
+    if let Some(item) = scalar_item(&document, "performance", "keep_awake", &mut issues) {
+        match item.as_array() {
+            Some(sites) => {
+                for site in sites {
+                    match site.as_str().and_then(elaris_memory_saver::site_of) {
+                        Some(site) if !settings.keep_awake_sites.contains(&site) => {
+                            settings.keep_awake_sites.push(site);
+                        }
+                        Some(_) => {}
+                        None => {
+                            issues.push(format!("Invalid site in [performance].keep_awake: {site}"))
+                        }
+                    }
+                }
+            }
+            None => issues.push("[performance].keep_awake must be a list of sites".to_owned()),
+        }
+    }
     if let Some(value) = string_value(&document, "performance", "memory_saver", &mut issues) {
         if let Some(mode) = MemorySaver::from_config_key(&value) {
             settings.memory_saver = mode;

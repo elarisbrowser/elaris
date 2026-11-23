@@ -290,6 +290,8 @@ pub struct Settings {
     pub grain: u8,
     pub reduce_motion: bool,
     pub memory_saver: elaris_memory_saver::MemorySaver,
+    /// Sites whose tabs Memory Saver never puts to sleep, as [`elaris_memory_saver::site_of`] names them.
+    pub keep_awake_sites: Vec<String>,
     pub content_blocking: ContentBlocking,
 }
 
@@ -316,6 +318,7 @@ impl Default for Settings {
             grain: 0,
             reduce_motion: false,
             memory_saver: elaris_memory_saver::MemorySaver::default(),
+            keep_awake_sites: Vec::new(),
             content_blocking: ContentBlocking::default(),
         }
     }
@@ -391,6 +394,7 @@ pub enum SettingsChange {
     ReduceMotion(bool),
     ForceDark(bool),
     MemorySaver(elaris_memory_saver::MemorySaver),
+    KeepAwakeSites(Vec<String>),
     SplitViewLimit(usize),
     ContentBlocking(bool),
     ContentBlockingList(ContentBlockList, bool),
