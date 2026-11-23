@@ -80,15 +80,22 @@ impl Bookmark {
 
     /// What the bar and lists call it: its title, or its site until it has one.
     pub fn label(&self) -> &str {
-        match (self.title.trim(), self.url()) {
-            ("", Some(url)) => crate::address::compact_address(url),
-            (title, _) => title,
+        match self.url() {
+            Some(url) if !self.has_title() => crate::address::compact_address(url),
+            _ => self.title.trim(),
         }
+    }
+
+    /// Whether it has a title of its own. A link's address saved as its title, as a tab names a
+    /// page before it has one, is none.
+    pub fn has_title(&self) -> bool {
+        let title = self.title.trim();
+        !title.is_empty() && Some(title) != self.url().map(str::trim)
     }
 
     /// A link still without a title or icon, which loading its page would give it.
     pub fn missing_details(&self) -> bool {
-        self.url().is_some() && (self.title.trim().is_empty() || self.favicon.is_none())
+        self.url().is_some() && (!self.has_title() || self.favicon.is_none())
     }
 
     fn children_mut(&mut self) -> Option<&mut Vec<Bookmark>> {
@@ -383,7 +390,7 @@ impl Bookmarks {
             let mut changed = false;
             if node.url() == Some(url) {
                 if let Some(title) = title.map(str::trim).filter(|title| !title.is_empty())
-                    && node.title.trim().is_empty()
+                    && !node.has_title()
                 {
                     node.title = title.to_owned();
                     changed = true;
@@ -615,6 +622,17 @@ mod tests {
             )
             .unwrap();
         assert_eq!(bookmarks.get(blank).unwrap().label(), "google.com");
+        let addressed = bookmarks
+            .add_link(
+                BookmarkId::BAR,
+                "https://a.example/x",
+                "https://a.example/x",
+                0,
+            )
+            .unwrap();
+        assert_eq!(bookmarks.get(addressed).unwrap().label(), "a.example");
+        assert!(bookmarks.fill_details("https://a.example/x", Some("A"), None));
+        assert_eq!(bookmarks.get(addressed).unwrap().title, "A");
         assert!(bookmarks.get(blank).unwrap().missing_details());
         let icon = Favicon::new(1, 1, &[1, 2, 3, 4]).unwrap();
         assert!(bookmarks.fill_details(

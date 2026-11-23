@@ -147,7 +147,7 @@ impl AppState {
             .browser
             .tab(tab)
             .filter(|tab| !tab.is_internal() && !tab.url.is_empty() && tab.url != "about:blank")
-            .map(|tab| (tab.label().to_owned(), tab.url.clone()))
+            .map(|tab| (tab.title.trim().to_owned(), tab.url.clone()))
         else {
             return;
         };
@@ -307,7 +307,7 @@ impl AppState {
             .tabs()
             .iter()
             .filter(|tab| !tab.is_internal() && !tab.url.is_empty() && tab.url != "about:blank")
-            .map(|tab| (tab.label().to_owned(), tab.url.clone()))
+            .map(|tab| (tab.title.trim().to_owned(), tab.url.clone()))
             .collect();
         if pages.is_empty() {
             return;
