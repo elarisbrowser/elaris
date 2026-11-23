@@ -730,13 +730,8 @@ mod tests {
         runtime.frame(0.016);
         runtime.frame(0.5);
         let labels = menu_labels(&runtime);
-        let title = runtime
-            .state
-            .browser
-            .active_tab()
-            .unwrap()
-            .label()
-            .to_owned();
+        let title = runtime.state.bookmarks().bar()[0].label().to_owned();
+        assert_eq!(title, "example.com");
         assert_eq!(
             labels,
             [
@@ -755,5 +750,33 @@ mod tests {
 
         let horizontal = super::tests::runtime(TabLayout::Horizontal, true);
         assert!(horizontal.presented("bookmarks-button").is_none());
+    }
+
+    #[test]
+    fn the_sidebar_menu_slides_its_highlight_to_the_hovered_row() {
+        let mut runtime = runtime(TabLayout::Vertical, true);
+        runtime.update(|state, _| state.bookmarks.sidebar_menu = true);
+        runtime.frame(0.016);
+        runtime.frame(0.5);
+        let row = runtime
+            .elements()
+            .into_iter()
+            .find(|element| {
+                element.role == "menuitem"
+                    && element
+                        .key
+                        .as_deref()
+                        .is_some_and(|key| key.starts_with("bookmarks-sidebar-menu-item"))
+            })
+            .and_then(|element| element.key)
+            .unwrap();
+        let ([x, y, w, h], _) = runtime.presented(&row).unwrap();
+        runtime.pointer_move(x + w / 2.0, y + h / 2.0);
+        runtime.frame(0.6);
+        runtime.frame(0.7);
+        assert_eq!(
+            runtime.state.context_menu_highlight.as_deref(),
+            Some(row.as_str())
+        );
     }
 }

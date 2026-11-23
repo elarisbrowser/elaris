@@ -18,6 +18,22 @@ pub(crate) fn scope(state: &AppState) -> &'static str {
         "page-context-menu-item"
     } else if state.omnibox.search_engine_menu_open {
         "search-engine-menu-item"
+    } else if state.bookmarks.sidebar_menu {
+        "bookmarks-sidebar-menu-item"
+    } else if !state.bookmarks.open_folders.is_empty() {
+        // Each bar folder's menu is keyed by its folder.
+        "bookmark-folder-"
+    } else if state.bookmarks.row_menu.is_some() {
+        "bookmarks-menu-"
+    } else if state
+        .bookmarks
+        .editor
+        .as_ref()
+        .is_some_and(|editor| editor.folder_menu_open)
+    {
+        "bookmark-editor-folder-item"
+    } else if state.translate_menu.is_some() {
+        "translate-menu-item"
     } else {
         ""
     }
