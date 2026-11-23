@@ -52,11 +52,14 @@ pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
     }
 }
 
-/// Whether the Linux row shows its window controls and holds the page below it: with the sidebar
-/// closed, or while the pointer is at the top edge or in the row.
+/// Whether the Linux row shows its window controls and holds the page below it: always with the
+/// sidebar closed or on the right, otherwise while the pointer is at the top edge or in the row.
 #[cfg(elaris_ui = "linux")]
 pub(crate) fn header_revealed(state: &AppState) -> bool {
-    state.sidebar.collapsed || state.titlebar.is_visible() || state.zoom_menu.is_some()
+    state.sidebar.collapsed
+        || state.sidebar_on_right()
+        || state.titlebar.is_visible()
+        || state.zoom_menu.is_some()
 }
 
 /// A passive hit target that sits at the window's top edge while the toolbar is closed.
@@ -145,7 +148,7 @@ fn header_content(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>, reveal
 
     #[cfg(elaris_ui = "linux")]
     if flipped {
-        return flipped_header(state, lead, revealed, cx, theme);
+        return flipped_header(state, lead, cx, theme);
     }
 
     let mut header = row()
@@ -166,28 +169,17 @@ fn header_content(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>, reveal
     header
 }
 
-/// The Linux row with a right-hand sidebar: the buttons hold the sidebar's column at the window's
-/// right edge, and the window controls, when revealed, take the left.
+/// The Linux row with a right-hand sidebar: the window controls take the left, and the buttons
+/// hold the sidebar's column at the window's right edge.
 #[cfg(elaris_ui = "linux")]
-fn flipped_header(
-    state: &AppState,
-    lead: El,
-    revealed: bool,
-    cx: &mut Cx<AppState>,
-    theme: &Theme,
-) -> El {
-    let header = row()
+fn flipped_header(state: &AppState, lead: El, cx: &mut Cx<AppState>, theme: &Theme) -> El {
+    row()
         .key("header")
         .h(theme::HEADER_HEIGHT)
         .gap(theme::NAV_GAP)
         .center_y()
         .absolute(0.0, 0.0)
-        .w_full();
-    if !revealed {
-        // Only the buttons drag the window, so the page keeps its top edge.
-        return header.child(spacer()).child(lead.window_drag());
-    }
-    header
+        .w_full()
         .window_drag()
         .pl(theme::SIDEBAR_PADDING)
         .children(fading_window_controls(state, theme, cx))
