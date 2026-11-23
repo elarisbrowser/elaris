@@ -163,7 +163,6 @@ fn nav_button(
         .radius(theme::MENU_NAV_RADIUS)
         .continuous_corners()
         .fill(theme.overlay_control)
-        .border(1.0, theme.separator)
         .disabled(!enabled)
         .focusable(enabled)
         .child(
