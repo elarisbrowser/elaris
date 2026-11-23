@@ -33,13 +33,16 @@ pub(crate) fn load_or_create(path: &Path) -> Result<ConfigLoad, String> {
         Ok(contents) => parse(&contents),
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
             write_atomic(path, DEFAULT_CONFIG.as_bytes()).map_err(|error| {
-                format!("cannot create configuration {}: {error}", path.display())
+                format!(
+                    "cannot create configuration {}: {error}",
+                    crate::storage::display_path(path)
+                )
             })?;
             parse(DEFAULT_CONFIG)
         }
         Err(error) => Err(format!(
             "cannot read configuration {}: {error}",
-            path.display()
+            crate::storage::display_path(path)
         )),
     }
 }
@@ -363,8 +366,12 @@ fn write_site_setting(
     if sites.is_empty() {
         document.as_table_mut().remove("permissions");
     }
-    write_atomic(path, document.to_string().as_bytes())
-        .map_err(|error| format!("cannot save configuration {}: {error}", path.display()))
+    write_atomic(path, document.to_string().as_bytes()).map_err(|error| {
+        format!(
+            "cannot save configuration {}: {error}",
+            crate::storage::display_path(path)
+        )
+    })
 }
 
 fn string_value(
@@ -539,8 +546,12 @@ pub(crate) fn write_change(path: &Path, change: &SettingsChange) -> Result<(), S
         table.insert(key, Item::Value(new_value));
     }
 
-    write_atomic(path, document.to_string().as_bytes())
-        .map_err(|error| format!("cannot save configuration {}: {error}", path.display()))
+    write_atomic(path, document.to_string().as_bytes()).map_err(|error| {
+        format!(
+            "cannot save configuration {}: {error}",
+            crate::storage::display_path(path)
+        )
+    })
 }
 
 fn write_atomic(path: &Path, contents: &[u8]) -> io::Result<()> {

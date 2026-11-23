@@ -66,7 +66,7 @@ pub(super) fn configure_download_directory(
     std::fs::create_dir_all(path).map_err(|error| {
         format!(
             "cannot create download directory {}: {error}",
-            path.display()
+            crate::storage::display_path(path)
         )
     })?;
     ladybird.set_download_directory(path)

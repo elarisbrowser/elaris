@@ -98,6 +98,50 @@ impl Paths {
     }
 }
 
+/// A path for a message. The home directory shows as `~`, so logs and errors do not carry the user's name.
+pub(crate) fn display_path(path: &Path) -> String {
+    redact_home(path, std::env::var_os("HOME").map(PathBuf::from).as_deref())
+}
+
+fn redact_home(path: &Path, home: Option<&Path>) -> String {
+    if let Some(home) = home
+        && let Ok(rest) = path.strip_prefix(home)
+    {
+        return format!("~/{}", rest.display());
+    }
+    path.display().to_string()
+}
+
+#[cfg(test)]
+mod redaction_tests {
+    use super::redact_home;
+    use std::path::Path;
+
+    #[test]
+    fn the_home_directory_shows_as_tilde() {
+        let home = Path::new("/Users/someone");
+        assert_eq!(
+            redact_home(
+                Path::new("/Users/someone/Library/Application Support/Elaris/session.json"),
+                Some(home)
+            ),
+            "~/Library/Application Support/Elaris/session.json"
+        );
+        assert_eq!(
+            redact_home(Path::new("/var/tmp/profile"), Some(home)),
+            "/var/tmp/profile"
+        );
+        assert_eq!(
+            redact_home(Path::new("/Users/someonelse/x"), Some(home)),
+            "/Users/someonelse/x"
+        );
+        assert_eq!(
+            redact_home(Path::new("/Users/someone/x"), None),
+            "/Users/someone/x"
+        );
+    }
+}
+
 pub(crate) fn default_download_directory() -> PathBuf {
     let home = std::env::var_os("HOME")
         .map(PathBuf::from)

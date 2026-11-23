@@ -22,7 +22,7 @@ use elaris::history::{Cursor, Entry, History, Page};
 mod paths;
 mod session;
 
-pub(crate) use paths::{Paths, default_download_directory};
+pub(crate) use paths::{Paths, default_download_directory, display_path};
 use session::write_sessions_atomic;
 pub(crate) use session::{Session, SessionFavicon, SessionSplit, SessionTab};
 
@@ -333,7 +333,7 @@ impl Storage {
             Err(error) => {
                 eprintln!(
                     "Elaris: ignoring unreadable session {}: {error}",
-                    paths.session_file.display()
+                    display_path(&paths.session_file)
                 );
                 None
             }
@@ -353,7 +353,7 @@ impl Storage {
             .unwrap_or_else(|error| {
                 eprintln!(
                     "Elaris: ignoring unreadable download history {}: {error}",
-                    paths.download_history_file.display()
+                    display_path(&paths.download_history_file)
                 );
                 Vec::new()
             });
@@ -612,7 +612,7 @@ fn run_worker(
         Err(error) => {
             eprintln!(
                 "Elaris: cannot open history {}: {error}",
-                history_file.display()
+                display_path(&history_file)
             );
             None
         }

@@ -78,8 +78,12 @@ impl Runtime {
     ) -> Result<(Self, Option<String>), String> {
         // Ladybird finds its resources beside its helper processes unless a path overrides them.
         let resources = std::env::var_os("ELARIS_LADYBIRD_RESOURCE_DIR").map(PathBuf::from);
-        std::fs::create_dir_all(&profile)
-            .map_err(|e| format!("cannot create profile {}: {e}", profile.display()))?;
+        std::fs::create_dir_all(&profile).map_err(|e| {
+            format!(
+                "cannot create profile {}: {e}",
+                crate::storage::display_path(&profile)
+            )
+        })?;
         let events = Rc::new(RefCell::new(Vec::new()));
         let sink = Rc::clone(&events);
         let mut ladybird = Ladybird::new(resources.as_deref(), &profile, move |view, event| {
