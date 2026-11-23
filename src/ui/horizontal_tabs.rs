@@ -94,28 +94,29 @@ pub(super) fn view(
     #[cfg(elaris_ui = "linux")]
     let inset = (theme::ICON_BUTTON + theme::NAV_GAP) * window_controls.len() as f32;
 
-    // Compact tabs share their row with the toolbar: navigation leads, the address bar trails.
+    // Compact tabs share their row with the toolbar: navigation and the address bar lead, the
+    // tabs follow, and downloads trail.
     let compact = state.compact_tabs();
     let mut toolbar = Vec::new();
     let mut trailing = Vec::new();
     if compact {
         toolbar.extend(header::navigation(state, theme));
-        trailing.push(
-            super::omnibox::address_bar(state, cx, theme, reduced, overlays)
-                .w(theme::COMPACT_ADDRESS_WIDTH)
-                .grow(0.0),
-        );
         trailing.extend(super::bookmarks::expand_button(state, theme));
         trailing.push(downloads::trigger(state, theme, overlays));
     }
-    // Each item in the strip takes its width and the gap after it.
-    let toolbar_width = (toolbar.len() + trailing.len().saturating_sub(1)) as f32
-        * (theme::ICON_BUTTON + theme::NAV_GAP)
-        + if compact {
-            theme::COMPACT_ADDRESS_WIDTH + theme::NAV_GAP
-        } else {
-            0.0
-        };
+    // Each button in the strip takes its width and the gap after it; the address bar holds its
+    // width so the tabs, not it, give way in a narrow window.
+    let mut toolbar_width = (toolbar.len() + trailing.len().saturating_sub(1)) as f32
+        * (theme::ICON_BUTTON + theme::NAV_GAP);
+    if compact {
+        toolbar.push(
+            super::omnibox::address_bar(state, cx, theme, reduced, overlays)
+                .w(theme::COMPACT_ADDRESS_WIDTH)
+                .min_w(theme::COMPACT_ADDRESS_WIDTH)
+                .grow(0.0),
+        );
+        toolbar_width += theme::COMPACT_ADDRESS_WIDTH + theme::NAV_GAP;
+    }
 
     let strip_width = state.sidebar.horizontal_strip_width.unwrap_or_else(|| {
         cx.layout_size("window")

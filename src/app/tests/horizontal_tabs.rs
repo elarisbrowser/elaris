@@ -776,10 +776,13 @@ fn compact_tabs_fold_the_toolbar_into_the_tab_strip() {
     let strip = rect(&runtime, "horizontal-tab-strip");
     let address = rect(&runtime, "horizontal-address-bar");
     assert!(address[1] >= strip[1] && address[1] + address[3] <= strip[1] + strip[3]);
-    let inset = runtime.state.page_inset();
+    // The address bar leads at its full width, and the tabs follow it.
+    assert_eq!(address[2], theme::COMPACT_ADDRESS_WIDTH);
+    assert!(address[0] + address[2] <= rect(&runtime, "horizontal-tab-sections")[0]);
+    // The page meets the strip, whose own margin spaces it from the tabs.
     assert_eq!(
         crate::ui::viewport::page_origin(&runtime.state)[1],
-        theme::HORIZONTAL_STRIP_HEIGHT + inset
+        theme::HORIZONTAL_STRIP_HEIGHT
     );
 }
 

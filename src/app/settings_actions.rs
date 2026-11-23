@@ -114,6 +114,16 @@ impl super::AppState {
         }
     }
 
+    /// The gap above the page in the horizontal layout. Compact tabs already leave the strip's
+    /// own margin below the tabs, so the page meets it there and they sit evenly in their row.
+    pub(crate) fn page_top_inset(&self) -> f32 {
+        if self.compact_tabs() {
+            0.0
+        } else {
+            self.page_inset()
+        }
+    }
+
     /// The page's corner radius; square when edge to edge.
     pub(crate) fn page_radius(&self) -> f32 {
         match self.settings.page_style {

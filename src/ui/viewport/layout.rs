@@ -40,7 +40,13 @@ pub(crate) fn view(
         .min_w(0.0)
         .min_h(0.0)
         // With the sidebar hidden, the page sits below the header and in from the left edge too.
-        .pt(if horizontal { inset } else { top_padding })
+        .pt(if fullscreen {
+            0.0
+        } else if horizontal {
+            state.page_top_inset()
+        } else {
+            top_padding
+        })
         .pl(if horizontal || state.sidebar.collapsed || right {
             inset
         } else {

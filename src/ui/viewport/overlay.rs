@@ -70,7 +70,9 @@ pub(crate) fn page_origin(state: &AppState) -> [f32; 2] {
     if state.horizontal_tabs() {
         [
             inset + offset[0],
-            crate::ui::bookmarks::horizontal_chrome_height(state) + inset + offset[1],
+            crate::ui::bookmarks::horizontal_chrome_height(state)
+                + state.page_top_inset()
+                + offset[1],
         ]
     } else {
         [left + offset[0], top + offset[1]]
