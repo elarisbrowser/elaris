@@ -57,6 +57,16 @@ function(elaris_add_ladybird_bridge)
             "${ELARIS_BRIDGE_DIR}/src/picture_in_picture_macos.mm"
             "${ELARIS_BRIDGE_DIR}/src/media_controls_macos.mm"
             "${LADYBIRD_SOURCE_DIR}/UI/Qt/MicrophoneAuthorizerMacOS.mm")
+        # Ladybird's macOS translator reaches Apple's Translation framework through its Swift library, which Ladybird's
+        # UI builds only with Swift and a recent enough SDK. Without it, pages are not offered translation.
+        if(TARGET ladybird_translation_service)
+            list(APPEND objc_sources
+                "${LADYBIRD_SOURCE_DIR}/UI/Qt/TranslatorMac.mm"
+                "${LADYBIRD_SOURCE_DIR}/UI/Qt/Conversions.mm")
+            target_link_libraries(elaris_ladybird PRIVATE ladybird_translation_service "-framework NaturalLanguage")
+            target_link_options(elaris_ladybird PRIVATE "LINKER:-weak_framework,Translation")
+            target_compile_definitions(elaris_ladybird PRIVATE ELARIS_HAS_TRANSLATOR)
+        endif()
         target_sources(elaris_ladybird PRIVATE ${objc_sources})
         set_source_files_properties(${objc_sources} PROPERTIES COMPILE_FLAGS "-fobjc-arc")
         target_link_libraries(elaris_ladybird PRIVATE
@@ -86,7 +96,7 @@ function(elaris_add_ladybird_bridge)
         "${CMAKE_BINARY_DIR}/Libraries"
         "${CMAKE_BINARY_DIR}/Services"
     )
-    target_link_libraries(elaris_ladybird PRIVATE AK LibWebView LibWebCommon LibCore LibFileSystem LibGfx LibIPC LibURL)
+    target_link_libraries(elaris_ladybird PRIVATE AK LibWebView LibWebCommon LibCore LibFileSystem LibGfx LibIPC LibURL LibUnicode)
 
     if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
         target_compile_options(elaris_ladybird PRIVATE -Wall -Wextra -Wpedantic)

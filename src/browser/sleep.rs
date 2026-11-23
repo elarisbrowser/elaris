@@ -79,6 +79,7 @@ impl Browser {
         tab.navigation_items.clear();
         tab.can_go_back = false;
         tab.can_go_forward = false;
+        tab.translation = Default::default();
         tab.engine = Applied {
             pending_load: Some(tab.url.clone()),
             deferred_load: true,

@@ -283,6 +283,11 @@ unsafe extern "C" {
     pub(super) fn elaris_ladybird_find_end(view: *mut RawView) -> i32;
     pub(super) fn elaris_ladybird_selected_text(view: *mut RawView, request_id: u64) -> i32;
     pub(super) fn elaris_ladybird_take_screenshot(view: *mut RawView, full: i32) -> i32;
+    pub(super) fn elaris_ladybird_translate(
+        view: *mut RawView,
+        language: *const c_char,
+        download: i32,
+    ) -> i32;
     pub(super) fn elaris_ladybird_edit(
         view: *mut RawView,
         command: i32,

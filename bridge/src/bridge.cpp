@@ -47,6 +47,11 @@
 #include <LibWebView/ProcessSnapshot.h>
 #include <LibWebView/Settings.h>
 #include <LibWebView/Utilities.h>
+#include <LibWebView/PageTranslation.h>
+#include <LibUnicode/DisplayNames.h>
+#if defined(ELARIS_HAS_TRANSLATOR)
+#include <UI/Qt/TranslatorMac.h>
+#endif
 #if defined(AK_OS_MACOS)
 #include <UI/Qt/MicrophoneAuthorizerMacOS.h>
 
@@ -152,6 +157,9 @@ class ElarisApplication final : public WebView::Application {
         : WebView::Application(AK::move(helper_directory)) {
 #if defined(AK_OS_MACOS)
         set_spell_checker(Elaris::make_spell_checker_macos());
+#endif
+#if defined(ELARIS_HAS_TRANSLATOR)
+        set_translator(Ladybird::create_platform_translator());
 #endif
     }
     // The host process is Elaris, not a Ladybird browser, so its own crashes are never captured or reported.
@@ -485,6 +493,8 @@ struct ElarisLadybirdView {
     bool accessibility{};
     // A Picture-in-Picture window's own view. Rust never sees it, and media keys leave it out.
     bool picture_in_picture{};
+    // The translation state last reported, so only changes are sent.
+    std::string translation_state{};
 };
 
 static AK::OwnPtr<ElarisApplication> s_application;
@@ -615,6 +625,92 @@ static void emit(ElarisLadybirdView const* view, ElarisLadybirdEventKind kind, s
     event.text = text.c_str();
     event.value = value;
     view->bridge->callback(view->bridge->context, &event);
+}
+
+// Elaris's own strings are English, so languages are named in English, as Ladybird's menu names them.
+static String language_display_name(StringView language) {
+    auto primary_language = WebView::primary_language_subtag(language);
+    if (auto name = Unicode::language_display_name("en"sv, primary_language, Unicode::LanguageDisplay::Standard);
+        name.has_value())
+        return name->to_utf8();
+    return MUST(String::from_utf8(primary_language));
+}
+
+// What the page menu offers to translate the page into, as {"offered","translated","items":[{"language","label",
+// "checked","download","enabled"}]}. The items are worded as Ladybird's own translation menu words them.
+static void emit_translation(ElarisLadybirdView& handle) {
+    auto& translation = handle.view->page_translation();
+    auto target_language = translation.target_language();
+    JsonArray items;
+    for (auto const& target : translation.target_languages()) {
+        auto name = language_display_name(target.language);
+        if (!target.needs_download) {
+            JsonObject item;
+            item.set("language"sv, target.language);
+            item.set("label"sv, MUST(String::formatted("Translate to {}", name)));
+            item.set("checked"sv, target_language.has_value() && WebView::is_same_language(*target_language, target.language));
+            item.set("download"sv, false);
+            item.set("enabled"sv, true);
+            MUST(items.append(move(item)));
+        }
+        if (!target.needs_download && !target.faster_after_download)
+            continue;
+        // "Download Dutch to Translate to English…" for a Dutch page, but "Download Italian to Translate…" for an
+        // English one.
+        String names = "Languages"_string;
+        auto suffix = MUST(String::formatted(" to {}", name));
+        if (!target.languages_to_download.is_empty()) {
+            Vector<String> download_names;
+            for (auto const& language : target.languages_to_download)
+                download_names.append(language_display_name(language));
+            names = MUST(String::join(" and "sv, download_names));
+            if (any_of(target.languages_to_download, [&](auto const& language) {
+                    return WebView::is_same_language(language, target.language);
+                }))
+                suffix = {};
+        }
+        auto verb = target.downloading ? "Downloading"sv : "Download"sv;
+        auto purpose = target.needs_download ? "Translate"sv : "Faster Translation"sv;
+        JsonObject item;
+        item.set("language"sv, target.language);
+        item.set("label"sv, MUST(String::formatted("{} {} for {}{}…", verb, names, purpose, suffix)));
+        if (target.needs_download)
+            item.set("label"sv, MUST(String::formatted("{} {} to Translate{}…", verb, names, suffix)));
+        item.set("checked"sv, false);
+        item.set("download"sv, true);
+        item.set("enabled"sv, !target.downloading);
+        MUST(items.append(move(item)));
+    }
+    JsonObject state;
+    state.set("offered"sv, translation.is_offered());
+    state.set("translated"sv, translation.is_translated());
+    state.set("items"sv, move(items));
+    auto json = state.serialized().to_byte_string();
+    std::string text{json.characters(), json.length()};
+    if (text == handle.translation_state)
+        return;
+    handle.translation_state = text;
+    emit(&handle, ELARIS_LADYBIRD_TRANSLATION, text);
+}
+
+extern "C" int32_t elaris_ladybird_translate(ElarisLadybirdView* handle, char const* language, int32_t download) {
+    if (!handle)
+        return fail("view is required");
+    if (!on_owner_thread(handle->bridge))
+        return fail("translation must be asked for on the initialization thread");
+    auto& translation = handle->view->page_translation();
+    if (!language || !*language) {
+        translation.show_original();
+        return succeed();
+    }
+    auto target = String::from_utf8(StringView{language, strlen(language)});
+    if (target.is_error())
+        return fail("invalid language");
+    if (download)
+        translation.download_languages_for(target.release_value());
+    else
+        translation.translate_to(target.release_value());
+    return succeed();
 }
 
 static void set_web_fullscreen(ElarisLadybirdView& handle, bool fullscreen) {
@@ -1641,6 +1737,7 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
     handle->view->on_favicon_change = [handle](Optional<Gfx::Bitmap const&> favicon) { emit_favicon(handle, favicon); };
     handle->view->on_ready_to_paint = [handle] { emit(handle, ELARIS_LADYBIRD_FRAME); };
     handle->view->on_navigation_state_change = [handle] {
+        emit_translation(*handle);
         auto const& view = *handle->view;
         emit(handle, ELARIS_LADYBIRD_HISTORY, {},
              (view.can_navigate_back() ? ELARIS_LADYBIRD_HISTORY_BACK : 0) |

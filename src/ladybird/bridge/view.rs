@@ -174,6 +174,17 @@ impl WebView {
         })
     }
 
+    /// Translates the page into `language`, or downloads what that needs; with no language, shows
+    /// the page as it was.
+    pub fn translate(&mut self, language: &str, download: bool) -> Result<(), String> {
+        let language = CString::new(language)
+            .map_err(|_| "language contains an interior NUL byte".to_owned())?;
+        // SAFETY: The view is live on its owner's thread, and the string outlives the call.
+        status_result(unsafe {
+            elaris_ladybird_translate(self.raw.as_ptr(), language.as_ptr(), i32::from(download))
+        })
+    }
+
     pub fn load(&mut self, url: &str) -> Result<(), String> {
         let url = CString::new(url).map_err(|_| "URL contains an interior NUL byte".to_owned())?;
         // SAFETY: The view is live on its owner's thread.

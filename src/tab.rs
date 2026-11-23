@@ -114,6 +114,8 @@ pub(crate) struct Tab {
     pub(crate) playing_audio: bool,
     /// The page's process crashed or ran out of memory; a reload recovers it.
     pub(crate) crash: Option<elaris::ladybird::Crash>,
+    /// What the page can be translated into.
+    pub(crate) translation: elaris::ladybird::Translation,
     /// Memory Saver closed the page's view; it loads again when next shown.
     pub(crate) asleep: bool,
     /// When the tab was last shown, from which Memory Saver judges how idle it is.
@@ -179,6 +181,7 @@ impl Tab {
             web_fullscreen: false,
             playing_audio: false,
             crash: None,
+            translation: Default::default(),
             asleep: false,
             last_seen: std::time::Instant::now(),
             permissions_in_use: [false; PermissionKind::ALL.len()],
@@ -225,6 +228,7 @@ impl Tab {
             web_fullscreen: false,
             playing_audio: false,
             crash: None,
+            translation: Default::default(),
             asleep: false,
             last_seen: std::time::Instant::now(),
             permissions_in_use: [false; PermissionKind::ALL.len()],
@@ -282,6 +286,7 @@ impl Tab {
             }
             TabUpdate::WebFullscreen(active) => self.web_fullscreen = active,
             TabUpdate::PlayingAudio(playing) => self.playing_audio = playing,
+            TabUpdate::Translation(translation) => self.translation = translation,
             TabUpdate::Crashed(crash) => {
                 self.thumbnail = None;
                 self.loading = false;
@@ -489,6 +494,19 @@ mod tests {
         assert!(!tab.loading && tab.busy());
         tab.update(TabUpdate::Crashed(None));
         assert_eq!(tab.crash, None);
+    }
+
+    #[test]
+    fn takes_in_what_the_page_can_be_translated_into() {
+        let json = r#"{"offered":true,"translated":false,"items":[
+            {"language":"en","label":"Translate to English","checked":false,"download":false,"enabled":true},
+            {"language":"de","label":"Download German to Translate…","checked":false,"download":true,"enabled":true}]}"#;
+        let translation: elaris::ladybird::Translation = serde_json::from_str(json).unwrap();
+        let mut tab = tab("https://example.fr/");
+        tab.update(TabUpdate::Translation(translation));
+        assert!(tab.translation.offered && !tab.translation.translated);
+        assert_eq!(tab.translation.items[0].label, "Translate to English");
+        assert!(tab.translation.items[1].download);
     }
 
     #[test]

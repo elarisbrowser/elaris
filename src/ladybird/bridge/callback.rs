@@ -187,6 +187,7 @@ pub(super) unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEv
             },
             27 => Event::WebFullscreen(raw.value != 0),
             34 => Event::PlayingAudio(raw.value != 0),
+            37 => Event::Translation(serde_json::from_str(&text).unwrap_or_default()),
             36 => Event::Screenshot(if raw.value != 0 {
                 Ok(text.into())
             } else {

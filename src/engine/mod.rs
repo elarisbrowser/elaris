@@ -261,6 +261,12 @@ pub(crate) enum ViewCommand {
         request_id: u64,
         response: Option<String>,
     },
+    /// Translates the page into `language`, or downloads what that needs; an empty language shows
+    /// the page as it was.
+    Translate {
+        language: String,
+        download: bool,
+    },
     /// Saves a PNG of the visible page, or the whole page, to the download directory.
     Screenshot {
         full: bool,
@@ -390,6 +396,7 @@ pub(crate) enum TabUpdate {
     WebFullscreen(bool),
     PlayingAudio(bool),
     Crashed(Option<elaris::ladybird::Crash>),
+    Translation(elaris::ladybird::Translation),
     /// Whether the page cancelled a wheel event; a cancelled wheel keeps its gesture from becoming a swipe.
     WheelResult(bool),
     PermissionUse(elaris_core::permissions::PermissionKind, bool),

@@ -196,6 +196,8 @@ pub enum Event {
     WebFullscreen(bool),
     /// Whether the page is playing audio.
     PlayingAudio(bool),
+    /// What the page can be translated into.
+    Translation(Translation),
     /// Where a screenshot was saved, or why it could not be.
     Screenshot(Result<std::path::PathBuf, String>),
     /// The page's process ended, or `None` once a reload recovered the tab.
@@ -433,4 +435,23 @@ pub struct Crash {
     /// The page that was showing, which a reload loads again.
     pub url: String,
     pub out_of_memory: bool,
+}
+
+/// What a page can be translated into, as Ladybird's translation menu offers it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Deserialize)]
+pub struct Translation {
+    /// The page is in a language the user doesn't read, and the platform can translate it.
+    pub offered: bool,
+    pub translated: bool,
+    pub items: Vec<TranslationItem>,
+}
+
+/// One choice: translate into a language, or download what translating into it needs.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+pub struct TranslationItem {
+    pub language: String,
+    pub label: String,
+    pub checked: bool,
+    pub download: bool,
+    pub enabled: bool,
 }

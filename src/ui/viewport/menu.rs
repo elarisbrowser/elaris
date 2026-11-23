@@ -310,6 +310,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
                 s.browser.send(id, ViewCommand::Screenshot { full: true })
             }))
             .separator();
+        menu = translation_items(menu, tab);
     }
     if !info.selection.is_empty() {
         let text = info.selection.clone();
@@ -330,4 +331,44 @@ pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
         }));
     }
     menu.build(state, theme, layer);
+}
+
+/// Translate to each language Ladybird offers, the downloads some need, and Show Original once
+/// the page is translated. Nothing while the page is in a language the user reads.
+fn translation_items(mut menu: Menu, tab: &Tab) -> Menu {
+    let translation = &tab.translation;
+    if !translation.offered && !translation.translated {
+        return menu;
+    }
+    let id = tab.id();
+    menu = menu.group_label("Translate");
+    for choice in &translation.items {
+        let language = choice.language.clone();
+        let download = choice.download;
+        menu = menu.item(
+            item(id, &choice.label, move |s, _| {
+                s.browser.send(
+                    id,
+                    ViewCommand::Translate {
+                        language: language.clone(),
+                        download,
+                    },
+                )
+            })
+            .checked(choice.checked)
+            .disabled(!choice.enabled),
+        );
+    }
+    if translation.translated {
+        menu = menu.item(item(id, "Show Original", move |s, _| {
+            s.browser.send(
+                id,
+                ViewCommand::Translate {
+                    language: String::new(),
+                    download: false,
+                },
+            )
+        }));
+    }
+    menu.separator()
 }

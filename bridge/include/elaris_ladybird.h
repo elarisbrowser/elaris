@@ -60,6 +60,9 @@ typedef enum {
     ELARIS_LADYBIRD_CRASHED = 35,
     /* A screenshot was saved, its path in text, with value 1; or it failed, the reason in text, with value 0. */
     ELARIS_LADYBIRD_SCREENSHOT = 36,
+    /* What the page can be translated into, as JSON in text: {"offered","translated","items":[{"language","label",
+     * "checked","download","enabled"}]}. */
+    ELARIS_LADYBIRD_TRANSLATION = 37,
 } ElarisLadybirdEventKind;
 
 /* Permission event text is the origin and selection is the permission key.
@@ -405,6 +408,9 @@ int32_t elaris_ladybird_find_end(ElarisLadybirdView*);
 int32_t elaris_ladybird_selected_text(ElarisLadybirdView*, uint64_t request_id);
 /* Saves a PNG of the visible page, or of the whole page when full is nonzero, to the download directory. */
 int32_t elaris_ladybird_take_screenshot(ElarisLadybirdView*, int32_t full);
+/* Translates the page into language, or downloads what that needs when download is nonzero. An empty language shows
+ * the page as it was. */
+int32_t elaris_ladybird_translate(ElarisLadybirdView*, char const* language, int32_t download);
 int32_t elaris_ladybird_key_event(ElarisLadybirdView* view, const ElarisLadybirdKeyEvent* event);
 int32_t elaris_ladybird_set_focus(ElarisLadybirdView* view, int32_t focused);
 /* Sets the colour scheme every page sees through prefers-color-scheme: nonzero for dark, zero for light. It is
