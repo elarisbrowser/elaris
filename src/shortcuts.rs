@@ -52,6 +52,7 @@ pub(crate) enum Shortcut {
     /// Go forward in the active tab's history.
     Forward,
     /// Has no key of its own; the menu bar and the internal pages' menu open it.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     OpenTaskManager,
 }
 
@@ -128,6 +129,7 @@ const fn bind_option(shortcut: Shortcut, key: &'static str) -> Binding {
 
 impl Shortcut {
     /// The chord that runs this shortcut, if it has one.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) fn binding(self) -> Option<Binding> {
         BINDINGS
             .iter()
