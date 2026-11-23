@@ -297,6 +297,16 @@ enum {
 /* Clears the selected engine data last used at or after since_ms (Unix milliseconds; negative clears all
  * time). Completion arrives as BROWSING_DATA_CLEARED with the same request id. */
 int32_t elaris_ladybird_clear_browsing_data(ElarisLadybird*, int64_t since_ms, int32_t flags, uint64_t request_id);
+/* Describes every Ladybird process, as Ladybird's Task Manager shows them, in a JSON array written to *out_json. Each
+ * entry is {"id", "pid", "kind", "private", "title", "site", "owner", "cpu", "memory", "spare", "tabs", "frames"}:
+ * "id" is the process's child ID, which never names another process, "kind" its process name, "site" the site it
+ * works for (empty for none), "owner" the child ID of the process it works for (null for none), "memory" bytes, and
+ * "cpu" percent of one core. "tabs" are [{"view", "title"}] with the host's view id, or 0 for a view Elaris does not
+ * own, and "frames" are [{"name", "url", "sandboxed"}]. Free the string with elaris_ladybird_free_string(). */
+int32_t elaris_ladybird_processes(ElarisLadybird*, char** out_json);
+/* Ends the process with this child ID; a process that is already gone counts as ended. */
+int32_t elaris_ladybird_end_process(ElarisLadybird*, uint64_t child_id);
+void elaris_ladybird_free_string(char*);
 /* Replaces the autoplay default and site exceptions. Policies are 0 allow, 1 block audio, 2 block all;
  * json is an array of [origin, policy] rows. */
 int32_t elaris_ladybird_set_autoplay(ElarisLadybird*, int32_t default_policy, char const* json);

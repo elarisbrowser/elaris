@@ -203,6 +203,12 @@ unsafe extern "C" {
         enabled: i32,
         json: *const c_char,
     ) -> i32;
+    pub(super) fn elaris_ladybird_processes(
+        bridge: *mut RawBridge,
+        out_json: *mut *mut c_char,
+    ) -> i32;
+    pub(super) fn elaris_ladybird_end_process(bridge: *mut RawBridge, child_id: u64) -> i32;
+    pub(super) fn elaris_ladybird_free_string(string: *mut c_char);
     pub(super) fn elaris_ladybird_clear_browsing_data(
         bridge: *mut RawBridge,
         since_ms: i64,

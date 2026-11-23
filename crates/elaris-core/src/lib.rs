@@ -15,4 +15,5 @@ pub mod internal;
 pub mod paths;
 pub mod perf;
 pub mod permissions;
+pub mod processes;
 pub mod settings;

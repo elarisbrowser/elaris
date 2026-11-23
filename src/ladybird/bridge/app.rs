@@ -228,6 +228,26 @@ impl Ladybird {
         })
     }
 
+    /// Every Ladybird process, as Ladybird's Task Manager describes them.
+    pub fn processes(&mut self) -> Result<Vec<elaris_core::processes::Process>, String> {
+        let mut json = std::ptr::null_mut();
+        // SAFETY: The bridge is live on its owner thread and writes an owned string on success.
+        status_result(unsafe { elaris_ladybird_processes(self.owner.raw.as_ptr(), &mut json) })?;
+        // SAFETY: The bridge returned a NUL-terminated string that stays valid until it is freed below.
+        let text = unsafe { std::ffi::CStr::from_ptr(json) }
+            .to_string_lossy()
+            .into_owned();
+        // SAFETY: The string came from the bridge, which frees it, and is not used after.
+        unsafe { elaris_ladybird_free_string(json) };
+        elaris_core::processes::parse(&text)
+    }
+
+    /// Ends the process with Ladybird's child ID `id`. One that is already gone counts as ended.
+    pub fn end_process(&mut self, id: u64) -> Result<(), String> {
+        // SAFETY: The bridge is live on its owner thread.
+        status_result(unsafe { elaris_ladybird_end_process(self.owner.raw.as_ptr(), id) })
+    }
+
     /// Discards the private session once no private view remains, so the next one starts empty.
     pub fn reset_private_session(&mut self) -> Result<(), String> {
         // SAFETY: The bridge is live on its owner thread.

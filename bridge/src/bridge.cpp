@@ -43,6 +43,8 @@
 #include <LibWebView/HeadlessWebView.h>
 #include <LibWebView/PageBackingStores.h>
 #include <LibWebView/PermissionManager.h>
+#include <LibWebView/ProcessManager.h>
+#include <LibWebView/ProcessSnapshot.h>
 #include <LibWebView/Settings.h>
 #include <LibWebView/Utilities.h>
 #if defined(AK_OS_MACOS)
@@ -1903,6 +1905,91 @@ extern "C" int32_t elaris_ladybird_clear_browsing_data(ElarisLadybird* bridge, i
         ->when_resolved([report](Empty) { report(true); })
         .when_rejected([report](Error const&) { report(false); });
     return succeed();
+}
+
+// The site a process is listed under, as Ladybird's Task Manager names it: pages and request servers are isolated by
+// site, so a site's hosts, such as www.example.com and example.com, share its registrable domain.
+static String task_manager_site_label(URL::URL const& url) {
+    if (url == URL::about_blank())
+        return {};
+    if (url.host().has_value()) {
+        if (auto domain = url.host()->registrable_domain(); domain.has_value())
+            return domain.release_value();
+        if (auto host = url.serialized_host(); !host.is_empty())
+            return MUST(String::from_utf8(host));
+    }
+    if (url.scheme() == "file"sv && !url.basename().is_empty())
+        return MUST(String::from_byte_string(url.basename()));
+    return MUST(String::formatted("{}:", url.scheme()));
+}
+
+static String task_manager_frame_name(URL::URL const& url) {
+    if (url.host().has_value())
+        return MUST(String::formatted("{}{}", url.host()->serialize(), url.serialize_path()));
+    if (url.scheme() == "data"sv)
+        return "data:"_string;
+    return MUST(String::from_byte_string(url.serialize_for_display()));
+}
+
+static AK::JsonObject process_json(ElarisLadybird const& bridge, WebView::ProcessSnapshot const& process) {
+    using WebView::ProcessType;
+    AK::JsonObject object;
+    object.set("id"sv, process.child_id);
+    object.set("pid"sv, static_cast<i64>(process.pid));
+    object.set("kind"sv, WebView::process_name_from_type(process.type));
+    object.set("private"sv, process.is_private == WebView::IsPrivate::Yes);
+    object.set("title"sv, process.title.has_value() ? AK::JsonValue{process.title->to_utf8()} : AK::JsonValue{});
+    auto has_site = first_is_one_of(process.type, ProcessType::WebContent, ProcessType::RequestServer,
+                                    ProcessType::ImageDecoder);
+    object.set("site"sv, has_site && process.site_url.has_value() ? task_manager_site_label(*process.site_url)
+                                                                   : String{});
+    object.set("owner"sv, process.owner_child_id.has_value() ? AK::JsonValue{*process.owner_child_id} : AK::JsonValue{});
+    object.set("cpu"sv, static_cast<double>(process.cpu_percent));
+    object.set("memory"sv, process.memory_usage_bytes);
+    object.set("spare"sv, process.type == ProcessType::WebContent && process.title == "(spare)"_utf16);
+    AK::JsonArray tabs;
+    for (auto const& tab : process.tabs) {
+        auto view = std::find_if(bridge.views.begin(), bridge.views.end(), [&](auto const* handle) {
+            return handle->view->view_id() == tab.page.view_id;
+        });
+        AK::JsonObject entry;
+        entry.set("view"sv, view == bridge.views.end() ? 0 : (*view)->id);
+        entry.set("title"sv, tab.title.to_utf8());
+        MUST(tabs.append(move(entry)));
+    }
+    object.set("tabs"sv, move(tabs));
+    AK::JsonArray frames;
+    for (auto const& frame : process.frames) {
+        AK::JsonObject entry;
+        entry.set("name"sv, task_manager_frame_name(frame.url));
+        entry.set("url"sv, MUST(String::from_byte_string(frame.url.serialize_for_display())));
+        entry.set("sandboxed"sv, frame.is_sandboxed);
+        MUST(frames.append(move(entry)));
+    }
+    object.set("frames"sv, move(frames));
+    return object;
+}
+
+extern "C" int32_t elaris_ladybird_processes(ElarisLadybird* bridge, char** out_json) {
+    if (!bridge || !s_application || !on_owner_thread(bridge) || !out_json)
+        return fail("process snapshots require the bridge owner thread");
+    AK::JsonArray processes;
+    for (auto const& process : WebView::process_snapshots(WebView::Application::process_manager()))
+        MUST(processes.append(process_json(*bridge, process)));
+    *out_json = strdup(processes.serialized().to_byte_string().characters());
+    return *out_json ? succeed() : fail("out of memory");
+}
+
+extern "C" int32_t elaris_ladybird_end_process(ElarisLadybird* bridge, uint64_t child_id) {
+    if (!bridge || !s_application || !on_owner_thread(bridge))
+        return fail("ending a process requires the bridge owner thread");
+    if (!WebView::end_process(WebView::Application::process_manager(), child_id))
+        return fail("the process could not be ended");
+    return succeed();
+}
+
+extern "C" void elaris_ladybird_free_string(char* string) {
+    free(string);
 }
 
 static Optional<Web::HTML::AutoplayPolicy> autoplay_policy(Optional<i32> value) {
