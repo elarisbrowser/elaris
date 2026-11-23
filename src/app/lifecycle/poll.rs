@@ -8,6 +8,10 @@ use crate::tab::{Tab, TabId};
 
 /// Rune's per-frame hook: forwards UI changes to the browser and shows what it reported.
 pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
+    if super::super::termination::take_request() {
+        // A SIGTERM quits as the Quit command does, so the session is saved first.
+        tx.quit();
+    }
     #[cfg(target_os = "macos")]
     let deactivated_drag = super::super::transfer::in_progress()
         && !crate::window_macos::application_active()
