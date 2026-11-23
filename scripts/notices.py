@@ -4,12 +4,16 @@
 Run from the repository root: `python3 scripts/notices.py`. Use `--check` to fail when the file is out of date, so CI
 can keep the notices in step with Cargo.lock.
 
-Ladybird's and vcpkg's licences are not covered here; they are listed in the notices' C++ section, which must be
-maintained alongside the pinned revisions.
+The C++ section lists what the built app bundles: Ladybird, and the vcpkg packages that supply the libraries in each
+bundle. Build the app bundles first (`./elaris bundle`), so the libraries exist to be listed. Library files that no vcpkg
+package installed are flagged for review.
 """
+
+from __future__ import annotations
 
 import argparse
 import json
+import platform
 import re
 import subprocess
 import sys
@@ -41,6 +45,94 @@ def cargo_packages() -> list[dict]:
 
 def needs_review(expression: str) -> bool:
     return bool(COPYLEFT.search(expression)) and not PERMISSIVE.search(expression)
+
+
+VCPKG_ROOT = ROOT / "vendor" / "ladybird" / "Build" / "release" / "vcpkg_installed"
+VCPKG_INFO = VCPKG_ROOT / "vcpkg" / "info"
+BUNDLE_LIBRARY_DIRS = [ROOT / "build" / "Elaris.app" / "Contents" / "lib", ROOT / "build" / "linux" / "Elaris" / "lib"]
+# Ladybird's own libraries are BSD-2-Clause; Elaris's bridge is part of this project.
+LADYBIRD_PREFIXES = ("liblagom-",)
+ELARIS_LIBRARIES = ("libelaris_ladybird",)
+
+
+def host_triplet() -> str:
+    system = {"Darwin": "osx", "Linux": "linux"}.get(platform.system(), "unknown")
+    arch = "arm64" if platform.machine().lower() in {"arm64", "aarch64"} else "x64"
+    return f"{arch}-{system}-dynamic"
+
+
+def bundled_library_names() -> set[str]:
+    names: set[str] = set()
+    for directory in BUNDLE_LIBRARY_DIRS:
+        if directory.is_dir():
+            names.update(path.name for path in directory.iterdir())
+    return names
+
+
+def vcpkg_packages(triplet: str) -> dict[str, tuple[str, str]]:
+    """Maps each library file name vcpkg installed for `triplet` to (package, version)."""
+    owners: dict[str, tuple[str, str]] = {}
+    suffix = f"_{triplet}.list"
+    for listing in sorted(VCPKG_INFO.glob(f"*{suffix}")):
+        stem = listing.name[: -len(suffix)]
+        package, _, version = stem.partition("_")
+        for line in listing.read_text().splitlines():
+            if line.endswith("/") or "/lib/" not in line:
+                continue
+            owners.setdefault(line.rsplit("/", 1)[-1], (package, version or stem))
+    return owners
+
+
+def copyright_text(package: str) -> str | None:
+    path = VCPKG_ROOT / host_triplet() / "share" / package / "copyright"
+    return path.read_text(errors="replace") if path.is_file() else None
+
+
+def cpp_section() -> list[str]:
+    names = bundled_library_names()
+    lines = ["", "## C++ components", ""]
+    if not names:
+        return lines + ["No app bundle is built yet, so the bundled C++ components cannot be listed. Run `./elaris bundle`.", ""]
+    owners = vcpkg_packages(host_triplet())
+    found: dict[str, str] = {}
+    unmatched: list[str] = []
+    for name in sorted(names):
+        if name.startswith(ELARIS_LIBRARIES):
+            continue
+        if name.startswith(LADYBIRD_PREFIXES):
+            found.setdefault("Ladybird", "")
+        elif name in owners:
+            package, version = owners[name]
+            found.setdefault(f"{package} {version}", package)
+        else:
+            unmatched.append(name)
+
+    lines += [
+        "Ladybird, the engine Elaris embeds, is BSD-2-Clause. Its licence text is in the appendix.",
+        "",
+        "| Component | Licence source |",
+        "| --- | --- |",
+    ]
+    for label, package in sorted(found.items()):
+        source = f"vcpkg `{package}`" if package else "Ladybird `LICENSE`"
+        lines.append(f"| {label} | {source} |")
+    if unmatched:
+        lines += ["", "### Needs review", "", "These bundled libraries were not installed by vcpkg:", ""]
+        lines += [f"- {name}" for name in unmatched]
+
+    lines += ["", "### Licence texts", ""]
+    ladybird = ROOT / "vendor" / "ladybird" / "LICENSE"
+    if ladybird.is_file():
+        lines += ["#### Ladybird", "", "```text", ladybird.read_text(errors="replace").rstrip(), "```", ""]
+    for package in sorted({package for package in found.values() if package}):
+        text = copyright_text(package)
+        lines.append(f"#### {package}")
+        lines.append("")
+        if text is None:
+            lines += ["No `copyright` file was found for this package; check its vcpkg port before release.", ""]
+        else:
+            lines += ["```text", text.rstrip(), "```", ""]
+    return lines
 
 
 def render(packages: list[dict]) -> str:
@@ -75,16 +167,7 @@ def render(packages: list[dict]) -> str:
         lines += ["", "### Needs review", "", "These crates declare only copyleft licences:", ""]
         lines += [f"- {name}" for name in flagged]
 
-    lines += [
-        "",
-        "## C++ components",
-        "",
-        "- [Ladybird](https://github.com/LadybirdBrowser/ladybird), pinned as the `vendor/ladybird` submodule: BSD-2-Clause.",
-        "- Ladybird's vcpkg dependencies, built from the pinned overlay ports. Their licences are listed in each package's",
-        "  `share/<package>/copyright` file inside the vcpkg installation, and must be copied here for each release.",
-        "- Rune, the UI framework: a git dependency pinned in `Cargo.toml`, listed in the crate table above.",
-        "",
-    ]
+    lines += cpp_section()
     return "\n".join(lines)
 
 
