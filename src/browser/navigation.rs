@@ -132,6 +132,12 @@ impl Browser {
         if self.tab(id).is_some_and(|tab| !tab.is_internal()) {
             self.invalidate_find(id);
             self.send(id, command);
+            // Show the stop mark at once rather than waiting for the engine to report the load.
+            if self.engine.is_some()
+                && let Some(tab) = self.tab_mut(id)
+            {
+                tab.loading = true;
+            }
         }
     }
 
