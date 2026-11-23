@@ -41,6 +41,8 @@ pub(crate) struct Polled {
     pub(crate) download_directory_error: Option<String>,
     /// Popups pages opened, as (opener, request, activate), for the app to give a window.
     pub(crate) popups: Vec<(TabId, u64, bool)>,
+    /// What pages loaded in hidden views reported.
+    pub(crate) fetched: Vec<super::Fetched>,
     /// Tabs that fell asleep, for Memory Saver to count the memory they freed.
     pub(crate) slept: Vec<TabId>,
     /// Screenshots this window's tabs asked for: where each was saved, or why it could not be.
@@ -81,6 +83,8 @@ pub(crate) struct Browser {
     pub(super) window: Window,
     /// Development timing: the last poll.
     pub(super) last_poll: Option<Instant>,
+    /// Pages loading in hidden views for their title and icon.
+    pub(super) fetches: Vec<super::fetch::Fetch>,
 }
 
 /// Display state and the available area for all visible panes.
@@ -128,6 +132,7 @@ impl Default for Browser {
                 viewport_focused: false,
             },
             last_poll: None,
+            fetches: Vec::new(),
         }
     }
 }

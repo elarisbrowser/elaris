@@ -7,6 +7,7 @@ use crate::engine::FakeEngine;
 
 mod downloads;
 mod engine;
+mod fetch;
 mod find;
 mod navigation;
 mod sleep;

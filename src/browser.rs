@@ -23,6 +23,7 @@ mod display;
 mod downloads;
 mod engine_sync;
 mod error;
+mod fetch;
 mod find;
 mod input_routing;
 mod lifecycle;
@@ -36,6 +37,7 @@ pub(crate) mod swipe;
 mod tabs;
 
 pub(crate) use error::Error;
+pub(crate) use fetch::Fetched;
 pub(crate) use state::{Browser, Polled};
 
 use crate::engine::{Command, ViewCommand};

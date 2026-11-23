@@ -28,11 +28,17 @@ impl Browser {
         if let Some(peek) = &self.peek {
             tab_ids.push(peek.page.id());
         }
+        tab_ids.extend(self.fetch_ids());
         let updates: Vec<Update> = self
             .engine
             .as_ref()
             .map_or_else(Vec::new, |engine| engine.updates_for(&tab_ids));
         for update in updates {
+            if let Update::Tab(id, tab_update) = &update
+                && self.fetch_update(*id, tab_update)
+            {
+                continue;
+            }
             match update {
                 // A tab closed since the engine reported this has nothing to show it.
                 Update::Tab(id, crate::engine::TabUpdate::WheelResult(cancelled)) => {
@@ -239,6 +245,8 @@ impl Browser {
                 }
             }
         }
+        polled.fetched = self.finish_fetches();
+        polled.changed |= !polled.fetched.is_empty();
         for id in self.visible_tabs().into_iter().flatten() {
             if let Some(tab) = self.tab_mut(id) {
                 let frames = tab.surface.frames();

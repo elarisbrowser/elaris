@@ -271,6 +271,9 @@ impl Browser {
     pub(crate) fn close_window_views(&mut self) {
         self.suspend_window();
         self.dismiss_peek();
+        for fetch in std::mem::take(&mut self.fetches) {
+            fetch.close(self.engine.as_ref());
+        }
         for tab in &self.tabs {
             let id = tab.id();
             if !tab.is_internal()
