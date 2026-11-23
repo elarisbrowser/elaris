@@ -115,6 +115,8 @@ Direct `cargo run` also remains a UI-only build and does not require the Ladybir
 | --- | --- |
 | `./elaris setup` | Install prerequisites, Rust toolchains, and the pinned Ladybird submodule |
 | `./elaris build` | Build the integrated browser, including Ladybird and its bridge |
+| `./elaris build --rust` / `--ladybird` | Build only Elaris with Cargo, or only Ladybird and its bridge (neither flag builds both) |
+| `./elaris clean` | Remove `target/`, `build/`, and Ladybird's build folder (narrow with `--rust` or `--ladybird`) |
 | `./elaris run [URL]` | Build the integrated browser and open it |
 | `./elaris check` | Run `cargo fmt --check`, `cargo check`, Clippy, and Rust tests |
 | `./elaris format` | Format Rust and Elaris-owned C++ sources |

@@ -78,12 +78,19 @@ def setup(args: argparse.Namespace) -> None:
 
 def build(args: argparse.Namespace) -> None:
     release = ["--release"] if _profile(args) == "release" else []
-    if args.ui:
-        run_step("Elaris interface", "cargo", "+stable", "build", "--locked", *release)
+    # With neither flag, build both. --ui is the older spelling of --rust without the bridge.
+    rust_requested = args.rust or args.ui
+    build_rust = rust_requested or not args.ladybird
+    build_ladybird = args.ladybird or not rust_requested
+    if build_ladybird:
+        engine.build_for_elaris(args.jobs)
+    if not build_rust:
         return
-    engine.build_for_elaris(args.jobs)
-    _configure_bridge_environment(bridge_lib_dir())
-    run_step("Elaris browser", "cargo", "+stable", "build", "--locked", *release, "--features", "ladybird-bridge")
+    if build_ladybird:
+        _configure_bridge_environment(bridge_lib_dir())
+        run_step("Elaris browser", "cargo", "+stable", "build", "--locked", *release, "--features", "ladybird-bridge")
+    else:
+        run_step("Elaris interface", "cargo", "+stable", "build", "--locked", *release)
 
 
 def format_sources(_args: argparse.Namespace) -> None:
@@ -121,7 +128,7 @@ def _configure_bridge_environment(bridge_dir: str) -> None:
 
 def bundle(args: argparse.Namespace) -> None:
     """Build an optimised Elaris and package it with Ladybird's engine and the brand icon for this platform."""
-    build(argparse.Namespace(ui=False, release=True, jobs=None))
+    build(argparse.Namespace(ui=False, rust=False, ladybird=False, release=True, jobs=None))
     executable = _executable("release")
     if sys.platform == "darwin":
         bundled = packaging.macos_release_bundle(executable, "canary" if args.canary else "stable")
@@ -141,7 +148,7 @@ def launch(args: argparse.Namespace) -> None:
     ui_only = args.ui or args.linux_ui
     if sys.platform == "darwin" and not ui_only:
         if not _run_artifacts_are_current(ui_only=False, profile=profile):
-            build(args)
+            build(argparse.Namespace(ui=False, rust=False, ladybird=False, release=args.release, jobs=args.jobs))
         _configure_bridge_environment(bridge_lib_dir())
         if release:
             executable = packaging.macos_release_bundle(_executable(profile))
@@ -373,6 +380,8 @@ def register_commands(commands) -> None:
                 "--canary", action="store_true", help="Name the build as canary, with the yellow icon (macOS)"
             )
         elif handler is build:
+            subcommand.add_argument("--rust", action="store_true", help="Build Elaris with Cargo")
+            subcommand.add_argument("--ladybird", action="store_true", help="Build Ladybird and its bridge")
             subcommand.add_argument("--ui", action="store_true", help="Build only the interface, without Ladybird")
             subcommand.add_argument("--release", action="store_true", help="Build Elaris optimised (cargo --release)")
             subcommand.add_argument("--jobs", help="Parallel build jobs (default: ELARIS_JOBS or 4)")

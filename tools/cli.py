@@ -4,7 +4,7 @@
 import argparse
 import sys
 
-from elaris_cli import cpp, desktop, engine, linux, patches, project, rune, ui
+from elaris_cli import clean, cpp, desktop, engine, linux, patches, project, rune, ui
 
 
 if sys.version_info < (3, 9):
@@ -15,6 +15,7 @@ examples:
   ./elaris setup               install prerequisites and initialise Ladybird
   ./elaris run example.com     build if needed, then open a page
   ./elaris check               format, lint, and test
+  ./elaris clean               remove build and target folders
 
 Run './elaris <command> --help' for a command's options.
 Global options go before the command, for example './elaris --verbose build'.
@@ -44,6 +45,7 @@ def parser() -> argparse.ArgumentParser:
     linux.register_commands(commands)
     desktop.register_commands(commands)
     rune.register_commands(commands)
+    clean.register_commands(commands)
     return cli
 
 
