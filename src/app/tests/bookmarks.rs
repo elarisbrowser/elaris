@@ -146,3 +146,53 @@ fn every_web_page_is_saved_to_a_new_folder_named_on_the_bookmarks_page() {
         Some(InternalRoute::Page(InternalPage::Bookmarks))
     );
 }
+
+#[test]
+fn fetched_pages_and_open_tabs_fill_in_what_bookmarks_lack() {
+    let mut state = AppState::new(Some("https://example.com/"));
+    let (engine, fake) = crate::engine::Engine::fake();
+    state.browser.connect(engine);
+    state.set_tab_layout(elaris_core::settings::TabLayout::Horizontal);
+    let id = {
+        let mut bookmarks = state.bookmarks();
+        bookmarks
+            .add_link(BookmarkId::BAR, "", "https://docs.rs/", 0)
+            .unwrap()
+    };
+    // On show in the bar and lacking a title, its page is fetched, once.
+    let mut tx = Tx::default();
+    state.poll_bookmark_details(&crate::browser::Polled::default(), &mut tx);
+    let loads = |fake: &crate::engine::FakeEngine| {
+        fake.commands
+            .try_iter()
+            .filter(|command| {
+                matches!(command, crate::engine::Command::View(_, crate::engine::ViewCommand::Load(url)) if url == "https://docs.rs/")
+            })
+            .count()
+    };
+    assert_eq!(loads(&fake), 1);
+    state.poll_bookmark_details(&crate::browser::Polled::default(), &mut tx);
+    assert_eq!(loads(&fake), 0);
+
+    let polled = crate::browser::Polled {
+        fetched: vec![crate::browser::Fetched {
+            url: "https://docs.rs/".into(),
+            title: Some("Docs.rs".into()),
+            favicon: None,
+        }],
+        ..Default::default()
+    };
+    assert!(state.poll_bookmark_details(&polled, &mut tx));
+    assert_eq!(state.bookmarks().get(id).unwrap().title, "Docs.rs");
+
+    // An open tab at the page gives it its icon.
+    let tab = state.browser.active_tab().unwrap().id();
+    state.browser.navigate(tab, "https://docs.rs/").unwrap();
+    state.browser.restore_favicon(tab, 1, 1, vec![9, 9, 9, 9]);
+    let changed = crate::browser::Polled {
+        changed: true,
+        ..Default::default()
+    };
+    state.poll_bookmark_details(&changed, &mut tx);
+    assert!(state.bookmarks().get(id).unwrap().favicon.is_some());
+}

@@ -98,7 +98,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     state.note_tab_memory(&polled);
     let task_manager_changed = state.poll_task_manager(&mut polled, tx);
     state.poll_memory_saver(tx);
-    let bookmarks_changed = state.poll_bookmarks();
+    let bookmarks_changed = state.poll_bookmarks() | state.poll_bookmark_details(&polled, tx);
     apply_page_updates(state, &mut polled, tx);
     let preview_changed = crate::ui::poll_tab_preview(state, clock, tx)
         || crate::ui::displayed_tab_preview(state)

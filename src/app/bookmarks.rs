@@ -10,8 +10,9 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use rune::{TextEdit, Tx};
 
 use super::AppState;
+use crate::browser::Polled;
 use crate::tab::{TabId, TabSection};
-use elaris_core::bookmarks::{BookmarkId, Bookmarks, Error};
+use elaris_core::bookmarks::{Bookmark, BookmarkId, Bookmarks, Error, Favicon};
 use elaris_core::internal::InternalPage;
 
 pub(crate) type SharedBookmarks = Arc<Mutex<Bookmarks>>;
@@ -35,6 +36,10 @@ pub(crate) struct BookmarksState {
     pub(crate) page: Page,
     /// Why the last change could not be made.
     pub(crate) error: Option<String>,
+    /// Pages fetched this run for their title and icon, which are never fetched again.
+    fetched: std::collections::HashSet<String>,
+    /// Icons as the interface draws them, by bookmark, with the hash of the pixels they show.
+    icons: std::cell::RefCell<std::collections::HashMap<BookmarkId, (u64, rune::Pixels)>>,
 }
 
 /// The star's popover: the bookmark's name, address and folder.
@@ -146,15 +151,145 @@ impl AppState {
         else {
             return;
         };
+        let favicon = self
+            .browser
+            .tab(tab)
+            .and_then(|tab| tab.favicon_data.as_ref())
+            .and_then(|icon| Favicon::new(icon.width, icon.height, &icon.rgba));
         let existing = self.bookmarks().find_url(&url).map(|bookmark| bookmark.id);
         let id = existing.or_else(|| {
             self.change_bookmarks(|bookmarks| {
-                bookmarks.add_link(BookmarkId::BAR, &title, &url, now())
+                let id = bookmarks.add_link(BookmarkId::BAR, &title, &url, now())?;
+                bookmarks.fill_details(&url, None, favicon.as_ref());
+                Ok(id)
             })
         });
         if let Some(id) = id.filter(|_| edit) {
             self.edit_bookmark(id, false);
         }
+    }
+
+    /// Fills in bookmarks' missing titles and icons: from what fetched pages found, from open tabs
+    /// showing bookmarked pages, and by fetching the pages of bookmarks on show that still lack
+    /// them. Reports whether any changed.
+    pub(super) fn poll_bookmark_details(&mut self, polled: &Polled, tx: &mut Tx) -> bool {
+        let mut found: Vec<(String, Option<String>, Option<Favicon>)> = polled
+            .fetched
+            .iter()
+            .map(|fetched| {
+                (
+                    fetched.url.clone(),
+                    fetched.title.clone(),
+                    fetched.favicon.clone(),
+                )
+            })
+            .collect();
+        // Tabs only gain titles and icons in polls that changed something.
+        if polled.changed {
+            let bookmarks = self.bookmarks();
+            for tab in self.browser.tabs() {
+                if tab.loading || tab.is_internal() {
+                    continue;
+                }
+                let missing = bookmarks
+                    .links()
+                    .any(|link| link.url() == Some(tab.url.as_str()) && link.missing_details());
+                if missing {
+                    let favicon = tab
+                        .favicon_data
+                        .as_ref()
+                        .and_then(|icon| Favicon::new(icon.width, icon.height, &icon.rgba));
+                    let title = (!tab.title.trim().is_empty()).then(|| tab.title.clone());
+                    if title.is_some() || favicon.is_some() {
+                        found.push((tab.url.clone(), title, favicon));
+                    }
+                }
+            }
+        }
+        let mut changed = false;
+        if !found.is_empty() {
+            let mut bookmarks = self.bookmarks();
+            for (url, title, favicon) in &found {
+                changed |= bookmarks.fill_details(url, title.as_deref(), favicon.as_ref());
+            }
+            drop(bookmarks);
+            if changed {
+                self.change_bookmarks(|_| Ok(()));
+            }
+        }
+        let wanted: Vec<String> = self
+            .bookmarks_on_show()
+            .into_iter()
+            .filter(|url| !self.bookmarks.fetched.contains(url))
+            .collect();
+        for url in wanted {
+            if self.browser.fetch_page(&url) {
+                self.bookmarks.fetched.insert(url);
+            }
+        }
+        if self.browser.fetching() {
+            tx.wake_after(std::time::Duration::from_millis(500));
+        }
+        changed
+    }
+
+    /// The addresses of links on show in the bar, the sidebar's menu or the bookmarks page that
+    /// still lack a title or icon.
+    fn bookmarks_on_show(&self) -> Vec<String> {
+        let bookmarks = self.bookmarks();
+        let mut shown: Vec<&Bookmark> = Vec::new();
+        let menu_open = self.bookmarks.sidebar_menu || !self.bookmarks.open_folders.is_empty();
+        if (self.horizontal_tabs() && !bookmarks.bar().is_empty()) || menu_open {
+            shown.extend(bookmarks.bar());
+        }
+        if let Some(folder) = self
+            .bookmarks
+            .open_folders
+            .last()
+            .and_then(|id| bookmarks.get(*id))
+        {
+            shown.extend(folder.children());
+        }
+        let on_page = self.browser.active_tab().is_some_and(|tab| {
+            tab.internal
+                == Some(elaris_core::internal::InternalRoute::Page(
+                    InternalPage::Bookmarks,
+                ))
+        });
+        if on_page {
+            let query = self.bookmarks.page.search.text.trim();
+            if query.is_empty() {
+                if let Some(folder) = bookmarks.get(self.bookmarks.page.folder) {
+                    shown.extend(folder.children());
+                }
+            } else {
+                shown.extend(bookmarks.search(query));
+            }
+        }
+        shown
+            .into_iter()
+            .filter(|bookmark| bookmark.missing_details())
+            .filter_map(|bookmark| bookmark.url().map(str::to_owned))
+            .collect()
+    }
+
+    /// A bookmark's icon as the interface draws it, made once per icon.
+    pub(crate) fn bookmark_icon(&self, bookmark: &Bookmark) -> Option<rune::Pixels> {
+        use std::hash::{Hash, Hasher};
+        let favicon = bookmark.favicon.as_ref()?;
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        favicon.rgba.hash(&mut hasher);
+        let hash = hasher.finish();
+        let mut icons = self.bookmarks.icons.borrow_mut();
+        if let Some((cached, pixels)) = icons.get(&bookmark.id)
+            && *cached == hash
+        {
+            return Some(pixels.clone());
+        }
+        let pixels = rune::Pixels::new();
+        pixels.set(favicon.width, favicon.height, favicon.rgba.clone());
+        icons.insert(bookmark.id, (hash, pixels.clone()));
+        Some(pixels)
     }
 
     /// The star and Cmd+D: bookmarks the active page, or edits its bookmark.

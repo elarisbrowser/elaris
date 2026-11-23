@@ -335,10 +335,17 @@ fn glyph(glyph: &'static rune::Icon, theme: &Theme) -> El {
     icon(glyph, theme::ICON).color(theme.icon).a11y_hidden()
 }
 
-/// A bookmark's mark: the favicon of an open tab at its address, a page, or a folder.
+/// A bookmark's mark: its saved icon, the favicon of an open tab at its address, a page, or a
+/// folder.
 pub(in crate::ui) fn mark(state: &AppState, bookmark: &Bookmark, theme: &Theme) -> El {
     if bookmark.is_folder() {
         return glyph(&icons::FOLDER, theme);
+    }
+    if let Some(pixels) = state.bookmark_icon(bookmark) {
+        return el()
+            .size(theme::ICON, theme::ICON)
+            .pixels(&pixels)
+            .a11y_hidden();
     }
     let favicon = state
         .browser
