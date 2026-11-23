@@ -196,3 +196,13 @@ fn fetched_pages_and_open_tabs_fill_in_what_bookmarks_lack() {
     state.poll_bookmark_details(&changed, &mut tx);
     assert!(state.bookmarks().get(id).unwrap().favicon.is_some());
 }
+
+#[test]
+fn the_tab_menu_removes_a_bookmark_it_made() {
+    let mut state = AppState::new(Some("https://example.com/"));
+    let tab = state.browser.active_tab().unwrap().id();
+    state.bookmark_tab(tab, false);
+    let id = bookmark_on(&state).unwrap();
+    state.remove_bookmark(id);
+    assert!(bookmark_on(&state).is_none());
+}
