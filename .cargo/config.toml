@@ -1,0 +1,4 @@
+# The minimum macOS version the Rust code links against. Ladybird, which Elaris links in, requires macOS 14.4, so the
+# Elaris binary declares the same floor instead of the SDK default. A developer's own MACOSX_DEPLOYMENT_TARGET wins.
+[env]
+MACOSX_DEPLOYMENT_TARGET = { value = "14.4", force = false }
