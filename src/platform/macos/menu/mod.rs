@@ -16,6 +16,7 @@ use std::collections::{HashMap, HashSet};
 use objc2_05::rc::Retained;
 use objc2_05::runtime::ProtocolObject;
 use objc2_app_kit_02::{NSMenuDelegate, NSMenuItem};
+use objc2_foundation_02::NSString;
 
 use self::state::MenuState;
 use crate::app::AppState;
@@ -35,6 +36,8 @@ thread_local! {
     static ACTIVE_WINDOW: Cell<Option<u64>> = const { Cell::new(None) };
     /// Shortcut items show no keys while Settings records a new chord.
     static KEYS_PAUSED: Cell<bool> = const { Cell::new(false) };
+    /// Every other item's key, kept while paused: Quit, Hide, Minimize, the Edit keys and more.
+    static PAUSED_KEYS: RefCell<Vec<(Retained<NSMenuItem>, Retained<NSString>)>> = const { RefCell::new(Vec::new()) };
     /// Windows whose pages have not yet agreed to unload for a pending quit.
     static QUIT_PENDING: RefCell<Option<HashSet<u64>>> = const { RefCell::new(None) };
 }

@@ -36,6 +36,8 @@ pub(crate) struct Theme {
     pub(crate) address_field: Color,
     pub(crate) control_border: Color,
     pub(crate) focus: Color,
+    /// Borders and copy for a problem the user should fix, such as conflicting shortcuts.
+    pub(crate) danger: Color,
     pub(crate) selection: Color,
     /// Overlays on buttons and rows under the pointer, and while pressed.
     pub(crate) hover: Color,
@@ -120,6 +122,7 @@ pub(crate) fn palette(
             address_field: oklch(0.24, 0.006, HUE).alpha(chrome_alpha),
             control_border: oklch(0.56, 0.015, HUE),
             focus: accent,
+            danger: oklch(0.72, 0.16, 25.0),
             selection,
             hover: oklcha(0.66, 0.008, HUE, 0.08),
             press: oklcha(0.66, 0.008, HUE, 0.13),
@@ -152,6 +155,7 @@ pub(crate) fn palette(
             address_field: oklch(0.985, 0.004, HUE).alpha(chrome_alpha),
             control_border: oklch(0.55, 0.015, HUE),
             focus: accent,
+            danger: oklch(0.55, 0.2, 27.0),
             selection,
             hover: oklcha(0.2, 0.02, HUE, 0.06),
             press: oklcha(0.2, 0.02, HUE, 0.1),

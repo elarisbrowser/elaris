@@ -30,14 +30,28 @@ fn plain(key: Key) -> KeyEvent {
 fn a_recorded_chord_replaces_the_actions_keys() {
     let mut state = AppState::new(None);
     state.toggle_recording(Shortcut::Find);
+    // Close tab has Command-W: the first press shows the conflict and changes nothing.
+    assert!(state.record_key(&chord('w', false)));
+    let recorder = &state.shortcut_recorder;
+    assert_eq!(recorder.recording, Some(Shortcut::Find));
+    assert_eq!(
+        recorder.pending,
+        Some((Chord::new('w', false, false), Shortcut::Close))
+    );
+    assert!(recorder.problem);
+    assert!(state.settings.keybindings.is_empty());
+
+    // Pressing it again moves it.
     assert!(state.record_key(&chord('w', false)));
     assert_eq!(state.shortcut_recorder.recording, None);
+    assert_eq!(state.shortcut_recorder.pending, None);
     assert_eq!(
         state.settings.keybindings["find"],
         [Chord::new('w', false, false)]
     );
     let notice = state.shortcut_recorder.notice.clone().unwrap();
-    assert!(notice.ends_with("no longer runs close tab."), "{notice}");
+    assert!(notice.ends_with("moved here from close tab."), "{notice}");
+    assert!(!state.shortcut_recorder.problem);
     assert!(state.shortcut_customized(Shortcut::Find));
 
     state.reset_shortcut(Shortcut::Find);
@@ -63,8 +77,19 @@ fn reserved_and_unmodified_keys_keep_listening() {
     assert_eq!(state.shortcut_recorder.recording, Some(Shortcut::NewTab));
     assert!(state.settings.keybindings.is_empty());
 
-    assert!(!state.record_key(&plain(Key::Tab)));
+    // Nothing reaches other handlers while listening, not even Tab or Control-Tab.
+    assert!(state.record_key(&plain(Key::Tab)));
+    let control_tab = KeyEvent {
+        key: Key::Tab,
+        mods: Mods {
+            ctrl: true,
+            ..Mods::default()
+        },
+    };
+    assert!(state.record_key(&control_tab));
+    assert_eq!(state.shortcut_recorder.recording, Some(Shortcut::NewTab));
     assert!(state.record_key(&plain(Key::Escape)));
+    assert_eq!(state.shortcut_recorder.notice, None);
     assert_eq!(state.shortcut_recorder.recording, None);
     assert!(state.settings.keybindings.is_empty());
 }
@@ -134,7 +159,13 @@ fn the_keyboard_page_records_a_chord_before_it_runs_as_a_shortcut() {
         Some(Shortcut::NewTab)
     );
 
-    // Command-W would close the tab; while recording it becomes New Tab's key instead.
+    // Command-W would close the tab. While recording it only shows the conflict with Close tab,
+    // and a second press moves it to New Tab.
+    runtime.key(chord('w', false));
+    runtime.frame(0.0);
+    assert_eq!(runtime.state.browser.tabs().len(), tabs);
+    assert!(runtime.state.settings.keybindings.is_empty());
+    assert!(runtime.state.shortcut_recorder.pending.is_some());
     runtime.key(chord('w', false));
     runtime.frame(0.0);
     assert_eq!(runtime.state.browser.tabs().len(), tabs);
@@ -168,4 +199,35 @@ fn the_search_section_lists_custom_engines_with_the_add_form() {
     ] {
         assert!(find(&runtime, key).is_some(), "{key}");
     }
+}
+
+#[test]
+fn conflicting_config_keys_are_reported_on_their_rows() {
+    let mut state = AppState::new(Some("elaris://settings"));
+    let config = elaris_core::config::parse(
+        "[keybindings]\nfind = \"mod+c\"\nnew_tab = \"mod+k\"\nreload = \"mod+k\"\n",
+    )
+    .unwrap();
+    state.settings.keybindings = config.settings.keybindings;
+    let conflicts = crate::shortcuts::conflicts(&state.settings.keybindings);
+    let on = |shortcut| {
+        conflicts
+            .iter()
+            .any(|conflict| conflict.shortcut == Some(shortcut))
+    };
+    assert!(on(Shortcut::Find));
+    assert!(on(Shortcut::Reload));
+    assert!(!on(Shortcut::NewTab));
+
+    // The page still draws every row, conflicting ones included.
+    state.page_category = Some("settings-keyboard");
+    let mut runtime = rune::Runtime::new(
+        state,
+        crate::ui::view,
+        (1280.0, 800.0),
+        rune::Env::new(false, 1.0),
+    );
+    runtime.frame(0.0);
+    assert!(find(&runtime, "shortcut-keys-find").is_some());
+    assert!(find(&runtime, "shortcut-reset-find").is_some());
 }

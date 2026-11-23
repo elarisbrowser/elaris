@@ -16,7 +16,7 @@ use super::items::{
 };
 use super::quit::quit_guard;
 use super::target::menu_target_class;
-use super::{FULL_SCREEN_ITEM, KEYS_PAUSED, MENU_ITEMS, MENU_TARGET};
+use super::{FULL_SCREEN_ITEM, KEYS_PAUSED, MENU_ITEMS, MENU_TARGET, PAUSED_KEYS};
 use crate::app::AppState;
 use crate::shortcuts::Shortcut;
 
@@ -79,11 +79,47 @@ fn set_modifiers(item: &NSMenuItem, shift: bool, option: bool, control: bool) {
     );
 }
 
-/// Takes the shortcut items' keys away while `paused`, so AppKit lets a chord being recorded
-/// reach the window instead of running its menu item, and gives them back after.
+/// Takes every menu item's key away while `paused`, so AppKit lets a chord being recorded reach
+/// the window instead of running a menu item (Quit and Minimize included), and gives them back
+/// after.
 pub(super) fn pause_key_equivalents(paused: bool) {
-    if KEYS_PAUSED.with(|slot| slot.replace(paused)) != paused {
+    if KEYS_PAUSED.with(|slot| slot.replace(paused)) == paused {
+        return;
+    }
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    if paused {
+        let mut keyed = Vec::new();
+        if let Some(menu) = unsafe { NSApplication::sharedApplication(mtm).mainMenu() } {
+            collect_keyed(&menu, &mut keyed);
+        }
+        for (item, _) in &keyed {
+            unsafe { item.setKeyEquivalent(&NSString::from_str("")) };
+        }
+        PAUSED_KEYS.with(|slot| *slot.borrow_mut() = keyed);
+    } else {
+        for (item, key) in PAUSED_KEYS.with(|slot| slot.take()) {
+            unsafe { item.setKeyEquivalent(&key) };
+        }
+        // The keymap may have changed while paused.
         apply_key_equivalents();
+    }
+}
+
+/// Each item in `menu` and its submenus that has a key, with that key.
+fn collect_keyed(menu: &NSMenu, keyed: &mut Vec<(Retained<NSMenuItem>, Retained<NSString>)>) {
+    for index in 0..unsafe { menu.numberOfItems() } {
+        let Some(item) = (unsafe { menu.itemAtIndex(index) }) else {
+            continue;
+        };
+        let key = unsafe { item.keyEquivalent() };
+        if key.length() > 0 {
+            keyed.push((item.clone(), key));
+        }
+        if let Some(submenu) = unsafe { item.submenu() } {
+            collect_keyed(&submenu, keyed);
+        }
     }
 }
 

@@ -247,29 +247,48 @@ fn with_keymap<R>(read: impl FnOnce(&[Binding]) -> R) -> R {
     read(keymap.as_deref().unwrap_or(DEFAULTS))
 }
 
+/// A `[keybindings]` entry the keymap could not use, and the action it belongs to when the name
+/// is one.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Conflict {
+    pub(crate) shortcut: Option<Shortcut>,
+    pub(crate) message: String,
+}
+
 /// Merges `[keybindings]` into the defaults. An overridden action keeps only the chords it is
 /// given, and a chord it claims is taken from whichever action had it by default. Returns the
-/// keymap and a message for each override that could not be used.
-fn resolve(overrides: &KeyBindings) -> (Vec<Binding>, Vec<String>) {
+/// keymap and each override that could not be used.
+fn resolve(overrides: &KeyBindings) -> (Vec<Binding>, Vec<Conflict>) {
     let mut keymap: Vec<Binding> = Vec::new();
     let mut overridden = Vec::new();
     let mut issues = Vec::new();
     for (name, chords) in overrides {
         let Some(&(shortcut, _)) = NAMES.iter().find(|(_, known)| known == name) else {
-            issues.push(format!("Unknown action [keybindings].{name}"));
+            issues.push(Conflict {
+                shortcut: None,
+                message: format!("Unknown action [keybindings].{name}"),
+            });
             continue;
         };
         overridden.push(shortcut);
         for &chord in chords {
-            if let Some((_, owner)) = RESERVED.iter().find(|(reserved, _)| *reserved == chord) {
-                issues.push(format!(
-                    "[keybindings].{name}: {chord} is reserved for {owner}"
-                ));
-            } else if let Some(taken) = keymap.iter().find(|binding| binding.chord == chord) {
-                issues.push(format!(
-                    "[keybindings].{name}: {chord} is already bound to {}",
-                    taken.shortcut.name().unwrap_or_default()
-                ));
+            let label = chord_label(chord);
+            let problem = if let Some(owner) = reserved_by(chord) {
+                Some(format!("{label} is reserved for {owner}"))
+            } else {
+                keymap
+                    .iter()
+                    .find(|binding| binding.chord == chord)
+                    .map(|taken| {
+                        let other = title(taken.shortcut).to_lowercase();
+                        format!("{label} is also set for {other}")
+                    })
+            };
+            if let Some(problem) = problem {
+                issues.push(Conflict {
+                    shortcut: Some(shortcut),
+                    message: format!("[keybindings].{name}: {problem}"),
+                });
             } else {
                 keymap.push(Binding { shortcut, chord });
             }
@@ -286,6 +305,7 @@ fn resolve(overrides: &KeyBindings) -> (Vec<Binding>, Vec<String>) {
 /// a message for each override that could not be used.
 pub(crate) fn apply_keybindings(overrides: &KeyBindings) -> Vec<String> {
     let (keymap, issues) = resolve(overrides);
+    let issues = issues.into_iter().map(|issue| issue.message).collect();
     // Tests run in parallel in one process, so they check `resolve` and keep the defaults here.
     if cfg!(not(test)) {
         *KEYMAP.write().expect("keymap lock poisoned") = Some(keymap);
@@ -332,6 +352,11 @@ pub(crate) fn chord_label(chord: Chord) -> String {
         let option = if chord.option { "+Alt" } else { "" };
         format!("Ctrl{shift}{option}+{key}")
     }
+}
+
+/// The overrides in `[keybindings]` the keymap could not use.
+pub(crate) fn conflicts(overrides: &KeyBindings) -> Vec<Conflict> {
+    resolve(overrides).1
 }
 
 /// What a reserved chord does, if `chord` is one.
@@ -744,23 +769,16 @@ mod tests {
             ("teleport", &["mod+j"]),
         ]));
         assert_eq!(issues.len(), 3, "{issues:?}");
-        assert!(
+        let has = |text: &str, shortcut: Option<Shortcut>| {
             issues
                 .iter()
-                .any(|issue| issue.contains("reserved for Copy"))
-        );
-        assert!(
-            issues
-                .iter()
-                .any(|issue| issue.contains("[keybindings].teleport"))
-        );
+                .any(|issue| issue.message.contains(text) && issue.shortcut == shortcut)
+        };
+        assert!(has("reserved for Copy", Some(Shortcut::Find)));
+        assert!(has("[keybindings].teleport", None));
         // `find` sorts before `open_task_manager` and `reload`, and `open_task_manager` claims
         // mod+k before `reload` does.
-        assert!(
-            issues
-                .iter()
-                .any(|issue| issue.contains("already bound to open_task_manager"))
-        );
+        assert!(has("also set for task manager", Some(Shortcut::Reload)));
         let run = |text| shortcut_in(&keymap, &chord_event(Chord::parse(text).unwrap()));
         assert_eq!(run("mod+k"), Some(Shortcut::OpenTaskManager));
         assert_eq!(run("mod+r"), None);

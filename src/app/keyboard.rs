@@ -7,7 +7,7 @@ use rune::{Key, KeyEvent};
 
 use super::AppState;
 use crate::shortcuts::{self, Shortcut};
-use elaris_core::keybindings::{self, KeyBindings};
+use elaris_core::keybindings::{self, Chord, KeyBindings};
 use elaris_core::settings::SettingsChange;
 
 #[derive(Default)]
@@ -16,22 +16,42 @@ pub(crate) struct ShortcutRecorder {
     pub(crate) recording: Option<Shortcut>,
     /// What the last recording changed, or why a chord was refused.
     pub(crate) notice: Option<String>,
+    /// Whether the notice is a problem to fix rather than news.
+    pub(crate) problem: bool,
+    /// A chord another action uses, pressed once: pressing it again moves it to the recording
+    /// action. Both show the conflict until then.
+    pub(crate) pending: Option<(Chord, Shortcut)>,
 }
 
 impl AppState {
     /// Listens for `shortcut`'s new chord, or stops if it was already listening.
     pub(crate) fn toggle_recording(&mut self, shortcut: Shortcut) {
-        let recorder = &mut self.shortcut_recorder;
-        recorder.notice = None;
-        recorder.recording = (recorder.recording != Some(shortcut)).then_some(shortcut);
+        let recording = self.shortcut_recorder.recording != Some(shortcut);
+        self.shortcut_recorder = ShortcutRecorder {
+            recording: recording.then_some(shortcut),
+            ..ShortcutRecorder::default()
+        };
     }
 
     pub(crate) fn stop_recording(&mut self) {
-        self.shortcut_recorder.recording = None;
+        let recorder = &mut self.shortcut_recorder;
+        recorder.recording = None;
+        recorder.pending = None;
+        if recorder.problem {
+            recorder.notice = None;
+            recorder.problem = false;
+        }
     }
 
-    /// Takes a key while an action is listening: a chord becomes its only key, Backspace or
-    /// Delete removes its keys, and Escape stops listening. Returns whether the key was used.
+    fn refuse(&mut self, notice: String) {
+        self.shortcut_recorder.notice = Some(notice);
+        self.shortcut_recorder.problem = true;
+    }
+
+    /// Takes every key while an action is listening, so none runs anything else: a chord
+    /// becomes the action's only key, Backspace or Delete removes its keys, and Escape stops
+    /// listening. A chord another action uses waits for a second press to move it. Returns
+    /// whether an action was listening.
     pub(crate) fn record_key(&mut self, event: &KeyEvent) -> bool {
         let Some(shortcut) = self.shortcut_recorder.recording else {
             return false;
@@ -41,7 +61,6 @@ impl AppState {
                 self.stop_recording();
                 return true;
             }
-            Key::Tab => return false,
             Key::Backspace | Key::Delete => {
                 self.stop_recording();
                 self.clear_shortcut(shortcut);
@@ -55,29 +74,41 @@ impl AppState {
             } else {
                 "Ctrl"
             };
-            self.shortcut_recorder.notice = Some(format!("Hold {modifier} with the key."));
+            self.shortcut_recorder.pending = None;
+            self.refuse(format!("Hold {modifier} with the key."));
             return true;
         };
         let label = shortcuts::chord_label(chord);
         if let Some(owner) = shortcuts::reserved_by(chord) {
-            self.shortcut_recorder.notice = Some(format!("{label} is reserved for {owner}."));
+            self.shortcut_recorder.pending = None;
+            self.refuse(format!("{label} is reserved for {owner}."));
             return true;
         }
         let Some(name) = shortcut.name() else {
             self.stop_recording();
             return true;
         };
-        let previous = shortcuts::owner(chord).filter(|owner| *owner != shortcut);
+        let other = shortcuts::owner(chord).filter(|owner| *owner != shortcut);
+        if let Some(other) = other
+            && self.shortcut_recorder.pending != Some((chord, other))
+        {
+            self.shortcut_recorder.pending = Some((chord, other));
+            let title = shortcuts::title(other).to_lowercase();
+            self.refuse(format!(
+                "{label} is already used by {title}. Press it again to use it here instead."
+            ));
+            return true;
+        }
         let mut bindings = self.settings.keybindings.clone();
         keybindings::assign(&mut bindings, name, chord);
         self.set_keybindings(bindings);
-        self.stop_recording();
-        self.shortcut_recorder.notice = previous.map(|previous| {
-            format!(
-                "{label} no longer runs {}.",
-                shortcuts::title(previous).to_lowercase()
-            )
-        });
+        self.shortcut_recorder = ShortcutRecorder {
+            notice: other.map(|other| {
+                let title = shortcuts::title(other).to_lowercase();
+                format!("{label} moved here from {title}.")
+            }),
+            ..ShortcutRecorder::default()
+        };
         true
     }
 
