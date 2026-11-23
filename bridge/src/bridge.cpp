@@ -158,9 +158,6 @@ class ElarisApplication final : public WebView::Application {
 #if defined(AK_OS_MACOS)
         set_spell_checker(Elaris::make_spell_checker_macos());
 #endif
-#if defined(ELARIS_HAS_TRANSLATOR)
-        set_translator(Ladybird::create_platform_translator());
-#endif
     }
     // The host process is Elaris, not a Ladybird browser, so its own crashes are never captured or reported.
     bool captures_browser_crashes() const override {
@@ -1461,6 +1458,10 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
         WebView::s_ladybird_resource_root = resource_dir;
     s_event_loop = &Core::EventLoop::current();
     s_event_loop_thread = std::this_thread::get_id();
+#if defined(ELARIS_HAS_TRANSLATOR)
+    // The translator answers on the event loop, which only exists once the application does.
+    s_application->set_translator(Ladybird::create_platform_translator());
+#endif
     *out_bridge = new ElarisLadybird{
         .callback = callback,
         .context = context,
