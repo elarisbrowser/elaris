@@ -12,7 +12,6 @@ use crate::app;
 use crate::app::AppState;
 use crate::tab::{TabId, TabSection};
 use crate::ui::components::controls::row_button;
-use crate::ui::components::hover_highlight::{self, Group};
 use crate::ui::components::rule::hairline;
 use crate::ui::icons;
 use crate::ui::sidebar::drag::{
@@ -133,16 +132,10 @@ pub(super) fn divider(key: &'static str, clear: bool, theme: &Theme) -> El {
 
 /// The divider's trailing button that closes every regular tab, leaving favourites open.
 fn clear_button(theme: &Theme) -> El {
-    let key = "clear-tabs";
-    let button = row()
-        .key(key)
-        .h(theme::SIDEBAR_CLEAR_HEIGHT)
-        .px(theme::SIDEBAR_CLEAR_PADDING)
+    row()
+        .key("clear-tabs")
         .gap(theme::SIDEBAR_CLEAR_GAP)
         .center_y()
-        .radius(theme::ROW_RADIUS)
-        .continuous_corners()
-        .press(theme.press)
         .press_scale(theme::PRESS_SCALE)
         .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
         .label("Clear tabs")
@@ -153,8 +146,7 @@ fn clear_button(theme: &Theme) -> El {
                 .color(theme.text_muted)
                 .single_line(),
         )
-        .on_press(|state: &mut AppState| state.clear_regular_tabs());
-    hover_highlight::attach(button, key, Group::Controls)
+        .on_press(|state: &mut AppState| state.clear_regular_tabs())
 }
 
 /// The button that opens a new tab, at the top or bottom of the tab list.
