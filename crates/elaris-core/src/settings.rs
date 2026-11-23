@@ -288,7 +288,9 @@ pub struct Settings {
     /// How much of the window's colour tints the glass, 0 through 100. The settings page shows
     /// the inverse as transparency.
     pub tint_opacity: u8,
-    /// How strong the still noise over the glass is, 0 through 100.
+    /// Whether the still noise over the window is shown. It works with or without glass.
+    pub grain_enabled: bool,
+    /// How strong the still noise is, 0 through 100.
     pub grain: u8,
     pub reduce_motion: bool,
     pub memory_saver: elaris_memory_saver::MemorySaver,
@@ -318,7 +320,8 @@ impl Default for Settings {
             glass_enabled: true,
             glass_style: GlassStyle::default(),
             tint_opacity: 100,
-            grain: 0,
+            grain_enabled: false,
+            grain: 40,
             reduce_motion: false,
             memory_saver: elaris_memory_saver::MemorySaver::default(),
             keep_awake_sites: Vec::new(),
@@ -367,6 +370,10 @@ impl Settings {
         self.tint_opacity = opacity.min(100);
     }
 
+    pub fn set_grain_enabled(&mut self, enabled: bool) {
+        self.grain_enabled = enabled;
+    }
+
     pub fn set_grain(&mut self, grain: u8) {
         self.grain = grain.min(100);
     }
@@ -394,6 +401,7 @@ pub enum SettingsChange {
     GlassEnabled(bool),
     GlassStyle(GlassStyle),
     TintOpacity(u8),
+    GrainEnabled(bool),
     Grain(u8),
     ReduceMotion(bool),
     ForceDark(bool),

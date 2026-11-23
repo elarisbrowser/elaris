@@ -216,6 +216,14 @@ impl super::AppState {
         self.save_setting(SettingsChange::TintOpacity(opacity));
     }
 
+    pub(crate) fn set_grain_enabled(&mut self, enabled: bool) {
+        if self.settings.grain_enabled == enabled {
+            return;
+        }
+        self.settings.set_grain_enabled(enabled);
+        self.save_setting(SettingsChange::GrainEnabled(enabled));
+    }
+
     pub(crate) fn set_grain(&mut self, grain: u8) {
         let grain = grain.min(100);
         if self.settings.grain == grain {

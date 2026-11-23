@@ -171,6 +171,7 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
             ("appearance", "glass_style", value.config_key().to_owned())
         }
         SettingsChange::TintOpacity(value) => ("appearance", "tint_opacity", value.to_string()),
+        SettingsChange::GrainEnabled(value) => ("appearance", "grain_enabled", value.to_string()),
         SettingsChange::Grain(value) => ("appearance", "grain", value.to_string()),
         SettingsChange::ForceDark(value) => ("pages", "force_dark", value.to_string()),
         SettingsChange::ReduceMotion(value) => ("performance", "reduce_motion", value.to_string()),
@@ -186,6 +187,7 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
     };
     let new_value = if section == "content_blocking"
         || key == "glass"
+        || key == "grain_enabled"
         || key == "reduce_motion"
         || key == "force_dark"
         || key == "bookmarks_bar"

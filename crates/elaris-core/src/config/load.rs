@@ -164,6 +164,9 @@ pub fn parse(contents: &str) -> Result<ConfigLoad, String> {
             defaults.glass_style
         });
     }
+    if let Some(value) = bool_value(&document, "appearance", "grain_enabled", &mut issues) {
+        settings.grain_enabled = value;
+    }
     if let Some(value) = integer_value(&document, "appearance", "grain", &mut issues) {
         if (0..=100).contains(&value) {
             settings.grain = value as u8;

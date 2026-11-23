@@ -505,7 +505,8 @@ fn every_setting_change_round_trips_through_the_shared_model() {
 fn glass_style_and_grain_default_round_trip_and_reject_bad_values() {
     let defaults = parse("").unwrap().settings;
     assert_eq!(defaults.glass_style, GlassStyle::Liquid);
-    assert_eq!(defaults.grain, 0);
+    assert!(!defaults.grain_enabled);
+    assert_eq!(defaults.grain, 40);
 
     let path = std::env::temp_dir().join(format!(
         "elaris-config-glass-{}-{}.toml",
@@ -514,15 +515,17 @@ fn glass_style_and_grain_default_round_trip_and_reject_bad_values() {
     ));
     fs::write(&path, DEFAULT_CONFIG).expect("write initial config");
     write_change(&path, &SettingsChange::GlassStyle(GlassStyle::Frosted)).unwrap();
-    write_change(&path, &SettingsChange::Grain(40)).unwrap();
+    write_change(&path, &SettingsChange::GrainEnabled(true)).unwrap();
+    write_change(&path, &SettingsChange::Grain(60)).unwrap();
     let loaded = load_or_create(&path).expect("reload changed config");
     assert_eq!(loaded.settings.glass_style, GlassStyle::Frosted);
-    assert_eq!(loaded.settings.grain, 40);
+    assert!(loaded.settings.grain_enabled);
+    assert_eq!(loaded.settings.grain, 60);
     fs::remove_file(path).expect("remove glass config");
 
     let invalid = parse("[appearance]\nglass_style = 'clear'\ngrain = 101").unwrap();
     assert_eq!(invalid.settings.glass_style, GlassStyle::Liquid);
-    assert_eq!(invalid.settings.grain, 0);
+    assert_eq!(invalid.settings.grain, 40);
     assert_eq!(invalid.issues.len(), 2);
 }
 
