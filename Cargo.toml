@@ -18,13 +18,13 @@ rust-version = "1.89"
 
 [dependencies.rune]
 git = "https://github.com/elarisbrowser/rune"
-rev = "5dfa884d3de981782e401659003a95b8dae4b853"
+rev = "79027ad5f9ae942ca674521784d9abd9af23315e"
 default-features = false
 features = ["accessibility", "embedded-fonts", "metal-backend", "native-file-dialog", "svg", "tooling"]
 
 [dependencies.rune-kit]
 git = "https://github.com/elarisbrowser/rune"
-rev = "5dfa884d3de981782e401659003a95b8dae4b853"
+rev = "79027ad5f9ae942ca674521784d9abd9af23315e"
 
 [dependencies.elaris-core]
 path = "crates/elaris-core"
@@ -107,26 +107,26 @@ opt-level = 1
 # Rune needs its matching graphics, platform, accessibility, and text patches outside its workspace.
 [patch.crates-io.wgpu-hal]
 git = "https://github.com/elarisbrowser/rune"
-rev = "5dfa884d3de981782e401659003a95b8dae4b853"
+rev = "79027ad5f9ae942ca674521784d9abd9af23315e"
 
 [patch.crates-io.parley_engine]
 git = "https://github.com/elarisbrowser/rune"
-rev = "5dfa884d3de981782e401659003a95b8dae4b853"
+rev = "79027ad5f9ae942ca674521784d9abd9af23315e"
 package = "parley_engine"
 
 [patch.crates-io.sctk-adwaita]
 git = "https://github.com/elarisbrowser/rune"
-rev = "5dfa884d3de981782e401659003a95b8dae4b853"
+rev = "79027ad5f9ae942ca674521784d9abd9af23315e"
 
 [patch.crates-io.accesskit_windows]
 git = "https://github.com/elarisbrowser/rune"
-rev = "5dfa884d3de981782e401659003a95b8dae4b853"
+rev = "79027ad5f9ae942ca674521784d9abd9af23315e"
 
 [patch.crates-io.accesskit_macos]
 git = "https://github.com/elarisbrowser/rune"
-rev = "5dfa884d3de981782e401659003a95b8dae4b853"
+rev = "79027ad5f9ae942ca674521784d9abd9af23315e"
 
 [patch.crates-io.winit]
 git = "https://github.com/elarisbrowser/rune"
-rev = "5dfa884d3de981782e401659003a95b8dae4b853"
+rev = "79027ad5f9ae942ca674521784d9abd9af23315e"
 package = "winit"
