@@ -528,10 +528,19 @@ static void emit_discard(ElarisLadybirdView& handle, bool kept) {
 
 // What a sleeping tab had, kept until the tab wakes or closes: its session history, and the state Ladybird keeps for
 // it, such as its sessionStorage.
+// Ladybird's Vector has a zero-length inline buffer when it has no inline capacity. GCC's -Wpedantic rejects that
+// inside a struct, though Ladybird's own compilers accept it, so silence only this struct on GCC.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wpedantic"
+#endif
 struct DiscardedTab {
     WebView::SessionHistorySnapshot history;
     u64 state_id{};
 };
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 static std::map<uint64_t, DiscardedTab> s_discarded_tabs;
 
 static AK::OwnPtr<ElarisApplication> s_application;
