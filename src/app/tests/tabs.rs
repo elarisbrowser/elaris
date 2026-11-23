@@ -58,6 +58,22 @@ fn close_others_keeps_recently_closed_favourite_tabs_reopenable() {
     assert_eq!(state.browser.active_tab().map(Tab::id), Some(reopened));
 }
 #[test]
+fn clear_regular_tabs_keeps_favourites_open() {
+    let mut state = AppState::new(Some("favourite.example"));
+    let favourite = state.browser.active_tab().unwrap().id();
+    state
+        .browser
+        .move_tab_to(favourite, TabSection::Favourite, 0)
+        .unwrap();
+    state.browser.open_tab("one.example").unwrap();
+    state.browser.open_tab("two.example").unwrap();
+
+    state.clear_regular_tabs();
+    let remaining: Vec<_> = state.browser.tabs().iter().map(Tab::id).collect();
+    assert_eq!(remaining, [favourite]);
+    assert_eq!(state.recently_closed().len(), 2);
+}
+#[test]
 fn omnibox_routes_internal_pages_and_keeps_ordinary_web_navigation() {
     let mut state = AppState::new(Some("example.com"));
     let tab = state.browser.active_tab().unwrap().id();

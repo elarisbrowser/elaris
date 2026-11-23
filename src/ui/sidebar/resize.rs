@@ -28,7 +28,14 @@ pub(crate) fn handle(state: &AppState, window_width: f32) -> El {
         .on_drag(move |state: &mut AppState, drag, tx| match drag.phase {
             // The width at the press, kept for the gesture.
             rune::Phase::Down => drag.data = state.sidebar.width,
-            rune::Phase::Move => state.sidebar.width = stretched(drag.data + grow * drag.dx),
+            rune::Phase::Move => {
+                let was_within = settled(state.sidebar.width) == state.sidebar.width;
+                state.sidebar.width = stretched(drag.data + grow * drag.dx);
+                // Tap once as the edge passes a limit and starts to resist.
+                if was_within && settled(state.sidebar.width) != state.sidebar.width {
+                    crate::platform::trackpad::threshold_haptic();
+                }
+            }
             // The spring back waits for the next frame: a drag's commits land at once, and a
             // move in the same frame as the release would land the settle too.
             rune::Phase::Up => {

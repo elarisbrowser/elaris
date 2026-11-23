@@ -12,6 +12,12 @@ pub(crate) fn threshold_haptic() {
     platform::perform(platform::ALIGNMENT);
 }
 
+/// A light tick, as macOS gives when a drag moves between discrete positions.
+pub(crate) fn step_haptic() {
+    #[cfg(target_os = "macos")]
+    platform::perform(platform::LEVEL_CHANGE);
+}
+
 /// Whether scrolled content follows the fingers (macOS's "Natural scrolling", on by default).
 pub(crate) fn natural_scrolling() -> bool {
     #[cfg(target_os = "macos")]

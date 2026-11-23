@@ -285,6 +285,18 @@ impl super::AppState {
         self.begin_close(targets, CloseAction::Tabs { keep: Some(tab) });
     }
 
+    /// Closes every regular tab, leaving favourites open.
+    pub(crate) fn clear_regular_tabs(&mut self) {
+        let targets: Vec<_> = self
+            .browser
+            .section_tabs(TabSection::Regular)
+            .map(Tab::id)
+            .collect();
+        if !targets.is_empty() {
+            self.begin_close(targets, CloseAction::Tabs { keep: None });
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn recently_closed(&self) -> &[RecentlyClosedTab] {
         &self.recently_closed

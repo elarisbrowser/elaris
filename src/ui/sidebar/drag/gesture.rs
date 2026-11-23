@@ -257,6 +257,13 @@ impl TabDragState {
         );
         dragging.target = Some(TabDropTarget { section, index });
         dragging.valid = true;
+        // Tick as the drop slot moves, but not when the drag first picks one.
+        if previous
+            .0
+            .is_some_and(|target| Some(target) != dragging.target)
+        {
+            crate::platform::trackpad::step_haptic();
+        }
         previous != (dragging.target, dragging.valid)
     }
 

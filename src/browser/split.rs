@@ -186,12 +186,19 @@ impl Browser {
         }
     }
 
-    pub(crate) fn resize_split(&mut self, left: f32) {
+    /// Moves the divider to `left`, within the panes' minimum widths. True when this move
+    /// newly pinned the divider against one of those limits.
+    pub(crate) fn resize_split(&mut self, left: f32) -> bool {
         let width = self.window.viewport[0];
-        if let Some(split) = &mut self.split {
-            let available = (width - DIVIDER).max(1.0);
-            split.ratio = widths(width, left / available)[0] / available;
-        }
+        let Some(split) = &mut self.split else {
+            return false;
+        };
+        let available = (width - DIVIDER).max(1.0);
+        let clamped = widths(width, left / available)[0];
+        let ratio = clamped / available;
+        let arrived = clamped != left && ratio != split.ratio;
+        split.ratio = ratio;
+        arrived
     }
 }
 

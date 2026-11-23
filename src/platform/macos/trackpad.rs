@@ -8,6 +8,8 @@ use objc2_foundation_02::NSString;
 
 /// `NSHapticFeedbackPatternAlignment`.
 pub(crate) const ALIGNMENT: isize = 1;
+/// `NSHapticFeedbackPatternLevelChange`.
+pub(crate) const LEVEL_CHANGE: isize = 2;
 /// `NSHapticFeedbackPerformanceTimeNow`.
 const NOW: usize = 1;
 

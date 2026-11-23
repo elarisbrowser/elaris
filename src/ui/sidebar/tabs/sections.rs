@@ -2,7 +2,8 @@
 
 //! Section rendering for the sidebar: the favourites grid, the regular tab list, and their dividers and new-tab button.
 
-use rune::{El, GrowthSpec, Spring, col, el, icon, row};
+use rune::tok::type_;
+use rune::{El, GrowthSpec, Spring, col, el, icon, row, text};
 
 use super::placeholder::{drop_placeholder, source_placeholder};
 use super::row::{favourite_tile, tab_row};
@@ -11,6 +12,7 @@ use crate::app;
 use crate::app::AppState;
 use crate::tab::{TabId, TabSection};
 use crate::ui::components::controls::row_button;
+use crate::ui::components::hover_highlight::{self, Group};
 use crate::ui::components::rule::hairline;
 use crate::ui::icons;
 use crate::ui::sidebar::drag::{
@@ -116,13 +118,43 @@ pub(super) fn presence_motion(reduced_motion: bool) -> Spring {
 }
 
 /// A hairline between sidebar sections. Its spacing comes from `SIDEBAR_DIVIDER_PADDING` alone.
-pub(super) fn divider(key: &'static str, theme: &Theme) -> El {
-    col()
+/// With `clear`, the hairline ends in a button that closes every regular tab.
+pub(super) fn divider(key: &'static str, clear: bool, theme: &Theme) -> El {
+    row()
         .key(key)
         .w_full()
         .px(theme::SIDEBAR_PADDING)
         .py(theme::SIDEBAR_DIVIDER_PADDING)
-        .child(hairline(theme.overlay_border))
+        .gap(theme::ROW_GAP)
+        .center_y()
+        .child(hairline(theme.overlay_border).grow(1.0))
+        .children(clear.then(|| clear_button(theme)))
+}
+
+/// The divider's trailing button that closes every regular tab, leaving favourites open.
+fn clear_button(theme: &Theme) -> El {
+    let key = "clear-tabs";
+    let button = row()
+        .key(key)
+        .h(theme::SIDEBAR_CLEAR_HEIGHT)
+        .px(theme::SIDEBAR_CLEAR_PADDING)
+        .gap(theme::SIDEBAR_CLEAR_GAP)
+        .center_y()
+        .radius(theme::ROW_RADIUS)
+        .continuous_corners()
+        .press(theme.press)
+        .press_scale(theme::PRESS_SCALE)
+        .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
+        .label("Clear tabs")
+        .child(icon(&icons::ARROW_DOWN, theme::SIDEBAR_CLEAR_ICON).color(theme.text_muted))
+        .child(
+            text("Clear")
+                .font(type_::LABEL)
+                .color(theme.text_muted)
+                .single_line(),
+        )
+        .on_press(|state: &mut AppState| state.clear_regular_tabs());
+    hover_highlight::attach(button, key, Group::Controls)
 }
 
 /// The button that opens a new tab, at the top or bottom of the tab list.

@@ -223,6 +223,11 @@ pub(crate) const SIDEBAR_PADDING: f32 = space::S2 + space::S1 / 2.0;
 pub(crate) const SIDEBAR_GAP: f32 = space::S2;
 /// Space above and below a sidebar divider, so the divider sits close to the sections it separates.
 pub(crate) const SIDEBAR_DIVIDER_PADDING: f32 = space::S1;
+/// The "Clear" button at the end of the regular tabs' divider.
+pub(crate) const SIDEBAR_CLEAR_HEIGHT: f32 = 22.0;
+pub(crate) const SIDEBAR_CLEAR_PADDING: f32 = space::S1 + space::S1 / 2.0;
+pub(crate) const SIDEBAR_CLEAR_GAP: f32 = space::S1;
+pub(crate) const SIDEBAR_CLEAR_ICON: f32 = 12.0;
 /// The row level with the window controls, holding the navigation buttons: the height of the
 /// titlebar band macOS drags, since the controls sit centred in it.
 pub(crate) const HORIZONTAL_STRIP_HEIGHT: f32 = HEADER_HEIGHT - 4.0;

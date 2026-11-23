@@ -37,6 +37,11 @@ pub(super) fn view(
         .tab_drag
         .preview_items(state.browser.tabs(), TabSection::Favourite);
     let has_favourites = !favourite_items.is_empty();
+    let has_regular_tabs = state
+        .browser
+        .section_tabs(TabSection::Regular)
+        .next()
+        .is_some();
     let reorder_motion = if reduced_motion {
         Spring::NONE
     } else {
@@ -52,9 +57,9 @@ pub(super) fn view(
             edge: theme::TAB_PRESENCE_EDGE,
         })
         .motion(reorder_motion);
-    if !has_favourites && !state.browser.tabs().is_empty() {
+    if !has_favourites && has_regular_tabs {
         scroll_content =
-            scroll_content.child(divider("regular-tabs-divider", theme).arrives_whole());
+            scroll_content.child(divider("regular-tabs-divider", true, theme).arrives_whole());
     }
     if new_tab_top {
         scroll_content = scroll_content.child(new_tab_button(theme).arrives_whole());
@@ -99,7 +104,7 @@ pub(super) fn view(
                 theme,
                 reduced_motion,
             ))
-            .child(divider("favourites-divider", theme))
+            .child(divider("favourites-divider", has_regular_tabs, theme))
             .gap(theme::SIDEBAR_GAP);
     }
     sidebar_tabs = sidebar_tabs.child(scroll);

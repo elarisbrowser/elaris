@@ -33,7 +33,9 @@ pub(super) fn divider(live: bool, theme: &Theme) -> El {
                     drag.data = split::widths(state.browser.content_width(), split.ratio)[0];
                 }
             } else if !drag.cancelled() {
-                state.browser.resize_split(drag.data + drag.dx);
+                if state.browser.resize_split(drag.data + drag.dx) {
+                    crate::platform::trackpad::threshold_haptic();
+                }
                 tx.instant();
             }
         })
@@ -53,7 +55,11 @@ pub(super) fn grid_divider(row: usize, columns: usize, theme: &Theme) -> El {
                 } else if !drag.cancelled() {
                     let share = drag.data + drag.dx / available;
                     let equal = 1.0 / columns as f32;
-                    split.ratio = (share - equal + 0.5).clamp(0.0, 1.0);
+                    let ratio = (share - equal + 0.5).clamp(0.0, 1.0);
+                    if matches!(ratio, 0.0 | 1.0) && ratio != split.ratio {
+                        crate::platform::trackpad::threshold_haptic();
+                    }
+                    split.ratio = ratio;
                     tx.instant();
                 }
             }

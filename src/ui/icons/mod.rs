@@ -5,6 +5,7 @@
 
 use rune::Icon;
 
+mod arrow_down;
 mod autoplay;
 mod back;
 mod camera;
@@ -53,6 +54,7 @@ mod system;
 mod search_engines;
 mod tick;
 
+pub(crate) use arrow_down::ARROW_DOWN;
 pub(crate) use autoplay::AUTOPLAY;
 pub(crate) use back::BACK;
 pub(crate) use camera::CAMERA;
