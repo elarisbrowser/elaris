@@ -10,7 +10,8 @@ use rune::{FileDialogOptions, Key, KeyEvent, Tx};
 use crate::app::{self, AppState};
 use crate::browser::Browser;
 use crate::tab::{Tab, TabId};
-use crate::ui;
+use crate::toast::Toast;
+use crate::ui::{self, icons};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Shortcut {
@@ -22,6 +23,8 @@ pub(crate) enum Shortcut {
     Close,
     /// Open the omnibox with the active page address selected.
     FocusOmnibox,
+    /// Copy the active page's address, and confirm with a toast.
+    CopyAddress,
     Find,
     FindNext,
     FindPrevious,
@@ -124,6 +127,7 @@ pub(crate) fn dispatch(state: &mut AppState, shortcut: Shortcut, tx: &mut Tx) {
             }
         }
         Shortcut::FocusOmnibox => focus_omnibox(state, tx),
+        Shortcut::CopyAddress => copy_address(state, tx),
         Shortcut::Find => state.open_find(tx),
         Shortcut::FindNext | Shortcut::FindPrevious => {
             if !state.find_open {
@@ -200,6 +204,28 @@ fn focus_omnibox(state: &mut AppState, tx: &mut Tx) {
     tx.focus("omnibox-input", false);
 }
 
+/// Copies the address the omnibox shows, as the sidebar's copy button does, and confirms it.
+fn copy_address(state: &mut AppState, tx: &mut Tx) {
+    let address = state
+        .browser
+        .active_tab()
+        .map(|tab| tab.url.as_str())
+        .filter(|url| !url.is_empty() && *url != "about:blank")
+        .map(str::to_owned);
+    match address {
+        Some(address) => {
+            tx.copy(address.clone());
+            state.toasts.show(
+                tx,
+                Toast::new("Copied address")
+                    .icon(&icons::COPY)
+                    .detail(address),
+            );
+        }
+        None => state.toasts.show(tx, "No address to copy"),
+    }
+}
+
 /// The shortcut `event` is, if any.
 pub(crate) fn shortcut(event: &KeyEvent) -> Option<Shortcut> {
     let Key::Command(key) = event.key else {
@@ -217,6 +243,7 @@ pub(crate) fn shortcut(event: &KeyEvent) -> Option<Shortcut> {
         ('t' | 'T', true) => Shortcut::ReopenClosedTab,
         ('w', false) => Shortcut::Close,
         ('l', false) => Shortcut::FocusOmnibox,
+        ('c', true) => Shortcut::CopyAddress,
         ('r', false) => Shortcut::Reload,
         ('r', true) => Shortcut::ReloadBypassingCache,
         ('=' | '+', _) => Shortcut::ZoomIn,
@@ -263,6 +290,7 @@ mod tests {
         assert_eq!(press('T', true), Some(Shortcut::ReopenClosedTab));
         assert_eq!(press('w', false), Some(Shortcut::Close));
         assert_eq!(press('l', false), Some(Shortcut::FocusOmnibox));
+        assert_eq!(press('c', true), Some(Shortcut::CopyAddress));
         assert_eq!(press('r', false), Some(Shortcut::Reload));
         assert_eq!(press('R', true), Some(Shortcut::ReloadBypassingCache));
         assert_eq!(press('=', false), Some(Shortcut::ZoomIn));
@@ -286,6 +314,7 @@ mod tests {
         assert_eq!(press('[', false), None);
         assert_eq!(press('0', true), None);
         assert_eq!(press('q', false), None);
+        assert_eq!(press('c', false), None);
         let typed = KeyEvent {
             key: Key::Text("t".into()),
             mods: Mods::default(),
@@ -305,5 +334,21 @@ mod tests {
         assert_eq!(state.browser.tabs().len(), 1);
         assert_eq!(state.browser.active_tab().unwrap().id(), original);
         assert!(!state.omnibox.open);
+    }
+
+    #[test]
+    fn copy_address_confirms_with_a_toast() {
+        let mut state = AppState::new(Some("example.com"));
+        dispatch(&mut state, Shortcut::CopyAddress, &mut Tx::default());
+        let toast = &state.toasts.shown.last().unwrap().toast;
+        assert_eq!(toast.message, "Copied address");
+        assert!(toast.detail.is_some());
+
+        let mut empty = AppState::new(Some("about:blank"));
+        dispatch(&mut empty, Shortcut::CopyAddress, &mut Tx::default());
+        assert_eq!(
+            empty.toasts.shown.last().unwrap().toast.message,
+            "No address to copy"
+        );
     }
 }
