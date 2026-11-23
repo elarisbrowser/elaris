@@ -20,7 +20,7 @@ mod split;
 
 pub(crate) use context_menu::context_menu;
 pub(in crate::ui) use drag_handler::tab_drag_handler;
-pub(in crate::ui) use icon::tab_icon;
+pub(in crate::ui) use icon::{dim_if_asleep, tab_icon};
 pub(in crate::ui) use overlay::drag_overlay;
 #[cfg(target_os = "macos")]
 pub(crate) use overlay::floating_drag_preview;

@@ -24,7 +24,7 @@ impl Browser {
     #[cfg(any(feature = "ladybird-bridge", test))]
     pub(crate) fn connect(&mut self, engine: Engine) {
         for tab in &self.tabs {
-            if !tab.is_internal() {
+            if !tab.is_internal() && !tab.asleep {
                 engine.send(Command::Open(tab.id(), tab.surface.clone(), self.private));
                 let zoom = tab.zoom_override.unwrap_or(self.default_zoom);
                 if zoom != 100 {

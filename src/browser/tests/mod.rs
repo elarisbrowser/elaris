@@ -9,6 +9,7 @@ mod downloads;
 mod engine;
 mod find;
 mod navigation;
+mod sleep;
 mod tabs;
 mod views;
 

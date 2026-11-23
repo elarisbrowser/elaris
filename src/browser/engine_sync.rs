@@ -295,6 +295,9 @@ impl Browser {
             }
         }
         let scheme_known = window.applied_dark.get().is_some();
+        let (private, accessibility) = (self.private, self.accessibility);
+        let default_zoom = self.default_zoom;
+        let now = Instant::now();
         for tab in self
             .tabs
             .iter_mut()
@@ -304,11 +307,20 @@ impl Browser {
                 continue;
             }
             let id = tab.id();
-            let applied = &mut tab.engine;
             let active = input_page == Some(id);
             let side = panes.iter().position(|pane| *pane == Some(id));
             let is_peek = peek_id == Some(id);
             let visible = is_peek || side.is_some();
+            if visible {
+                tab.last_seen = now;
+                if tab.asleep {
+                    wake(engine, tab, private, accessibility, default_zoom);
+                }
+            }
+            if tab.asleep {
+                continue;
+            }
+            let applied = &mut tab.engine;
             let size = if is_peek {
                 peek::geometry(window.viewport).page_size()
             } else if let (Some(side), Some(ratio)) = (side, split_ratio)
@@ -368,4 +380,26 @@ impl Browser {
             }
         }
     }
+}
+
+/// Opens a sleeping tab's view again, as it was set up before it slept. Its page loads once the
+/// view has a viewport, as a first page does.
+fn wake(
+    engine: &crate::engine::Engine,
+    tab: &mut Tab,
+    private: bool,
+    accessibility: bool,
+    zoom: u16,
+) {
+    let id = tab.id();
+    tab.asleep = false;
+    engine.send(Command::Open(id, tab.surface.clone(), private));
+    let zoom = tab.zoom_override.unwrap_or(zoom);
+    if zoom != 100 {
+        engine.send(Command::View(id, ViewCommand::SetZoom(zoom)));
+    }
+    if accessibility {
+        engine.send(Command::View(id, ViewCommand::SetAccessibility(true)));
+    }
+    tab.engine.deferred_load = false;
 }

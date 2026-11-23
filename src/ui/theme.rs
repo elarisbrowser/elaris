@@ -266,6 +266,8 @@ pub(crate) const ICON_BUTTON: f32 = 28.0;
 pub(crate) const ICON_BUTTON_RADIUS: f32 = radius::MD;
 pub(crate) const LOADING_PERIOD: f64 = 1.0;
 pub(crate) const ICON: f32 = 16.0;
+/// How visible a sleeping tab is in the tab list.
+pub(crate) const ASLEEP_OPACITY: f32 = 0.5;
 pub(crate) const CLOSE_BUTTON: f32 = 24.0;
 /// The space between the navigation buttons, and between them and the sidebar toggle while the
 /// sidebar is hidden.

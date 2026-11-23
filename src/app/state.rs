@@ -145,6 +145,8 @@ pub(crate) struct AppState {
     pub(super) history_revision: u64,
     pub(crate) history_page: HistoryPage,
     pub(crate) task_manager: TaskManagerPage,
+    /// When Memory Saver next checks for tabs to sleep; none until its first check.
+    pub(crate) memory_saver_check: Option<std::time::Instant>,
     /// The page title the window shows.
     pub(super) window_title: Option<String>,
     pub(crate) zoom_menu: Option<TabId>,

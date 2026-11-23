@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! The mark at the leading edge of a tab: its favicon, a static page glyph, or a spinner.
+//! The mark at the leading edge of a tab: its favicon, a static page glyph, a spinner, or a bed
+//! while it sleeps.
 
 use rune::{El, el, icon};
 
@@ -18,6 +19,9 @@ pub(in crate::ui) fn tab_icon(
     theme: &Theme,
 ) -> El {
     let color = if active { theme.text } else { theme.text_muted };
+    if tab.asleep {
+        return icon(&icons::BED, size).color(color).label("Sleeping");
+    }
     if let Some(favicon) = &tab.favicon {
         return el().size(size, size).center().pixels(favicon);
     }
@@ -35,4 +39,13 @@ pub(in crate::ui) fn tab_icon(
         _ => &icons::PAGE,
     };
     icon(glyph, size).color(color)
+}
+
+/// Fades a sleeping tab, so the tabs still holding memory stand out.
+pub(in crate::ui) fn dim_if_asleep(element: El, tab: &Tab) -> El {
+    if tab.asleep {
+        element.opacity(theme::ASLEEP_OPACITY)
+    } else {
+        element
+    }
 }

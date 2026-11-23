@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Look & layout: theme, tabs, accent, glass, Split View and motion.
+//! Look & layout: theme, tabs, accent, glass, Split View, motion and Memory Saver.
 
 use rune::tok::type_;
 use rune::{Drag, El, Phase, col, el, row, text};
@@ -12,6 +12,7 @@ use crate::ui::icons;
 use crate::ui::internal::PageContext;
 use crate::ui::theme::{self, Theme};
 use elaris_core::appearance::{AccentColor, Appearance, GlassStyle};
+use elaris_core::memory_saver::MemorySaver;
 use elaris_core::settings::{NewTabPosition, PageStyle, SidebarSide, TabLayout};
 
 use super::section;
@@ -246,16 +247,31 @@ fn motion(cx: &mut PageContext) -> El {
         .hide_label()
         .on_toggle(|state: &mut AppState| state.set_reduce_motion(!state.settings.reduce_motion))
         .build(&switch_kit(&cx.kit));
-    section(
-        "Performance",
-        cx.theme,
-        [setting(
-            cx,
-            "Reduce motion",
-            "Minimise animations and transitions throughout Elaris.",
-            reduce_motion,
-        )],
+    let mode = cx.state.settings.memory_saver;
+    let memory_saver = SegmentedControl::new(
+        &MemorySaver::ALL.map(MemorySaver::label),
+        MemorySaver::ALL.iter().position(|choice| *choice == mode),
     )
+    .width(Some(theme::PAGE_CONTROL_WIDTH))
+    .label("Memory Saver")
+    .on_pick(|state: &mut AppState, index, _| state.set_memory_saver(MemorySaver::ALL[index]))
+    .build(&cx.kit);
+    let reduce_motion = setting(
+        cx,
+        "Reduce motion",
+        "Minimise animations and transitions throughout Elaris.",
+        reduce_motion,
+    );
+    let memory_saver = setting(
+        cx,
+        "Memory Saver",
+        &format!(
+            "Puts background tabs to sleep to free memory; they reload when you return. {}",
+            mode.description()
+        ),
+        memory_saver,
+    );
+    section("Performance", cx.theme, [memory_saver, reduce_motion])
 }
 
 fn accent_color_control(selected: AccentColor, theme: &Theme) -> El {

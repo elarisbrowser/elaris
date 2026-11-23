@@ -226,6 +226,16 @@ impl super::AppState {
         self.save_setting(SettingsChange::ReduceMotion(enabled));
     }
 
+    pub(crate) fn set_memory_saver(&mut self, mode: elaris_core::memory_saver::MemorySaver) {
+        if self.settings.memory_saver == mode {
+            return;
+        }
+        self.settings.memory_saver = mode;
+        // The next poll checks at once under the new mode.
+        self.memory_saver_check = None;
+        self.save_setting(SettingsChange::MemorySaver(mode));
+    }
+
     pub(crate) fn set_page_zoom(&mut self, zoom: u16) {
         if self.settings.page_zoom != zoom {
             self.settings.page_zoom = zoom;

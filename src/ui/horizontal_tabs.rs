@@ -8,7 +8,7 @@ use crate::ui::components::menu::{Menu, MenuItem};
 use rune::{Align, Cx, El, Side, Spring, Transition, Tx, col, el, row};
 
 use super::sidebar::drag::PreviewItem;
-use super::sidebar::tabs::{drag_overlay, tab_drag_handler, tab_icon};
+use super::sidebar::tabs::{dim_if_asleep, drag_overlay, tab_drag_handler, tab_icon};
 use super::sidebar::{header, hover};
 use super::theme::{self, Theme};
 use super::{downloads, icons};
@@ -490,9 +490,11 @@ fn tab_view(state: &AppState, tab: &Tab, theme: &Theme) -> El {
             .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
             .child(icon)
     };
-    tile = tile
-        .radius(theme::HORIZONTAL_TAB_RADIUS)
-        .continuous_corners();
+    tile = dim_if_asleep(
+        tile.radius(theme::HORIZONTAL_TAB_RADIUS)
+            .continuous_corners(),
+        tab,
+    );
     if active {
         tile = tile.fill(theme.tab_active).shadow(
             theme::ACTIVE_SHADOW_Y,

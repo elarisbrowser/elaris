@@ -29,6 +29,7 @@ mod lifecycle;
 mod navigation;
 pub(crate) mod peek;
 mod selection;
+mod sleep;
 pub(crate) mod split;
 mod state;
 pub(crate) mod swipe;

@@ -5,7 +5,7 @@
 use rune::{El, Spring, el};
 
 use super::drag_handler::tab_drag_handler;
-use super::icon::tab_icon;
+use super::icon::{dim_if_asleep, tab_icon};
 use super::split::{TabRowStyle, members as split_group_members};
 use crate::app::AppState;
 use crate::tab::{Tab, TabSection};
@@ -72,6 +72,7 @@ pub(super) fn favourite_tile(
     } else {
         tile = tile.fill(theme.address_field);
     }
+    tile = dim_if_asleep(tile, tab);
     if hidden {
         tile = tile.opacity(0.0).opacity_motion(rune::Anim::INSTANT);
     }
@@ -145,6 +146,7 @@ pub(super) fn tab_row(
             theme.tab_active_shadow,
         );
     }
+    row = dim_if_asleep(row, tab);
     if hidden {
         row = row.opacity(0.0).opacity_motion(rune::Anim::INSTANT);
     }

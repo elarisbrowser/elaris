@@ -10,4 +10,5 @@ pub(crate) mod macos;
 
 pub(crate) mod default_browser;
 pub(crate) mod haptics;
+pub(crate) mod memory;
 pub(crate) mod trackpad;

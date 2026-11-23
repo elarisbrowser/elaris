@@ -51,6 +51,7 @@ pub(crate) mod cross_window_drag;
 pub(crate) mod detach;
 mod find;
 mod lifecycle;
+mod memory_saver;
 mod mini;
 mod omnibox_actions;
 mod session;

@@ -5,6 +5,7 @@
 pub(crate) mod default_browser;
 pub(crate) mod drag_overlay;
 pub(crate) mod haptics;
+pub(crate) mod memory;
 pub(crate) mod menu;
 pub(crate) mod titlebar;
 pub(crate) mod trackpad;
