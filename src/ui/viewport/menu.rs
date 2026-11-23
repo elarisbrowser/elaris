@@ -298,11 +298,18 @@ pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
             .icon(&icons::LINK),
         );
     } else if info.media.is_none() {
-        menu = with_header(menu, state, tab, theme).item(item(
-            id,
-            "Reload Without Cache",
-            move |s, _| s.browser.reload_bypassing_cache(id),
-        ));
+        menu = with_header(menu, state, tab, theme)
+            .item(item(id, "Reload Without Cache", move |s, _| {
+                s.browser.reload_bypassing_cache(id)
+            }))
+            .separator()
+            .item(item(id, "Take Screenshot", move |s, _| {
+                s.browser.send(id, ViewCommand::Screenshot { full: false })
+            }))
+            .item(item(id, "Screenshot Full Page", move |s, _| {
+                s.browser.send(id, ViewCommand::Screenshot { full: true })
+            }))
+            .separator();
     }
     if !info.selection.is_empty() {
         let text = info.selection.clone();

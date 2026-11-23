@@ -49,6 +49,10 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     let mut polled = state.browser.poll();
     let mini_changed = super::super::mini::poll(state, tx);
     open_popups(state, &mut polled);
+    for (tab, path) in std::mem::take(&mut polled.screenshots) {
+        state.browser.add_saved_file(tab, path);
+        state.downloads_open = true;
+    }
     state.poll_tab_close(&polled, tx);
     crate::ui::form_picker::poll(state, &mut polled, tx);
     let peek_changed = update_peek(state, previous_peek, clock, tx);

@@ -161,6 +161,10 @@ impl Browser {
                         polled.popups.push((source, request, activate));
                     }
                 }
+                Update::Screenshot(id, result) => {
+                    polled.screenshots.push((id, result));
+                    polled.changed = true;
+                }
                 Update::PopupClosed(id) => {
                     self.close_tab(id);
                     polled.changed = true;

@@ -2,6 +2,7 @@
 
 use super::{Browser, Error};
 use crate::engine::{Command, DownloadAction};
+use crate::tab::TabId;
 use elaris_core::address::url_for_address;
 use elaris_core::downloads::{
     self, Download, DownloadId, Request as DownloadRequest, Status as DownloadStatus,
@@ -48,6 +49,20 @@ impl Browser {
         if let Some(engine) = &self.engine {
             engine.send(Command::SetDownloadDirectory(directory));
         }
+    }
+
+    /// Lists a file the engine saved for tab `id`, such as a screenshot, among the downloads.
+    pub(crate) fn add_saved_file(&self, id: TabId, path: Result<std::path::PathBuf, String>) {
+        let Ok(download_id) = DownloadId::next() else {
+            return;
+        };
+        let source = self
+            .page(id)
+            .map_or_else(String::new, |tab| tab.url.clone());
+        self.downloads
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(Download::saved(download_id, source, path, self.private));
     }
 
     /// Starts a Ladybird transfer and returns its stable browser identifier immediately.

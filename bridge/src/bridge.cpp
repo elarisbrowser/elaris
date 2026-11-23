@@ -169,6 +169,18 @@ class ElarisApplication final : public WebView::Application {
     }
 
     ErrorOr<AK::LexicalPath> default_path_for_downloaded_file(AK::ByteString const& file) const override;
+    // Elaris chooses download paths itself, so Ladybird only asks here for a screenshot, which goes to the download
+    // directory.
+    NonnullRefPtr<Core::Promise<AK::ByteString>> ask_user_for_download_path(AK::ByteString const& file) const override {
+        if (!saving_screenshot)
+            return WebView::Application::ask_user_for_download_path(file);
+        auto path = default_path_for_downloaded_file(file);
+        if (path.is_error())
+            return Core::Promise<AK::ByteString>::rejected(path.release_error());
+        return Core::Promise<AK::ByteString>::resolved(path.value().string());
+    }
+    // Set while a screenshot is being saved.
+    bool saving_screenshot { false };
 #if defined(AK_OS_MACOS) || defined(AK_OS_LINUX)
     void resolve_external_url_handler(URL::URL const& url,
                                       WebView::ExternalURLHandlerCallback callback) const override {
@@ -2337,6 +2349,29 @@ extern "C" int32_t elaris_ladybird_find_end(ElarisLadybirdView* handle) {
     if (!on_owner_thread(handle->bridge))
         return fail("find dismissal must run on the initialization thread");
     handle->view->find_in_page_end();
+    return succeed();
+}
+
+extern "C" int32_t elaris_ladybird_take_screenshot(ElarisLadybirdView* handle, int32_t full) {
+    if (!handle)
+        return fail("view is required");
+    if (!on_owner_thread(handle->bridge))
+        return fail("screenshots must be taken on the initialization thread");
+    auto type = full ? WebView::ViewImplementation::ScreenshotType::Full
+                     : WebView::ViewImplementation::ScreenshotType::Visible;
+    s_application->saving_screenshot = true;
+    auto weak_view = handle->view->make_weak_ptr();
+    handle->view->take_screenshot(type)
+        ->when_resolved([weak_view, handle](LexicalPath const& path) {
+            s_application->saving_screenshot = false;
+            if (weak_view)
+                emit(handle, ELARIS_LADYBIRD_SCREENSHOT, path.string().characters(), 1);
+        })
+        .when_rejected([weak_view, handle](Error const& error) {
+            s_application->saving_screenshot = false;
+            if (weak_view)
+                emit(handle, ELARIS_LADYBIRD_SCREENSHOT, ByteString::formatted("{}", error).characters(), 0);
+        });
     return succeed();
 }
 

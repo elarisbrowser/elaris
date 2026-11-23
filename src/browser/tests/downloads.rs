@@ -179,3 +179,29 @@ fn retry_starts_the_address_again_in_place_of_the_failed_record() {
     let done = record(&browser, DownloadStatus::Completed, false);
     assert!(browser.retry_download(done).is_err());
 }
+
+#[test]
+fn screenshots_are_listed_among_the_downloads() {
+    let (mut browser, fake) = ready();
+    let tab = browser.open_tab("example.com").unwrap();
+    browser.send(tab, ViewCommand::Screenshot { full: true });
+    assert!(sent(&fake).contains(&view(tab, ViewCommand::Screenshot { full: true })));
+
+    let path = std::env::temp_dir().join("elaris-screenshot-test.png");
+    fake.updates
+        .send(Update::Screenshot(tab, Ok(path.clone())))
+        .unwrap();
+    let polled = browser.poll();
+    assert_eq!(polled.screenshots, [(tab, Ok(path.clone()))]);
+    for (id, result) in polled.screenshots {
+        browser.add_saved_file(id, result);
+    }
+    browser.add_saved_file(tab, Err("No space left".into()));
+    let downloads = browser.downloads();
+    assert_eq!(downloads[0].status, DownloadStatus::Completed);
+    assert_eq!(downloads[0].destination.as_ref(), Some(&path));
+    assert_eq!(downloads[0].filename, "elaris-screenshot-test.png");
+    assert_eq!(downloads[0].source_url, "https://example.com");
+    assert_eq!(downloads[1].status, DownloadStatus::Failed);
+    assert_eq!(downloads[1].error.as_deref(), Some("No space left"));
+}

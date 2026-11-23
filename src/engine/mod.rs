@@ -261,6 +261,10 @@ pub(crate) enum ViewCommand {
         request_id: u64,
         response: Option<String>,
     },
+    /// Saves a PNG of the visible page, or the whole page, to the download directory.
+    Screenshot {
+        full: bool,
+    },
     /// Reads the current webpage selection without blocking the UI thread.
     SelectedText {
         request_id: u64,
@@ -301,6 +305,8 @@ pub(crate) enum Update {
     NewTab(TabId, String, u64, bool),
     Popup(TabId, u64, bool),
     PopupClosed(TabId),
+    /// Where the screenshot this tab asked for was saved, or why it could not be.
+    Screenshot(TabId, Result<std::path::PathBuf, String>),
     Peek(TabId, String, u64),
     ContextMenu(TabId, elaris::ladybird::PageMenu),
     Clipboard(TabId, String),
@@ -515,6 +521,7 @@ fn update_tab(update: &Update) -> Option<TabId> {
         | Update::NewTab(id, _, _, _)
         | Update::Popup(id, _, _)
         | Update::PopupClosed(id)
+        | Update::Screenshot(id, _)
         | Update::Peek(id, _, _)
         | Update::ContextMenu(id, _)
         | Update::Clipboard(id, _)

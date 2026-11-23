@@ -58,6 +58,8 @@ typedef enum {
     /* The page's process ended: value 1 when it crashed, 2 when it was ended for its memory use, and 0 once a reload
      * recovers the tab. The failed URL is in text. */
     ELARIS_LADYBIRD_CRASHED = 35,
+    /* A screenshot was saved, its path in text, with value 1; or it failed, the reason in text, with value 0. */
+    ELARIS_LADYBIRD_SCREENSHOT = 36,
 } ElarisLadybirdEventKind;
 
 /* Permission event text is the origin and selection is the permission key.
@@ -401,6 +403,8 @@ int32_t elaris_ladybird_preflight_close(ElarisLadybirdView*);
 int32_t elaris_ladybird_find_end(ElarisLadybirdView*);
 /* Reads the current webpage selection and returns it asynchronously with the request ID. */
 int32_t elaris_ladybird_selected_text(ElarisLadybirdView*, uint64_t request_id);
+/* Saves a PNG of the visible page, or of the whole page when full is nonzero, to the download directory. */
+int32_t elaris_ladybird_take_screenshot(ElarisLadybirdView*, int32_t full);
 int32_t elaris_ladybird_key_event(ElarisLadybirdView* view, const ElarisLadybirdKeyEvent* event);
 int32_t elaris_ladybird_set_focus(ElarisLadybirdView* view, int32_t focused);
 /* Sets the colour scheme every page sees through prefers-color-scheme: nonzero for dark, zero for light. It is

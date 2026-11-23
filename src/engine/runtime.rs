@@ -590,6 +590,10 @@ impl Runtime {
                         total_match_count,
                     },
                 },
+                Event::Screenshot(result) => {
+                    updates.push(Update::Screenshot(tab, result));
+                    continue;
+                }
                 Event::SelectedText { request_id, text } => {
                     updates.push(Update::FindSelection(tab, request_id, text));
                     continue;
@@ -698,6 +702,7 @@ fn apply_to_view(view: &mut View, command: ViewCommand, timing: &mut Timing) -> 
             response,
         } => web.reply_to_dialog(request_id, response.as_deref()),
         ViewCommand::SelectedText { request_id } => web.selected_text(request_id),
+        ViewCommand::Screenshot { full } => web.take_screenshot(full),
         ViewCommand::Edit(edit) => web.edit(&edit),
         ViewCommand::Load(url) => web.load(&url),
         ViewCommand::Reload => web.reload(),

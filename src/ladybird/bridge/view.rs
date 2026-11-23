@@ -166,6 +166,14 @@ impl WebView {
         status_result(unsafe { elaris_ladybird_selected_text(self.raw.as_ptr(), request_id) })
     }
 
+    /// Saves a PNG of the visible page, or the whole page, to the download directory.
+    pub fn take_screenshot(&mut self, full: bool) -> Result<(), String> {
+        // SAFETY: The view is live on its owner's thread.
+        status_result(unsafe {
+            elaris_ladybird_take_screenshot(self.raw.as_ptr(), i32::from(full))
+        })
+    }
+
     pub fn load(&mut self, url: &str) -> Result<(), String> {
         let url = CString::new(url).map_err(|_| "URL contains an interior NUL byte".to_owned())?;
         // SAFETY: The view is live on its owner's thread.

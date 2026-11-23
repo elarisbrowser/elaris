@@ -196,6 +196,8 @@ pub enum Event {
     WebFullscreen(bool),
     /// Whether the page is playing audio.
     PlayingAudio(bool),
+    /// Where a screenshot was saved, or why it could not be.
+    Screenshot(Result<std::path::PathBuf, String>),
     /// The page's process ended, or `None` once a reload recovered the tab.
     Crashed(Option<Crash>),
     /// A wheel event finished; `cancelled` when the page called preventDefault on it.

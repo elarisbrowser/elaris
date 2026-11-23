@@ -144,6 +144,49 @@ impl Download {
     }
 }
 
+impl Download {
+    /// A file the browser saved itself, such as a screenshot, already complete at `path`; or, without
+    /// a path, one it could not save, and why.
+    pub fn saved(
+        id: DownloadId,
+        source_url: String,
+        path: Result<PathBuf, String>,
+        private: bool,
+    ) -> Self {
+        let (filename, destination, status, error, bytes) = match path {
+            Ok(path) => (
+                path.file_name()
+                    .map_or_else(String::new, |name| name.to_string_lossy().into_owned()),
+                Some(path.clone()),
+                Status::Completed,
+                None,
+                std::fs::metadata(&path).map_or(0, |metadata| metadata.len()),
+            ),
+            Err(error) => (
+                "Screenshot".to_owned(),
+                None,
+                Status::Failed,
+                Some(error),
+                0,
+            ),
+        };
+        Self {
+            id,
+            filename,
+            source_url,
+            destination,
+            status,
+            bytes_downloaded: bytes,
+            total_bytes: Some(bytes),
+            error,
+            started_at: std::time::SystemTime::now(),
+            private,
+            can_resume: false,
+            retrying: false,
+        }
+    }
+}
+
 /// A Ladybird snapshot copied across the bridge and assigned a browser identifier by Rust.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Update {
