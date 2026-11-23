@@ -98,7 +98,7 @@ fn toolbar(state: &AppState, theme: &Theme, _cx: &mut Cx<AppState>) -> El {
         .window_drag();
     #[cfg(elaris_ui = "linux")]
     {
-        bar = bar.raise();
+        bar = bar.raise().pl(theme::SIDEBAR_PADDING);
     }
     #[cfg(not(elaris_ui = "linux"))]
     {
