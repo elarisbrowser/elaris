@@ -280,6 +280,8 @@ pub(crate) fn escape(state: &mut AppState) -> bool {
         state.navigation_menu = None;
     } else if state.zoom_menu.is_some() {
         state.zoom_menu = None;
+    } else if state.translate_menu.is_some() {
+        state.translate_menu = None;
     } else if state.sidebar.overflow_menu_open {
         state.sidebar.overflow_menu_open = false;
     } else if state.omnibox.search_engine_menu_open {

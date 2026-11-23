@@ -148,6 +148,7 @@ fn search_launcher(state: &AppState, theme: &Theme, reduced: bool, overlays: &mu
         .active_tab()
         .map(|tab| permission_prompt::address_indicators(tab, theme))
         .unwrap_or_default();
+    marks.extend(super::translate::button(state, theme, overlays));
     marks.extend(header::zoom_indicator(state, theme, overlays));
     search_field(state, theme, reduced, marks)
 }

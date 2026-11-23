@@ -149,6 +149,8 @@ pub(crate) struct AppState {
     /// The page title the window shows.
     pub(super) window_title: Option<String>,
     pub(crate) zoom_menu: Option<TabId>,
+    /// The tab whose translate menu is open in the address field.
+    pub(crate) translate_menu: Option<TabId>,
     /// The tab whose zoom chip shows, and the clock time it hides.
     pub(crate) zoom_chip: Option<(TabId, f64)>,
     /// The toasts on screen, shown over the window.

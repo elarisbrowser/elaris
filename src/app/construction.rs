@@ -197,6 +197,7 @@ impl AppState {
             memory_saver: Default::default(),
             window_title: None,
             zoom_menu: None,
+            translate_menu: None,
             zoom_chip: None,
             toasts: Default::default(),
             navigation_menu: None,

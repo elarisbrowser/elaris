@@ -300,6 +300,7 @@ pub(super) fn address_bar(
         let label = address
             .map(elaris_core::address::compact_address)
             .unwrap_or("Search or type a URL");
+        let translate = super::translate::button(state, theme, overlays);
         let zoom = super::sidebar::header::zoom_indicator(state, theme, overlays);
         let activity = state
             .browser
@@ -333,6 +334,7 @@ pub(super) fn address_bar(
                         .grow(1.0),
                 )
                 .children(activity)
+                .children(translate)
                 .children(zoom),
         );
     }

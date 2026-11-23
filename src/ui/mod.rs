@@ -18,6 +18,7 @@ pub(crate) mod permission_prompt;
 mod sidebar;
 mod tab_preview;
 mod toast;
+mod translate;
 pub(crate) use sidebar::hover::{
     dismiss as dismiss_tab_preview, displayed as displayed_tab_preview, poll as poll_tab_preview,
 };

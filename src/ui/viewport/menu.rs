@@ -347,42 +347,21 @@ pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
     menu.build(state, theme, layer);
 }
 
-/// Translate to each language Ladybird offers, the downloads some need, and Show Original once
-/// the page is translated. Nothing while the page is in a language the user reads.
+/// The page's translation choices, as the address field's translate button offers them.
 fn translation_items(mut menu: Menu, tab: &Tab) -> Menu {
-    let translation = &tab.translation;
-    if !translation.offered && !translation.translated {
+    if !crate::ui::translate::offered(tab) {
         return menu;
     }
     let id = tab.id();
     menu = menu.group_label("Translate");
-    for choice in &translation.items {
-        let language = choice.language.clone();
-        let download = choice.download;
+    for choice in crate::ui::translate::choices(tab) {
+        let (checked, enabled) = (choice.checked, choice.enabled);
+        let label = choice.label.clone();
         menu = menu.item(
-            item(id, &choice.label, move |s, _| {
-                s.browser.send(
-                    id,
-                    ViewCommand::Translate {
-                        language: language.clone(),
-                        download,
-                    },
-                )
-            })
-            .checked(choice.checked)
-            .disabled(!choice.enabled),
+            item(id, &label, move |s, _| s.browser.send(id, choice.command()))
+                .checked(checked)
+                .disabled(!enabled),
         );
-    }
-    if translation.translated {
-        menu = menu.item(item(id, "Show Original", move |s, _| {
-            s.browser.send(
-                id,
-                ViewCommand::Translate {
-                    language: String::new(),
-                    download: false,
-                },
-            )
-        }));
     }
     menu.separator()
 }

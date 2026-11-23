@@ -55,6 +55,7 @@ mod system;
 
 mod search_engines;
 mod tick;
+mod translate;
 
 pub(crate) use activity::ACTIVITY;
 pub(crate) use arrow_down::ARROW_DOWN;
@@ -105,6 +106,7 @@ pub(crate) use site_popover_arrow::SITE_POPOVER_ARROW;
 pub(crate) use split_view::SPLIT_VIEW;
 pub(crate) use system::SYSTEM;
 pub(crate) use tick::TICK;
+pub(crate) use translate::TRANSLATE;
 
 const fn icon(name: &'static str, body: &'static str) -> Icon {
     Icon {
