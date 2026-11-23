@@ -76,6 +76,12 @@ Run `./elaris check` before opening a pull request. See [CONTRIBUTING.md](CONTRI
 | C++ bridge | [bridge/README.md](bridge/README.md) |
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
 
+## Support
+
+If you find Elaris useful, you can support its development.
+
+<a href='https://ko-fi.com/F8O123TMDU' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi5.png?v=6' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
+
 ## License
 
 Elaris is licensed under [GPL-3.0-only](LICENSE). Contributions are welcome under the same license. See [TRADEMARKS.md](TRADEMARKS.md) for branding guidance.
