@@ -1,5 +1,4 @@
 #include <charconv>
-#include "dev_options.h"
 #include <chrono>
 #include <filesystem>
 #include <fstream>
@@ -11,6 +10,7 @@
 #include <thread>
 #include <vector>
 
+#include "dev_options.h"
 #include "private_session.h"
 
 struct FindResult {
