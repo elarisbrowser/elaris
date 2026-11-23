@@ -1,0 +1,49 @@
+name: Nightly canary
+
+# Builds main every night as a canary and replaces the rolling "canary" pre-release. Canary builds are release
+# builds named as canary, so they run the same code path as a stable release.
+#
+# Disabled: the schedule below is commented out, so this runs only when started by hand. To enable it, uncomment
+# the schedule block.
+
+on:
+  # schedule:
+  #   - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-canary
+  cancel-in-progress: false
+
+jobs:
+  changed:
+    name: Check for new commits
+    runs-on: ubuntu-24.04
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: check
+        name: Look for commits in the last day
+        run: |
+          # A scheduled run on an unchanged main would only rebuild the same canary, so it is skipped.
+          if [ -n "$(git log --since='25 hours ago' --format=%H origin/main -1)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  canary:
+    name: Build canary
+    needs: changed
+    if: needs.changed.outputs.changed == 'true'
+    uses: ./.github/workflows/release.yml
+    with:
+      channel: canary
+    permissions:
+      contents: write

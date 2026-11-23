@@ -2,12 +2,19 @@ name: Release
 
 # Builds the macOS and Linux app bundles, each with Ladybird's engine, and publishes them as a draft pre-release.
 # Pushing a tag such as v0.1.0-alpha.1 runs it; workflow_dispatch runs it for a branch without publishing.
+# The nightly workflow calls it with channel "canary", which publishes the rolling canary pre-release instead.
 
 on:
   push:
     tags:
       - "v*"
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      channel:
+        description: "stable for tagged releases, canary for the nightly build"
+        type: string
+        default: stable
 
 permissions:
   contents: read
@@ -67,11 +74,21 @@ jobs:
             release-macos-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json') }}-
             release-macos-
 
+      - name: Name this build
+        env:
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          if [ "$CHANNEL" = canary ]; then
+            echo "ELARIS_VERSION=canary-$(date -u +%Y%m%d)-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          else
+            echo "ELARIS_VERSION=${GITHUB_REF_NAME:-dev}" >> "$GITHUB_ENV"
+          fi
+
       - name: Set up Elaris and Ladybird
         run: ./elaris setup
 
       - name: Build and bundle Elaris
-        run: ./elaris bundle
+        run: ./elaris bundle ${{ inputs.channel == 'canary' && '--canary' || '' }}
 
       - name: Save Ladybird dependency and build caches
         if: always()
@@ -97,7 +114,7 @@ jobs:
 
       - name: Package a disk image and checksums
         run: |
-          version="${GITHUB_REF_NAME:-dev}"
+          version="$ELARIS_VERSION"
           staging="$RUNNER_TEMP/dmg"
           mkdir -p "$staging" dist
           cp -R build/Elaris.app "$staging/"
@@ -153,6 +170,16 @@ jobs:
             release-linux-x64-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json') }}-
             release-linux-x64-
 
+      - name: Name this build
+        env:
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          if [ "$CHANNEL" = canary ]; then
+            echo "ELARIS_VERSION=canary-$(date -u +%Y%m%d)-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          else
+            echo "ELARIS_VERSION=${GITHUB_REF_NAME:-dev}" >> "$GITHUB_ENV"
+          fi
+
       - name: Set up Elaris and Ladybird
         run: |
           # Ladybird refuses to build as root, so build as an unprivileged user as the bridge workflow does.
@@ -164,7 +191,7 @@ jobs:
           runuser -u elaris-builder -- ./elaris setup --skip-system-deps
 
       - name: Build and bundle Elaris
-        run: runuser -u elaris-builder -- env ELARIS_JOBS=4 ./elaris bundle
+        run: runuser -u elaris-builder -- env ELARIS_JOBS=4 ./elaris bundle ${{ inputs.channel == 'canary' && '--canary' || '' }}
 
       - name: Save Ladybird dependency and build caches
         if: always()
@@ -190,7 +217,7 @@ jobs:
 
       - name: Package the tarball and checksums
         run: |
-          version="${GITHUB_REF_NAME:-dev}"
+          version="$ELARIS_VERSION"
           mkdir -p dist
           archive="dist/Elaris-${version}-linux-x86_64.tar.gz"
           # Fixed owners, names and times, and no gzip name or time, so the same build always gives the same archive.
@@ -236,3 +263,29 @@ jobs:
             --draft --prerelease \
             --title "Elaris ${TAG} (experimental alpha)" \
             --notes "Experimental alpha builds of Elaris. Each archive ships Ladybird's engine; see BUILD-INFO.txt for the exact Elaris, Ladybird and Rune revisions and verify the .sha256 checksum before running."
+
+  publish-canary:
+    name: Publish rolling canary pre-release
+    needs: [macos, linux]
+    if: inputs.channel == 'canary'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Replace the canary pre-release with tonight's builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          # The canary tag always names the newest build, so the previous one is replaced rather than kept.
+          gh release delete canary --cleanup-tag --yes 2>/dev/null || true
+          gh release create canary dist/* \
+            --target "$SHA" \
+            --prerelease --latest=false \
+            --title "Elaris canary ($(date -u +%Y-%m-%d))" \
+            --notes "Built nightly from main at ${SHA:0:7}. Canary builds are unreleased and may break; they share the stable profile, so back up your data first. See BUILD-INFO.txt for the exact revisions and verify the .sha256 checksum before running."
