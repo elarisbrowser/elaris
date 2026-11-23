@@ -296,15 +296,19 @@ pub(super) const HOVER_EXIT: Anim = Anim::new(Curve::tween(0.15, Easing::EASE_OU
 pub(crate) const GLYPH_MORPH_SCALE: f32 = 0.6;
 /// The blur, in points, a swapped-out glyph dissolves into.
 pub(crate) const GLYPH_MORPH_BLUR: f32 = 2.0;
+/// The incoming glyph pops in with a slight overshoot; the outgoing one leaves quickly.
+pub(crate) const GLYPH_MORPH_MOTION: SpringPair =
+    SpringPair::new(Spring::new(0.3, 0.35), Spring::new(0.15, 0.0));
 
 /// One glyph replacing another in place: it shrinks, blurs and fades out as its successor
-/// grows and sharpens in.
+/// pops up and sharpens in.
 pub(crate) fn glyph_morph(reduced_motion: bool) -> Transition {
     if reduced_motion {
         return Transition::none();
     }
     Transition::scale(GLYPH_MORPH_SCALE)
         .combined(Transition::blur(GLYPH_MORPH_BLUR))
+        .springs(GLYPH_MORPH_MOTION)
         .allow_small_scale()
 }
 
