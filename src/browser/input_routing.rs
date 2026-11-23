@@ -1,17 +1,22 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 use elaris::ladybird::{Key, MouseKind};
-use rune::{KeyEvent, Mods, PointerButton, WheelEvent};
+use rune::{GesturePhase, KeyEvent, MagnifyEvent, Mods, PointerButton, WheelEvent};
 
 use super::swipe::{Direction, Step, SwipeView, Swipes};
 use super::{Browser, TabId, ViewCommand};
 use crate::input;
+
+/// Wheel points per unit of Rune's Ctrl + wheel magnification (`MagnifyEvent::wheel`).
+const PINCH_WHEEL: f32 = 200.0;
 
 #[derive(Default)]
 pub(super) struct Held {
     drag: Option<(TabId, i32)>,
     keys: Vec<(TabId, Option<rune::PhysicalKeyCode>, Key)>,
     swipes: Swipes,
+    /// The tab a trackpad pinch has zoomed since its fingers touched down.
+    pinch: Option<TabId>,
 }
 
 impl Browser {
@@ -166,6 +171,36 @@ impl Browser {
         false
     }
 
+    /// Zooms the page's visual viewport for a trackpad pinch, as Ladybird's own UI does. Ctrl +
+    /// wheel, which Rune also reports as a pinch, stays a wheel for the page.
+    pub(crate) fn pinch_page(&mut self, id: TabId, magnify: MagnifyEvent, mods: Mods) {
+        if magnify.wheel {
+            let mut wheel =
+                WheelEvent::new(0.0, magnify.delta * PINCH_WHEEL).at(magnify.x, magnify.y);
+            wheel.mods = mods;
+            self.wheel_page(id, wheel);
+            return;
+        }
+        if magnify.phase == GesturePhase::Began {
+            self.input.pinch = None;
+        }
+        if magnify.delta != 0.0 && self.accepts_pointer(id) {
+            let continues = self.input.pinch == Some(id);
+            let event = input::pinch(
+                [magnify.x, magnify.y],
+                magnify.delta,
+                continues,
+                mods,
+                self.window.scale.get(),
+            );
+            self.input.pinch = Some(id);
+            self.send(id, ViewCommand::Pinch(event));
+        }
+        if magnify.phase == GesturePhase::Ended {
+            self.input.pinch = None;
+        }
+    }
+
     /// Ladybird finished a wheel event; returns whether that began a history swipe.
     pub(super) fn wheel_result(&mut self, id: TabId, cancelled: bool) -> bool {
         let (back, forward) = self
@@ -238,5 +273,6 @@ impl Browser {
         }
         self.input.keys.clear();
         self.input.swipes.cancel();
+        self.input.pinch = None;
     }
 }

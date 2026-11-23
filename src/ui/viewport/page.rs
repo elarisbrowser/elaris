@@ -201,6 +201,14 @@ pub(super) fn page(
                 false
             }
         })
+        .on_magnify(move |state: &mut AppState, magnify, tx| {
+            if let Some(id) = id.filter(|_| !internal) {
+                state.browser.pinch_page(id, magnify, tx.mods());
+                true
+            } else {
+                false
+            }
+        })
         .on_key(move |state: &mut AppState, key, tx| {
             if state.browser.focused_side() == side {
                 page_key(state, key, tx)

@@ -719,6 +719,10 @@ fn apply_to_view(view: &mut View, command: ViewCommand, timing: &mut Timing) -> 
             timing.input();
             web.mouse_event(event)
         }
+        ViewCommand::Pinch(event) => {
+            timing.input();
+            web.pinch_event(event)
+        }
         ViewCommand::Key(event) => {
             timing.input();
             web.key_event(event)

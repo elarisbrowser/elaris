@@ -2,8 +2,8 @@
 
 use super::*;
 use crate::engine::{TabUpdate, Update};
-use elaris::ladybird::{MouseEvent, MouseKind};
-use rune::{Key as RuneKey, KeyEvent, Mods, PointerButton};
+use elaris::ladybird::{MouseEvent, MouseKind, PinchEvent};
+use rune::{GesturePhase, Key as RuneKey, KeyEvent, MagnifyEvent, Mods, PointerButton};
 
 #[test]
 fn closing_the_active_tab_activates_its_neighbour() {
@@ -165,4 +165,49 @@ fn updates_reach_only_their_own_tab_and_never_a_closed_one() {
     send(second, TabUpdate::Title("Late".into()));
     assert!(!browser.poll().changed);
     assert_eq!(browser.tab(first).unwrap().title, "First");
+}
+
+#[test]
+fn trackpad_pinches_zoom_the_page_and_ctrl_wheel_stays_a_wheel() {
+    let (mut browser, fake) = ready();
+    let id = browser.open_tab("example.com").unwrap();
+    browser.poll();
+    sent(&fake);
+
+    browser.note_scale(2.0);
+    for (delta, phase) in [
+        (0.0, GesturePhase::Began),
+        (0.1, GesturePhase::Moved),
+        (0.2, GesturePhase::Moved),
+        (0.0, GesturePhase::Ended),
+    ] {
+        let pinch = MagnifyEvent::new(delta).at(3.0, 4.0).phase(phase);
+        browser.pinch_page(id, pinch, Mods::default());
+    }
+    let mut wheel = MagnifyEvent::new(0.5);
+    wheel.wheel = true;
+    browser.pinch_page(id, wheel, Mods::default());
+
+    let sent = sent(&fake);
+    let continues: Vec<_> = sent
+        .iter()
+        .filter_map(|command| match command {
+            Command::View(
+                to,
+                ViewCommand::Pinch(PinchEvent {
+                    x: 6,
+                    y: 8,
+                    continues,
+                    ..
+                }),
+            ) if *to == id => Some(*continues),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(continues, [false, true]);
+    assert!(sent.iter().any(|command| matches!(
+        command,
+        Command::View(_, ViewCommand::Mouse(MouseEvent { kind: MouseKind::Wheel, wheel, .. }))
+            if wheel.1 < 0.0
+    )));
 }

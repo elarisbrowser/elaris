@@ -54,6 +54,10 @@ pub(super) fn webpage(id: TabId) -> El {
             state.browser.wheel_page(id, wheel);
             true
         })
+        .on_magnify(move |state: &mut AppState, magnify, tx| {
+            state.browser.pinch_page(id, magnify, tx.mods());
+            true
+        })
         .on_key(viewport::page_key)
         .on_key_up(|state: &mut AppState, key, tx| {
             state.browser.key(key, false, false, tx.physical_key())

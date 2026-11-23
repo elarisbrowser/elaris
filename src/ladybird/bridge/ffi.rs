@@ -85,6 +85,15 @@ pub(super) struct RawMouseEvent {
 }
 
 #[repr(C)]
+pub(super) struct RawPinchEvent {
+    pub(super) x: i32,
+    pub(super) y: i32,
+    pub(super) modifiers: i32,
+    pub(super) scale_delta: f64,
+    pub(super) continues_gesture: i32,
+}
+
+#[repr(C)]
 pub(super) struct RawKeyEvent {
     pub(super) kind: i32,
     pub(super) key: i32,
@@ -159,6 +168,10 @@ unsafe extern "C" {
     pub(super) fn elaris_ladybird_mouse_event(
         view: *mut RawView,
         event: *const RawMouseEvent,
+    ) -> i32;
+    pub(super) fn elaris_ladybird_pinch_event(
+        view: *mut RawView,
+        event: *const RawPinchEvent,
     ) -> i32;
     pub(super) fn elaris_ladybird_discard_prepared(view: *mut RawView, request: u64) -> i32;
     pub(super) fn elaris_ladybird_load_prepared(

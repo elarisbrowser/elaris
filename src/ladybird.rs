@@ -358,6 +358,18 @@ pub struct MouseEvent {
     pub clicks: i32,
 }
 
+/// A trackpad pinch at a device-pixel position in the view, zooming its visual viewport.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PinchEvent {
+    pub x: i32,
+    pub y: i32,
+    pub modifiers: i32,
+    /// Scale by `1 + scale_delta`; positive zooms in.
+    pub scale_delta: f64,
+    /// Every step of a pinch after its first.
+    pub continues: bool,
+}
+
 /// Where a touchpad scroll is in its gesture, as the C ABI numbers it. Wheel notches have none.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(i32)]

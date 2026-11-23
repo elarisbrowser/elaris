@@ -2,7 +2,9 @@
 
 //! Translates Rune input into Ladybird page input. Rune reports points; pages take device pixels.
 
-use elaris::ladybird::{Key, KeyEvent, MouseEvent, MouseKind, WheelPhase, button, modifier};
+use elaris::ladybird::{
+    Key, KeyEvent, MouseEvent, MouseKind, PinchEvent, WheelPhase, button, modifier,
+};
 use rune::{GesturePhase, Key as RuneKey, KeyEvent as RuneKeyEvent, Mods};
 
 pub(crate) fn modifiers(mods: Mods) -> i32 {
@@ -67,6 +69,23 @@ pub(crate) fn wheel(
         precise,
         phase,
         ..pointer(MouseKind::Wheel, point, scale, 0, 0, Mods::default(), 0)
+    }
+}
+
+/// A trackpad pinch step, `continues` for every step after the gesture's first.
+pub(crate) fn pinch(
+    point: [f32; 2],
+    delta: f32,
+    continues: bool,
+    mods: Mods,
+    scale: f32,
+) -> PinchEvent {
+    PinchEvent {
+        x: device(point[0], scale),
+        y: device(point[1], scale),
+        modifiers: modifiers(mods),
+        scale_delta: f64::from(delta),
+        continues,
     }
 }
 

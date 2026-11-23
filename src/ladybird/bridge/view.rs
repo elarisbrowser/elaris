@@ -10,7 +10,9 @@ use std::rc::Rc;
 
 use super::app::Owner;
 use super::ffi::*;
-use crate::ladybird::{DisplayMetadata, Frame, GpuFrame, GpuPoll, Key, KeyEvent, MouseEvent};
+use crate::ladybird::{
+    DisplayMetadata, Frame, GpuFrame, GpuPoll, Key, KeyEvent, MouseEvent, PinchEvent,
+};
 
 const NO_FRAME: i32 = 1;
 const BUSY: i32 = 2;
@@ -383,6 +385,18 @@ impl WebView {
         };
         // SAFETY: The view is live on its owner's thread and `raw` outlives the call.
         status_result(unsafe { elaris_ladybird_mouse_event(self.raw.as_ptr(), &raw) })
+    }
+
+    pub fn pinch_event(&mut self, event: PinchEvent) -> Result<(), String> {
+        let raw = RawPinchEvent {
+            x: event.x,
+            y: event.y,
+            modifiers: event.modifiers,
+            scale_delta: event.scale_delta,
+            continues_gesture: event.continues.into(),
+        };
+        // SAFETY: The view is live on its owner's thread and `raw` outlives the call.
+        status_result(unsafe { elaris_ladybird_pinch_event(self.raw.as_ptr(), &raw) })
     }
 
     pub fn key_event(&mut self, event: KeyEvent) -> Result<(), String> {

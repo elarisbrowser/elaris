@@ -207,6 +207,7 @@ pub(crate) enum ViewCommand {
         scale: f64,
     },
     Mouse(MouseEvent),
+    Pinch(elaris::ladybird::PinchEvent),
     Key(KeyEvent),
     Edit(elaris::ladybird::Edit),
     LoadPrepared {
