@@ -4,6 +4,7 @@
 #include <elaris_ladybird.h>
 
 #include <chrono>
+#include <filesystem>
 #include <iostream>
 #include <string>
 
@@ -36,8 +37,18 @@ int main(int argc, char** argv) {
         std::cerr << "usage: elaris_ladybird_picture_in_picture <resource-dir> <profile-dir> <page> <video>\n";
         return 2;
     }
-    // The page takes the video's file URL from its fragment.
-    std::string url = std::string("file://") + argv[3] + "#file://" + argv[4];
+    // A file page may read only files in its own folder, so the page and its video are copied into one. The page takes
+    // the video's file URL from its fragment.
+    namespace fs = std::filesystem;
+    auto folder = fs::temp_directory_path() / "elaris-picture-in-picture";
+    std::error_code error;
+    fs::remove_all(folder, error);
+    fs::create_directories(folder);
+    auto page = folder / fs::path(argv[3]).filename();
+    auto video = folder / fs::path(argv[4]).filename();
+    fs::copy_file(argv[3], page);
+    fs::copy_file(argv[4], video);
+    std::string url = "file://" + page.string() + "#file://" + video.string();
 
     Events events;
     ElarisLadybird* bridge = nullptr;
