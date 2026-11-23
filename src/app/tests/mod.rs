@@ -6,6 +6,7 @@ pub(super) fn active_url(state: &AppState) -> &str {
     &state.browser.active_tab().unwrap().url
 }
 
+mod bookmarks;
 mod find;
 mod history;
 mod horizontal_tabs;

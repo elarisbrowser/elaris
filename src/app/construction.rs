@@ -198,6 +198,7 @@ impl AppState {
             window_title: None,
             zoom_menu: None,
             translate_menu: None,
+            bookmarks: Default::default(),
             zoom_chip: None,
             toasts: Default::default(),
             navigation_menu: None,
@@ -211,6 +212,12 @@ impl AppState {
         state
             .browser
             .share_downloads(shared_downloads(state.storage.as_deref()));
+        #[cfg(not(test))]
+        {
+            state.bookmarks = super::bookmarks::BookmarksState::with_list(
+                super::bookmarks::shared(state.storage.as_deref()),
+            );
+        }
         state.open_start_page(start, initial_session.as_ref());
         if start.is_none()
             && let Some(session) = initial_session

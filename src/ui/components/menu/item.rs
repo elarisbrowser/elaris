@@ -19,6 +19,8 @@ pub(crate) struct MenuItem {
     lead: Option<El>,
     checked: Option<bool>,
     disabled: bool,
+    /// The keys that do the same, shown at the trailing edge, such as "⌘D".
+    shortcut: Option<String>,
     press: Option<Apply>,
 }
 
@@ -31,8 +33,15 @@ impl MenuItem {
             lead: None,
             checked: None,
             disabled: false,
+            shortcut: None,
             press: None,
         }
+    }
+
+    /// The keys that do the same, shown at the trailing edge.
+    pub(crate) fn shortcut(mut self, keys: impl Into<String>) -> Self {
+        self.shortcut = Some(keys.into());
+        self
     }
 
     /// A static icon before the label.
@@ -170,6 +179,17 @@ impl MenuItem {
                 .single_line()
                 .a11y_hidden(),
         );
+        if let Some(keys) = self.shortcut {
+            entry = entry
+                .child(el().grow(1.0).min_w(theme::MENU_SHORTCUT_GAP))
+                .child(
+                    text(keys)
+                        .font(type_::BODY)
+                        .color(theme.text_muted)
+                        .single_line()
+                        .a11y_hidden(),
+                );
+        }
         if let Some(on) = self.checked {
             // A growing label measures as no width, so the panel could not widen to it; a spacer
             // pushes the tick to the trailing edge instead.

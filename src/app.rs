@@ -47,6 +47,7 @@ use window_sessions::{
 
 mod clear_data;
 pub(crate) use clear_data::{ClearDataDialog, ClearRange};
+mod bookmarks;
 pub(crate) mod cross_window_drag;
 pub(crate) mod detach;
 mod find;
@@ -65,6 +66,7 @@ mod transfer;
 #[cfg(test)]
 mod tests;
 
+pub(crate) use bookmarks::open_bookmarks;
 pub(crate) use lifecycle::{
     new_tab, omnibox_input_key, on_reopen, on_window_focus, open_from_launcher, open_history,
     open_settings, poll, setup_headless, shut_down, start_workers, submit_omnibox, window_closed,

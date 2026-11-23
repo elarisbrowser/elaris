@@ -36,6 +36,7 @@ pub(in crate::ui) fn tab_icon(
     let glyph = match tab.internal {
         Some(InternalRoute::Page(InternalPage::History)) => &icons::HISTORY,
         Some(InternalRoute::Page(InternalPage::TaskManager)) => &icons::ACTIVITY,
+        Some(InternalRoute::Page(InternalPage::Bookmarks)) => &icons::STAR,
         _ => &icons::PAGE,
     };
     icon(glyph, size).color(color)

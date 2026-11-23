@@ -137,6 +137,7 @@ fn body(state: &AppState, theme: &Theme, overlays: &mut Vec<El>, reduced_motion:
                 .w_full()
                 .center_y()
                 .child(super::downloads::trigger(state, theme, overlays))
+                .child(super::bookmarks::sidebar_button(state, theme, overlays))
                 .child(rune::el().grow(1.0))
                 .child(appearance(state, theme)),
         )
@@ -149,6 +150,7 @@ fn search_launcher(state: &AppState, theme: &Theme, reduced: bool, overlays: &mu
         .map(|tab| permission_prompt::address_indicators(tab, theme))
         .unwrap_or_default();
     marks.extend(super::translate::button(state, theme, overlays));
+    marks.extend(super::bookmarks::star(state, theme, overlays));
     marks.extend(header::zoom_indicator(state, theme, overlays));
     search_field(state, theme, reduced, marks)
 }

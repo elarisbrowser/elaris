@@ -17,13 +17,19 @@ use crate::ui::viewport::menu::{KEY, with_header};
 /// Internal pages the menu links to, except the one it is on.
 type Open = fn(&mut AppState, &mut Tx);
 
-const SHORTCUTS: [(InternalPage, &str, Open, Option<&AnimatedIcon>); 3] = [
+const SHORTCUTS: [(InternalPage, &str, Open, Option<&AnimatedIcon>); 4] = [
     (InternalPage::Settings, "Settings", app::open_settings, None),
     (
         InternalPage::History,
         "History",
         app::open_history,
         Some(&animated_icon::HISTORY),
+    ),
+    (
+        InternalPage::Bookmarks,
+        "Bookmarks",
+        app::open_bookmarks,
+        None,
     ),
     (
         InternalPage::TaskManager,

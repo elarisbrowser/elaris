@@ -3,6 +3,7 @@
 //! The window's interface: a sidebar beside the active tab's page. Each part is its own module;
 //! colours and measurements live in `theme`.
 
+mod bookmarks;
 pub(crate) mod components;
 mod downloads;
 mod find;
@@ -50,6 +51,8 @@ pub(crate) const VIEWPORT: &str = "viewport";
 pub(crate) const HISTORY_SEARCH: &str = "history-search";
 pub(crate) const HISTORY_SCROLL: &str = "history-scroll";
 pub(crate) const TASK_MANAGER_SEARCH: &str = "task-manager-search";
+pub(crate) const BOOKMARKS_SEARCH: &str = "bookmarks-search";
+pub(crate) const BOOKMARKS_SCROLL: &str = "bookmarks-scroll";
 pub(crate) const TASK_MANAGER_SCROLL: &str = "task-manager-scroll";
 pub(crate) const FIND_INPUT: &str = "find-input";
 #[cfg(target_os = "macos")]
@@ -101,6 +104,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
                 &mut overlays,
                 reduced_motion,
             ))
+            .children(bookmarks::bar(state, &theme, &mut overlays))
             .child(viewport::view(state, &theme, &mut overlays, reduced_motion));
     } else {
         let sidebar = sidebar::view(state, &theme, &mut overlays, reduced_motion);

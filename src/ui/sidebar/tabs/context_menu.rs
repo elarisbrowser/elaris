@@ -50,7 +50,25 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
         {
             // A tab on screen stays awake; it can sleep once the user moves on.
             let shown = state.browser.visible_tabs().contains(&Some(sleepable.id()));
+            let bookmarked = state.bookmarks().find_url(&sleepable.url).is_some();
             menu = menu
+                .item(
+                    MenuItem::new(if bookmarked {
+                        "Bookmarked"
+                    } else {
+                        "Bookmark Tab"
+                    })
+                    .icon(if bookmarked {
+                        &icons::STAR_FILLED
+                    } else {
+                        &icons::STAR
+                    })
+                    .disabled(bookmarked)
+                    .on_select(move |state: &mut AppState| {
+                        state.dismiss_context_menu();
+                        state.bookmark_tab(tab, false);
+                    }),
+                )
                 .item(
                     MenuItem::new("Sleep Tab")
                         .icon(&icons::BED)

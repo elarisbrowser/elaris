@@ -40,6 +40,11 @@ pub(crate) enum Shortcut {
     ToggleSidebar,
     OpenSettings,
     OpenHistory,
+    /// Bookmark the active page, or edit its bookmark.
+    BookmarkPage,
+    /// Save every web page in the window to a new bookmark folder.
+    BookmarkAllTabs,
+    OpenBookmarks,
     /// Has no key of its own; the menu bar and the internal pages' menu open it.
     OpenTaskManager,
 }
@@ -150,6 +155,9 @@ pub(crate) fn dispatch(state: &mut AppState, shortcut: Shortcut, tx: &mut Tx) {
         Shortcut::ToggleSidebar => {}
         Shortcut::OpenSettings => app::open_settings(state, tx),
         Shortcut::OpenHistory => app::open_history(state, tx),
+        Shortcut::BookmarkPage => state.bookmark_active_tab(),
+        Shortcut::BookmarkAllTabs => state.bookmark_all_tabs(tx),
+        Shortcut::OpenBookmarks => app::open_bookmarks(state, tx),
         Shortcut::OpenTaskManager => app::open_task_manager(state, tx),
         Shortcut::PreviousTab
         | Shortcut::NextTab
@@ -223,6 +231,10 @@ pub(crate) fn shortcut(event: &KeyEvent) -> Option<Shortcut> {
         return None;
     };
     let shift = event.mods.shift;
+    // Option turns B into ∫ on a US Mac layout.
+    if event.mods.alt {
+        return matches!(key, 'b' | 'B' | '∫').then_some(Shortcut::OpenBookmarks);
+    }
     Some(match (key.to_ascii_lowercase(), shift) {
         ('n', false) => Shortcut::NewWindow,
         ('n' | 'N', true) => Shortcut::NewPrivateWindow,
@@ -246,6 +258,8 @@ pub(crate) fn shortcut(event: &KeyEvent) -> Option<Shortcut> {
         #[cfg(target_os = "linux")]
         ('h', false) => Shortcut::OpenHistory,
         (',', false) => Shortcut::OpenSettings,
+        ('d', false) => Shortcut::BookmarkPage,
+        ('d' | 'D', true) => Shortcut::BookmarkAllTabs,
         // Shift turns [ and ] into { and } on most layouts.
         ('[' | '{', true) => Shortcut::PreviousTab,
         (']' | '}', true) => Shortcut::NextTab,
@@ -297,6 +311,17 @@ mod tests {
         assert_eq!(press('1', false), Some(Shortcut::SelectTab(0)));
         assert_eq!(press('8', false), Some(Shortcut::SelectTab(7)));
         assert_eq!(press('9', false), Some(Shortcut::SelectLastTab));
+        assert_eq!(press('d', false), Some(Shortcut::BookmarkPage));
+        assert_eq!(press('D', true), Some(Shortcut::BookmarkAllTabs));
+        let manage = KeyEvent {
+            key: Key::Command('b'),
+            mods: Mods {
+                cmd: true,
+                alt: true,
+                ..Mods::default()
+            },
+        };
+        assert_eq!(shortcut(&manage), Some(Shortcut::OpenBookmarks));
     }
 
     #[test]

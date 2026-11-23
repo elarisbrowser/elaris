@@ -159,6 +159,9 @@ pub(super) fn action_from_id(id: isize) -> Option<Action> {
         115 => Action::Shortcut(Shortcut::NewPrivateWindow),
         116 => Action::Shortcut(Shortcut::OpenTaskManager),
         117 => Action::Shortcut(Shortcut::CopyAddress),
+        118 => Action::Shortcut(Shortcut::BookmarkPage),
+        119 => Action::Shortcut(Shortcut::OpenBookmarks),
+        120 => Action::Shortcut(Shortcut::BookmarkAllTabs),
         _ => return None,
     })
 }
@@ -183,6 +186,9 @@ fn shortcut_id(shortcut: Shortcut) -> isize {
         Shortcut::NewPrivateWindow => 15,
         Shortcut::OpenTaskManager => 16,
         Shortcut::CopyAddress => 17,
+        Shortcut::BookmarkPage => 18,
+        Shortcut::OpenBookmarks => 19,
+        Shortcut::BookmarkAllTabs => 20,
         _ => -1,
     }
 }

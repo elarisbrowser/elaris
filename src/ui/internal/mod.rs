@@ -9,6 +9,7 @@
 
 mod menu;
 
+mod bookmarks;
 mod clear_data;
 mod history;
 mod layout;
@@ -67,6 +68,10 @@ fn page(page: InternalPage) -> Page {
         InternalPage::History => Page {
             view: history::view,
             actions: history::ACTIONS,
+        },
+        InternalPage::Bookmarks => Page {
+            view: bookmarks::view,
+            actions: bookmarks::ACTIONS,
         },
         InternalPage::Downloads => Page {
             view: placeholders::downloads,

@@ -159,6 +159,7 @@ fn results(state: &AppState, suggestions: &[Suggestion], theme: &Theme, results_
         if previous != Some(suggestion.section) && suggestions.len() > 1 {
             let label = match suggestion.section {
                 Section::OpenTabs => Some("Open tabs"),
+                Section::Bookmarks => Some("Bookmarks"),
                 Section::Recent => Some("Recent"),
                 Section::QuickActions => Some("Actions"),
                 Section::Navigate => None,
@@ -242,7 +243,7 @@ pub(super) fn address_bar(
             let top = y + height + theme::NAV_GAP;
             overlays.push(
                 el().key("address-results-dismiss")
-                    .absolute(0.0, theme::HORIZONTAL_CHROME_HEIGHT)
+                    .absolute(0.0, super::bookmarks::horizontal_chrome_height(state))
                     .w_full()
                     .h_full()
                     .a11y_hidden()
@@ -301,6 +302,7 @@ pub(super) fn address_bar(
             .map(elaris_core::address::compact_address)
             .unwrap_or("Search or type a URL");
         let translate = super::translate::button(state, theme, overlays);
+        let star = super::bookmarks::star(state, theme, overlays);
         let zoom = super::sidebar::header::zoom_indicator(state, theme, overlays);
         let activity = state
             .browser
@@ -335,6 +337,7 @@ pub(super) fn address_bar(
                 )
                 .children(activity)
                 .children(translate)
+                .children(star)
                 .children(zoom),
         );
     }
@@ -471,6 +474,7 @@ fn glyph_for(state: &AppState, suggestion: &Suggestion, theme: &Theme) -> El {
         Glyph::Search => &super::icons::SEARCH,
         Glyph::Page => &super::icons::PAGE,
         Glyph::History => &super::icons::HISTORY,
+        Glyph::Bookmark => &super::icons::STAR,
         Glyph::NewTab => &super::icons::PLUS,
         Glyph::Reload => &super::icons::RELOAD,
         Glyph::Close => &super::icons::CLOSE,

@@ -36,6 +36,7 @@ macro_rules! internal_pages {
 internal_pages! {
     Settings => ("settings", "Settings"),
     History => ("history", "History"),
+    Bookmarks => ("bookmarks", "Bookmarks"),
     Downloads => ("downloads", "Downloads"),
     TaskManager => ("processes", "Task Manager"),
     About => ("about", "About Elaris"),

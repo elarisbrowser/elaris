@@ -212,6 +212,7 @@ fn internal_pages_open_a_native_context_menu_with_page_actions() {
             "Reload config.toml",
             "Copy Page Address",
             "History",
+            "Bookmarks",
             "Task Manager",
         ]
     );

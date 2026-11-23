@@ -253,6 +253,35 @@ pub(crate) fn install(app: rune::AppHandle<AppState>) {
         &target,
         &mut items,
     );
+    let bookmarks = menu(
+        "Bookmarks",
+        &[
+            item(
+                "Bookmark This Page",
+                Action::Shortcut(Shortcut::BookmarkPage),
+                "d",
+                false,
+            ),
+            item(
+                "Bookmark All Tabs…",
+                Action::Shortcut(Shortcut::BookmarkAllTabs),
+                "d",
+                true,
+            ),
+            ItemSpec {
+                option: true,
+                ..item(
+                    "Manage Bookmarks",
+                    Action::Shortcut(Shortcut::OpenBookmarks),
+                    "b",
+                    false,
+                )
+            },
+        ],
+        mtm,
+        &target,
+        &mut items,
+    );
     let tabs = menu(
         "Tabs",
         &[
@@ -299,6 +328,7 @@ pub(crate) fn install(app: rune::AppHandle<AppState>) {
         ("Edit", edit),
         ("View", view),
         ("History", history),
+        ("Bookmarks", bookmarks),
         ("Tabs", tabs),
         ("Window", window),
     ] {

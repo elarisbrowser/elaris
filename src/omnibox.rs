@@ -10,6 +10,7 @@ use elaris_core::history::Entry as HistoryEntry;
 
 const MAX_TAB_SUGGESTIONS: usize = 4;
 const MAX_HISTORY_SUGGESTIONS: usize = 3;
+const MAX_BOOKMARK_SUGGESTIONS: usize = 3;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Mode {
@@ -59,6 +60,7 @@ impl State {
 pub(crate) enum Section {
     Navigate,
     OpenTabs,
+    Bookmarks,
     Recent,
     QuickActions,
 }
@@ -68,6 +70,7 @@ pub(crate) enum Glyph {
     Search,
     Page,
     History,
+    Bookmark,
     NewTab,
     Reload,
     Close,
@@ -95,10 +98,12 @@ pub(crate) struct Suggestion {
     pub(crate) action: Action,
 }
 
-/// A short list built only from the input, currently open tabs, and locally recorded visits.
+/// A short list built only from the input, currently open tabs, bookmarks as (title, address),
+/// and locally recorded visits.
 pub(crate) fn suggestions(
     query: &str,
     tabs: &[Tab],
+    bookmarks: &[(String, String)],
     history: &[HistoryEntry],
     sidebar_collapsed: bool,
     search_engine: SearchEngine,
@@ -154,9 +159,34 @@ pub(crate) fn suggestions(
             }),
     );
 
+    // Bookmarks come only for something typed, ahead of plain visits.
+    let mut matching_bookmarks: Vec<_> = bookmarks
+        .iter()
+        .filter(|_| !query.is_empty())
+        .filter(|(_, url)| !tabs.iter().any(|tab| tab.url == *url))
+        .filter_map(|(title, url)| {
+            match_score(&folded, title, url).map(|score| (score, title, url))
+        })
+        .collect();
+    matching_bookmarks.sort_by_key(|(score, ..)| *score);
+    matching_bookmarks.truncate(MAX_BOOKMARK_SUGGESTIONS);
+    let shown_bookmarks: Vec<&String> = matching_bookmarks.iter().map(|(_, _, url)| *url).collect();
+    suggestions.extend(matching_bookmarks.iter().map(|(_, title, url)| Suggestion {
+        section: Section::Bookmarks,
+        title: if title.is_empty() {
+            (*url).clone()
+        } else {
+            (*title).clone()
+        },
+        detail: site_detail(title, url),
+        glyph: Glyph::Bookmark,
+        action: Action::VisitRecent((*url).clone()),
+    }));
+
     let mut matching_history: Vec<_> = history
         .iter()
         .filter(|entry| !tabs.iter().any(|tab| tab.url == entry.url))
+        .filter(|entry| !shown_bookmarks.contains(&&entry.url))
         .filter_map(|entry| {
             match_score(&folded, &entry.title, &entry.url).map(|score| (score, entry))
         })
@@ -291,7 +321,7 @@ mod tests {
             ),
             tab(3, "Rust blog", "https://blog.example.org"),
         ];
-        let suggestions = suggestions("rust", &tabs, &[], false, SearchEngine::default());
+        let suggestions = suggestions("rust", &tabs, &[], &[], false, SearchEngine::default());
         let tabs: Vec<_> = suggestions
             .iter()
             .filter(|suggestion| suggestion.section == Section::OpenTabs)
@@ -304,7 +334,14 @@ mod tests {
     #[test]
     fn matches_open_tabs_by_domain_and_url_and_selects_the_existing_tab() {
         let tabs = [tab(7, "Elaris", "https://github.com/theo/elaris/issues")];
-        let suggestions = suggestions("github.com", &tabs, &[], false, SearchEngine::default());
+        let suggestions = suggestions(
+            "github.com",
+            &tabs,
+            &[],
+            &[],
+            false,
+            SearchEngine::default(),
+        );
         assert!(suggestions.iter().any(|suggestion| {
             suggestion.title == "Elaris"
                 && suggestion.action == Action::SwitchTab(TabId::from_raw(7))
@@ -327,13 +364,62 @@ mod tests {
                 visit_count: 1,
             },
         ];
-        let suggestions = suggestions("rust", &[], &history, false, SearchEngine::default());
+        let suggestions = suggestions("rust", &[], &[], &history, false, SearchEngine::default());
         let recent: Vec<_> = suggestions
             .iter()
             .filter(|suggestion| suggestion.section == Section::Recent)
             .collect();
         assert_eq!(recent.len(), 1);
         assert_eq!(recent[0].title, "Rust Book");
+    }
+
+    #[test]
+    fn bookmarks_lead_history_for_typed_queries_and_hide_their_visits() {
+        let bookmarks = vec![(
+            "Rust Book".to_owned(),
+            "https://doc.rust-lang.org/book/".to_owned(),
+        )];
+        let history = vec![
+            HistoryEntry {
+                url: "https://doc.rust-lang.org/book/".into(),
+                title: "Rust Book".into(),
+                last_visited: 2,
+                visit_count: 9,
+            },
+            HistoryEntry {
+                url: "https://rust-lang.org/".into(),
+                title: "Rust".into(),
+                last_visited: 1,
+                visit_count: 1,
+            },
+        ];
+        let found = suggestions(
+            "rust",
+            &[],
+            &bookmarks,
+            &history,
+            false,
+            SearchEngine::default(),
+        );
+        let sections: Vec<_> = found
+            .iter()
+            .filter(|s| matches!(s.section, Section::Bookmarks | Section::Recent))
+            .map(|s| (s.section, s.title.as_str()))
+            .collect();
+        assert_eq!(
+            sections,
+            [(Section::Bookmarks, "Rust Book"), (Section::Recent, "Rust")]
+        );
+        assert_eq!(
+            found
+                .iter()
+                .find(|s| s.section == Section::Bookmarks)
+                .unwrap()
+                .glyph,
+            Glyph::Bookmark
+        );
+        let empty = suggestions("", &[], &bookmarks, &[], false, SearchEngine::default());
+        assert!(empty.iter().all(|s| s.section != Section::Bookmarks));
     }
 
     #[test]
@@ -353,7 +439,7 @@ mod tests {
             },
         ];
 
-        let rust = suggestions("rust", &[], &history, false, SearchEngine::default());
+        let rust = suggestions("rust", &[], &[], &history, false, SearchEngine::default());
         let recent: Vec<_> = rust
             .iter()
             .filter(|suggestion| suggestion.section == Section::Recent)
@@ -361,7 +447,7 @@ mod tests {
         assert_eq!(recent[0].title, "Rust Book");
         assert_eq!(recent[1].title, "Source repository");
 
-        let github = suggestions("github", &[], &history, false, SearchEngine::default());
+        let github = suggestions("github", &[], &[], &history, false, SearchEngine::default());
         assert!(github.iter().any(|suggestion| {
             suggestion.section == Section::Recent
                 && suggestion.action

@@ -70,9 +70,15 @@ impl super::AppState {
                 history.search(query, 100)
             }
         });
+        let bookmarks: Vec<(String, String)> = self
+            .bookmarks()
+            .links()
+            .filter_map(|link| Some((link.title.clone(), link.url()?.to_owned())))
+            .collect();
         let mut suggestions = omnibox::suggestions(
             query,
             self.browser.tabs(),
+            &bookmarks,
             &history,
             self.sidebar.collapsed,
             self.settings.search_engine,

@@ -238,6 +238,19 @@ pub(crate) const HORIZONTAL_FIELD_RADIUS: f32 = radius::MD;
 pub(crate) const HORIZONTAL_COMPACT_TAB: f32 = HORIZONTAL_TAB_HEIGHT;
 pub(crate) const HORIZONTAL_TAB_MIN: f32 = 104.0;
 pub(crate) const HORIZONTAL_TAB_MAX: f32 = 176.0;
+/// The bookmarks bar under the horizontal toolbar, and its items.
+pub(crate) const BOOKMARKS_BAR_HEIGHT: f32 = 30.0;
+pub(crate) const BOOKMARKS_BAR_PADDING: f32 = space::S2;
+pub(crate) const BOOKMARKS_BAR_GAP: f32 = space::S1;
+pub(crate) const BOOKMARKS_BAR_ITEM_HEIGHT: f32 = 24.0;
+pub(crate) const BOOKMARKS_BAR_ITEM_MAX: f32 = 180.0;
+pub(crate) const BOOKMARKS_MENU_WIDTH: f32 = 240.0;
+/// The bookmark editor's fields.
+pub(crate) const BOOKMARK_EDITOR_WIDTH: f32 = 280.0;
+/// The least room between a menu row's label and the shortcut at its trailing edge.
+pub(crate) const MENU_SHORTCUT_GAP: f32 = space::S6;
+/// How far each level of the bookmarks page's folder tree sits in.
+pub(crate) const BOOKMARKS_TREE_INDENT: f32 = space::S3;
 pub(crate) const HORIZONTAL_SPLIT_MARKER_HEIGHT: f32 = 2.0;
 pub(crate) const HORIZONTAL_EMPTY_SECTION: f32 = space::S2;
 pub(crate) const HEADER_HEIGHT: f32 = 38.0;

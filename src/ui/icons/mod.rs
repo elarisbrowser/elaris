@@ -51,6 +51,7 @@ mod sidebar;
 mod site_controls;
 mod site_popover_arrow;
 mod split_view;
+mod star;
 mod system;
 
 mod search_engines;
@@ -104,6 +105,7 @@ pub(crate) use sidebar::SIDEBAR;
 pub(crate) use site_controls::SITE_CONTROLS;
 pub(crate) use site_popover_arrow::SITE_POPOVER_ARROW;
 pub(crate) use split_view::SPLIT_VIEW;
+pub(crate) use star::{STAR, STAR_FILLED};
 pub(crate) use system::SYSTEM;
 pub(crate) use tick::TICK;
 pub(crate) use translate::TRANSLATE;

@@ -282,6 +282,22 @@ pub(crate) fn escape(state: &mut AppState) -> bool {
         state.zoom_menu = None;
     } else if state.translate_menu.is_some() {
         state.translate_menu = None;
+    } else if state.bookmarks.row_menu.is_some() {
+        state.bookmarks.row_menu = None;
+    } else if state.bookmarks.sidebar_menu || !state.bookmarks.open_folders.is_empty() {
+        state.bookmarks.sidebar_menu = false;
+        state.bookmarks.open_folders.clear();
+    } else if state
+        .bookmarks
+        .editor
+        .as_ref()
+        .is_some_and(|editor| editor.folder_menu_open)
+    {
+        if let Some(editor) = &mut state.bookmarks.editor {
+            editor.folder_menu_open = false;
+        }
+    } else if state.bookmarks.editor.is_some() {
+        state.close_bookmark_editor();
     } else if state.sidebar.overflow_menu_open {
         state.sidebar.overflow_menu_open = false;
     } else if state.omnibox.search_engine_menu_open {
