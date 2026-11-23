@@ -32,6 +32,8 @@ jobs:
         run: cargo fmt -- --check
       - name: Check C++ formatting
         run: ./elaris cpp-format
+      - name: Check Ladybird patches apply
+        run: ./elaris patches check
       - name: Check package
         run: cargo check --locked
       - name: Link the UI-only application

@@ -1,0 +1,18 @@
+name: Ladybird patches
+
+# Detect Elaris patches that no longer apply to upstream Ladybird before the pin is bumped.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  upstream:
+    name: Check patches against upstream master
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Check Ladybird patches apply
+        run: ./elaris patches check --upstream

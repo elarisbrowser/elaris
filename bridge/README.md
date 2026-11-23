@@ -66,6 +66,17 @@ Automatic runs can be added later by defining `push` and `pull_request` path fil
 - Ladybird loads `WebCompat.json` and its pdf.js viewer while the application is created, from the `Ladybird.app` resources next to `WebContent`. `platform_init()` replaces the resource root the host passes in during `create()`, so the bridge's resource directory does not supply either of them. Both work from a build tree; a packaged build must keep that bundle layout, or change Ladybird's initialization.
 - AppleClang needs one narrow warning exception for the statement-expression expansion inside Ladybird's `WEB_VIEW_APPLICATION` macro. No other Elaris C++ warnings were suppressed.
 
+## Patch conflicts
+
+`./elaris patches check` dry-runs every patch in `patches/` against the checkout and reports each as clean, fuzzy (applies with an offset; refresh it) or conflict. `./elaris engine build` runs it before configuring CMake, and CI runs it on every push. Before bumping the `vendor/ladybird` pin, check the target first:
+
+```sh
+./elaris patches check --upstream     # fetch and check upstream master
+./elaris patches check --ref <commit> # a revision already fetched into vendor/ladybird
+```
+
+The weekly `Ladybird patches` workflow runs the `--upstream` check so drift shows up before a bump.
+
 Elaris also applies [disable-reporting.patch](patches/disable-reporting.patch) to LibWebView. It keeps Ladybird's crash capture running but never keeps or submits crash reports, and it makes web-compatibility report submissions fail before any network request. The two switches are `reporting_enabled` in `ReportSubmission.cpp` and the `crash_report_sending()` getter in `Settings.h`.
 
 If reporting is enabled later, only engine crashes can be reported. `ElarisApplication` overrides `captures_browser_crashes()` to `false`, so the Elaris host process never installs Ladybird's browser crash handler. Engine processes (WebContent, RequestServer, ImageDecoder, Compositor, and the other helpers) still capture crashes. Hub, which is part of the engine, still captures its own. Every report names `application` (`elaris`), `application_version` (from `Cargo.toml`) and `engine` (`ladybird`), next to the Ladybird build information. A future reporting backend can change the two switches and set `ReportSubmission::set_post_function` to its own transport.
