@@ -15,8 +15,12 @@ PACKAGING = ROOT / "packaging"
 LINUX_ASSETS = PACKAGING / "linux"
 # Compiled from the brand kit's Icon Composer documents, so the designer's layers and gradient carry over.
 APP_ICONS = ASSETS / "brand-kit" / "apple" / "Icon Exports"
-# Stable builds wear the blue icon; dev and nightly builds the yellow one, so they are easy to tell apart.
-APP_ICON_SOURCES = {"stable": APP_ICONS / "Icon.icon", "dev": APP_ICONS / "Icon-Dev.icon"}
+# Stable releases wear the blue icon; dev runs and canary builds the yellow one, so they are easy to tell apart.
+APP_ICON_SOURCES = {
+    "stable": APP_ICONS / "Icon.icon",
+    "dev": APP_ICONS / "Icon-Dev.icon",
+    "canary": APP_ICONS / "Icon-Dev.icon",
+}
 APP_ID = "org.elarisbrowser.Elaris"
 ENGINE_BUILD = ROOT / "build" / "cpp-ladybird"
 LADYBIRD_APP = ENGINE_BUILD / "bin" / "Ladybird.app"
@@ -45,7 +49,7 @@ def _copy_if_changed(source: Path, destination: Path) -> bool:
 def _macos_app_icon(channel: str) -> Path:
     """Compile the channel's icon into Assets.car (macOS 26+) and Icon.icns (older systems), cached under build/."""
     source = APP_ICON_SOURCES[channel]
-    output = ROOT / "build" / "icons" / "macos" / channel
+    output = ROOT / "build" / "icons" / "macos" / source.stem
     compiled = [output / "Assets.car", output / "Icon.icns"]
     newest_source = max(path.stat().st_mtime_ns for path in source.rglob("*") if path.is_file())
     if all(path.is_file() and path.stat().st_mtime_ns >= newest_source for path in compiled):

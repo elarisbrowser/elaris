@@ -124,7 +124,7 @@ def bundle(args: argparse.Namespace) -> None:
     build(argparse.Namespace(ui=False, release=True, jobs=None))
     executable = _executable("release")
     if sys.platform == "darwin":
-        bundled = packaging.macos_release_bundle(executable, "dev" if args.nightly else "stable")
+        bundled = packaging.macos_release_bundle(executable, "canary" if args.canary else "stable")
         ui.success(f"Bundled {bundled.parents[2]}")
     elif sys.platform.startswith("linux"):
         prefix = ROOT / "build" / "linux" / "Elaris"
@@ -370,7 +370,7 @@ def register_commands(commands) -> None:
             )
         elif handler is bundle:
             subcommand.add_argument(
-                "--nightly", action="store_true", help="Use the yellow dev icon (macOS) instead of the stable one"
+                "--canary", action="store_true", help="Name the build as canary, with the yellow icon (macOS)"
             )
         elif handler is build:
             subcommand.add_argument("--ui", action="store_true", help="Build only the interface, without Ladybird")
