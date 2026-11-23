@@ -29,17 +29,27 @@ pub(in crate::ui) use zoom::zoom_indicator;
 /// What a navigation button does to the active tab.
 type Navigate = fn(&mut Browser, TabId);
 
-pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El {
+/// `overlays` and `reduced` serve the address bar, when the toolbar holds it.
+pub(crate) fn view(
+    state: &AppState,
+    theme: &Theme,
+    cx: &mut Cx<AppState>,
+    overlays: &mut Vec<El>,
+    reduced: bool,
+) -> El {
     #[cfg(elaris_ui = "linux")]
     {
         // The toggle and navigation always show; revealing the row only adds the window
         // controls and pushes the page down beneath them.
-        // A system frame draws its own bar, so Elaris's toolbar is left out entirely.
-        if crate::app::LinuxDecorations::current() == crate::app::LinuxDecorations::System {
+        // A system frame draws its own bar, so Elaris's toolbar is left out unless it holds the
+        // address bar.
+        if crate::app::LinuxDecorations::current() == crate::app::LinuxDecorations::System
+            && !state.toolbar_address_bar()
+        {
             return el();
         }
         let visible = header_revealed(state);
-        let header = header_content(state, theme, cx, visible);
+        let header = header_content(state, theme, cx, visible, overlays, reduced);
         if visible {
             header.on_hover_change(|state: &mut AppState, inside, tx| {
                 if state.titlebar.set_toolbar_hovered(inside) {
@@ -52,20 +62,21 @@ pub(crate) fn view(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>) -> El
     }
     #[cfg(not(elaris_ui = "linux"))]
     {
-        header_content(state, theme, cx, false)
+        header_content(state, theme, cx, false, overlays, reduced)
     }
 }
 
 /// Whether the Linux row shows its window controls and holds the page below it: always with the
 /// sidebar closed or on the right, otherwise while the pointer is at the top edge or in the row.
-/// Never with a system frame, which has no toolbar to show.
+/// With a system frame, only while the row holds the address bar.
 #[cfg(elaris_ui = "linux")]
 pub(crate) fn header_revealed(state: &AppState) -> bool {
     if crate::app::LinuxDecorations::current() == crate::app::LinuxDecorations::System {
-        return false;
+        return state.toolbar_address_bar();
     }
     state.sidebar.collapsed
         || state.sidebar_on_right()
+        || state.toolbar_address_bar()
         || state.titlebar.is_visible()
         || state.zoom_menu.is_some()
 }
@@ -90,8 +101,17 @@ fn titlebar_visibility_changed(tx: &mut rune::Tx) {
     tx.motion(theme::TITLEBAR_REVEAL);
 }
 
-/// `revealed` spans the row across the window and adds the Linux window controls.
-fn header_content(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>, revealed: bool) -> El {
+/// `revealed` spans the row across the window and adds the Linux window controls. With the
+/// address bar in the toolbar, the row always spans the window and the bar fills it past the
+/// navigation buttons.
+fn header_content(
+    state: &AppState,
+    theme: &Theme,
+    cx: &mut Cx<AppState>,
+    revealed: bool,
+    overlays: &mut Vec<El>,
+    reduced: bool,
+) -> El {
     let collapsed = state.sidebar.collapsed;
     let toggle_label = if collapsed {
         "Show sidebar"
@@ -152,7 +172,12 @@ fn header_content(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>, reveal
         .absolute(0.0, 0.0)
         .window_drag()
         .child(lead);
-    if spans_window || revealed {
+    if state.toolbar_address_bar() {
+        header = header.w_full().pr(theme::SIDEBAR_PADDING).child(
+            crate::ui::omnibox::address_bar(state, cx, theme, reduced, overlays)
+                .min_w(theme::TOOLBAR_ADDRESS_MIN),
+        );
+    } else if spans_window || revealed {
         header = header.w_full().pr(theme::SIDEBAR_PADDING).child(spacer());
     }
     #[cfg(elaris_ui = "linux")]

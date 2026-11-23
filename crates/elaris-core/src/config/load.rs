@@ -13,8 +13,8 @@ use crate::appearance::{AccentColor, Appearance, GlassStyle};
 use crate::keybindings::{Chord, KeyBindings};
 use crate::permissions::{AutoplayPolicy, PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{
-    ContentBlockList, DownloadDirectory, NewTabPosition, PageStyle, Settings, SidebarSide,
-    StartupMode, TabLayout, WindowDecorations,
+    AddressBarPosition, ContentBlockList, DownloadDirectory, NewTabPosition, PageStyle, Settings,
+    SidebarSide, StartupMode, TabLayout, WindowDecorations,
 };
 use elaris_memory_saver::MemorySaver;
 
@@ -66,6 +66,21 @@ pub fn parse(contents: &str) -> Result<ConfigLoad, String> {
         } else {
             issues.push(format!("Invalid value for [appearance].tab_layout: {value:?}; expected vertical or horizontal"));
         }
+    }
+    if let Some(value) = string_value(&document, "appearance", "address_bar", &mut issues) {
+        if let Some(position) = AddressBarPosition::ALL
+            .into_iter()
+            .find(|position| position.config_key() == value)
+        {
+            settings.address_bar = position;
+        } else {
+            issues.push(format!(
+                "Invalid value for [appearance].address_bar: {value:?}; expected sidebar or toolbar"
+            ));
+        }
+    }
+    if let Some(value) = bool_value(&document, "appearance", "compact_tabs", &mut issues) {
+        settings.compact_tabs = value;
     }
     if let Some(value) = string_value(&document, "appearance", "sidebar_side", &mut issues) {
         if let Some(side) = SidebarSide::ALL

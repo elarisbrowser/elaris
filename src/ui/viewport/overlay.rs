@@ -25,7 +25,7 @@ pub(super) fn header_above_page(state: &AppState) -> bool {
     }
     #[cfg(not(elaris_ui = "linux"))]
     {
-        state.sidebar.collapsed || state.sidebar_on_right()
+        state.sidebar.collapsed || state.sidebar_on_right() || state.toolbar_address_bar()
     }
 }
 

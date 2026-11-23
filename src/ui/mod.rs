@@ -114,7 +114,13 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         } else {
             window.child(sidebar).child(page)
         }
-        .child(sidebar::header::view(state, &theme, cx));
+        .child(sidebar::header::view(
+            state,
+            &theme,
+            cx,
+            &mut overlays,
+            reduced_motion,
+        ));
         if !state.sidebar.collapsed {
             let window_width = cx.layout_size("window").map_or(0.0, |size| size[0]);
             window = window.child(sidebar::resize::handle(state, window_width));
@@ -129,7 +135,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
         {
             overlays.push(find);
         }
-        if !horizontal
+        if !state.toolbar_address_bar()
             && let Some(overlay) = omnibox::view(
                 state,
                 &theme,

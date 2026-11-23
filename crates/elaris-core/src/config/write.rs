@@ -116,6 +116,10 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
         SettingsChange::TabLayout(value) => {
             ("appearance", "tab_layout", value.config_key().to_owned())
         }
+        SettingsChange::AddressBar(value) => {
+            ("appearance", "address_bar", value.config_key().to_owned())
+        }
+        SettingsChange::CompactTabs(value) => ("appearance", "compact_tabs", value.to_string()),
         SettingsChange::SidebarSide(value) => {
             ("appearance", "sidebar_side", value.config_key().to_owned())
         }
@@ -191,6 +195,7 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
         || key == "reduce_motion"
         || key == "force_dark"
         || key == "bookmarks_bar"
+        || key == "compact_tabs"
     {
         Value::from(value == "true")
     } else if matches!(key, "tint_opacity" | "grain" | "max_panes" | "zoom") {

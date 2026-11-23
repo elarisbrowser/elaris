@@ -11,8 +11,8 @@ use crate::appearance::{AccentColor, Appearance, GlassStyle};
 use crate::keybindings::Chord;
 use crate::permissions::{AutoplayPolicy, PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{
-    ContentBlockList, DownloadDirectory, NewTabPosition, PageStyle, Settings, SettingsChange,
-    SidebarSide, StartupMode, TabLayout, WindowDecorations,
+    AddressBarPosition, ContentBlockList, DownloadDirectory, NewTabPosition, PageStyle, Settings,
+    SettingsChange, SidebarSide, StartupMode, TabLayout, WindowDecorations,
 };
 
 use super::write::NEXT_TEMP_FILE;
@@ -39,6 +39,33 @@ fn tab_layout_defaults_to_vertical_and_round_trips() {
     }
     let invalid = parse("[appearance]\ntab_layout = 'diagonal'").unwrap();
     assert_eq!(invalid.settings.tab_layout, TabLayout::Vertical);
+    assert_eq!(invalid.issues.len(), 1);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn address_bar_and_compact_tabs_default_and_round_trip() {
+    let directory = std::env::temp_dir().join(format!(
+        "elaris-config-address-bar-{}-{}",
+        std::process::id(),
+        NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed)
+    ));
+    let path = directory.join("config.toml");
+    let defaults = parse("").unwrap().settings;
+    assert_eq!(defaults.address_bar, AddressBarPosition::Sidebar);
+    assert!(!defaults.compact_tabs);
+    for position in [AddressBarPosition::Toolbar, AddressBarPosition::Sidebar] {
+        write_change(&path, &SettingsChange::AddressBar(position)).unwrap();
+        let settings = parse(&fs::read_to_string(&path).unwrap()).unwrap().settings;
+        assert_eq!(settings.address_bar, position);
+    }
+    for compact in [true, false] {
+        write_change(&path, &SettingsChange::CompactTabs(compact)).unwrap();
+        let settings = parse(&fs::read_to_string(&path).unwrap()).unwrap().settings;
+        assert_eq!(settings.compact_tabs, compact);
+    }
+    let invalid = parse("[appearance]\naddress_bar = 'bottom'").unwrap();
+    assert_eq!(invalid.settings.address_bar, AddressBarPosition::Sidebar);
     assert_eq!(invalid.issues.len(), 1);
     fs::remove_dir_all(directory).unwrap();
 }

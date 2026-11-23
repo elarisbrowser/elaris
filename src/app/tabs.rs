@@ -35,7 +35,7 @@ impl super::AppState {
     }
 
     pub(crate) fn activate(&mut self, tab: TabId) {
-        if self.horizontal_tabs() {
+        if self.toolbar_address_bar() {
             self.omnibox.close();
         }
         crate::ui::dismiss_tab_preview(self);

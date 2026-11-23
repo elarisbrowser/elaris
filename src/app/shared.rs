@@ -111,7 +111,7 @@ impl AppState {
                 false
             } else {
                 let previous = self.engine_download_directory();
-                self.prepare_tab_layout(settings.tab_layout);
+                self.prepare_chrome(&settings);
                 self.settings = settings;
                 self.browser.set_default_zoom(self.settings.page_zoom);
                 let current = self.engine_download_directory();

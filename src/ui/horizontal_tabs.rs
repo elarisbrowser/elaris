@@ -94,6 +94,29 @@ pub(super) fn view(
     #[cfg(elaris_ui = "linux")]
     let inset = (theme::ICON_BUTTON + theme::NAV_GAP) * window_controls.len() as f32;
 
+    // Compact tabs share their row with the toolbar: navigation leads, the address bar trails.
+    let compact = state.compact_tabs();
+    let mut toolbar = Vec::new();
+    let mut trailing = Vec::new();
+    if compact {
+        toolbar.extend(header::navigation(state, theme));
+        trailing.push(
+            super::omnibox::address_bar(state, cx, theme, reduced, overlays)
+                .w(theme::COMPACT_ADDRESS_WIDTH)
+                .grow(0.0),
+        );
+        trailing.extend(super::bookmarks::expand_button(state, theme));
+        trailing.push(downloads::trigger(state, theme, overlays));
+    }
+    // Each item in the strip takes its width and the gap after it.
+    let toolbar_width = (toolbar.len() + trailing.len().saturating_sub(1)) as f32
+        * (theme::ICON_BUTTON + theme::NAV_GAP)
+        + if compact {
+            theme::COMPACT_ADDRESS_WIDTH + theme::NAV_GAP
+        } else {
+            0.0
+        };
+
     let strip_width = state.sidebar.horizontal_strip_width.unwrap_or_else(|| {
         cx.layout_size("window")
             .map_or(theme::WINDOW_MIN_SIZE.0, |size| size[0])
@@ -112,7 +135,8 @@ pub(super) fn view(
         - theme::SIDEBAR_PADDING
         - theme::ICON_BUTTON
         - theme::ROW_PADDING
-        - gaps * theme::NAV_GAP;
+        - gaps * theme::NAV_GAP
+        - toolbar_width;
     let sections = TabSection::ORDER
         .map(|section| state.tab_drag.preview_items(state.browser.tabs(), section));
     let regular = state
@@ -170,6 +194,7 @@ pub(super) fn view(
     }
     let live = state.tab_drag.scroll_live();
     strip = strip
+        .children(toolbar)
         .child(
             row()
                 .key(SCROLL)
@@ -222,12 +247,39 @@ pub(super) fn view(
                 state.open_context_menu(None, press);
             }),
     );
+    strip = strip.children(trailing);
     #[cfg(elaris_ui = "linux")]
     {
         strip = strip.children(window_controls);
     }
 
-    let navigation = row()
+    drag_overlay(state, theme, overlays, reduced);
+
+    let chrome = col()
+        .key("horizontal-chrome")
+        .w_full()
+        .transition(if reduced {
+            Transition::none()
+        } else {
+            Transition::opacity()
+        })
+        .child(strip);
+    if compact {
+        chrome
+    } else {
+        chrome.child(navigation(state, cx, theme, overlays, reduced))
+    }
+}
+
+/// The toolbar row below the tab strip: navigation, the address bar, and downloads.
+fn navigation(
+    state: &AppState,
+    cx: &mut Cx<AppState>,
+    theme: &Theme,
+    overlays: &mut Vec<El>,
+    reduced: bool,
+) -> El {
+    row()
         .key("horizontal-navigation")
         .w_full()
         .h(theme::HORIZONTAL_NAV_HEIGHT)
@@ -239,19 +291,7 @@ pub(super) fn view(
             state, cx, theme, reduced, overlays,
         ))
         .children(super::bookmarks::expand_button(state, theme))
-        .child(downloads::trigger(state, theme, overlays));
-    drag_overlay(state, theme, overlays, reduced);
-
-    col()
-        .key("horizontal-chrome")
-        .w_full()
-        .transition(if reduced {
-            Transition::none()
-        } else {
-            Transition::opacity()
-        })
-        .child(strip)
-        .child(navigation)
+        .child(downloads::trigger(state, theme, overlays))
 }
 
 fn overflow_menu(state: &AppState, cx: &Cx<AppState>, theme: &Theme, overlays: &mut Vec<El>) -> El {

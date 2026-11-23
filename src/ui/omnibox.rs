@@ -98,7 +98,7 @@ pub(crate) fn view(
 }
 
 fn editor(state: &AppState, suggestions: &[Suggestion], theme: &Theme) -> El {
-    let style = if state.horizontal_tabs() {
+    let style = if state.toolbar_address_bar() {
         type_::BODY
     } else {
         theme::OMNIBOX_INPUT_TEXT
@@ -107,7 +107,7 @@ fn editor(state: &AppState, suggestions: &[Suggestion], theme: &Theme) -> El {
     if !suggestions.is_empty() {
         field = field.active_descendant(format!("omnibox-result-{}", state.omnibox.selected));
     }
-    if !state.horizontal_tabs() {
+    if !state.toolbar_address_bar() {
         field = field.focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus);
     }
     field
@@ -136,7 +136,7 @@ fn results(state: &AppState, suggestions: &[Suggestion], theme: &Theme, results_
         .key("omnibox-results")
         .w_full()
         .max_h(results_limit.max(0.0))
-        .px(if state.horizontal_tabs() {
+        .px(if state.toolbar_address_bar() {
             0.0
         } else {
             theme::ROW_PADDING
@@ -146,7 +146,7 @@ fn results(state: &AppState, suggestions: &[Suggestion], theme: &Theme, results_
         })
         .role("listbox")
         .label("Suggestions");
-    let height = if state.horizontal_tabs() {
+    let height = if state.toolbar_address_bar() {
         theme::ROW_HEIGHT
     } else {
         theme::OMNIBOX_ROW_HEIGHT
@@ -199,7 +199,7 @@ fn results(state: &AppState, suggestions: &[Suggestion], theme: &Theme, results_
     results.child(content.children(rows))
 }
 
-pub(super) fn address_bar(
+pub(in crate::ui) fn address_bar(
     state: &AppState,
     cx: &Cx<AppState>,
     theme: &Theme,
@@ -215,6 +215,7 @@ pub(super) fn address_bar(
         state.omnibox.open && state.browser.peek.is_none() && state.tab_switcher.is_none();
     let mut bar = row()
         .key("horizontal-address-bar")
+        .no_window_drag()
         .w(0.0)
         .min_w(0.0)
         .grow(1.0)
@@ -243,7 +244,7 @@ pub(super) fn address_bar(
             let top = y + height + theme::NAV_GAP;
             overlays.push(
                 el().key("address-results-dismiss")
-                    .absolute(0.0, super::bookmarks::horizontal_chrome_height(state))
+                    .absolute(0.0, super::bookmarks::top_chrome_height(state))
                     .w_full()
                     .h_full()
                     .a11y_hidden()
@@ -348,7 +349,7 @@ fn search_engine_selector(state: &AppState, theme: &Theme, overlays: &mut Vec<El
     let settings = &state.settings;
     let engine = settings.search_engine;
     let label = format!("Search engine: {}", settings.search_engine_label(engine));
-    let height = if state.horizontal_tabs() {
+    let height = if state.toolbar_address_bar() {
         theme::CLOSE_BUTTON
     } else {
         theme::OMNIBOX_SEARCH_BUTTON_HEIGHT
@@ -363,7 +364,7 @@ fn search_engine_selector(state: &AppState, theme: &Theme, overlays: &mut Vec<El
         .fill(theme.address_field)
         .hover(theme.hover)
         .press(theme.press)
-        .press_scale(if state.horizontal_tabs() {
+        .press_scale(if state.toolbar_address_bar() {
             1.0
         } else {
             theme::PRESS_SCALE

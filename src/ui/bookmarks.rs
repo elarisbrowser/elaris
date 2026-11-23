@@ -20,12 +20,27 @@ const EDITOR_TITLE: &str = "bookmark-editor-title";
 /// The horizontal layout's chrome above the page: its tab strip and toolbar, and the bookmarks
 /// bar while it shows.
 pub(crate) fn horizontal_chrome_height(state: &AppState) -> f32 {
-    theme::HORIZONTAL_CHROME_HEIGHT
+    let chrome = if state.compact_tabs() {
+        theme::HORIZONTAL_STRIP_HEIGHT
+    } else {
+        theme::HORIZONTAL_CHROME_HEIGHT
+    };
+    chrome
         + if bar_shown(state) {
             theme::BOOKMARKS_BAR_HEIGHT
         } else {
             0.0
         }
+}
+
+/// How far the chrome above the page reaches down: the horizontal chrome, or the header row that
+/// holds the vertical layout's toolbar.
+pub(crate) fn top_chrome_height(state: &AppState) -> f32 {
+    if state.horizontal_tabs() {
+        horizontal_chrome_height(state)
+    } else {
+        theme::HEADER_HEIGHT
+    }
 }
 
 /// The bar shows in the horizontal layout while it isn't collapsed and the Bookmarks Bar holds a

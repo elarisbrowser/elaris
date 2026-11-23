@@ -125,8 +125,10 @@ fn body(state: &AppState, theme: &Theme, overlays: &mut Vec<El>, reduced_motion:
         .min_h(0.0)
         .px(theme::SIDEBAR_PADDING)
         .pb(theme::VIEWPORT_INSET)
-        .gap(theme::SIDEBAR_GAP)
-        .child(search_launcher(state, theme, reduced_motion, overlays));
+        .gap(theme::SIDEBAR_GAP);
+    if !state.toolbar_address_bar() {
+        body = body.child(search_launcher(state, theme, reduced_motion, overlays));
+    }
     if let Some(status) = state.status() {
         body = body.child(
             text(status)
@@ -301,7 +303,7 @@ pub(super) fn site_controls(theme: &Theme, size: f32) -> El {
         tx.live_only();
     })
     .on_press_tx(move |state: &mut AppState, tx| {
-        if state.horizontal_tabs() && state.omnibox.open {
+        if state.toolbar_address_bar() && state.omnibox.open {
             state.omnibox.close();
             tx.focus(super::viewport::focus_key(&state.browser), false);
         }

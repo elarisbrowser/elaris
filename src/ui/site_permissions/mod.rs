@@ -34,7 +34,7 @@ pub(crate) fn view(
     ]);
     let center = anchor[0] + anchor[2] / 2.0;
     let x = (center - design::WIDTH / 2.0).max(10.0);
-    let x = if state.horizontal_tabs() {
+    let x = if state.toolbar_address_bar() {
         x.min(
             cx.layout_size("window")
                 .map_or(x, |size| (size[0] - design::WIDTH - 10.0).max(10.0)),
@@ -62,7 +62,7 @@ pub(crate) fn view(
             .key("site-controls-arrow")
             .size(20.0, 10.0)
             .absolute(
-                if state.horizontal_tabs() {
+                if state.toolbar_address_bar() {
                     center - 10.0
                 } else {
                     x + design::WIDTH / 2.0 - 10.0

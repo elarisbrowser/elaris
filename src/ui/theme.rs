@@ -232,6 +232,10 @@ pub(crate) const HORIZONTAL_STRIP_HEIGHT: f32 = HEADER_HEIGHT - 4.0;
 pub(crate) const HORIZONTAL_FIELD_HEIGHT: f32 = FIELD_HEIGHT - 8.0;
 pub(crate) const HORIZONTAL_NAV_HEIGHT: f32 = HORIZONTAL_FIELD_HEIGHT;
 pub(crate) const HORIZONTAL_CHROME_HEIGHT: f32 = HORIZONTAL_STRIP_HEIGHT + HORIZONTAL_NAV_HEIGHT;
+/// The address bar's width when compact tabs share its row.
+pub(crate) const COMPACT_ADDRESS_WIDTH: f32 = 320.0;
+/// The narrowest a toolbar address bar beside the vertical sidebar's header gets.
+pub(crate) const TOOLBAR_ADDRESS_MIN: f32 = 160.0;
 pub(crate) const HORIZONTAL_TAB_HEIGHT: f32 = ROW_HEIGHT - 8.0;
 pub(crate) const HORIZONTAL_TAB_RADIUS: f32 = radius::MD;
 pub(crate) const HORIZONTAL_FIELD_RADIUS: f32 = radius::MD;

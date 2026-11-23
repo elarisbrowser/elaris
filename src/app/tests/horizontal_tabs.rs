@@ -765,3 +765,39 @@ fn sidebar_moves_to_the_right_edge_and_back() {
     settle(&mut window);
     assert!(near(rect(&window, "sidebar")[0], 0.0));
 }
+
+#[test]
+fn compact_tabs_fold_the_toolbar_into_the_tab_strip() {
+    let mut state = AppState::new(Some("https://example.com/"));
+    state.set_tab_layout(TabLayout::Horizontal);
+    state.set_compact_tabs(true);
+    let runtime = runtime(state, 1000.0);
+    assert!(runtime.presented("horizontal-navigation").is_none());
+    let strip = rect(&runtime, "horizontal-tab-strip");
+    let address = rect(&runtime, "horizontal-address-bar");
+    assert!(address[1] >= strip[1] && address[1] + address[3] <= strip[1] + strip[3]);
+    let inset = runtime.state.page_inset();
+    assert_eq!(
+        crate::ui::viewport::page_origin(&runtime.state)[1],
+        theme::HORIZONTAL_STRIP_HEIGHT + inset
+    );
+}
+
+#[test]
+fn the_vertical_layout_can_hold_its_address_bar_in_a_toolbar() {
+    let mut state = AppState::new(Some("https://example.com/"));
+    state.set_address_bar(elaris_core::settings::AddressBarPosition::Toolbar);
+    let mut runtime = runtime(state, 1000.0);
+    // The only launcher is the toolbar's, past the sidebar.
+    let sidebar_width = runtime.state.sidebar.width;
+    assert!(rect(&runtime, "omnibox-launcher")[0] >= sidebar_width);
+    let address = rect(&runtime, "horizontal-address-bar");
+    assert!(address[0] >= sidebar_width);
+    assert!(address[1] + address[3] <= theme::HEADER_HEIGHT);
+
+    // Hiding the sidebar keeps the address bar in the toolbar.
+    runtime.update(|state, _| state.sidebar.collapsed = true);
+    runtime.frame(2.0);
+    runtime.frame(3.0);
+    assert!(runtime.presented("horizontal-address-bar").is_some());
+}

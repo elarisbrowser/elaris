@@ -13,8 +13,8 @@ use elaris_core::permissions::{
 #[cfg(elaris_ui = "linux")]
 use elaris_core::settings::WindowDecorations;
 use elaris_core::settings::{
-    ContentBlockList, DownloadDirectory, NewTabPosition, PageStyle, SettingsChange, SidebarSide,
-    StartupMode, TabLayout,
+    AddressBarPosition, ContentBlockList, DownloadDirectory, NewTabPosition, PageStyle, Settings,
+    SettingsChange, SidebarSide, StartupMode, TabLayout,
 };
 
 impl super::AppState {
@@ -24,9 +24,36 @@ impl super::AppState {
 
     pub(crate) fn set_tab_layout(&mut self, layout: TabLayout) {
         if self.settings.tab_layout != layout {
-            self.prepare_tab_layout(layout);
+            self.reset_chrome();
             self.settings.tab_layout = layout;
             self.save_setting(SettingsChange::TabLayout(layout));
+        }
+    }
+
+    /// Whether the address bar sits inline in a toolbar above the page, rather than opening as
+    /// an overlay from the sidebar. The horizontal layout always has its toolbar.
+    pub(crate) fn toolbar_address_bar(&self) -> bool {
+        self.horizontal_tabs() || self.settings.address_bar == AddressBarPosition::Toolbar
+    }
+
+    pub(crate) fn set_address_bar(&mut self, position: AddressBarPosition) {
+        if self.settings.address_bar != position {
+            self.reset_chrome();
+            self.settings.address_bar = position;
+            self.save_setting(SettingsChange::AddressBar(position));
+        }
+    }
+
+    /// Whether the horizontal layout folds its toolbar into the tab strip, as a single row.
+    pub(crate) fn compact_tabs(&self) -> bool {
+        self.horizontal_tabs() && self.settings.compact_tabs
+    }
+
+    pub(crate) fn set_compact_tabs(&mut self, compact: bool) {
+        if self.settings.compact_tabs != compact {
+            self.reset_chrome();
+            self.settings.compact_tabs = compact;
+            self.save_setting(SettingsChange::CompactTabs(compact));
         }
     }
 
@@ -98,10 +125,24 @@ impl super::AppState {
         }
     }
 
-    pub(super) fn prepare_tab_layout(&mut self, layout: TabLayout) {
-        if self.settings.tab_layout != layout {
-            self.reset_tab_chrome();
+    /// Resets the chrome before `next` settings move the tabs or the address bar.
+    pub(super) fn prepare_chrome(&mut self, next: &Settings) {
+        let shape = |settings: &Settings| {
+            (
+                settings.tab_layout,
+                settings.address_bar,
+                settings.compact_tabs,
+            )
+        };
+        if shape(&self.settings) != shape(next) {
+            self.reset_chrome();
         }
+    }
+
+    /// Drops the tab chrome and closes the address bar, which draws differently in its new place.
+    fn reset_chrome(&mut self) {
+        self.reset_tab_chrome();
+        self.omnibox.close();
     }
 
     /// Drops drags, menus and anchors that belong to where the tabs were drawn before a move.
@@ -409,7 +450,7 @@ impl super::AppState {
 
     pub(super) fn apply_config_load(&mut self, load: ConfigLoad) {
         let previous_download_directory = self.engine_download_directory();
-        self.prepare_tab_layout(load.settings.tab_layout);
+        self.prepare_chrome(&load.settings);
         self.settings = load.settings;
         self.browser.set_default_zoom(self.settings.page_zoom);
         self.browser.split_view_limit = self.settings.split_view_limit;

@@ -49,6 +49,33 @@ impl TabLayout {
     }
 }
 
+/// Where the vertical layout puts the address bar: atop the sidebar, or in a toolbar above the
+/// page. The horizontal layout always uses its toolbar.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AddressBarPosition {
+    #[default]
+    Sidebar,
+    Toolbar,
+}
+
+impl AddressBarPosition {
+    pub const ALL: [Self; 2] = [Self::Sidebar, Self::Toolbar];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Sidebar => "Sidebar",
+            Self::Toolbar => "Toolbar",
+        }
+    }
+
+    pub fn config_key(self) -> &'static str {
+        match self {
+            Self::Sidebar => "sidebar",
+            Self::Toolbar => "toolbar",
+        }
+    }
+}
+
 /// Which edge of the window the vertical sidebar sits against.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SidebarSide {
@@ -271,6 +298,9 @@ pub struct Settings {
     /// Darkens pages that don't provide a dark theme of their own.
     pub force_dark: bool,
     pub tab_layout: TabLayout,
+    pub address_bar: AddressBarPosition,
+    /// The horizontal layout puts its tabs, navigation and address bar in a single row.
+    pub compact_tabs: bool,
     pub sidebar_side: SidebarSide,
     pub new_tab_position: NewTabPosition,
     pub page_style: PageStyle,
@@ -310,6 +340,8 @@ impl Default for Settings {
             autoplay: crate::permissions::AutoplayPolicy::default(),
             force_dark: false,
             tab_layout: TabLayout::default(),
+            address_bar: AddressBarPosition::default(),
+            compact_tabs: false,
             sidebar_side: SidebarSide::default(),
             new_tab_position: NewTabPosition::default(),
             page_style: PageStyle::default(),
@@ -413,6 +445,8 @@ pub enum SettingsChange {
     PageZoom(u16),
     Autoplay(crate::permissions::AutoplayPolicy),
     TabLayout(TabLayout),
+    AddressBar(AddressBarPosition),
+    CompactTabs(bool),
     SidebarSide(SidebarSide),
     NewTabPosition(NewTabPosition),
     PageStyle(PageStyle),

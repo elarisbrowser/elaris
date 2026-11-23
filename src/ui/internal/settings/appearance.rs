@@ -12,7 +12,9 @@ use crate::ui::icons;
 use crate::ui::internal::PageContext;
 use crate::ui::theme::{self, Theme};
 use elaris_core::appearance::{AccentColor, Appearance, GlassStyle};
-use elaris_core::settings::{NewTabPosition, PageStyle, SidebarSide, TabLayout};
+use elaris_core::settings::{
+    AddressBarPosition, NewTabPosition, PageStyle, SidebarSide, TabLayout,
+};
 
 use super::section;
 
@@ -86,6 +88,30 @@ fn appearance(cx: &mut PageContext) -> El {
         tx.motion(theme::SIDEBAR_TOGGLE);
     })
     .build(&cx.kit);
+    let address_bar = SegmentedControl::new(
+        &AddressBarPosition::ALL.map(AddressBarPosition::label),
+        AddressBarPosition::ALL
+            .iter()
+            .position(|position| *position == state.settings.address_bar),
+    )
+    .width(Some(theme::PAGE_CONTROL_WIDTH))
+    .label("Address Bar")
+    .on_pick(|state: &mut AppState, index, tx| {
+        state.set_address_bar(AddressBarPosition::ALL[index]);
+        tx.animated();
+        tx.motion(theme::SIDEBAR_TOGGLE);
+    })
+    .build(&cx.kit);
+    let compact_tabs = rune_kit::Switch::new(state.settings.compact_tabs)
+        .standard()
+        .label("Compact tabs")
+        .hide_label()
+        .on_toggle_tx(|state: &mut AppState, tx| {
+            state.set_compact_tabs(!state.settings.compact_tabs);
+            tx.animated();
+            tx.motion(theme::SIDEBAR_TOGGLE);
+        })
+        .build(&switch_kit(&cx.kit));
     let sidebar_side = SegmentedControl::new(
         &SidebarSide::ALL.map(SidebarSide::label),
         SidebarSide::ALL
@@ -114,7 +140,7 @@ fn appearance(cx: &mut PageContext) -> El {
         tx.motion(theme::TAB_REORDER_MOTION);
     })
     .build(&cx.kit);
-    let rows = vec![
+    let mut rows = vec![
         setting(
             cx,
             "Theme",
@@ -133,6 +159,24 @@ fn appearance(cx: &mut PageContext) -> El {
             "Choose where open tabs appear.",
             tab_layout,
         ),
+    ];
+    // Each layout offers only the choices that shape it.
+    if state.horizontal_tabs() {
+        rows.push(setting(
+            cx,
+            "Compact tabs",
+            "Put the tabs, navigation and address bar in a single row.",
+            compact_tabs,
+        ));
+    } else {
+        rows.push(setting(
+            cx,
+            "Address bar",
+            "Choose whether the address bar sits in the sidebar or in a toolbar above the page.",
+            address_bar,
+        ));
+    }
+    rows.extend([
         setting(
             cx,
             "Sidebar position",
@@ -157,7 +201,7 @@ fn appearance(cx: &mut PageContext) -> El {
             "Choose the colour used for interactive emphasis.",
             accent_color_control(state.settings.accent_color, cx.theme),
         ),
-    ];
+    ]);
     section("Appearance", cx.theme, rows)
 }
 
