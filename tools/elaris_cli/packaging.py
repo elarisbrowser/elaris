@@ -13,8 +13,10 @@ from .common import ENGINE, ROOT, VCPKG_INSTALLED, run, vcpkg_triplet
 ASSETS = ROOT / "assets"
 PACKAGING = ROOT / "packaging"
 LINUX_ASSETS = PACKAGING / "linux"
-# Compiled from the brand kit's Icon Composer document, so the designer's layers and gradient carry over.
-APP_ICON_SOURCE = ASSETS / "brand-kit" / "apple" / "Icon Exports" / "Icon.icon"
+# Compiled from the brand kit's Icon Composer documents, so the designer's layers and gradient carry over.
+APP_ICONS = ASSETS / "brand-kit" / "apple" / "Icon Exports"
+# Stable builds wear the blue icon; dev and nightly builds the yellow one, so they are easy to tell apart.
+APP_ICON_SOURCES = {"stable": APP_ICONS / "Icon.icon", "dev": APP_ICONS / "Icon-Dev.icon"}
 APP_ID = "org.elarisbrowser.Elaris"
 ENGINE_BUILD = ROOT / "build" / "cpp-ladybird"
 LADYBIRD_APP = ENGINE_BUILD / "bin" / "Ladybird.app"
@@ -40,17 +42,22 @@ def _copy_if_changed(source: Path, destination: Path) -> bool:
     return True
 
 
-def _macos_app_icon() -> Path:
-    """Compile the icon into Assets.car (macOS 26+) and Icon.icns (older systems), cached under build/."""
-    output = ROOT / "build" / "icons" / "macos"
+def _macos_app_icon(channel: str) -> Path:
+    """Compile the channel's icon into Assets.car (macOS 26+) and Icon.icns (older systems), cached under build/."""
+    source = APP_ICON_SOURCES[channel]
+    output = ROOT / "build" / "icons" / "macos" / channel
     compiled = [output / "Assets.car", output / "Icon.icns"]
-    newest_source = max(path.stat().st_mtime_ns for path in APP_ICON_SOURCE.rglob("*") if path.is_file())
+    newest_source = max(path.stat().st_mtime_ns for path in source.rglob("*") if path.is_file())
     if all(path.is_file() and path.stat().st_mtime_ns >= newest_source for path in compiled):
         return output
 
-    output.mkdir(parents=True, exist_ok=True)
+    # actool names the icon after its document, and Info.plist expects "Icon", so compile a copy by that name.
+    staged = output / "source" / "Icon.icon"
+    if staged.parent.exists():
+        shutil.rmtree(staged.parent)
+    shutil.copytree(source, staged)
     run(
-        "xcrun", "actool", str(APP_ICON_SOURCE),
+        "xcrun", "actool", str(staged),
         "--compile", str(output),
         "--output-partial-info-plist", str(output / "partial-info.plist"),
         "--app-icon", "Icon",
@@ -65,15 +72,17 @@ def _macos_app_icon() -> Path:
     return output
 
 
-def _macos_bundle_metadata(contents: Path) -> None:
-    """Copy the Info.plist and the compiled icon into an app's Contents."""
-    icon = _macos_app_icon()
+def _macos_bundle_metadata(contents: Path, channel: str) -> bool:
+    """Copy the Info.plist and the channel's compiled icon into an app's Contents. Returns whether anything changed."""
+    icon = _macos_app_icon(channel)
+    changed = False
     for source, destination in (
         (PACKAGING / "macos" / "Info.plist", contents / "Info.plist"),
         (icon / "Assets.car", contents / "Resources" / "Assets.car"),
         (icon / "Icon.icns", contents / "Resources" / "Icon.icns"),
     ):
-        _copy_if_changed(source, destination)
+        changed |= _copy_if_changed(source, destination)
+    return changed
 
 
 def macos_app_bundle(executable: Path, name: str = "ElarisDev") -> Path:
@@ -82,7 +91,7 @@ def macos_app_bundle(executable: Path, name: str = "ElarisDev") -> Path:
     contents = ROOT / "build" / f"{name}.app" / "Contents"
     bundled_executable = contents / "MacOS" / executable.name
     copied = _copy_if_changed(executable, bundled_executable)
-    _macos_bundle_metadata(contents)
+    copied |= _macos_bundle_metadata(contents, "dev")
     if copied:
         # Replacing any file in a signed bundle invalidates its signature, and macOS kills the app for that.
         subprocess.run(["codesign", "--force", "--sign", "-", str(contents.parent)], check=True)
@@ -114,12 +123,12 @@ def _bundle_inputs(executable: Path) -> tuple[str, str]:
     return str(engine), str(executable.stat().st_mtime_ns)
 
 
-def macos_release_bundle(executable: Path) -> Path:
+def macos_release_bundle(executable: Path, channel: str = "stable") -> Path:
     """build/Elaris.app with Ladybird's helpers, resources and libraries, relocatable and signed.
 
     A full assembly copies and verifies every engine library, which takes about half a minute, so it runs only
     when the engine changed. When only Elaris changed, its executable is swapped in and the bundle re-signed;
-    when nothing changed, the bundle is reused as is. Returns the bundled executable.
+    when nothing changed, the bundle is reused as is. `channel` picks the icon. Returns the bundled executable.
     """
     if not (LADYBIRD_APP / "Contents" / "MacOS" / LADYBIRD_APP_BINARY).is_file():
         raise SystemExit("elaris: Ladybird's app bundle is missing; run ./elaris build first")
@@ -131,11 +140,13 @@ def macos_release_bundle(executable: Path) -> Path:
     engine, elaris = _bundle_inputs(executable)
     previous = RELEASE_BUNDLE_STAMP.read_text().split() if RELEASE_BUNDLE_STAMP.is_file() else []
     if bundled_executable.is_file() and len(previous) == 2 and previous[0] == engine:
-        if previous[1] != elaris:
+        icon_changed = _macos_bundle_metadata(contents, channel)
+        if previous[1] != elaris or icon_changed:
             ui.info("Updating Elaris in Elaris.app…")
             shutil.copy2(executable, bundled_executable)
             tool.fix_rpaths(app)
             tool.resign(app, ENGINE_BUILD)
+            app.touch()
             RELEASE_BUNDLE_STAMP.write_text(f"{engine} {elaris}")
         return bundled_executable
 
@@ -154,7 +165,7 @@ def macos_release_bundle(executable: Path) -> Path:
         contents / "Resources",
         ignore=shutil.ignore_patterns(*LADYBIRD_APP_ICON_FILES),
     )
-    _macos_bundle_metadata(contents)
+    _macos_bundle_metadata(contents, channel)
 
     # Libraries come from the directories the built executables were linked against, which is what dyld searched.
     search_directories = []

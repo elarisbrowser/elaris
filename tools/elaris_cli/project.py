@@ -119,12 +119,12 @@ def _configure_bridge_environment(bridge_dir: str) -> None:
     os.environ[loader_variable] = os.pathsep.join(directories)
 
 
-def bundle(_args: argparse.Namespace) -> None:
+def bundle(args: argparse.Namespace) -> None:
     """Build an optimised Elaris and package it with Ladybird's engine and the brand icon for this platform."""
     build(argparse.Namespace(ui=False, release=True, jobs=None))
     executable = _executable("release")
     if sys.platform == "darwin":
-        bundled = packaging.macos_release_bundle(executable)
+        bundled = packaging.macos_release_bundle(executable, "dev" if args.nightly else "stable")
         ui.success(f"Bundled {bundled.parents[2]}")
     elif sys.platform.startswith("linux"):
         prefix = ROOT / "build" / "linux" / "Elaris"
@@ -367,6 +367,10 @@ def register_commands(commands) -> None:
                 "--skip-system-deps",
                 action="store_true",
                 help="Skip package manager installs but still verify required tools",
+            )
+        elif handler is bundle:
+            subcommand.add_argument(
+                "--nightly", action="store_true", help="Use the yellow dev icon (macOS) instead of the stable one"
             )
         elif handler is build:
             subcommand.add_argument("--ui", action="store_true", help="Build only the interface, without Ladybird")
