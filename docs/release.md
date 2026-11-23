@@ -15,6 +15,12 @@ publishes the draft by hand.
 
 `workflow_dispatch` runs the same jobs for a chosen branch and uploads the artifacts without creating a release.
 
+## Versions
+
+Releases use SemVer pre-release tags such as `v0.1.0-alpha.1`. `Cargo.toml` carries the same version, and the release
+artifacts and `BUILD-INFO.txt` use the tag. The macOS app bundle keeps the plain `0.1.0` in `Info.plist`, because Apple's
+bundle version fields accept only numbers and dots.
+
 ## What each artifact contains
 
 | Platform | File | Contents |
@@ -28,7 +34,8 @@ commit, the Rune revision, and the toolchain used.
 ## Limitations of this release process
 
 - Apple builds are ad-hoc signed. They are not notarized, so Gatekeeper will ask for approval on first launch.
-- macOS builds target Apple Silicon only. Intel and Linux ARM64 are not built.
+- macOS builds target Apple Silicon only. Intel Macs are not supported for the alpha, and Linux ARM64 is not built.
+- The minimum macOS version is 14.4, the lowest version Ladybird supports.
 - Linux needs a Vulkan driver at run time, which the system's GPU driver or Mesa provides.
 - The Linux x86_64 build runs in Ladybird's CI image. Local verification was done on arm64 under Docker, so the first
   run of the workflow is the first x86_64 check.
