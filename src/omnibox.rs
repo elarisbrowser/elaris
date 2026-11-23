@@ -11,6 +11,31 @@ use elaris_core::history::Entry as HistoryEntry;
 const MAX_TAB_SUGGESTIONS: usize = 4;
 const MAX_HISTORY_SUGGESTIONS: usize = 3;
 const MAX_BOOKMARK_SUGGESTIONS: usize = 3;
+/// How much must be typed before a bookmarked site becomes the top hit, so one letter never
+/// takes over Enter.
+const MIN_TOP_HIT_LENGTH: usize = 2;
+
+/// A bookmark as the omnibox matches it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct BookmarkHint {
+    pub(crate) title: String,
+    pub(crate) url: String,
+    /// The folders it sits in, such as "Bookmarks Bar News", which a query can name.
+    pub(crate) folders: String,
+}
+
+/// How well a bookmark matches, best first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum BookmarkMatch {
+    /// Its site starts with the whole query: the top hit.
+    Site,
+    /// Its title starts with the query.
+    Title,
+    /// Every word starts a word of its title, site, address or folders.
+    Words,
+    /// The query appears somewhere in its address.
+    Address,
+}
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Mode {
@@ -98,12 +123,12 @@ pub(crate) struct Suggestion {
     pub(crate) action: Action,
 }
 
-/// A short list built only from the input, currently open tabs, bookmarks as (title, address),
-/// and locally recorded visits.
+/// A short list built only from the input, currently open tabs, bookmarks, and locally recorded
+/// visits.
 pub(crate) fn suggestions(
     query: &str,
     tabs: &[Tab],
-    bookmarks: &[(String, String)],
+    bookmarks: &[BookmarkHint],
     history: &[HistoryEntry],
     sidebar_collapsed: bool,
     search_engine: SearchEngine,
@@ -159,29 +184,53 @@ pub(crate) fn suggestions(
             }),
     );
 
-    // Bookmarks come only for something typed, ahead of plain visits.
+    // Bookmarks come only for something typed, ahead of plain visits. A bookmark whose site
+    // starts with what was typed is the top hit, so Enter opens it.
     let mut matching_bookmarks: Vec<_> = bookmarks
         .iter()
         .filter(|_| !query.is_empty())
-        .filter(|(_, url)| !tabs.iter().any(|tab| tab.url == *url))
-        .filter_map(|(title, url)| {
-            match_score(&folded, title, url).map(|score| (score, title, url))
+        .filter(|bookmark| !tabs.iter().any(|tab| tab.url == bookmark.url))
+        .filter_map(|bookmark| {
+            let visits = history
+                .iter()
+                .find(|entry| entry.url == bookmark.url)
+                .map_or(0, |entry| entry.visit_count);
+            bookmark_score(&folded, bookmark).map(|score| (score, visits, bookmark))
         })
         .collect();
-    matching_bookmarks.sort_by_key(|(score, ..)| *score);
+    matching_bookmarks.sort_by(|(left, left_visits, _), (right, right_visits, _)| {
+        left.cmp(right).then_with(|| right_visits.cmp(left_visits))
+    });
     matching_bookmarks.truncate(MAX_BOOKMARK_SUGGESTIONS);
-    let shown_bookmarks: Vec<&String> = matching_bookmarks.iter().map(|(_, _, url)| *url).collect();
-    suggestions.extend(matching_bookmarks.iter().map(|(_, title, url)| Suggestion {
-        section: Section::Bookmarks,
-        title: if title.is_empty() {
-            (*url).clone()
+    let shown_bookmarks: Vec<&String> = matching_bookmarks
+        .iter()
+        .map(|(_, _, bookmark)| &bookmark.url)
+        .collect();
+    let suggestion = |bookmark: &BookmarkHint, section| Suggestion {
+        section,
+        title: if bookmark.title.is_empty() {
+            bookmark.url.clone()
         } else {
-            (*title).clone()
+            bookmark.title.clone()
         },
-        detail: site_detail(title, url),
+        detail: site_detail(&bookmark.title, &bookmark.url),
         glyph: Glyph::Bookmark,
-        action: Action::VisitRecent((*url).clone()),
-    }));
+        action: Action::VisitRecent(bookmark.url.clone()),
+    };
+    let mut rest = matching_bookmarks.iter();
+    if let Some((score, _, bookmark)) = matching_bookmarks.first()
+        && *score == BookmarkMatch::Site
+        && folded.chars().count() >= MIN_TOP_HIT_LENGTH
+    {
+        rest.next();
+        let top = suggestion(bookmark, Section::Navigate);
+        // A typed address that leads to the same page needs no second row.
+        suggestions.retain(|existing| {
+            !matches!(&existing.action, Action::Navigate(url) if same_page(url, &bookmark.url))
+        });
+        suggestions.insert(0, top);
+    }
+    suggestions.extend(rest.map(|(_, _, bookmark)| suggestion(bookmark, Section::Bookmarks)));
 
     let mut matching_history: Vec<_> = history
         .iter()
@@ -293,6 +342,43 @@ fn match_score(query: &str, title: &str, url: &str) -> Option<u8> {
     }
 }
 
+/// Whether two addresses differ only by scheme, a leading "www." or a trailing slash.
+fn same_page(left: &str, right: &str) -> bool {
+    let page = |url: &str| {
+        let url = url.to_ascii_lowercase();
+        let rest = url.split_once("://").map_or(url.as_str(), |(_, rest)| rest);
+        let rest = rest.strip_prefix("www.").unwrap_or(rest);
+        rest.trim_end_matches('/').to_owned()
+    };
+    page(left) == page(right)
+}
+
+/// How a bookmark matches the lower-cased query, if it does.
+fn bookmark_score(query: &str, bookmark: &BookmarkHint) -> Option<BookmarkMatch> {
+    let url = bookmark.url.to_ascii_lowercase();
+    let host = address::host_for_address(&url);
+    let site = host.strip_prefix("www.").unwrap_or(host);
+    let title = bookmark.title.to_lowercase();
+    if !query.contains(' ') && (site.starts_with(query) || host.starts_with(query)) {
+        return Some(BookmarkMatch::Site);
+    }
+    if title.starts_with(query) {
+        return Some(BookmarkMatch::Title);
+    }
+    let text = [title.as_str(), &bookmark.folders.to_lowercase(), &url].join(" ");
+    let words: Vec<&str> = text
+        .split(|ch: char| !ch.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .collect();
+    if query
+        .split_whitespace()
+        .all(|part| words.iter().any(|word| word.starts_with(part)))
+    {
+        return Some(BookmarkMatch::Words);
+    }
+    url.contains(query).then_some(BookmarkMatch::Address)
+}
+
 fn action_matches(query: &str, label: &str) -> bool {
     let label = label.to_ascii_lowercase();
     query
@@ -373,34 +459,42 @@ mod tests {
         assert_eq!(recent[0].title, "Rust Book");
     }
 
-    #[test]
-    fn bookmarks_lead_history_for_typed_queries_and_hide_their_visits() {
-        let bookmarks = vec![(
-            "Rust Book".to_owned(),
-            "https://doc.rust-lang.org/book/".to_owned(),
-        )];
-        let history = vec![
-            HistoryEntry {
-                url: "https://doc.rust-lang.org/book/".into(),
-                title: "Rust Book".into(),
-                last_visited: 2,
-                visit_count: 9,
-            },
-            HistoryEntry {
-                url: "https://rust-lang.org/".into(),
-                title: "Rust".into(),
-                last_visited: 1,
-                visit_count: 1,
-            },
-        ];
-        let found = suggestions(
-            "rust",
+    fn hint(title: &str, url: &str, folders: &str) -> BookmarkHint {
+        BookmarkHint {
+            title: title.into(),
+            url: url.into(),
+            folders: folders.into(),
+        }
+    }
+
+    fn visit(title: &str, url: &str, visit_count: u64) -> HistoryEntry {
+        HistoryEntry {
+            url: url.into(),
+            title: title.into(),
+            last_visited: 1,
+            visit_count,
+        }
+    }
+
+    fn find(query: &str, bookmarks: &[BookmarkHint], history: &[HistoryEntry]) -> Vec<Suggestion> {
+        suggestions(
+            query,
             &[],
-            &bookmarks,
-            &history,
+            bookmarks,
+            history,
             false,
             SearchEngine::default(),
-        );
+        )
+    }
+
+    #[test]
+    fn bookmarks_lead_history_for_typed_queries_and_hide_their_visits() {
+        let bookmarks = [hint("Rust Book", "https://doc.rust-lang.org/book/", "")];
+        let history = [
+            visit("Rust Book", "https://doc.rust-lang.org/book/", 9),
+            visit("Rust", "https://rust-lang.org/", 1),
+        ];
+        let found = find("rust", &bookmarks, &history);
         let sections: Vec<_> = found
             .iter()
             .filter(|s| matches!(s.section, Section::Bookmarks | Section::Recent))
@@ -410,16 +504,83 @@ mod tests {
             sections,
             [(Section::Bookmarks, "Rust Book"), (Section::Recent, "Rust")]
         );
-        assert_eq!(
-            found
+        assert!(
+            find("", &bookmarks, &[])
                 .iter()
-                .find(|s| s.section == Section::Bookmarks)
-                .unwrap()
-                .glyph,
-            Glyph::Bookmark
+                .all(|s| s.glyph != Glyph::Bookmark)
         );
-        let empty = suggestions("", &[], &bookmarks, &[], false, SearchEngine::default());
-        assert!(empty.iter().all(|s| s.section != Section::Bookmarks));
+    }
+
+    #[test]
+    fn a_bookmarked_site_that_starts_with_the_query_is_the_top_hit() {
+        let bookmarks = [
+            hint("GitHub", "https://www.github.com/", ""),
+            hint("BBC News", "https://bbc.co.uk/news", ""),
+        ];
+        let top = &find("git", &bookmarks, &[])[0];
+        assert_eq!(
+            (top.section, top.glyph, &top.action),
+            (
+                Section::Navigate,
+                Glyph::Bookmark,
+                &Action::VisitRecent("https://www.github.com/".into())
+            )
+        );
+        // A title word is a suggestion, not the top hit, so the search stays first.
+        let news = find("news", &bookmarks, &[]);
+        assert!(matches!(news[0].action, Action::Search(_)));
+        assert!(
+            news.iter()
+                .any(|s| s.section == Section::Bookmarks && s.title == "BBC News")
+        );
+        // One letter never takes over Enter.
+        assert!(matches!(
+            find("g", &bookmarks, &[])[0].action,
+            Action::Search(_)
+        ));
+        // A typed address that is the bookmark is listed once.
+        let typed = find("github.com", &bookmarks, &[]);
+        assert_eq!(typed[0].glyph, Glyph::Bookmark);
+        assert!(
+            !typed
+                .iter()
+                .any(|s| matches!(&s.action, Action::Navigate(url) if url.contains("github")))
+        );
+    }
+
+    #[test]
+    fn every_word_can_name_the_title_site_address_or_folders() {
+        let bookmarks = [
+            hint("Front page", "https://bbc.co.uk/", "Bookmarks Bar News"),
+            hint("Recipes", "https://cooking.example/", "Other Bookmarks"),
+        ];
+        let found = find("news bbc", &bookmarks, &[]);
+        let titles: Vec<_> = found
+            .iter()
+            .filter(|s| s.glyph == Glyph::Bookmark)
+            .map(|s| s.title.as_str())
+            .collect();
+        assert_eq!(titles, ["Front page"]);
+        assert!(
+            find("news cooking", &bookmarks, &[])
+                .iter()
+                .all(|s| s.glyph != Glyph::Bookmark)
+        );
+    }
+
+    #[test]
+    fn equally_good_bookmarks_rank_by_visits() {
+        let bookmarks = [
+            hint("Docs one", "https://one.example/", "Docs"),
+            hint("Docs two", "https://two.example/", "Docs"),
+        ];
+        let history = [visit("Docs two", "https://two.example/", 7)];
+        let titles: Vec<_> = find("docs", &bookmarks, &history)
+            .into_iter()
+            .filter(|s| s.glyph == Glyph::Bookmark)
+            .map(|s| s.title)
+            .collect();
+        assert_eq!(titles, ["Docs two", "Docs one"]);
     }
 
     #[test]

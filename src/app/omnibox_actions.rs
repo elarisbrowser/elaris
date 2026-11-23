@@ -70,11 +70,24 @@ impl super::AppState {
                 history.search(query, 100)
             }
         });
-        let bookmarks: Vec<(String, String)> = self
-            .bookmarks()
-            .links()
-            .filter_map(|link| Some((link.title.clone(), link.url()?.to_owned())))
-            .collect();
+        let bookmarks: Vec<omnibox::BookmarkHint> = {
+            let bookmarks = self.bookmarks();
+            bookmarks
+                .links()
+                .filter_map(|link| {
+                    Some(omnibox::BookmarkHint {
+                        title: link.title.clone(),
+                        url: link.url()?.to_owned(),
+                        folders: bookmarks
+                            .path(link.id)
+                            .iter()
+                            .map(|folder| folder.label())
+                            .collect::<Vec<_>>()
+                            .join(" "),
+                    })
+                })
+                .collect()
+        };
         let mut suggestions = omnibox::suggestions(
             query,
             self.browser.tabs(),
