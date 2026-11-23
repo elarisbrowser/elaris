@@ -38,8 +38,11 @@ impl Browser {
                 Update::Tab(id, crate::engine::TabUpdate::WheelResult(cancelled)) => {
                     polled.changed |= self.wheel_result(id, cancelled);
                 }
-                Update::Tab(id, crate::engine::TabUpdate::Discarded(kept)) => {
-                    polled.changed |= self.finish_sleep(id, kept);
+                Update::Tab(id, crate::engine::TabUpdate::Discarded { kept, blockers }) => {
+                    if self.finish_sleep(id, kept, blockers) {
+                        polled.slept.push(id);
+                    }
+                    polled.changed = true;
                 }
                 Update::Tab(id, update) => {
                     if matches!(update, crate::engine::TabUpdate::WebFullscreen(true))
@@ -324,6 +327,7 @@ impl Browser {
             let visible = is_peek || side.is_some();
             if visible {
                 tab.last_seen = now;
+                tab.kept_awake.clear();
                 if tab.asleep {
                     wake(engine, tab, private, accessibility, default_zoom);
                 }

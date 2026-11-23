@@ -405,8 +405,11 @@ pub(crate) enum TabUpdate {
     PlayingAudio(bool),
     Crashed(Option<elaris::ladybird::Crash>),
     Translation(elaris::ladybird::Translation),
-    /// Whether Ladybird kept what the tab holds, so its view may close.
-    Discarded(bool),
+    /// Whether Ladybird kept what the tab holds, so its view may close, and if not, its reasons.
+    Discarded {
+        kept: bool,
+        blockers: u32,
+    },
     /// Whether the page cancelled a wheel event; a cancelled wheel keeps its gesture from becoming a swipe.
     WheelResult(bool),
     PermissionUse(elaris_core::permissions::PermissionKind, bool),

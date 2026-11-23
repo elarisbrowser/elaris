@@ -52,6 +52,7 @@ pub(crate) mod detach;
 mod find;
 mod lifecycle;
 mod memory_saver;
+pub(crate) use memory_saver::freed as memory_saver_freed;
 mod mini;
 mod omnibox_actions;
 mod session;

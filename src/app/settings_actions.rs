@@ -226,6 +226,11 @@ impl super::AppState {
         self.save_setting(SettingsChange::ReduceMotion(enabled));
     }
 
+    pub(super) fn set_keep_awake_sites(&mut self, sites: Vec<String>) {
+        self.settings.keep_awake_sites.clone_from(&sites);
+        self.save_setting(SettingsChange::KeepAwakeSites(sites));
+    }
+
     pub(crate) fn set_memory_saver(&mut self, mode: elaris_memory_saver::MemorySaver) {
         if self.settings.memory_saver == mode {
             return;

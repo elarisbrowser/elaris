@@ -7,6 +7,7 @@
 
 mod appearance;
 mod browsing;
+mod memory;
 mod privacy;
 mod system;
 

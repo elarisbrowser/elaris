@@ -198,8 +198,12 @@ pub enum Event {
     PlayingAudio(bool),
     /// What the page can be translated into.
     Translation(Translation),
-    /// Ladybird kept what the tab holds so its view can close, or declined as the tab is busy.
-    Discarded(bool),
+    /// Ladybird kept what the tab holds so its view can close, or kept the tab loaded for the
+    /// reasons its `DiscardBlockers` bits give.
+    Discarded {
+        kept: bool,
+        blockers: u32,
+    },
     /// Where a screenshot was saved, or why it could not be.
     Screenshot(Result<std::path::PathBuf, String>),
     /// The page's process ended, or `None` once a reload recovered the tab.

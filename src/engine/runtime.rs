@@ -534,7 +534,7 @@ impl Runtime {
                 Event::PlayingAudio(playing) => TabUpdate::PlayingAudio(playing),
                 Event::Crashed(crash) => TabUpdate::Crashed(crash),
                 Event::Translation(translation) => TabUpdate::Translation(translation),
-                Event::Discarded(kept) => TabUpdate::Discarded(kept),
+                Event::Discarded { kept, blockers } => TabUpdate::Discarded { kept, blockers },
                 Event::WheelResult { cancelled } => TabUpdate::WheelResult(cancelled),
                 Event::PermissionPrompt(prompt) => TabUpdate::PermissionPrompt(prompt),
                 Event::ExternalUrl(request) => TabUpdate::ExternalUrl(request),

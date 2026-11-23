@@ -118,6 +118,8 @@ pub(crate) struct Tab {
     pub(crate) translation: elaris::ladybird::Translation,
     /// Memory Saver closed the page's view; it loads again when next shown.
     pub(crate) asleep: bool,
+    /// Why Ladybird last kept the tab loaded when asked to put it to sleep, until it is next shown.
+    pub(crate) kept_awake: Vec<elaris_memory_saver::AwakeReason>,
     /// When the tab was last shown, from which Memory Saver judges how idle it is.
     pub(crate) last_seen: std::time::Instant,
     pub(crate) permissions_in_use: [bool; PermissionKind::ALL.len()],
@@ -187,6 +189,7 @@ impl Tab {
             crash: None,
             translation: Default::default(),
             asleep: false,
+            kept_awake: Vec::new(),
             last_seen: std::time::Instant::now(),
             permissions_in_use: [false; PermissionKind::ALL.len()],
             awaiting_close: false,
@@ -234,6 +237,7 @@ impl Tab {
             crash: None,
             translation: Default::default(),
             asleep: false,
+            kept_awake: Vec::new(),
             last_seen: std::time::Instant::now(),
             permissions_in_use: [false; PermissionKind::ALL.len()],
             awaiting_close: false,
@@ -292,7 +296,7 @@ impl Tab {
             TabUpdate::PlayingAudio(playing) => self.playing_audio = playing,
             TabUpdate::Translation(translation) => self.translation = translation,
             // The browser takes these before they reach a tab.
-            TabUpdate::Discarded(_) => return false,
+            TabUpdate::Discarded { .. } => return false,
             TabUpdate::Crashed(crash) => {
                 self.thumbnail = None;
                 self.loading = false;

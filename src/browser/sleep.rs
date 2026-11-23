@@ -10,22 +10,40 @@ use std::time::Instant;
 use super::Browser;
 use crate::engine::{Command, ViewCommand};
 use crate::tab::{Applied, Tab, TabId, TabSection};
-use elaris_memory_saver::Candidate;
+use elaris_memory_saver::{AwakeReason, Candidate};
 
 impl Tab {
-    /// Doing something that closing its view would break or lose.
-    pub(crate) fn busy(&self) -> bool {
-        self.playing_audio
-            || self.permissions_in_use.contains(&true)
-            || self.loading
-            || self.web_fullscreen
-            || self.awaiting_close
-            || self.page_dialog.is_some()
-            || self.permission_prompt.is_some()
-            || self.external_url.is_some()
+    /// What the tab is doing that closing its view would break or lose.
+    pub(crate) fn awake_reasons(&self) -> Vec<AwakeReason> {
+        use elaris_core::permissions::PermissionKind;
+        let using = |kind: PermissionKind| self.permissions_in_use[kind.index()];
+        [
+            (self.playing_audio, AwakeReason::PlayingAudio),
+            (
+                using(PermissionKind::Microphone) || using(PermissionKind::Camera),
+                AwakeReason::UsingMicrophone,
+            ),
+            (using(PermissionKind::Location), AwakeReason::UsingLocation),
+            (self.loading, AwakeReason::Loading),
+            (self.web_fullscreen, AwakeReason::Fullscreen),
+            (
+                self.awaiting_close
+                    || self.page_dialog.is_some()
+                    || self.permission_prompt.is_some()
+                    || self.external_url.is_some(),
+                AwakeReason::Dialog,
+            ),
             // Shown again, a page ended for its memory would grow back to the limit.
-            || self.crash.is_some()
-            || self.id().has_open_popup()
+            (self.crash.is_some(), AwakeReason::Crashed),
+            (self.id().has_open_popup(), AwakeReason::OpenPopup),
+        ]
+        .into_iter()
+        .filter_map(|(applies, reason)| applies.then_some(reason))
+        .collect()
+    }
+
+    pub(crate) fn busy(&self) -> bool {
+        !self.awake_reasons().is_empty()
     }
 }
 
@@ -79,7 +97,7 @@ impl Browser {
     /// history and sessionStorage among them, the view closes. A tab Ladybird kept loaded, or that
     /// the user came back to meanwhile, stays awake and counts as just seen, so it isn't asked
     /// about again until it has been idle as long once more.
-    pub(super) fn finish_sleep(&mut self, id: TabId, kept: bool) -> bool {
+    pub(super) fn finish_sleep(&mut self, id: TabId, kept: bool, blockers: u32) -> bool {
         let Some(engine) = self.engine.clone() else {
             return false;
         };
@@ -91,6 +109,8 @@ impl Browser {
         if !kept || visible {
             if kept {
                 engine.send(Command::ForgetSleep(id));
+            } else {
+                tab.kept_awake = AwakeReason::from_ladybird(blockers);
             }
             tab.last_seen = Instant::now();
             return false;

@@ -64,7 +64,7 @@ typedef enum {
      * "checked","download","enabled"}]}. */
     ELARIS_LADYBIRD_TRANSLATION = 37,
     /* Answers elaris_ladybird_discard: value 1 once the tab's state is kept and its view may close, 0 when the tab
-     * stays loaded. */
+     * stays loaded, with Ladybird's DiscardBlockers bits saying why in request_id. */
     ELARIS_LADYBIRD_DISCARD = 38,
 } ElarisLadybirdEventKind;
 

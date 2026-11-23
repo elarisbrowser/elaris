@@ -508,7 +508,23 @@ struct ElarisLadybirdView {
     // Elaris asked to put the tab to sleep; any other discard request, such as from Ladybird's own discarder, is
     // declined.
     bool discard_requested_by_host{};
+    bool discard_for_memory_pressure{};
 };
+
+// Answers elaris_ladybird_discard; a tab kept loaded carries Ladybird's reasons in request_id.
+static void emit_discard(ElarisLadybirdView& handle, bool kept) {
+    if (!handle.bridge->callback)
+        return;
+    auto reason = handle.discard_for_memory_pressure ? WebView::ViewImplementation::DiscardReason::MemoryPressure
+                                                     : WebView::ViewImplementation::DiscardReason::Inactivity;
+    ElarisLadybirdEvent event{};
+    event.kind = ELARIS_LADYBIRD_DISCARD;
+    event.view_id = handle.id;
+    event.text = "";
+    event.value = kept;
+    event.request_id = kept ? 0 : to_underlying(handle.view->discard_blockers(reason, MonotonicTime::now()));
+    handle.bridge->callback(handle.bridge->context, &event);
+}
 
 // What a sleeping tab had, kept until the tab wakes or closes: its session history, and the state Ladybird keeps for
 // it, such as its sessionStorage.
@@ -1772,11 +1788,11 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
         // Ladybird has the final say, as the tab may have started to do something the user would miss.
         auto state_id = view.keep_state_for_discarding();
         if (!state_id.has_value()) {
-            emit(handle, ELARIS_LADYBIRD_DISCARD, {}, 0);
+            emit_discard(*handle, false);
             return;
         }
         s_discarded_tabs[handle->id] = DiscardedTab{view.session_history_snapshot(), *state_id};
-        emit(handle, ELARIS_LADYBIRD_DISCARD, {}, 1);
+        emit_discard(*handle, true);
     };
     handle->view->on_navigation_state_change = [handle] {
         emit_translation(*handle);
@@ -2498,8 +2514,9 @@ extern "C" int32_t elaris_ladybird_discard(ElarisLadybirdView* handle, int32_t m
         return fail("tabs must be put to sleep on the initialization thread");
     auto reason = memory_pressure ? WebView::ViewImplementation::DiscardReason::MemoryPressure
                                   : WebView::ViewImplementation::DiscardReason::Inactivity;
+    handle->discard_for_memory_pressure = memory_pressure != 0;
     if (handle->view->discard_blockers(reason, MonotonicTime::now()) != WebView::DiscardBlockers::None) {
-        emit(handle, ELARIS_LADYBIRD_DISCARD, {}, 0);
+        emit_discard(*handle, false);
         return succeed();
     }
     // The tab's pages save the state of their history entries first, then on_discard_requested runs.

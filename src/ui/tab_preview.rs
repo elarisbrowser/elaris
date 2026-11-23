@@ -218,8 +218,41 @@ pub(super) fn view(
                                             .child(label(tab.label(), false))
                                             .child(label(address(tab), true)),
                                     ),
-                            ),
+                            )
+                            .children(memory_status(state, tab, theme)),
                     ),
+            ),
+    )
+}
+
+/// Whether Memory Saver put the tab to sleep, or why it stays awake.
+fn memory_status(state: &AppState, tab: &Tab, theme: &Theme) -> Option<El> {
+    if state.settings.memory_saver == elaris_memory_saver::MemorySaver::Off && !tab.asleep {
+        return None;
+    }
+    let status = if tab.asleep {
+        "Sleeping to save memory".to_owned()
+    } else {
+        let reasons = state.awake_reasons(tab);
+        if reasons.is_empty() {
+            return None;
+        }
+        let reasons: Vec<_> = reasons.iter().map(|reason| reason.label()).collect();
+        format!("Stays awake: {}", reasons.join(", "))
+    };
+    Some(
+        row()
+            .w_full()
+            .gap(GAP)
+            .items_center()
+            .child(icon(&icons::BED, super::theme::PREVIEW_STATUS_ICON).color(theme.text_muted))
+            .child(
+                text(status)
+                    .font(type_::LABEL)
+                    .color(theme.text_muted)
+                    .wrap()
+                    .min_w(0.0)
+                    .grow(1.0),
             ),
     )
 }

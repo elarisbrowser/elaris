@@ -41,6 +41,8 @@ pub(crate) struct Polled {
     pub(crate) download_directory_error: Option<String>,
     /// Popups pages opened, as (opener, request, activate), for the app to give a window.
     pub(crate) popups: Vec<(TabId, u64, bool)>,
+    /// Tabs that fell asleep, for Memory Saver to count the memory they freed.
+    pub(crate) slept: Vec<TabId>,
     /// Screenshots this window's tabs asked for: where each was saved, or why it could not be.
     pub(crate) screenshots: Vec<(TabId, Result<std::path::PathBuf, String>)>,
     /// The engine's processes, for the Task Manager in this tab.

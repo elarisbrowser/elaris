@@ -7,7 +7,10 @@ fn answer(browser: &mut Browser, fake: &crate::engine::FakeEngine, id: TabId, ke
     fake.updates
         .send(crate::engine::Update::Tab(
             id,
-            crate::engine::TabUpdate::Discarded(kept),
+            crate::engine::TabUpdate::Discarded {
+                kept,
+                blockers: if kept { 0 } else { 1 << 7 },
+            },
         ))
         .unwrap();
     browser.poll();

@@ -6,6 +6,7 @@ use rune::{El, Tx, el};
 use crate::app::{self, AppState};
 use crate::tab::{Tab, TabSection};
 use crate::ui::components::animated_icon;
+use crate::ui::icons;
 use crate::ui::theme::{self, Theme};
 use elaris_core::settings::TabLayout;
 
@@ -41,15 +42,34 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
                         state.duplicate(tab);
                     }),
             )
-            .separator()
-            .item(
-                MenuItem::new(section_action.0)
-                    .animated(&animated_icon::HEART)
-                    .on_select_tx(move |state: &mut AppState, tx: &mut Tx| {
-                        state.dismiss_context_menu();
-                        state.move_tab_to_section_animated(tab, section_action.1, tx);
-                    }),
-            );
+            .separator();
+        if let Some(sleepable) = state
+            .browser
+            .tab(tab)
+            .filter(|candidate| !candidate.is_internal() && !candidate.asleep)
+        {
+            // A tab on screen stays awake; it can sleep once the user moves on.
+            let shown = state.browser.visible_tabs().contains(&Some(sleepable.id()));
+            menu = menu
+                .item(
+                    MenuItem::new("Sleep Tab")
+                        .icon(&icons::BED)
+                        .disabled(shown)
+                        .on_select(move |state: &mut AppState| {
+                            state.dismiss_context_menu();
+                            state.sleep_now(tab);
+                        }),
+                )
+                .separator();
+        }
+        menu = menu.item(
+            MenuItem::new(section_action.0)
+                .animated(&animated_icon::HEART)
+                .on_select_tx(move |state: &mut AppState, tx: &mut Tx| {
+                    state.dismiss_context_menu();
+                    state.move_tab_to_section_animated(tab, section_action.1, tx);
+                }),
+        );
         for (side, label) in ["Split Left", "Split Right"].into_iter().enumerate() {
             menu = menu.item(
                 MenuItem::new(label)
