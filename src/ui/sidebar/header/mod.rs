@@ -85,11 +85,6 @@ fn titlebar_visibility_changed(tx: &mut rune::Tx) {
 /// `revealed` spans the row across the window and adds the Linux window controls.
 fn header_content(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>, revealed: bool) -> El {
     let collapsed = state.sidebar.collapsed;
-    // Linux mirrors a right-hand sidebar: the buttons take its column and the controls the left.
-    #[cfg(elaris_ui = "linux")]
-    let flipped = state.sidebar_on_right() && !collapsed;
-    #[cfg(not(elaris_ui = "linux"))]
-    let flipped = false;
     let toggle_label = if collapsed {
         "Show sidebar"
     } else {
@@ -115,11 +110,8 @@ fn header_content(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>, reveal
     {
         lead = lead.child(window_controls(cx.titlebar_inset(), theme));
     }
-    if flipped {
-        lead = lead.child(spacer());
-    }
     #[cfg(elaris_ui = "linux")]
-    if !flipped {
+    {
         lead = lead.pl(theme::SIDEBAR_PADDING);
     }
     lead = lead.child(toggle);
@@ -135,9 +127,7 @@ fn header_content(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>, reveal
     // A right-hand sidebar leaves the window controls over the page, so the row spans the window
     // as it does with the sidebar hidden.
     let spans_window = collapsed || state.sidebar_on_right();
-    lead = if flipped {
-        lead.w(state.sidebar.width).pr(theme::SIDEBAR_PADDING)
-    } else if spans_window {
+    lead = if spans_window {
         lead.child(el().w(theme::HEADER_GROUP_GAP))
     } else {
         lead.w(state.sidebar.width)
@@ -145,11 +135,6 @@ fn header_content(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>, reveal
             .child(spacer())
     };
     lead = lead.children(navigation(state, theme));
-
-    #[cfg(elaris_ui = "linux")]
-    if flipped {
-        return flipped_header(state, lead, cx, theme);
-    }
 
     let mut header = row()
         .key("header")
@@ -167,24 +152,6 @@ fn header_content(state: &AppState, theme: &Theme, cx: &mut Cx<AppState>, reveal
         header = header.children(fading_window_controls(state, theme, cx));
     }
     header
-}
-
-/// The Linux row with a right-hand sidebar: the buttons hold the sidebar's column, and the window
-/// controls keep their usual place at the window's right edge.
-#[cfg(elaris_ui = "linux")]
-fn flipped_header(state: &AppState, lead: El, cx: &mut Cx<AppState>, theme: &Theme) -> El {
-    row()
-        .key("header")
-        .h(theme::HEADER_HEIGHT)
-        .gap(theme::NAV_GAP)
-        .center_y()
-        .absolute(0.0, 0.0)
-        .w_full()
-        .window_drag()
-        .pr(theme::SIDEBAR_PADDING)
-        .child(spacer())
-        .child(lead)
-        .children(fading_window_controls(state, theme, cx))
 }
 
 #[cfg(elaris_ui = "linux")]
