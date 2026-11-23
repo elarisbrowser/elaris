@@ -46,6 +46,8 @@ pub struct Request {
     pub url: String,
     /// An optional name supplied by the caller; Ladybird sanitizes it before saving.
     pub suggested_filename: Option<String>,
+    /// An exact file to write, chosen by the user. Replaces any file already there.
+    pub destination: Option<PathBuf>,
 }
 
 impl Request {
@@ -54,12 +56,19 @@ impl Request {
         Self {
             url: url.into(),
             suggested_filename: None,
+            destination: None,
         }
     }
 
     /// Sets the filename Ladybird uses if the response does not suggest one.
     pub fn suggested_filename(mut self, filename: impl Into<String>) -> Self {
         self.suggested_filename = Some(filename.into());
+        self
+    }
+
+    /// Writes to this exact path instead of the Downloads directory.
+    pub fn destination(mut self, path: PathBuf) -> Self {
+        self.destination = Some(path);
         self
     }
 }
@@ -122,8 +131,11 @@ impl Download {
     /// Creates the initial state before Ladybird confirms a queued request.
     pub fn pending(id: DownloadId, request: &Request, url: String) -> Self {
         let filename = request
-            .suggested_filename
-            .clone()
+            .destination
+            .as_ref()
+            .and_then(|path| path.file_name())
+            .map(|name| name.to_string_lossy().into_owned())
+            .or_else(|| request.suggested_filename.clone())
             .or_else(|| url.rsplit('/').next().map(str::to_owned))
             .filter(|filename| !filename.is_empty())
             .unwrap_or_else(|| "download".to_owned());

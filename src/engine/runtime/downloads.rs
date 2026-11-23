@@ -13,10 +13,13 @@ impl Runtime {
         id: DownloadId,
         request: DownloadRequest,
     ) -> Result<(), String> {
-        match self
-            .ladybird
-            .start_download(&request.url, request.suggested_filename.as_deref())
-        {
+        let started = match &request.destination {
+            Some(destination) => self.ladybird.start_download_to(&request.url, destination),
+            None => self
+                .ladybird
+                .start_download(&request.url, request.suggested_filename.as_deref()),
+        };
+        match started {
             Ok(native_id) => {
                 self.native_download_ids.insert(native_id, id);
                 self.native_ids_by_download.insert(id, native_id);
