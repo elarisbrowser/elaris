@@ -10,6 +10,7 @@ use toml_edit::{DocumentMut, Item};
 
 use crate::address::{CustomSearchEngine, SearchEngine};
 use crate::appearance::{AccentColor, Appearance, GlassStyle};
+use crate::keybindings::{Chord, KeyBindings};
 use crate::permissions::{AutoplayPolicy, PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{
     ContentBlockList, DownloadDirectory, NewTabPosition, PageStyle, Settings, SidebarSide,
@@ -287,6 +288,7 @@ pub fn parse(contents: &str) -> Result<ConfigLoad, String> {
         };
     }
 
+    settings.keybindings = parse_keybindings(&document, &mut issues);
     let permissions = parse_permissions(&document, &mut issues);
     Ok(ConfigLoad {
         settings,
@@ -336,6 +338,44 @@ fn parse_search_engines(
         }
     }
     parsed
+}
+
+/// Reads `[keybindings]`: each action takes one chord, a list of them, or `""` to remove its keys.
+/// An action with any invalid chord keeps its default keys.
+fn parse_keybindings(document: &DocumentMut, issues: &mut Vec<String>) -> KeyBindings {
+    let mut bindings = KeyBindings::new();
+    let Some(item) = document.get("keybindings") else {
+        return bindings;
+    };
+    let Some(table) = item.as_table() else {
+        issues.push("[keybindings] must be a TOML table".to_owned());
+        return bindings;
+    };
+    for (action, value) in table {
+        let texts: Option<Vec<&str>> = match value.as_value() {
+            Some(toml_edit::Value::String(text)) => Some(vec![text.value().as_str()]),
+            Some(toml_edit::Value::Array(list)) => list.iter().map(|item| item.as_str()).collect(),
+            _ => None,
+        };
+        let Some(texts) = texts else {
+            issues.push(format!(
+                "[keybindings].{action} must be a chord such as \"mod+t\", or a list of them"
+            ));
+            continue;
+        };
+        let chords: Result<Vec<Chord>, String> = texts
+            .into_iter()
+            .filter(|text| !text.trim().is_empty())
+            .map(Chord::parse)
+            .collect();
+        match chords {
+            Ok(chords) => {
+                bindings.insert(action.to_owned(), chords);
+            }
+            Err(error) => issues.push(format!("Invalid chord for [keybindings].{action}: {error}")),
+        }
+    }
+    bindings
 }
 
 fn parse_permissions(document: &DocumentMut, issues: &mut Vec<String>) -> PermissionStore {

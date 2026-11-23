@@ -20,7 +20,7 @@ use objc2_app_kit_02::{NSMenuDelegate, NSMenuItem};
 use self::state::MenuState;
 use crate::app::AppState;
 
-pub(crate) use self::construct::install;
+pub(crate) use self::construct::{apply_key_equivalents, install};
 pub(crate) use self::quit::{quit_cancelled, quit_window_approved};
 #[cfg_attr(elaris_ui = "linux", allow(unused_imports))]
 pub(crate) use self::window::refresh;

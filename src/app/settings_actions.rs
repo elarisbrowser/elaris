@@ -424,7 +424,11 @@ impl super::AppState {
         if previous_download_directory != download_directory {
             self.browser.set_download_directory(download_directory);
         }
-        self.configuration_issue = (!load.issues.is_empty()).then(|| load.issues.join("\n"));
+        let mut issues = load.issues;
+        issues.extend(crate::shortcuts::apply_keybindings(
+            &self.settings.keybindings,
+        ));
+        self.configuration_issue = (!issues.is_empty()).then(|| issues.join("\n"));
     }
 
     /// Sends the engine every site decision and default that differs in `next`.

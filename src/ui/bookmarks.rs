@@ -8,6 +8,7 @@ use rune::{Align, El, Side, col, el, icon, row, text, text_input};
 use rune_kit::{Button, ButtonVariant};
 
 use crate::app::AppState;
+use crate::shortcuts::Shortcut;
 use crate::ui::components::controls;
 use crate::ui::components::menu::{Menu, MenuItem, Popover};
 use crate::ui::icons;
@@ -550,15 +551,6 @@ fn entry(state: &AppState, bookmark: &Bookmark, theme: &Theme) -> MenuItem {
     }
 }
 
-/// The keys for a shortcut as menus show them on this platform.
-fn keys(macos: &'static str, elsewhere: &'static str) -> &'static str {
-    if cfg!(target_os = "macos") {
-        macos
-    } else {
-        elsewhere
-    }
-}
-
 /// The vertical sidebar's bookmarks button, beside Downloads. Its menu manages and adds
 /// bookmarks, and lists the Bookmarks Bar with Other Bookmarks, whose folders open within it.
 pub(in crate::ui) fn sidebar_button(state: &AppState, theme: &Theme, layer: &mut Vec<El>) -> El {
@@ -614,7 +606,7 @@ pub(in crate::ui) fn sidebar_button(state: &AppState, theme: &Theme, layer: &mut
     menu = menu
         .item(
             MenuItem::new("Manage Bookmarks")
-                .shortcut(keys("⌥⌘B", "Ctrl+Alt+B"))
+                .shortcut_of(Shortcut::OpenBookmarks)
                 .on_select_tx(move |state: &mut AppState, tx| {
                     close(state);
                     crate::app::open_bookmarks(state, tx);
@@ -623,7 +615,7 @@ pub(in crate::ui) fn sidebar_button(state: &AppState, theme: &Theme, layer: &mut
         .separator()
         .item(
             MenuItem::new("Add Bookmark")
-                .shortcut(keys("⌘D", "Ctrl+D"))
+                .shortcut_of(Shortcut::BookmarkPage)
                 .disabled(!has_page)
                 .on_select_tx(move |state: &mut AppState, tx| {
                     close(state);
@@ -633,7 +625,7 @@ pub(in crate::ui) fn sidebar_button(state: &AppState, theme: &Theme, layer: &mut
         )
         .item(
             MenuItem::new("Bookmark All Tabs…")
-                .shortcut(keys("⇧⌘D", "Ctrl+Shift+D"))
+                .shortcut_of(Shortcut::BookmarkAllTabs)
                 .on_select_tx(move |state: &mut AppState, tx| {
                     close(state);
                     state.bookmark_all_tabs(tx);

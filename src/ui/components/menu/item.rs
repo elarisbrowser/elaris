@@ -39,8 +39,9 @@ impl MenuItem {
     }
 
     /// The keys that do the same, shown at the trailing edge.
-    pub(crate) fn shortcut(mut self, keys: impl Into<String>) -> Self {
-        self.shortcut = Some(keys.into());
+    /// Shows the chord that runs `shortcut` now, if it has one.
+    pub(crate) fn shortcut_of(mut self, shortcut: crate::shortcuts::Shortcut) -> Self {
+        self.shortcut = shortcut.hint();
         self
     }
 

@@ -93,7 +93,6 @@ impl AppState {
             .map_or_else(PermissionStore::default, |load| load.permissions.clone());
         #[cfg(not(test))]
         let permission_store = shared_permission_store(permission_store);
-        #[cfg_attr(test, allow(unused_mut))]
         let (settings, mut configuration_issue) = match config_load.as_ref() {
             Some(Ok(load)) => (
                 load.settings.clone(),
@@ -104,6 +103,16 @@ impl AppState {
         };
         #[cfg(not(test))]
         let settings = shared_settings(settings);
+        let keybinding_issues = crate::shortcuts::apply_keybindings(&settings.keybindings);
+        if !keybinding_issues.is_empty() {
+            configuration_issue = Some(
+                configuration_issue
+                    .into_iter()
+                    .chain(keybinding_issues)
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            );
+        }
         let initial_session = sessions.first().cloned();
         let restored_windows =
             if restore && start.is_none() && settings.startup != StartupMode::BlankWindow {

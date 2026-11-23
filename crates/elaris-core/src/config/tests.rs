@@ -8,6 +8,7 @@ use std::sync::atomic::Ordering;
 
 use crate::address::SearchEngine;
 use crate::appearance::{AccentColor, Appearance, GlassStyle};
+use crate::keybindings::Chord;
 use crate::permissions::{AutoplayPolicy, PermissionKind, PermissionState, PermissionStore};
 use crate::settings::{
     ContentBlockList, DownloadDirectory, NewTabPosition, PageStyle, Settings, SettingsChange,
@@ -293,6 +294,21 @@ fn unknown_search_engine_names_the_custom_keys_it_expected() {
     .expect("valid TOML with an invalid value is recoverable");
     assert_eq!(config.settings.search_engine, SearchEngine::DuckDuckGo);
     assert!(config.issues[0].ends_with("brave, kagi"));
+}
+
+#[test]
+fn keybindings_accept_one_chord_a_list_or_nothing() {
+    let config = parse(
+        "[keybindings]\nnew_tab = \"mod+y\"\nzoom_in = [\"mod+=\", \"mod+plus\"]\ncopy_address = \"\"\nreload = \"cmd+r\"\nfind = 3\n",
+    )
+    .expect("valid TOML with invalid chords is recoverable");
+    let bindings = &config.settings.keybindings;
+    assert_eq!(bindings["new_tab"], [Chord::new('y', false, false)]);
+    assert_eq!(bindings["zoom_in"].len(), 2);
+    assert!(bindings["copy_address"].is_empty());
+    assert!(!bindings.contains_key("reload"));
+    assert!(!bindings.contains_key("find"));
+    assert_eq!(config.issues.len(), 2);
 }
 
 #[test]

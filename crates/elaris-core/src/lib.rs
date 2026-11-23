@@ -13,6 +13,7 @@ pub mod download_history;
 pub mod downloads;
 pub mod history;
 pub mod internal;
+pub mod keybindings;
 pub mod paths;
 pub mod perf;
 pub mod permissions;

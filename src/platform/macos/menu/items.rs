@@ -50,15 +50,15 @@ pub(super) const fn item(
     }
 }
 
-/// A menu item that runs `shortcut`, and shows the chord the registry gives it.
+/// A menu item that runs `shortcut`. Its key equivalent comes from the keymap, which
+/// `apply_key_equivalents` sets once the menu is installed and whenever the keymap changes.
 pub(super) fn shortcut_item(title: &'static str, shortcut: Shortcut) -> ItemSpec {
-    let binding = shortcut.binding();
     ItemSpec {
         title,
         action: Some(Action::Shortcut(shortcut)),
-        key: binding.map_or("", |binding| binding.key),
-        shift: binding.is_some_and(|binding| binding.shift),
-        option: binding.is_some_and(|binding| binding.option),
+        key: "",
+        shift: false,
+        option: false,
         control: false,
     }
 }

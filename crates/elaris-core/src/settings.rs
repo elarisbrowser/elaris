@@ -299,6 +299,8 @@ pub struct Settings {
     /// Sites whose tabs Memory Saver never puts to sleep, as [`elaris_memory_saver::site_of`] names them.
     pub keep_awake_sites: Vec<String>,
     pub content_blocking: ContentBlocking,
+    /// Keyboard shortcut overrides from `[keybindings]`; actions not listed keep their defaults.
+    pub keybindings: crate::keybindings::KeyBindings,
 }
 
 impl Default for Settings {
@@ -329,6 +331,7 @@ impl Default for Settings {
             memory_saver: elaris_memory_saver::MemorySaver::default(),
             keep_awake_sites: Vec::new(),
             content_blocking: ContentBlocking::default(),
+            keybindings: Default::default(),
         }
     }
 }

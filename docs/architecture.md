@@ -70,7 +70,7 @@ Elaris stores:
 - `profile/`: Ladybird's engine-owned profile data, separate from Elaris history and session
   metadata.
 - `config.toml` ([reference](configuration.md)): appearance, split view limit, search provider and custom
-  search engines, download directory, startup mode and per-origin
+  search engines, keyboard shortcut overrides, download directory, startup mode and per-origin
   website permission overrides. The storage worker edits one value at a time, preserves unrelated
   TOML comments and keys, and replaces the file atomically. Website permission defaults are Ask;
   internal Elaris pages are excluded. A malformed file is reported and never replaced by defaults.

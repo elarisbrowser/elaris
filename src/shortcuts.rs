@@ -5,6 +5,9 @@
 //! table serves both. The page never sees these: it takes no Command or Control chords, so they
 //! reach the window.
 
+use std::sync::RwLock;
+
+use elaris_core::keybindings::{Chord, KeyBindings};
 use rune::{FileDialogOptions, Key, KeyEvent, Tx};
 
 use crate::app::{self, AppState};
@@ -56,85 +59,205 @@ pub(crate) enum Shortcut {
     OpenTaskManager,
 }
 
-/// One chord that runs a shortcut. `key` is the unshifted character, as menus show it, and
-/// `shift` and `option` are the modifiers the chord needs.
+/// One chord that runs a shortcut.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Binding {
     pub(crate) shortcut: Shortcut,
-    pub(crate) key: &'static str,
-    pub(crate) shift: bool,
-    pub(crate) option: bool,
+    pub(crate) chord: Chord,
 }
 
-/// Every chord the browser answers to, so this table is the one place to change a key. Menus
-/// read their key equivalents from it, and the first entry for a shortcut is the one they show.
+/// Every chord the browser answers to by default. `[keybindings]` in `config.toml` can replace
+/// any action's chords; [`resolve`] merges the two. Menus read their key equivalents from the
+/// result, and the first entry for a shortcut is the one they show.
 ///
 /// Chords kept out of this table on purpose:
 /// - Native macOS keys (Cmd+Z/X/C/V/A, Cmd+Q, Cmd+H, Cmd+M, Ctrl+Cmd+F) are wired by AppKit in
-///   `platform/macos/menu/construct.rs`, as every macOS app does.
+///   `platform/macos/menu/construct.rs`, as every macOS app does. [`RESERVED`] keeps them free.
 /// - Escape and Ctrl+Tab depend on what is open (find bar, split picker, tab switcher, drag,
 ///   fullscreen), so `on_key` and `tab_switcher::cycle_key` handle them in order.
-const BINDINGS: &[Binding] = &[
-    bind(Shortcut::NewWindow, "n", false),
-    bind(Shortcut::NewPrivateWindow, "n", true),
-    bind(Shortcut::NewTab, "t", false),
-    bind(Shortcut::ReopenClosedTab, "t", true),
-    bind(Shortcut::OpenFile, "o", false),
-    bind(Shortcut::Close, "w", false),
-    bind(Shortcut::FocusOmnibox, "l", false),
-    bind(Shortcut::CopyAddress, "c", true),
-    bind(Shortcut::Find, "f", false),
-    bind(Shortcut::FindNext, "g", false),
-    bind(Shortcut::FindPrevious, "g", true),
-    bind(Shortcut::Reload, "r", false),
-    bind(Shortcut::ReloadBypassingCache, "r", true),
-    bind(Shortcut::Back, "[", false),
-    bind(Shortcut::Forward, "]", false),
-    bind(Shortcut::ZoomIn, "=", false),
-    bind(Shortcut::ZoomIn, "=", true),
-    bind(Shortcut::ZoomOut, "-", false),
-    bind(Shortcut::ResetZoom, "0", false),
-    bind(Shortcut::PreviousTab, "[", true),
-    bind(Shortcut::NextTab, "]", true),
-    bind(Shortcut::SelectLastTab, "9", false),
-    bind(Shortcut::ToggleSidebar, "s", false),
+const DEFAULTS: &[Binding] = &[
+    bind(Shortcut::NewWindow, 'n', false),
+    bind(Shortcut::NewPrivateWindow, 'n', true),
+    bind(Shortcut::NewTab, 't', false),
+    bind(Shortcut::ReopenClosedTab, 't', true),
+    bind(Shortcut::OpenFile, 'o', false),
+    bind(Shortcut::Close, 'w', false),
+    bind(Shortcut::FocusOmnibox, 'l', false),
+    bind(Shortcut::CopyAddress, 'c', true),
+    bind(Shortcut::Find, 'f', false),
+    bind(Shortcut::FindNext, 'g', false),
+    bind(Shortcut::FindPrevious, 'g', true),
+    bind(Shortcut::Reload, 'r', false),
+    bind(Shortcut::ReloadBypassingCache, 'r', true),
+    bind(Shortcut::Back, '[', false),
+    bind(Shortcut::Forward, ']', false),
+    bind(Shortcut::ZoomIn, '=', false),
+    bind(Shortcut::ZoomIn, '=', true),
+    bind(Shortcut::ZoomOut, '-', false),
+    bind(Shortcut::ResetZoom, '0', false),
+    bind(Shortcut::PreviousTab, '[', true),
+    bind(Shortcut::NextTab, ']', true),
+    bind(Shortcut::SelectLastTab, '9', false),
+    bind(Shortcut::ToggleSidebar, 's', false),
     bind(Shortcut::OpenHistory, HISTORY_KEY, false),
-    bind(Shortcut::OpenSettings, ",", false),
-    bind(Shortcut::BookmarkPage, "d", false),
-    bind(Shortcut::BookmarkAllTabs, "d", true),
-    bind_option(Shortcut::OpenBookmarks, "b"),
-    bind(Shortcut::ToggleBookmarksBar, "b", true),
+    bind(Shortcut::OpenSettings, ',', false),
+    bind(Shortcut::BookmarkPage, 'd', false),
+    bind(Shortcut::BookmarkAllTabs, 'd', true),
+    Binding {
+        shortcut: Shortcut::OpenBookmarks,
+        chord: Chord::new('b', false, true),
+    },
+    bind(Shortcut::ToggleBookmarksBar, 'b', true),
 ];
 
 /// Command-Y on macOS, and Control-H elsewhere.
-const HISTORY_KEY: &str = if cfg!(target_os = "macos") { "y" } else { "h" };
+const HISTORY_KEY: char = if cfg!(target_os = "macos") { 'y' } else { 'h' };
 
-const fn bind(shortcut: Shortcut, key: &'static str, shift: bool) -> Binding {
+const fn bind(shortcut: Shortcut, key: char, shift: bool) -> Binding {
     Binding {
         shortcut,
-        key,
-        shift,
-        option: false,
+        chord: Chord::new(key, shift, false),
     }
 }
 
-const fn bind_option(shortcut: Shortcut, key: &'static str) -> Binding {
-    Binding {
-        shortcut,
-        key,
-        shift: false,
-        option: true,
+/// Chords the system's edit and application keys own, which a page and the menu bar rely on.
+const RESERVED: &[(Chord, &str)] = &[
+    (Chord::new('z', false, false), "Undo"),
+    (Chord::new('z', true, false), "Redo"),
+    (Chord::new('x', false, false), "Cut"),
+    (Chord::new('c', false, false), "Copy"),
+    (Chord::new('v', false, false), "Paste"),
+    (Chord::new('a', false, false), "Select All"),
+    (Chord::new('q', false, false), "Quit"),
+    #[cfg(target_os = "macos")]
+    (Chord::new('h', false, false), "Hide Elaris"),
+    #[cfg(target_os = "macos")]
+    (Chord::new('m', false, false), "Minimize"),
+];
+
+/// Each action `[keybindings]` can rebind, by its name there. Picking a tab by its number is
+/// built in and is not listed.
+const NAMES: &[(Shortcut, &str)] = &[
+    (Shortcut::NewWindow, "new_window"),
+    (Shortcut::NewPrivateWindow, "new_private_window"),
+    (Shortcut::NewTab, "new_tab"),
+    (Shortcut::OpenFile, "open_file"),
+    (Shortcut::ReopenClosedTab, "reopen_closed_tab"),
+    (Shortcut::Close, "close_tab"),
+    (Shortcut::FocusOmnibox, "focus_address_bar"),
+    (Shortcut::CopyAddress, "copy_address"),
+    (Shortcut::Find, "find"),
+    (Shortcut::FindNext, "find_next"),
+    (Shortcut::FindPrevious, "find_previous"),
+    (Shortcut::Reload, "reload"),
+    (Shortcut::ReloadBypassingCache, "reload_bypassing_cache"),
+    (Shortcut::ZoomIn, "zoom_in"),
+    (Shortcut::ZoomOut, "zoom_out"),
+    (Shortcut::ResetZoom, "reset_zoom"),
+    (Shortcut::PreviousTab, "previous_tab"),
+    (Shortcut::NextTab, "next_tab"),
+    (Shortcut::SelectLastTab, "select_last_tab"),
+    (Shortcut::ToggleSidebar, "toggle_sidebar"),
+    (Shortcut::OpenSettings, "open_settings"),
+    (Shortcut::OpenHistory, "open_history"),
+    (Shortcut::BookmarkPage, "bookmark_page"),
+    (Shortcut::BookmarkAllTabs, "bookmark_all_tabs"),
+    (Shortcut::OpenBookmarks, "open_bookmarks"),
+    (Shortcut::ToggleBookmarksBar, "toggle_bookmarks_bar"),
+    (Shortcut::Back, "back"),
+    (Shortcut::Forward, "forward"),
+    (Shortcut::OpenTaskManager, "open_task_manager"),
+];
+
+/// The keymap in use, shared by every window like the menu bar. `None` until the configuration
+/// is first applied, which means [`DEFAULTS`].
+static KEYMAP: RwLock<Option<Vec<Binding>>> = RwLock::new(None);
+
+fn with_keymap<R>(read: impl FnOnce(&[Binding]) -> R) -> R {
+    let keymap = KEYMAP.read().expect("keymap lock poisoned");
+    read(keymap.as_deref().unwrap_or(DEFAULTS))
+}
+
+/// Merges `[keybindings]` into the defaults. An overridden action keeps only the chords it is
+/// given, and a chord it claims is taken from whichever action had it by default. Returns the
+/// keymap and a message for each override that could not be used.
+fn resolve(overrides: &KeyBindings) -> (Vec<Binding>, Vec<String>) {
+    let mut keymap: Vec<Binding> = Vec::new();
+    let mut overridden = Vec::new();
+    let mut issues = Vec::new();
+    for (name, chords) in overrides {
+        let Some(&(shortcut, _)) = NAMES.iter().find(|(_, known)| known == name) else {
+            issues.push(format!("Unknown action [keybindings].{name}"));
+            continue;
+        };
+        overridden.push(shortcut);
+        for &chord in chords {
+            if let Some((_, owner)) = RESERVED.iter().find(|(reserved, _)| *reserved == chord) {
+                issues.push(format!(
+                    "[keybindings].{name}: {chord} is reserved for {owner}"
+                ));
+            } else if let Some(taken) = keymap.iter().find(|binding| binding.chord == chord) {
+                issues.push(format!(
+                    "[keybindings].{name}: {chord} is already bound to {}",
+                    taken.shortcut.name().unwrap_or_default()
+                ));
+            } else {
+                keymap.push(Binding { shortcut, chord });
+            }
+        }
     }
+    let claimed: Vec<Chord> = keymap.iter().map(|binding| binding.chord).collect();
+    keymap.extend(DEFAULTS.iter().copied().filter(|binding| {
+        !overridden.contains(&binding.shortcut) && !claimed.contains(&binding.chord)
+    }));
+    (keymap, issues)
+}
+
+/// Makes `overrides` the process's keymap and updates the menu bar's key equivalents. Returns
+/// a message for each override that could not be used.
+pub(crate) fn apply_keybindings(overrides: &KeyBindings) -> Vec<String> {
+    let (keymap, issues) = resolve(overrides);
+    // Tests run in parallel in one process, so they check `resolve` and keep the defaults here.
+    if cfg!(not(test)) {
+        *KEYMAP.write().expect("keymap lock poisoned") = Some(keymap);
+        #[cfg(target_os = "macos")]
+        crate::platform::macos::menu::apply_key_equivalents();
+    }
+    issues
 }
 
 impl Shortcut {
     /// The chord that runs this shortcut, if it has one.
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub(crate) fn binding(self) -> Option<Binding> {
-        BINDINGS
+        with_keymap(|keymap| {
+            keymap
+                .iter()
+                .copied()
+                .find(|binding| binding.shortcut == self)
+        })
+    }
+
+    /// The action's name in `[keybindings]`.
+    fn name(self) -> Option<&'static str> {
+        NAMES
             .iter()
-            .copied()
-            .find(|binding| binding.shortcut == self)
+            .find(|(shortcut, _)| *shortcut == self)
+            .map(|(_, name)| *name)
+    }
+
+    /// The chord as a menu shows it: "⇧⌘D" on macOS, "Ctrl+Shift+D" elsewhere.
+    pub(crate) fn hint(self) -> Option<String> {
+        let chord = self.binding()?.chord;
+        let key = chord.key.to_ascii_uppercase();
+        Some(if cfg!(target_os = "macos") {
+            let shift = if chord.shift { "⇧" } else { "" };
+            let option = if chord.option { "⌥" } else { "" };
+            format!("{option}{shift}⌘{key}")
+        } else {
+            let shift = if chord.shift { "+Shift" } else { "" };
+            let option = if chord.option { "+Alt" } else { "" };
+            format!("Ctrl{shift}{option}+{key}")
+        })
     }
 }
 
@@ -323,19 +446,22 @@ fn copy_address(state: &mut AppState, tx: &mut Tx) {
 
 /// The shortcut `event` is, if any.
 pub(crate) fn shortcut(event: &KeyEvent) -> Option<Shortcut> {
+    with_keymap(|keymap| shortcut_in(keymap, event))
+}
+
+fn shortcut_in(keymap: &[Binding], event: &KeyEvent) -> Option<Shortcut> {
     let Key::Command(typed) = event.key else {
         return None;
     };
-    let key = base_key(typed);
-    let (shift, option) = (event.mods.shift, event.mods.alt);
-    if let Some(binding) = BINDINGS.iter().find(|binding| {
-        binding.key.chars().eq([key]) && binding.shift == shift && binding.option == option
-    }) {
+    let pressed = Chord::new(base_key(typed), event.mods.shift, event.mods.alt);
+    if let Some(binding) = keymap.iter().find(|binding| binding.chord == pressed) {
         return Some(binding.shortcut);
     }
     // Command-1 to Command-8 pick a tab by its position, so they are not listed one by one.
-    match key {
-        '1'..='8' if !shift && !option => Some(Shortcut::SelectTab(key as usize - '1' as usize)),
+    match pressed.key {
+        key @ '1'..='8' if !pressed.shift && !pressed.option => {
+            Some(Shortcut::SelectTab(key as usize - '1' as usize))
+        }
         _ => None,
     }
 }
@@ -411,25 +537,116 @@ mod tests {
     #[test]
     fn every_binding_answers_to_its_own_chord() {
         // A chord shadowed by an earlier entry, or listed twice, fails here.
-        for binding in BINDINGS {
-            let key = KeyEvent {
-                key: Key::Command(binding.key.chars().next().unwrap()),
-                mods: Mods {
-                    cmd: true,
-                    shift: binding.shift,
-                    alt: binding.option,
-                    ..Mods::default()
-                },
-            };
-            assert_eq!(shortcut(&key), Some(binding.shortcut), "{binding:?}");
+        for binding in DEFAULTS {
+            assert_eq!(
+                shortcut(&chord_event(binding.chord)),
+                Some(binding.shortcut),
+                "{binding:?}"
+            );
+            assert!(
+                binding.shortcut.name().is_some(),
+                "{binding:?} has no [keybindings] name"
+            );
+        }
+    }
+
+    fn chord_event(chord: Chord) -> KeyEvent {
+        KeyEvent {
+            key: Key::Command(chord.key),
+            mods: Mods {
+                cmd: true,
+                shift: chord.shift,
+                alt: chord.option,
+                ..Mods::default()
+            },
+        }
+    }
+
+    fn overrides(entries: &[(&str, &[&str])]) -> KeyBindings {
+        entries
+            .iter()
+            .map(|(name, chords)| {
+                let chords = chords
+                    .iter()
+                    .map(|text| Chord::parse(text).unwrap())
+                    .collect();
+                ((*name).to_owned(), chords)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn overrides_replace_an_actions_keys_and_take_their_chords() {
+        let (keymap, issues) = resolve(&overrides(&[
+            ("new_tab", &["mod+y"]),
+            ("toggle_sidebar", &["mod+shift+t", "mod+alt+s"]),
+            ("copy_address", &[]),
+        ]));
+        assert!(issues.is_empty(), "{issues:?}");
+        let run = |text| shortcut_in(&keymap, &chord_event(Chord::parse(text).unwrap()));
+        assert_eq!(run("mod+y"), Some(Shortcut::NewTab));
+        assert_eq!(run("mod+t"), None);
+        assert_eq!(run("mod+shift+t"), Some(Shortcut::ToggleSidebar));
+        assert_eq!(run("mod+alt+s"), Some(Shortcut::ToggleSidebar));
+        assert_eq!(run("mod+s"), None);
+        assert_eq!(run("mod+shift+c"), None);
+        assert_eq!(run("mod+w"), Some(Shortcut::Close));
+        // The first chord an override lists is the one menus show.
+        let sidebar = keymap
+            .iter()
+            .find(|b| b.shortcut == Shortcut::ToggleSidebar);
+        assert_eq!(sidebar.unwrap().chord, Chord::parse("mod+shift+t").unwrap());
+    }
+
+    #[test]
+    fn unusable_overrides_are_reported_and_skipped() {
+        let (keymap, issues) = resolve(&overrides(&[
+            ("open_task_manager", &["mod+k"]),
+            ("reload", &["mod+k"]),
+            ("find", &["mod+c"]),
+            ("teleport", &["mod+j"]),
+        ]));
+        assert_eq!(issues.len(), 3, "{issues:?}");
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.contains("reserved for Copy"))
+        );
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.contains("[keybindings].teleport"))
+        );
+        // `find` sorts before `open_task_manager` and `reload`, and `open_task_manager` claims
+        // mod+k before `reload` does.
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.contains("already bound to open_task_manager"))
+        );
+        let run = |text| shortcut_in(&keymap, &chord_event(Chord::parse(text).unwrap()));
+        assert_eq!(run("mod+k"), Some(Shortcut::OpenTaskManager));
+        assert_eq!(run("mod+r"), None);
+        assert_eq!(run("mod+f"), None);
+    }
+
+    #[test]
+    fn every_named_action_is_distinct() {
+        for (index, (shortcut, name)) in NAMES.iter().enumerate() {
+            assert!(
+                NAMES[index + 1..]
+                    .iter()
+                    .all(|(other, other_name)| other != shortcut && other_name != name),
+                "{name}"
+            );
         }
     }
 
     #[test]
     fn menus_show_the_registry_chord() {
         let back = Shortcut::Back.binding().unwrap();
-        assert_eq!((back.key, back.shift, back.option), ("[", false, false));
-        assert!(Shortcut::OpenBookmarks.binding().unwrap().option);
+        assert_eq!(back.chord, Chord::new('[', false, false));
+        assert!(Shortcut::OpenBookmarks.binding().unwrap().chord.option);
         assert_eq!(Shortcut::OpenTaskManager.binding(), None);
     }
 

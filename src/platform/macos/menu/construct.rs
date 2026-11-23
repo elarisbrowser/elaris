@@ -4,13 +4,13 @@
 
 use objc2_05::rc::Retained;
 use objc2_05::runtime::{AnyObject, ProtocolObject, Sel};
-use objc2_05::{msg_send_id, sel};
+use objc2_05::{msg_send, msg_send_id, sel};
 use objc2_app_kit_02::{NSApplication, NSEventModifierFlags, NSMenu, NSMenuDelegate, NSMenuItem};
 use objc2_foundation_02::{MainThreadMarker, NSString};
 
 use super::items::{
-    Action, EditAction, ItemSpec, action_id, edit, item, native, native_control, native_option,
-    separator, shortcut_item,
+    Action, EditAction, ItemSpec, action_from_id, action_id, edit, item, native, native_control,
+    native_option, separator, shortcut_item,
 };
 use super::quit::quit_guard;
 use super::target::menu_target_class;
@@ -57,28 +57,46 @@ fn menu(
             FULL_SCREEN_ITEM.with(|slot| *slot.borrow_mut() = Some(item.clone()));
         }
         if !spec.key.is_empty() {
-            item.setKeyEquivalentModifierMask(
-                NSEventModifierFlags::NSEventModifierFlagCommand
-                    | if spec.shift {
-                        NSEventModifierFlags::NSEventModifierFlagShift
-                    } else {
-                        NSEventModifierFlags(0)
-                    }
-                    | if spec.option {
-                        NSEventModifierFlags::NSEventModifierFlagOption
-                    } else {
-                        NSEventModifierFlags(0)
-                    }
-                    | if spec.control {
-                        NSEventModifierFlags::NSEventModifierFlagControl
-                    } else {
-                        NSEventModifierFlags(0)
-                    },
-            );
+            set_modifiers(&item, spec.shift, spec.option, spec.control);
         }
         menu.addItem(&item);
     }
     menu
+}
+
+/// Command plus the given modifiers, for an item that has a key equivalent.
+fn set_modifiers(item: &NSMenuItem, shift: bool, option: bool, control: bool) {
+    let flag = |on: bool, flag: NSEventModifierFlags| {
+        if on { flag } else { NSEventModifierFlags(0) }
+    };
+    item.setKeyEquivalentModifierMask(
+        NSEventModifierFlags::NSEventModifierFlagCommand
+            | flag(shift, NSEventModifierFlags::NSEventModifierFlagShift)
+            | flag(option, NSEventModifierFlags::NSEventModifierFlagOption)
+            | flag(control, NSEventModifierFlags::NSEventModifierFlagControl),
+    );
+}
+
+/// Gives each shortcut item the chord the keymap has for it now, or none. AppKit answers menu
+/// key equivalents before the window sees the key, so a stale one would keep an old chord alive.
+pub(crate) fn apply_key_equivalents() {
+    if MainThreadMarker::new().is_none() {
+        return;
+    }
+    MENU_ITEMS.with(|slot| {
+        for item in slot.borrow().iter() {
+            let tag = unsafe { msg_send![&**item, tag] };
+            let Some(Action::Shortcut(shortcut)) = action_from_id(tag) else {
+                continue;
+            };
+            let chord = shortcut.binding().map(|binding| binding.chord);
+            let key = chord.map_or(String::new(), |chord| chord.key.to_string());
+            unsafe { item.setKeyEquivalent(&NSString::from_str(&key)) };
+            if let Some(chord) = chord {
+                set_modifiers(item, chord.shift, chord.option, false);
+            }
+        }
+    });
 }
 
 fn target_object(target: &ProtocolObject<dyn NSMenuDelegate>) -> &AnyObject {
@@ -270,4 +288,5 @@ pub(crate) fn install(app: rune::AppHandle<AppState>) {
     application.setMainMenu(Some(&root_menu));
     MENU_ITEMS.with(|slot| *slot.borrow_mut() = items);
     MENU_TARGET.with(|slot| *slot.borrow_mut() = Some(target));
+    apply_key_equivalents();
 }
