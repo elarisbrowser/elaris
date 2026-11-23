@@ -31,7 +31,13 @@ def linux_build(args: argparse.Namespace) -> None:
 
 def linux_test(args: argparse.Namespace) -> None:
     """Run the whole Linux suite: build, bridge tests, Rust checks, the release bundle, and the bundled browser."""
-    _run_in_container(args, ["/bin/sh", "scripts/linux-test.sh"])
+    # An x86_64 container on an arm64 host runs under emulation, where the sandbox's file broker cannot start.
+    emulated = (args.arch or _host_architecture()) == "amd64" and _host_architecture() == "arm64"
+    _run_in_container(
+        args,
+        ["/bin/sh", "scripts/linux-test.sh"],
+        extra_env={"ELARIS_TEST_DISABLE_SANDBOX": "1"} if emulated else None,
+    )
 
 
 def linux_ui(args: argparse.Namespace) -> None:

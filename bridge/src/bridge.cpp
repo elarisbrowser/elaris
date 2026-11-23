@@ -1320,7 +1320,17 @@ extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* 
         "--profile-path"sv,
         AK::StringView(profile_dir, std::char_traits<char>::length(profile_dir)),
     };
-    Main::Arguments main_arguments{0, nullptr, arguments};
+    // Test-only: emulated x86_64 containers cannot start the sandbox's file broker, so their tests opt out of it.
+    AK::StringView sandbox_free_arguments[]{
+        "elaris"sv,
+        "--headless=manual"sv,
+        "--profile-path"sv,
+        AK::StringView(profile_dir, std::char_traits<char>::length(profile_dir)),
+        "--disable-sandbox"sv,
+    };
+    auto const* disable_sandbox = std::getenv("ELARIS_TEST_DISABLE_SANDBOX");
+    bool const sandbox_free = disable_sandbox && std::string_view(disable_sandbox) == "1";
+    Main::Arguments main_arguments{0, nullptr, sandbox_free ? Span<AK::StringView>{sandbox_free_arguments} : Span<AK::StringView>{arguments}};
     auto application = ElarisApplication::create(main_arguments, helper_directory());
     if (application.is_error()) {
         if (Core::EventLoop::is_running()) {
