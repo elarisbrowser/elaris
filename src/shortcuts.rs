@@ -48,6 +48,8 @@ pub(crate) enum Shortcut {
     /// Save every web page in the window to a new bookmark folder.
     BookmarkAllTabs,
     OpenBookmarks,
+    /// Open the omnibox searching only bookmarks.
+    SearchBookmarks,
     /// Show or hide the horizontal layout's bookmarks bar.
     ToggleBookmarksBar,
     /// Go back in the active tab's history.
@@ -108,6 +110,7 @@ const DEFAULTS: &[Binding] = &[
         chord: Chord::new('b', false, true),
     },
     bind(Shortcut::ToggleBookmarksBar, 'b', true),
+    bind(Shortcut::SearchBookmarks, 'o', true),
 ];
 
 /// Command-Y on macOS, and Control-H elsewhere.
@@ -163,6 +166,7 @@ const NAMES: &[(Shortcut, &str)] = &[
     (Shortcut::BookmarkPage, "bookmark_page"),
     (Shortcut::BookmarkAllTabs, "bookmark_all_tabs"),
     (Shortcut::OpenBookmarks, "open_bookmarks"),
+    (Shortcut::SearchBookmarks, "search_bookmarks"),
     (Shortcut::ToggleBookmarksBar, "toggle_bookmarks_bar"),
     (Shortcut::Back, "back"),
     (Shortcut::Forward, "forward"),
@@ -372,6 +376,7 @@ pub(crate) fn dispatch(state: &mut AppState, shortcut: Shortcut, tx: &mut Tx) {
         Shortcut::BookmarkPage => state.bookmark_active_tab(),
         Shortcut::BookmarkAllTabs => state.bookmark_all_tabs(tx),
         Shortcut::OpenBookmarks => app::open_bookmarks(state, tx),
+        Shortcut::SearchBookmarks => app::search_bookmarks(state, tx),
         Shortcut::ToggleBookmarksBar => {
             state.toggle_bookmarks_bar();
             tx.animated();
@@ -523,6 +528,7 @@ mod tests {
         assert_eq!(press('d', false), Some(Shortcut::BookmarkPage));
         assert_eq!(press('D', true), Some(Shortcut::BookmarkAllTabs));
         assert_eq!(press('B', true), Some(Shortcut::ToggleBookmarksBar));
+        assert_eq!(press('O', true), Some(Shortcut::SearchBookmarks));
         let manage = KeyEvent {
             key: Key::Command('b'),
             mods: Mods {

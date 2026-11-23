@@ -96,6 +96,11 @@ pub(crate) fn open_from_launcher(state: &mut AppState, tx: &mut Tx) {
     tx.focus("omnibox-input", false);
 }
 
+pub(crate) fn search_bookmarks(state: &mut AppState, tx: &mut Tx) {
+    state.open_bookmark_search();
+    tx.focus("omnibox-input", false);
+}
+
 /// A new tab starts in the omnibox, ready to type.
 pub(crate) fn new_tab(state: &mut AppState, tx: &mut Tx) {
     if state.cancel_tab_drag() {
@@ -141,6 +146,22 @@ pub(crate) fn omnibox_input_key(state: &mut AppState, event: &KeyEvent, tx: &mut
         Key::Escape => {
             state.omnibox.close();
             tx.focus(focus_key(&state.browser), false);
+            true
+        }
+        // Tab switches between searching everything and searching bookmarks.
+        Key::Tab if event.mods == Default::default() => {
+            let scope = state.omnibox.scope.toggled();
+            state.omnibox.set_scope(scope);
+            tx.animated();
+            true
+        }
+        // Deleting past the start of an empty query leaves the bookmarks scope.
+        Key::Backspace
+            if state.omnibox.scope == omnibox::Scope::Bookmarks
+                && state.omnibox.input.text.is_empty() =>
+        {
+            state.omnibox.set_scope(omnibox::Scope::All);
+            tx.animated();
             true
         }
         Key::Up | Key::Down => {

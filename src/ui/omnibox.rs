@@ -7,7 +7,7 @@ use rune::tok::type_;
 use rune::{Cx, El, ScrollSpec, Transition, Tx, col, el, icon, row, text, text_input};
 
 use crate::app::{self, AppState};
-use crate::omnibox::{Action, Glyph, Section, Suggestion};
+use crate::omnibox::{Action, Glyph, Scope, Section, Suggestion};
 use crate::ui::theme::{self, Theme};
 use elaris_core::address::SearchEngine;
 
@@ -30,18 +30,24 @@ pub(crate) fn view(
         .px(theme::FIELD_PADDING + 4.0)
         .gap(theme::ROW_GAP + 4.0)
         .center_y()
-        .child(search_engine_selector(state, theme, overlays))
+        .child(leading(state, theme, reduced_motion, overlays))
         .child(editor(state, &suggestions, theme));
 
     let available = (height - 2.0 * theme::FIELD_PADDING).min(theme::OMNIBOX_MAX_HEIGHT);
     let results_limit = available - theme::OMNIBOX_INPUT_HEIGHT - theme::OMNIBOX_FOOTER_HEIGHT;
     let results = results(state, &suggestions, theme, results_limit);
+    let bookmarks = state.omnibox.scope == Scope::Bookmarks;
     let hints = match suggestions.len() {
-        0 => state.address_error.as_deref().unwrap_or("Esc  Close"),
+        0 if bookmarks => "No matching bookmarks     ⇥  Search     Esc  Close",
+        0 => state
+            .address_error
+            .as_deref()
+            .unwrap_or("⇥  Bookmarks     Esc  Close"),
+        _ if bookmarks => "↑↓  Navigate     ↵  Open     ⇥  Search     Esc  Close",
         1 if !state.omnibox.input.text.trim().is_empty() || state.omnibox.selection_moved => {
-            "↵  Open     Esc  Close"
+            "↵  Open     ⇥  Bookmarks     Esc  Close"
         }
-        _ => "↑↓  Navigate     ↵  Open     Esc  Close",
+        _ => "↑↓  Navigate     ↵  Open     ⇥  Bookmarks     Esc  Close",
     };
     let footer = row()
         .key("omnibox-hints")
@@ -72,7 +78,11 @@ pub(crate) fn view(
             tx.focus(crate::ui::VIEWPORT, false);
         })
         .role("dialog")
-        .label("Search and navigation")
+        .label(if bookmarks {
+            "Search bookmarks"
+        } else {
+            "Search and navigation"
+        })
         .token_motion(if reduced_motion {
             rune::Spring::NONE
         } else {
@@ -97,11 +107,64 @@ pub(crate) fn view(
     )
 }
 
+/// What leads the input: the search engine picker, or in the bookmarks scope a chip naming it,
+/// which pops in where the picker was.
+fn leading(state: &AppState, theme: &Theme, reduced: bool, overlays: &mut Vec<El>) -> El {
+    if state.omnibox.scope == Scope::All {
+        return search_engine_selector(state, theme, overlays)
+            .transition(scope_transition(reduced));
+    }
+    let height = if state.toolbar_address_bar() {
+        theme::CLOSE_BUTTON
+    } else {
+        theme::OMNIBOX_SEARCH_BUTTON_HEIGHT
+    };
+    row()
+        .key("omnibox-scope-bookmarks")
+        .h(height)
+        .px(theme::OMNIBOX_SEARCH_BUTTON_PADDING)
+        .gap(theme::OMNIBOX_SEARCH_BUTTON_GAP)
+        .center_y()
+        .radius(height / 2.0)
+        .fill(theme.address_field)
+        .hover(theme.hover)
+        .press(theme.press)
+        .role("button")
+        .label("Searching bookmarks. Click to search everything.")
+        .help("Search everything (Tab)")
+        .focusable(true)
+        .on_press_tx(|state: &mut AppState, tx| {
+            state.omnibox.set_scope(Scope::All);
+            tx.animated();
+            tx.focus("omnibox-input", false);
+        })
+        .transition(scope_transition(reduced))
+        .child(icon(&super::icons::STAR, theme::OMNIBOX_SEARCH_ICON).color(theme.icon))
+        .child(
+            text("Bookmarks")
+                .font(type_::LABEL)
+                .color(theme.text)
+                .single_line(),
+        )
+}
+
+fn scope_transition(reduced: bool) -> Transition {
+    if reduced {
+        Transition::none()
+    } else {
+        Transition::scale(theme::OMNIBOX_SCOPE_SCALE)
+    }
+}
+
 fn editor(state: &AppState, suggestions: &[Suggestion], theme: &Theme) -> El {
     let style = if state.toolbar_address_bar() {
         type_::BODY
     } else {
         theme::OMNIBOX_INPUT_TEXT
+    };
+    let placeholder = match state.omnibox.scope {
+        Scope::All => "Search or type a URL",
+        Scope::Bookmarks => "Search bookmarks",
     };
     let mut field = text_input(&state.omnibox.input, style);
     if !suggestions.is_empty() {
@@ -117,8 +180,8 @@ fn editor(state: &AppState, suggestions: &[Suggestion], theme: &Theme) -> El {
         .min_w(0.0)
         .color(theme.text)
         .caret(theme.text, theme.selection)
-        .placeholder("Search or type a URL", theme.text_muted)
-        .label("Search or type a URL")
+        .placeholder(placeholder, theme.text_muted)
+        .label(placeholder)
         .autofocus()
         .on_edit(|state: &mut AppState| &mut state.omnibox.input)
         .on_input_change(|state: &mut AppState, tx| {
@@ -156,7 +219,10 @@ fn results(state: &AppState, suggestions: &[Suggestion], theme: &Theme, results_
     let mut selected_y = None;
     let mut previous = None;
     for (index, suggestion) in suggestions.iter().enumerate() {
-        if previous != Some(suggestion.section) && suggestions.len() > 1 {
+        if previous != Some(suggestion.section)
+            && suggestions.len() > 1
+            && state.omnibox.scope == Scope::All
+        {
             let label = match suggestion.section {
                 Section::OpenTabs => Some("Open tabs"),
                 Section::Bookmarks => Some("Bookmarks"),
@@ -182,8 +248,12 @@ fn results(state: &AppState, suggestions: &[Suggestion], theme: &Theme, results_
         rows.push(result_row(state, suggestion, index, height, theme));
         y += height + theme::TAB_GAP;
     }
+    // Each scope keeps its own list, so switching scope brings the new rows in afresh.
     let mut content = col()
-        .key("omnibox-result-rows")
+        .key(match state.omnibox.scope {
+            Scope::All => "omnibox-result-rows",
+            Scope::Bookmarks => "omnibox-result-rows-bookmarks",
+        })
         .w_full()
         .gap(theme::TAB_GAP);
     if let Some(y) = selected_y {
@@ -238,7 +308,7 @@ pub(in crate::ui) fn address_bar(
         let suggestions = state.suggestions();
         let mut engine_menu = Vec::new();
         bar = bar
-            .child(search_engine_selector(state, theme, &mut engine_menu))
+            .child(leading(state, theme, reduced, &mut engine_menu))
             .child(editor(state, &suggestions, theme));
         if let Some([x, y, width, height]) = cx.window_layout("horizontal-address-bar") {
             let top = y + height + theme::NAV_GAP;
@@ -413,8 +483,16 @@ fn result_row(
     let glyph = glyph_for(state, suggestion, theme);
     let choice = suggestion.clone();
     let key = format!("omnibox-result-{index}");
+    let reduced = state.sidebar.hover.reduced.get();
+    let delay = (index as f32 * theme::OMNIBOX_ROW_STAGGER).min(theme::OMNIBOX_ROW_STAGGER_MAX);
     let mut row = row()
         .key(key)
+        .enter_delay(if reduced { 0.0 } else { delay })
+        .transition(if reduced {
+            Transition::none()
+        } else {
+            Transition::offset(0.0, theme::OMNIBOX_ROW_ENTER_OFFSET).combined(Transition::opacity())
+        })
         .w_full()
         .h(height)
         .px(theme::ROW_PADDING)

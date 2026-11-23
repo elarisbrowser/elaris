@@ -11,6 +11,8 @@ use elaris_core::history::Entry as HistoryEntry;
 const MAX_TAB_SUGGESTIONS: usize = 4;
 const MAX_HISTORY_SUGGESTIONS: usize = 3;
 const MAX_BOOKMARK_SUGGESTIONS: usize = 3;
+/// How many bookmarks the bookmarks scope lists at once.
+const MAX_BOOKMARK_SCOPE_RESULTS: usize = 50;
 /// How much must be typed before a bookmarked site becomes the top hit, so one letter never
 /// takes over Enter.
 const MIN_TOP_HIT_LENGTH: usize = 2;
@@ -44,10 +46,28 @@ pub(crate) enum Mode {
     New,
 }
 
+/// What the omnibox searches: everything, or only bookmarks.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Scope {
+    #[default]
+    All,
+    Bookmarks,
+}
+
+impl Scope {
+    pub(crate) fn toggled(self) -> Scope {
+        match self {
+            Scope::All => Scope::Bookmarks,
+            Scope::Bookmarks => Scope::All,
+        }
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct State {
     pub(crate) open: bool,
     pub(crate) mode: Mode,
+    pub(crate) scope: Scope,
     pub(crate) input: TextEdit,
     pub(crate) selected: usize,
     pub(crate) selection_moved: bool,
@@ -58,6 +78,7 @@ impl State {
     pub(crate) fn open(&mut self, query: &str, select_all: bool) {
         self.selection_moved = false;
         self.open = true;
+        self.scope = Scope::All;
         self.input.replace_text(query.to_owned());
         if select_all {
             self.input.anchor = 0;
@@ -68,6 +89,14 @@ impl State {
 
     pub(crate) fn close(&mut self) {
         self.open = false;
+        self.search_engine_menu_open = false;
+    }
+
+    /// Switches between searching everything and searching bookmarks, from the top result.
+    pub(crate) fn set_scope(&mut self, scope: Scope) {
+        self.scope = scope;
+        self.selected = 0;
+        self.selection_moved = false;
         self.search_engine_menu_open = false;
     }
 
@@ -313,6 +342,63 @@ pub(crate) fn suggestions(
     suggestions
 }
 
+/// Bookmarks alone, for the bookmarks scope: every one when nothing is typed, most visited
+/// first, otherwise the best matches. An open bookmark switches to its tab.
+pub(crate) fn bookmark_suggestions(
+    query: &str,
+    tabs: &[Tab],
+    bookmarks: &[BookmarkHint],
+    history: &[HistoryEntry],
+) -> Vec<Suggestion> {
+    let folded = query.trim().to_ascii_lowercase();
+    let mut matching: Vec<_> = bookmarks
+        .iter()
+        .filter_map(|bookmark| {
+            let score = if folded.is_empty() {
+                BookmarkMatch::Site
+            } else {
+                bookmark_score(&folded, bookmark)?
+            };
+            let visits = history
+                .iter()
+                .find(|entry| entry.url == bookmark.url)
+                .map_or(0, |entry| entry.visit_count);
+            Some((score, visits, bookmark))
+        })
+        .collect();
+    matching.sort_by(|(left, left_visits, a), (right, right_visits, b)| {
+        left.cmp(right)
+            .then_with(|| right_visits.cmp(left_visits))
+            .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
+    });
+    matching
+        .into_iter()
+        .take(MAX_BOOKMARK_SCOPE_RESULTS)
+        .map(|(_, _, bookmark)| {
+            let host = address::host_for_address(&bookmark.url);
+            let detail = match bookmark.folders.as_str() {
+                "" => host.to_owned(),
+                folders => format!("{folders} · {host}"),
+            };
+            let action = tabs.iter().find(|tab| tab.url == bookmark.url).map_or_else(
+                || Action::VisitRecent(bookmark.url.clone()),
+                |tab| Action::SwitchTab(tab.id()),
+            );
+            Suggestion {
+                section: Section::Bookmarks,
+                title: if bookmark.title.is_empty() {
+                    bookmark.url.clone()
+                } else {
+                    bookmark.title.clone()
+                },
+                detail,
+                glyph: Glyph::Bookmark,
+                action,
+            }
+        })
+        .collect()
+}
+
 fn site_detail(title: &str, url: &str) -> String {
     let host = address::host_for_address(url);
     if title.eq_ignore_ascii_case(host) {
@@ -471,6 +557,25 @@ mod tests {
 
     fn find(query: &str, bookmarks: &[BookmarkHint], history: &[HistoryEntry]) -> Vec<Suggestion> {
         suggestions(query, &[], bookmarks, history, false, "DuckDuckGo")
+    }
+
+    #[test]
+    fn the_bookmarks_scope_lists_only_bookmarks_and_filters_them() {
+        let bookmarks = [
+            hint("Rust Book", "https://doc.rust-lang.org/book/", "Reading"),
+            hint("Example", "https://example.com/", ""),
+        ];
+        let history = [visit("Example", "https://example.com/", 5)];
+        let all = bookmark_suggestions("", &[], &bookmarks, &history);
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0].title, "Example");
+        assert!(all.iter().all(|item| item.section == Section::Bookmarks));
+        let found = bookmark_suggestions("reading", &[], &bookmarks, &history);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].detail, "Reading · doc.rust-lang.org");
+        let tabs = [tab(3, "Example", "https://example.com/")];
+        let open = bookmark_suggestions("exa", &tabs, &bookmarks, &[]);
+        assert_eq!(open[0].action, Action::SwitchTab(TabId::from_raw(3)));
     }
 
     #[test]

@@ -620,6 +620,14 @@ pub(in crate::ui) fn sidebar_button(state: &AppState, theme: &Theme, layer: &mut
     let close = |state: &mut AppState| state.bookmarks.sidebar_menu = false;
     menu = menu
         .item(
+            MenuItem::new("Search Bookmarks")
+                .shortcut_of(Shortcut::SearchBookmarks)
+                .on_select_tx(move |state: &mut AppState, tx| {
+                    close(state);
+                    crate::app::search_bookmarks(state, tx);
+                }),
+        )
+        .item(
             MenuItem::new("Manage Bookmarks")
                 .shortcut_of(Shortcut::OpenBookmarks)
                 .on_select_tx(move |state: &mut AppState, tx| {
@@ -783,6 +791,7 @@ mod tests {
         assert_eq!(
             labels,
             [
+                "Search Bookmarks",
                 "Manage Bookmarks",
                 "Add Bookmark",
                 "Bookmark All Tabs…",

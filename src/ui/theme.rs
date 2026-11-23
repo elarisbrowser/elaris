@@ -429,6 +429,13 @@ pub(crate) const OMNIBOX_SEARCH_CHEVRON: f32 = 12.0;
 pub(crate) const OMNIBOX_SEARCH_BUTTON_HEIGHT: f32 = 28.0;
 pub(crate) const OMNIBOX_SEARCH_BUTTON_PADDING: f32 = 6.0;
 pub(crate) const OMNIBOX_SEARCH_BUTTON_GAP: f32 = 4.0;
+/// Delay between result rows as a scope switch brings them in, and the most it adds up to.
+pub(crate) const OMNIBOX_ROW_STAGGER: f32 = 0.025;
+pub(crate) const OMNIBOX_ROW_STAGGER_MAX: f32 = 0.2;
+/// How far result rows rise as they enter.
+pub(crate) const OMNIBOX_ROW_ENTER_OFFSET: f32 = 6.0;
+/// The scope chip's scale as it swaps with the search engine picker.
+pub(crate) const OMNIBOX_SCOPE_SCALE: f32 = 0.92;
 
 /// The compact floating Find in Page bar.
 pub(crate) const FIND_WIDTH: f32 = 344.0;

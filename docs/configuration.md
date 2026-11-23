@@ -89,6 +89,7 @@ to one of `mod+1` to `mod+8` takes precedence over tab selection.
 | `bookmark_page` | `mod+d` |
 | `bookmark_all_tabs` | `mod+shift+d` |
 | `open_bookmarks` | `mod+alt+b` |
+| `search_bookmarks` | `mod+shift+o` |
 | `toggle_bookmarks_bar` | `mod+shift+b` |
 | `open_task_manager` | none |
 

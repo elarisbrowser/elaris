@@ -49,6 +49,14 @@ impl super::AppState {
         self.address_error = None;
     }
 
+    /// Opens the omnibox searching only bookmarks, to open one in the active tab.
+    pub(crate) fn open_bookmark_search(&mut self) {
+        self.open_omnibox(omnibox::Mode::Current);
+        if self.omnibox.open {
+            self.omnibox.set_scope(omnibox::Scope::Bookmarks);
+        }
+    }
+
     pub(crate) fn suggestions(&self) -> Vec<Suggestion> {
         let query = self.omnibox.input.text.trim();
         let history = self.storage.as_ref().map_or_else(Vec::new, |storage| {
@@ -88,6 +96,9 @@ impl super::AppState {
                 })
                 .collect()
         };
+        if self.omnibox.scope == omnibox::Scope::Bookmarks {
+            return omnibox::bookmark_suggestions(query, self.browser.tabs(), &bookmarks, &history);
+        }
         let mut suggestions = omnibox::suggestions(
             query,
             self.browser.tabs(),

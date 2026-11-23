@@ -124,9 +124,9 @@ fn menu_command(action: Action) -> Option<MenuCommand> {
             | Shortcut::ResetZoom,
         ) => MenuCommand::WebPage,
         Action::Shortcut(Shortcut::CopyAddress | Shortcut::BookmarkPage) => MenuCommand::WebPage,
-        Action::Shortcut(Shortcut::OpenBookmarks | Shortcut::ToggleBookmarksBar) => {
-            MenuCommand::History
-        }
+        Action::Shortcut(
+            Shortcut::OpenBookmarks | Shortcut::SearchBookmarks | Shortcut::ToggleBookmarksBar,
+        ) => MenuCommand::History,
         Action::Shortcut(Shortcut::BookmarkAllTabs) => MenuCommand::WebPage,
         Action::Shortcut(Shortcut::ToggleSidebar) => MenuCommand::ToggleSidebar,
         Action::Shortcut(Shortcut::OpenHistory) => MenuCommand::History,
