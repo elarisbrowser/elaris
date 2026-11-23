@@ -1541,6 +1541,7 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
             emit(handle, ELARIS_LADYBIRD_PERMISSION_USE, "microphone", visible);
             break;
         case WebView::TabIndicator::PlayingAudio:
+            emit(handle, ELARIS_LADYBIRD_PLAYING_AUDIO, {}, visible);
             update_now_playing(*handle->bridge);
             break;
         }

@@ -186,6 +186,7 @@ pub(super) unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEv
                 visible: raw.value != 0,
             },
             27 => Event::WebFullscreen(raw.value != 0),
+            34 => Event::PlayingAudio(raw.value != 0),
             33 => Event::WheelResult {
                 cancelled: raw.value != 0,
             },

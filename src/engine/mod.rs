@@ -379,6 +379,7 @@ pub(crate) enum TabUpdate {
     ExternalUrl(Option<elaris::ladybird::ExternalUrl>),
     Accessibility(elaris::ladybird::AccessibilityEvent),
     WebFullscreen(bool),
+    PlayingAudio(bool),
     /// Whether the page cancelled a wheel event; a cancelled wheel keeps its gesture from becoming a swipe.
     WheelResult(bool),
     PermissionUse(elaris_core::permissions::PermissionKind, bool),

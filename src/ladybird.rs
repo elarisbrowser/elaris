@@ -194,6 +194,8 @@ pub enum Event {
     },
     Accessibility(AccessibilityEvent),
     WebFullscreen(bool),
+    /// Whether the page is playing audio.
+    PlayingAudio(bool),
     /// A wheel event finished; `cancelled` when the page called preventDefault on it.
     WheelResult {
         cancelled: bool,

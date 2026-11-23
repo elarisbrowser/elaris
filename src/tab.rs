@@ -91,6 +91,11 @@ pub(crate) struct Tab {
     pub(crate) accessibility_events: Vec<elaris::ladybird::AccessibilityEvent>,
     pub(crate) accessibility: crate::page_accessibility::PageAccessibility,
     pub(crate) web_fullscreen: bool,
+    pub(crate) playing_audio: bool,
+    /// Memory Saver closed the page's view; it loads again when next shown.
+    pub(crate) asleep: bool,
+    /// When the tab was last shown, from which Memory Saver judges how idle it is.
+    pub(crate) last_seen: std::time::Instant,
     pub(crate) permissions_in_use: [bool; PermissionKind::ALL.len()],
     pub(crate) awaiting_close: bool,
     pub(crate) favicon: Option<Pixels>,
@@ -150,6 +155,9 @@ impl Tab {
             accessibility_events: Vec::new(),
             accessibility: Default::default(),
             web_fullscreen: false,
+            playing_audio: false,
+            asleep: false,
+            last_seen: std::time::Instant::now(),
             permissions_in_use: [false; PermissionKind::ALL.len()],
             awaiting_close: false,
             favicon: None,
@@ -192,6 +200,9 @@ impl Tab {
             accessibility_events: Vec::new(),
             accessibility: Default::default(),
             web_fullscreen: false,
+            playing_audio: false,
+            asleep: false,
+            last_seen: std::time::Instant::now(),
             permissions_in_use: [false; PermissionKind::ALL.len()],
             awaiting_close: false,
             favicon: None,
@@ -246,6 +257,7 @@ impl Tab {
                 return std::mem::replace(&mut self.ime_caret, rect) != rect;
             }
             TabUpdate::WebFullscreen(active) => self.web_fullscreen = active,
+            TabUpdate::PlayingAudio(playing) => self.playing_audio = playing,
             // The browser's swipe tracking takes these before they reach a tab.
             TabUpdate::WheelResult(_) => {}
             TabUpdate::PermissionPrompt(prompt) => self.permission_prompt = prompt,

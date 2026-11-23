@@ -53,6 +53,8 @@ typedef enum {
     /* A wheel event finished. Value 1 when the page cancelled it with preventDefault, otherwise 0. Scrolls
      * do not count, so the host may still use a sideways wheel for a history swipe. */
     ELARIS_LADYBIRD_WHEEL_RESULT = 33,
+    /* Whether the page is playing audio, in value. */
+    ELARIS_LADYBIRD_PLAYING_AUDIO = 34,
 } ElarisLadybirdEventKind;
 
 /* Permission event text is the origin and selection is the permission key.
