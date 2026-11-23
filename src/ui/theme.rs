@@ -348,6 +348,8 @@ pub(crate) const PAGE_GROUP_PADDING: f32 = space::S3 + space::S1;
 pub(crate) const PAGE_CONTENT_WIDTH: f32 = 760.0;
 pub(crate) const PAGE_COMPACT_BREAKPOINT: f32 = 560.0;
 pub(crate) const PAGE_HEADER_ICON: f32 = 32.0;
+/// The message a tab shows when its page crashed.
+pub(crate) const CRASH_PAGE_WIDTH: f32 = 420.0;
 /// Space between sections, and the larger space between categories (twice as wide, so each
 /// category reads as one group).
 pub(crate) const PAGE_SECTION_GAP: f32 = space::S6;

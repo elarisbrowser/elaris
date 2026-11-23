@@ -1653,7 +1653,15 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
         cancel_form_picker(*handle, false);
         handle->dialog = {};
         emit_page_dialog(*handle);
-        emit(handle, ELARIS_LADYBIRD_LOAD_ERROR, "This page stopped responding.");
+    };
+    handle->view->on_crash_overlay_state_change = [handle](bool active) {
+        auto const& view = *handle->view;
+        if (!active) {
+            emit(handle, ELARIS_LADYBIRD_CRASHED, {}, 0);
+            return;
+        }
+        emit(handle, ELARIS_LADYBIRD_CRASHED, view.crash_overlay_failed_url().to_byte_string().characters(),
+             view.crash_overlay_is_for_memory_limit() ? 2 : 1);
     };
     handle->view->on_browser_history_traversal_complete = [handle] {
         cancel_form_picker(*handle, true);

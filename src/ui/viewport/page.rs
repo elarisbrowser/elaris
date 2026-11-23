@@ -124,6 +124,9 @@ pub(super) fn page(
         if !internal {
             page = page_hover(page, tab, theme);
         }
+        if let Some(crash) = super::crash::crash_page(tab, theme) {
+            page = page.child(crash);
+        }
         if let Some(swipe) = state.browser.swipe().filter(|swipe| swipe.tab == tab.id()) {
             page = page.child(swipe_indicator(swipe, theme));
         }

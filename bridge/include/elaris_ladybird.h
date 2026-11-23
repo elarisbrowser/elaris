@@ -55,6 +55,9 @@ typedef enum {
     ELARIS_LADYBIRD_WHEEL_RESULT = 33,
     /* Whether the page is playing audio, in value. */
     ELARIS_LADYBIRD_PLAYING_AUDIO = 34,
+    /* The page's process ended: value 1 when it crashed, 2 when it was ended for its memory use, and 0 once a reload
+     * recovers the tab. The failed URL is in text. */
+    ELARIS_LADYBIRD_CRASHED = 35,
 } ElarisLadybirdEventKind;
 
 /* Permission event text is the origin and selection is the permission key.

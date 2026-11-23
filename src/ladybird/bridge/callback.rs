@@ -187,6 +187,17 @@ pub(super) unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEv
             },
             27 => Event::WebFullscreen(raw.value != 0),
             34 => Event::PlayingAudio(raw.value != 0),
+            35 => Event::Crashed(match raw.value {
+                0 => None,
+                2 => Some(crate::ladybird::Crash {
+                    url: text,
+                    out_of_memory: true,
+                }),
+                _ => Some(crate::ladybird::Crash {
+                    url: text,
+                    out_of_memory: false,
+                }),
+            }),
             33 => Event::WheelResult {
                 cancelled: raw.value != 0,
             },

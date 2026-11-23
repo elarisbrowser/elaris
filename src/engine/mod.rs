@@ -383,6 +383,7 @@ pub(crate) enum TabUpdate {
     Accessibility(elaris::ladybird::AccessibilityEvent),
     WebFullscreen(bool),
     PlayingAudio(bool),
+    Crashed(Option<elaris::ladybird::Crash>),
     /// Whether the page cancelled a wheel event; a cancelled wheel keeps its gesture from becoming a swipe.
     WheelResult(bool),
     PermissionUse(elaris_core::permissions::PermissionKind, bool),

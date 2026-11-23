@@ -528,6 +528,7 @@ impl Runtime {
                 }
                 Event::WebFullscreen(active) => TabUpdate::WebFullscreen(active),
                 Event::PlayingAudio(playing) => TabUpdate::PlayingAudio(playing),
+                Event::Crashed(crash) => TabUpdate::Crashed(crash),
                 Event::WheelResult { cancelled } => TabUpdate::WheelResult(cancelled),
                 Event::PermissionPrompt(prompt) => TabUpdate::PermissionPrompt(prompt),
                 Event::ExternalUrl(request) => TabUpdate::ExternalUrl(request),

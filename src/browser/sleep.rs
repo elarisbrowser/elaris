@@ -21,6 +21,8 @@ impl Tab {
             || self.page_dialog.is_some()
             || self.permission_prompt.is_some()
             || self.external_url.is_some()
+            // Shown again, a page ended for its memory would grow back to the limit.
+            || self.crash.is_some()
             || self.id().has_open_popup()
     }
 }

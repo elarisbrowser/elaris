@@ -102,7 +102,11 @@ impl Browser {
                         self.activate_tab(id);
                     }
                     if let Some(tab) = self.tab_mut(id) {
-                        if matches!(update, crate::engine::TabUpdate::LoadError(_)) {
+                        if matches!(
+                            update,
+                            crate::engine::TabUpdate::LoadError(_)
+                                | crate::engine::TabUpdate::Crashed(Some(_))
+                        ) {
                             tab.awaiting_close = false;
                         }
                         let committed = match &update {

@@ -196,6 +196,8 @@ pub enum Event {
     WebFullscreen(bool),
     /// Whether the page is playing audio.
     PlayingAudio(bool),
+    /// The page's process ended, or `None` once a reload recovered the tab.
+    Crashed(Option<Crash>),
     /// A wheel event finished; `cancelled` when the page called preventDefault on it.
     WheelResult {
         cancelled: bool,
@@ -421,4 +423,12 @@ pub struct KeyEvent {
     pub pressed: bool,
     pub modifiers: i32,
     pub repeat: bool,
+}
+
+/// Why a tab's page is gone: its process crashed, or was ended for using too much memory.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Crash {
+    /// The page that was showing, which a reload loads again.
+    pub url: String,
+    pub out_of_memory: bool,
 }

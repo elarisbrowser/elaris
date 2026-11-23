@@ -112,6 +112,8 @@ pub(crate) struct Tab {
     pub(crate) accessibility: crate::page_accessibility::PageAccessibility,
     pub(crate) web_fullscreen: bool,
     pub(crate) playing_audio: bool,
+    /// The page's process crashed or ran out of memory; a reload recovers it.
+    pub(crate) crash: Option<elaris::ladybird::Crash>,
     /// Memory Saver closed the page's view; it loads again when next shown.
     pub(crate) asleep: bool,
     /// When the tab was last shown, from which Memory Saver judges how idle it is.
@@ -176,6 +178,7 @@ impl Tab {
             accessibility: Default::default(),
             web_fullscreen: false,
             playing_audio: false,
+            crash: None,
             asleep: false,
             last_seen: std::time::Instant::now(),
             permissions_in_use: [false; PermissionKind::ALL.len()],
@@ -221,6 +224,7 @@ impl Tab {
             accessibility: Default::default(),
             web_fullscreen: false,
             playing_audio: false,
+            crash: None,
             asleep: false,
             last_seen: std::time::Instant::now(),
             permissions_in_use: [false; PermissionKind::ALL.len()],
@@ -278,6 +282,12 @@ impl Tab {
             }
             TabUpdate::WebFullscreen(active) => self.web_fullscreen = active,
             TabUpdate::PlayingAudio(playing) => self.playing_audio = playing,
+            TabUpdate::Crashed(crash) => {
+                self.thumbnail = None;
+                self.loading = false;
+                self.playing_audio = false;
+                self.crash = crash;
+            }
             // The browser's swipe tracking takes these before they reach a tab.
             TabUpdate::WheelResult(_) => {}
             TabUpdate::PermissionPrompt(prompt) => self.permission_prompt = prompt,
@@ -464,6 +474,21 @@ mod tests {
         assert_eq!(tab.url, "https://example.com/a");
         assert_eq!(tab.error, None);
         assert!(tab.can_go_back && !tab.can_go_forward);
+    }
+
+    #[test]
+    fn a_crash_is_kept_until_a_reload_recovers_the_tab() {
+        let mut tab = tab("https://example.com/");
+        tab.loading = true;
+        let crash = elaris::ladybird::Crash {
+            url: "https://example.com/".into(),
+            out_of_memory: true,
+        };
+        tab.update(TabUpdate::Crashed(Some(crash.clone())));
+        assert_eq!(tab.crash, Some(crash));
+        assert!(!tab.loading && tab.busy());
+        tab.update(TabUpdate::Crashed(None));
+        assert_eq!(tab.crash, None);
     }
 
     #[test]

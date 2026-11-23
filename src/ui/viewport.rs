@@ -2,6 +2,7 @@
 
 //! Rounded webpage panes and their pointer, wheel, and keyboard input.
 
+mod crash;
 mod divider;
 mod input;
 mod layout;
