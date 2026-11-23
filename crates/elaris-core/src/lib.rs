@@ -6,6 +6,7 @@
 
 pub mod address;
 pub mod appearance;
+pub mod bookmarks;
 pub mod config;
 pub mod dev;
 pub mod download_history;
