@@ -10,7 +10,7 @@ use objc2_foundation_02::{MainThreadMarker, NSString};
 
 use super::items::{
     Action, EditAction, ItemSpec, action_id, edit, item, native, native_control, native_option,
-    separator,
+    separator, shortcut_item,
 };
 use super::quit::quit_guard;
 use super::target::menu_target_class;
@@ -121,12 +121,7 @@ pub(crate) fn install(app: rune::AppHandle<AppState>) {
         &[
             native("About Elaris", "", false),
             separator(),
-            item(
-                "Settings…",
-                Action::Shortcut(Shortcut::OpenSettings),
-                ",",
-                false,
-            ),
+            shortcut_item("Settings…", Shortcut::OpenSettings),
             separator(),
             native("Hide Elaris", "h", false),
             native_option("Hide Others", "h"),
@@ -141,32 +136,12 @@ pub(crate) fn install(app: rune::AppHandle<AppState>) {
     let file = menu(
         "File",
         &[
-            item(
-                "New Window",
-                Action::Shortcut(Shortcut::NewWindow),
-                "n",
-                false,
-            ),
-            item(
-                "New Private Window",
-                Action::Shortcut(Shortcut::NewPrivateWindow),
-                "n",
-                true,
-            ),
-            item("New Tab", Action::Shortcut(Shortcut::NewTab), "t", false),
-            item(
-                "Open File…",
-                Action::Shortcut(Shortcut::OpenFile),
-                "o",
-                false,
-            ),
-            item("Close Tab", Action::Shortcut(Shortcut::Close), "w", false),
-            item(
-                "Reopen Closed Tab",
-                Action::Shortcut(Shortcut::ReopenClosedTab),
-                "t",
-                true,
-            ),
+            shortcut_item("New Window", Shortcut::NewWindow),
+            shortcut_item("New Private Window", Shortcut::NewPrivateWindow),
+            shortcut_item("New Tab", Shortcut::NewTab),
+            shortcut_item("Open File…", Shortcut::OpenFile),
+            shortcut_item("Close Tab", Shortcut::Close),
+            shortcut_item("Reopen Closed Tab", Shortcut::ReopenClosedTab),
         ],
         mtm,
         &target,
@@ -180,16 +155,11 @@ pub(crate) fn install(app: rune::AppHandle<AppState>) {
             separator(),
             edit("Cut", EditAction::Cut, "x", false),
             edit("Copy", EditAction::Copy, "c", false),
-            item(
-                "Copy Address",
-                Action::Shortcut(Shortcut::CopyAddress),
-                "c",
-                true,
-            ),
+            shortcut_item("Copy Address", Shortcut::CopyAddress),
             edit("Paste", EditAction::Paste, "v", false),
             edit("Select All", EditAction::SelectAll, "a", false),
             separator(),
-            item("Find in Page", Action::Shortcut(Shortcut::Find), "f", false),
+            shortcut_item("Find in Page", Shortcut::Find),
         ],
         mtm,
         &target,
@@ -198,28 +168,13 @@ pub(crate) fn install(app: rune::AppHandle<AppState>) {
     let view = menu(
         "View",
         &[
-            item("Reload", Action::Shortcut(Shortcut::Reload), "r", false),
-            item(
-                "Reload Without Cache",
-                Action::Shortcut(Shortcut::ReloadBypassingCache),
-                "r",
-                true,
-            ),
+            shortcut_item("Reload", Shortcut::Reload),
+            shortcut_item("Reload Without Cache", Shortcut::ReloadBypassingCache),
             separator(),
-            item("Zoom In", Action::Shortcut(Shortcut::ZoomIn), "=", false),
-            item("Zoom Out", Action::Shortcut(Shortcut::ZoomOut), "-", false),
-            item(
-                "Reset Page Zoom",
-                Action::Shortcut(Shortcut::ResetZoom),
-                "0",
-                false,
-            ),
-            item(
-                "Toggle Sidebar",
-                Action::Shortcut(Shortcut::ToggleSidebar),
-                "s",
-                false,
-            ),
+            shortcut_item("Zoom In", Shortcut::ZoomIn),
+            shortcut_item("Zoom Out", Shortcut::ZoomOut),
+            shortcut_item("Reset Page Zoom", Shortcut::ResetZoom),
+            shortcut_item("Toggle Sidebar", Shortcut::ToggleSidebar),
             separator(),
             item("Split Left", Action::SplitLeft, "", false),
             item("Split Right", Action::SplitRight, "", false),
@@ -234,14 +189,9 @@ pub(crate) fn install(app: rune::AppHandle<AppState>) {
     let history = menu(
         "History",
         &[
-            item(
-                "Show History",
-                Action::Shortcut(Shortcut::OpenHistory),
-                "y",
-                false,
-            ),
-            item("Back", Action::Back, "[", false),
-            item("Forward", Action::Forward, "]", false),
+            shortcut_item("Show History", Shortcut::OpenHistory),
+            shortcut_item("Back", Shortcut::Back),
+            shortcut_item("Forward", Shortcut::Forward),
             item(
                 "Reopen Closed Tab",
                 Action::Shortcut(Shortcut::ReopenClosedTab),
@@ -256,27 +206,9 @@ pub(crate) fn install(app: rune::AppHandle<AppState>) {
     let bookmarks = menu(
         "Bookmarks",
         &[
-            item(
-                "Bookmark This Page",
-                Action::Shortcut(Shortcut::BookmarkPage),
-                "d",
-                false,
-            ),
-            item(
-                "Bookmark All Tabs…",
-                Action::Shortcut(Shortcut::BookmarkAllTabs),
-                "d",
-                true,
-            ),
-            ItemSpec {
-                option: true,
-                ..item(
-                    "Manage Bookmarks",
-                    Action::Shortcut(Shortcut::OpenBookmarks),
-                    "b",
-                    false,
-                )
-            },
+            shortcut_item("Bookmark This Page", Shortcut::BookmarkPage),
+            shortcut_item("Bookmark All Tabs…", Shortcut::BookmarkAllTabs),
+            shortcut_item("Manage Bookmarks", Shortcut::OpenBookmarks),
         ],
         mtm,
         &target,
@@ -285,13 +217,8 @@ pub(crate) fn install(app: rune::AppHandle<AppState>) {
     let tabs = menu(
         "Tabs",
         &[
-            item("Next Tab", Action::Shortcut(Shortcut::NextTab), "]", true),
-            item(
-                "Previous Tab",
-                Action::Shortcut(Shortcut::PreviousTab),
-                "[",
-                true,
-            ),
+            shortcut_item("Next Tab", Shortcut::NextTab),
+            shortcut_item("Previous Tab", Shortcut::PreviousTab),
             item("Move Tab to Favourites", Action::Favourite, "", false),
             item("Split Left", Action::SplitLeft, "", false),
             item("Split Right", Action::SplitRight, "", false),
@@ -307,12 +234,7 @@ pub(crate) fn install(app: rune::AppHandle<AppState>) {
             native("Minimize", "m", false),
             native("Zoom", "", false),
             separator(),
-            item(
-                "Task Manager",
-                Action::Shortcut(Shortcut::OpenTaskManager),
-                "",
-                false,
-            ),
+            shortcut_item("Task Manager", Shortcut::OpenTaskManager),
             separator(),
             native("Bring All to Front", "", false),
         ],

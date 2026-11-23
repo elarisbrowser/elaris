@@ -103,8 +103,8 @@ pub(super) fn apply_menu_state(snapshot: MenuState, mtm: MainThreadMarker) {
 
 fn menu_command(action: Action) -> Option<MenuCommand> {
     Some(match action {
-        Action::Back => MenuCommand::Back,
-        Action::Forward => MenuCommand::Forward,
+        Action::Shortcut(Shortcut::Back) => MenuCommand::Back,
+        Action::Shortcut(Shortcut::Forward) => MenuCommand::Forward,
         Action::Favourite => MenuCommand::Favourite,
         Action::SplitLeft | Action::SplitRight => MenuCommand::Split,
         Action::ExitSplit => MenuCommand::ExitSplit,

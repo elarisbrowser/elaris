@@ -7,8 +7,6 @@ use crate::shortcuts::Shortcut;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Action {
     Shortcut(Shortcut),
-    Back,
-    Forward,
     Favourite,
     SplitLeft,
     SplitRight,
@@ -48,6 +46,19 @@ pub(super) const fn item(
         key,
         shift,
         option: false,
+        control: false,
+    }
+}
+
+/// A menu item that runs `shortcut`, and shows the chord the registry gives it.
+pub(super) fn shortcut_item(title: &'static str, shortcut: Shortcut) -> ItemSpec {
+    let binding = shortcut.binding();
+    ItemSpec {
+        title,
+        action: Some(Action::Shortcut(shortcut)),
+        key: binding.map_or("", |binding| binding.key),
+        shift: binding.is_some_and(|binding| binding.shift),
+        option: binding.is_some_and(|binding| binding.option),
         control: false,
     }
 }
@@ -108,8 +119,6 @@ pub(super) const fn separator() -> ItemSpec {
 pub(super) fn action_id(action: Action) -> isize {
     match action {
         Action::Shortcut(shortcut) => 100 + shortcut_id(shortcut),
-        Action::Back => 1,
-        Action::Forward => 2,
         Action::Favourite => 4,
         Action::SplitLeft => 5,
         Action::SplitRight => 6,
@@ -129,8 +138,6 @@ pub(super) fn action_id(action: Action) -> isize {
 
 pub(super) fn action_from_id(id: isize) -> Option<Action> {
     Some(match id {
-        1 => Action::Back,
-        2 => Action::Forward,
         4 => Action::Favourite,
         5 => Action::SplitLeft,
         6 => Action::SplitRight,
@@ -162,6 +169,8 @@ pub(super) fn action_from_id(id: isize) -> Option<Action> {
         118 => Action::Shortcut(Shortcut::BookmarkPage),
         119 => Action::Shortcut(Shortcut::OpenBookmarks),
         120 => Action::Shortcut(Shortcut::BookmarkAllTabs),
+        121 => Action::Shortcut(Shortcut::Back),
+        122 => Action::Shortcut(Shortcut::Forward),
         _ => return None,
     })
 }
@@ -189,6 +198,8 @@ fn shortcut_id(shortcut: Shortcut) -> isize {
         Shortcut::BookmarkPage => 18,
         Shortcut::OpenBookmarks => 19,
         Shortcut::BookmarkAllTabs => 20,
+        Shortcut::Back => 21,
+        Shortcut::Forward => 22,
         _ => -1,
     }
 }

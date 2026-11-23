@@ -16,16 +16,6 @@ pub(super) fn perform_action(state: &mut AppState, action: Action, tx: &mut Tx) 
     let tab = state.browser.active_tab().map(Tab::id);
     match action {
         Action::Shortcut(shortcut) => shortcuts::dispatch(state, shortcut, tx),
-        Action::Back => {
-            if let Some(tab) = tab {
-                state.browser.go_back(tab);
-            }
-        }
-        Action::Forward => {
-            if let Some(tab) = tab {
-                state.browser.go_forward(tab);
-            }
-        }
         Action::Favourite => {
             if let Some(tab) = tab {
                 let section = state.browser.tab(tab).map(Tab::section);

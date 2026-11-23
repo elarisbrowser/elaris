@@ -45,8 +45,86 @@ pub(crate) enum Shortcut {
     /// Save every web page in the window to a new bookmark folder.
     BookmarkAllTabs,
     OpenBookmarks,
+    /// Go back in the active tab's history.
+    Back,
+    /// Go forward in the active tab's history.
+    Forward,
     /// Has no key of its own; the menu bar and the internal pages' menu open it.
     OpenTaskManager,
+}
+
+/// One chord that runs a shortcut. `key` is the unshifted character, as menus show it, and
+/// `shift` and `option` are the modifiers the chord needs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Binding {
+    pub(crate) shortcut: Shortcut,
+    pub(crate) key: &'static str,
+    pub(crate) shift: bool,
+    pub(crate) option: bool,
+}
+
+/// Every chord the browser answers to, so this table is the one place to change a key. Menus
+/// read their key equivalents from it, and the first entry for a shortcut is the one they show.
+const BINDINGS: &[Binding] = &[
+    bind(Shortcut::NewWindow, "n", false),
+    bind(Shortcut::NewPrivateWindow, "n", true),
+    bind(Shortcut::NewTab, "t", false),
+    bind(Shortcut::ReopenClosedTab, "t", true),
+    bind(Shortcut::OpenFile, "o", false),
+    bind(Shortcut::Close, "w", false),
+    bind(Shortcut::FocusOmnibox, "l", false),
+    bind(Shortcut::CopyAddress, "c", true),
+    bind(Shortcut::Find, "f", false),
+    bind(Shortcut::FindNext, "g", false),
+    bind(Shortcut::FindPrevious, "g", true),
+    bind(Shortcut::Reload, "r", false),
+    bind(Shortcut::ReloadBypassingCache, "r", true),
+    bind(Shortcut::Back, "[", false),
+    bind(Shortcut::Forward, "]", false),
+    bind(Shortcut::ZoomIn, "=", false),
+    bind(Shortcut::ZoomIn, "=", true),
+    bind(Shortcut::ZoomOut, "-", false),
+    bind(Shortcut::ResetZoom, "0", false),
+    bind(Shortcut::PreviousTab, "[", true),
+    bind(Shortcut::NextTab, "]", true),
+    bind(Shortcut::SelectLastTab, "9", false),
+    bind(Shortcut::ToggleSidebar, "s", false),
+    bind(Shortcut::OpenHistory, HISTORY_KEY, false),
+    bind(Shortcut::OpenSettings, ",", false),
+    bind(Shortcut::BookmarkPage, "d", false),
+    bind(Shortcut::BookmarkAllTabs, "d", true),
+    bind_option(Shortcut::OpenBookmarks, "b"),
+];
+
+/// Command-Y on macOS, and Control-H elsewhere.
+const HISTORY_KEY: &str = if cfg!(target_os = "macos") { "y" } else { "h" };
+
+const fn bind(shortcut: Shortcut, key: &'static str, shift: bool) -> Binding {
+    Binding {
+        shortcut,
+        key,
+        shift,
+        option: false,
+    }
+}
+
+const fn bind_option(shortcut: Shortcut, key: &'static str) -> Binding {
+    Binding {
+        shortcut,
+        key,
+        shift: false,
+        option: true,
+    }
+}
+
+impl Shortcut {
+    /// The chord that runs this shortcut, if it has one.
+    pub(crate) fn binding(self) -> Option<Binding> {
+        BINDINGS
+            .iter()
+            .copied()
+            .find(|binding| binding.shortcut == self)
+    }
 }
 
 /// Rune's hook for keys nothing focused took: runs the shortcut the key is, if any.
@@ -146,6 +224,8 @@ pub(crate) fn dispatch(state: &mut AppState, shortcut: Shortcut, tx: &mut Tx) {
                 tx.focus(ui::FIND_INPUT, false);
             }
         }
+        Shortcut::Back => state.with_active_tab(Browser::go_back),
+        Shortcut::Forward => state.with_active_tab(Browser::go_forward),
         Shortcut::Reload => state.with_active_tab(Browser::reload),
         Shortcut::ReloadBypassingCache => state.with_active_tab(Browser::reload_bypassing_cache),
         Shortcut::ZoomIn => state.with_active_tab(|browser, id| browser.change_zoom(id, 10)),
@@ -227,46 +307,33 @@ fn copy_address(state: &mut AppState, tx: &mut Tx) {
 
 /// The shortcut `event` is, if any.
 pub(crate) fn shortcut(event: &KeyEvent) -> Option<Shortcut> {
-    let Key::Command(key) = event.key else {
+    let Key::Command(typed) = event.key else {
         return None;
     };
-    let shift = event.mods.shift;
-    // Option turns B into ∫ on a US Mac layout.
-    if event.mods.alt {
-        return matches!(key, 'b' | 'B' | '∫').then_some(Shortcut::OpenBookmarks);
+    let key = base_key(typed);
+    let (shift, option) = (event.mods.shift, event.mods.alt);
+    if let Some(binding) = BINDINGS.iter().find(|binding| {
+        binding.key.chars().eq([key]) && binding.shift == shift && binding.option == option
+    }) {
+        return Some(binding.shortcut);
     }
-    Some(match (key.to_ascii_lowercase(), shift) {
-        ('n', false) => Shortcut::NewWindow,
-        ('n' | 'N', true) => Shortcut::NewPrivateWindow,
-        ('o', false) => Shortcut::OpenFile,
-        ('f', false) => Shortcut::Find,
-        ('g', false) => Shortcut::FindNext,
-        ('g', true) => Shortcut::FindPrevious,
-        ('t', false) => Shortcut::NewTab,
-        ('t' | 'T', true) => Shortcut::ReopenClosedTab,
-        ('w', false) => Shortcut::Close,
-        ('l', false) => Shortcut::FocusOmnibox,
-        ('c', true) => Shortcut::CopyAddress,
-        ('r', false) => Shortcut::Reload,
-        ('r', true) => Shortcut::ReloadBypassingCache,
-        ('=' | '+', _) => Shortcut::ZoomIn,
-        ('-', false) => Shortcut::ZoomOut,
-        ('0', false) => Shortcut::ResetZoom,
-        ('s', false) => Shortcut::ToggleSidebar,
-        #[cfg(target_os = "macos")]
-        ('y', false) => Shortcut::OpenHistory,
-        #[cfg(target_os = "linux")]
-        ('h', false) => Shortcut::OpenHistory,
-        (',', false) => Shortcut::OpenSettings,
-        ('d', false) => Shortcut::BookmarkPage,
-        ('d' | 'D', true) => Shortcut::BookmarkAllTabs,
-        // Shift turns [ and ] into { and } on most layouts.
-        ('[' | '{', true) => Shortcut::PreviousTab,
-        (']' | '}', true) => Shortcut::NextTab,
-        ('9', false) => Shortcut::SelectLastTab,
-        ('1'..='8', false) => Shortcut::SelectTab(key as usize - '1' as usize),
-        _ => return None,
-    })
+    // Command-1 to Command-8 pick a tab by its position, so they are not listed one by one.
+    match key {
+        '1'..='8' if !shift && !option => Some(Shortcut::SelectTab(key as usize - '1' as usize)),
+        _ => None,
+    }
+}
+
+/// The unshifted key a typed character came from, so `{` and `+` match `[` and `=`, and Option-B
+/// (typed as `∫` on a US Mac layout) matches `b`.
+fn base_key(typed: char) -> char {
+    match typed.to_ascii_lowercase() {
+        '{' => '[',
+        '}' => ']',
+        '+' => '=',
+        '∫' => 'b',
+        key => key,
+    }
 }
 
 #[cfg(test)]
@@ -325,12 +392,39 @@ mod tests {
     }
 
     #[test]
+    fn every_binding_answers_to_its_own_chord() {
+        // A chord shadowed by an earlier entry, or listed twice, fails here.
+        for binding in BINDINGS {
+            let key = KeyEvent {
+                key: Key::Command(binding.key.chars().next().unwrap()),
+                mods: Mods {
+                    cmd: true,
+                    shift: binding.shift,
+                    alt: binding.option,
+                    ..Mods::default()
+                },
+            };
+            assert_eq!(shortcut(&key), Some(binding.shortcut), "{binding:?}");
+        }
+    }
+
+    #[test]
+    fn menus_show_the_registry_chord() {
+        let back = Shortcut::Back.binding().unwrap();
+        assert_eq!((back.key, back.shift, back.option), ("[", false, false));
+        assert_eq!(Shortcut::OpenBookmarks.binding().unwrap().option, true);
+        assert_eq!(Shortcut::OpenTaskManager.binding(), None);
+    }
+
+    #[test]
     fn leaves_other_keys_alone() {
         assert_eq!(press('q', true), None);
-        assert_eq!(press('[', false), None);
+        assert_eq!(press('[', false), Some(Shortcut::Back));
+        assert_eq!(press(']', false), Some(Shortcut::Forward));
         assert_eq!(press('0', true), None);
         assert_eq!(press('q', false), None);
         assert_eq!(press('c', false), None);
+        assert_eq!(press('x', true), None);
         let typed = KeyEvent {
             key: Key::Text("t".into()),
             mods: Mods::default(),
