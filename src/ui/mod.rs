@@ -27,13 +27,13 @@ pub(crate) mod theme;
 pub(crate) mod viewport;
 pub(crate) use viewport::menu::PageMenuState;
 
+pub(crate) use sidebar::drag::{
+    DragVisual, MoveResult as TabDragMoveResult, TabDragState, TabDropTarget,
+};
 pub(crate) use sidebar::header::settle_zoom_chip;
 pub(crate) use sidebar::resize::settle as settle_sidebar;
 pub(crate) use sidebar::settle_copy_link;
-pub(crate) use sidebar::{
-    DragVisual, SidebarState, TabDragMoveResult, TabDragState, TabDropTarget,
-    toggle as toggle_sidebar,
-};
+pub(crate) use sidebar::{SidebarState, toggle as toggle_sidebar};
 pub(crate) use site_permissions::settle_site_action;
 pub(crate) use theme::{TAB_REORDER_MOTION, TRAFFIC_LIGHTS, WINDOW_MIN_SIZE};
 
@@ -49,7 +49,7 @@ pub(crate) const HISTORY_SEARCH: &str = "history-search";
 pub(crate) const HISTORY_SCROLL: &str = "history-scroll";
 pub(crate) const FIND_INPUT: &str = "find-input";
 #[cfg(target_os = "macos")]
-pub(crate) use sidebar::floating_drag_preview;
+pub(crate) use sidebar::tabs::floating_drag_preview;
 pub(crate) use theme::FIND_MOTION;
 
 pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
@@ -136,7 +136,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     }
     overlays.extend(tab_preview::view(state, cx, &theme, reduced_motion));
     viewport::menu::view(state, &theme, &mut overlays);
-    sidebar::context_menu(state, &theme, &mut overlays);
+    sidebar::tabs::context_menu(state, &theme, &mut overlays);
     sidebar::header::history_menu(state, &theme, &mut overlays);
     #[cfg(elaris_ui = "linux")]
     if !horizontal && state.titlebar.reveals_on_hover() {

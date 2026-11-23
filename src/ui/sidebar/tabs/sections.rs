@@ -106,7 +106,6 @@ pub(super) fn favourites(
         .child(grid)
 }
 
-/// A hairline between sidebar sections. Its spacing comes from `SIDEBAR_DIVIDER_PADDING` alone.
 /// The spring a tab stack's rows open and close their space on.
 pub(super) fn presence_motion(reduced_motion: bool) -> Spring {
     if reduced_motion {
@@ -116,6 +115,7 @@ pub(super) fn presence_motion(reduced_motion: bool) -> Spring {
     }
 }
 
+/// A hairline between sidebar sections. Its spacing comes from `SIDEBAR_DIVIDER_PADDING` alone.
 pub(super) fn divider(key: &'static str, theme: &Theme) -> El {
     col()
         .key(key)

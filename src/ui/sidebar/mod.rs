@@ -16,9 +16,6 @@ pub(super) mod tabs;
 
 use rune::tok::type_;
 use rune::{El, Transition, Tx, col, icon, row, text};
-pub(crate) use tabs::context_menu;
-#[cfg(target_os = "macos")]
-pub(crate) use tabs::floating_drag_preview;
 
 use super::icons;
 use super::permission_prompt;
@@ -27,8 +24,6 @@ use crate::app::{self, AppState};
 use crate::ui::components::animated_icon;
 use crate::ui::components::controls::row_button;
 use crate::ui::components::hover_highlight;
-pub(crate) use drag::MoveResult as TabDragMoveResult;
-pub(crate) use drag::{DragVisual, TabDragState, TabDropTarget};
 use elaris_core::appearance::Appearance;
 
 /// How the sidebar is laid out: what the window shows of it, not of the browser.
