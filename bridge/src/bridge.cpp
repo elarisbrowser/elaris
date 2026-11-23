@@ -27,6 +27,7 @@
 #include <LibGfx/SystemTheme.h>
 #include <LibURL/Parser.h>
 #include <LibURL/URL.h>
+#include <LibUnicode/DisplayNames.h>
 #include <LibWebCommon/HTML/ColorPickerUpdateState.h>
 #include <LibWebCommon/Loader/DownloadFilename.h>
 #include <LibWebCommon/Page/InputEvent.h>
@@ -42,14 +43,13 @@
 #include <LibWebView/FileDownloader.h>
 #include <LibWebView/HeadlessWebView.h>
 #include <LibWebView/PageBackingStores.h>
+#include <LibWebView/PageTranslation.h>
 #include <LibWebView/PermissionManager.h>
 #include <LibWebView/ProcessManager.h>
 #include <LibWebView/ProcessSnapshot.h>
+#include <LibWebView/SessionHistory.h>
 #include <LibWebView/Settings.h>
 #include <LibWebView/Utilities.h>
-#include <LibWebView/PageTranslation.h>
-#include <LibWebView/SessionHistory.h>
-#include <LibUnicode/DisplayNames.h>
 #if defined(ELARIS_HAS_TRANSLATOR)
 #include <UI/Qt/TranslatorMac.h>
 #endif
@@ -186,7 +186,7 @@ class ElarisApplication final : public WebView::Application {
         return Core::Promise<AK::ByteString>::resolved(path.value().string());
     }
     // Set while a screenshot is being saved.
-    bool saving_screenshot { false };
+    bool saving_screenshot{false};
 #if defined(AK_OS_MACOS) || defined(AK_OS_LINUX)
     void resolve_external_url_handler(URL::URL const& url,
                                       WebView::ExternalURLHandlerCallback callback) const override {
@@ -685,7 +685,8 @@ static void emit_translation(ElarisLadybirdView& handle) {
             JsonObject item;
             item.set("language"sv, target.language);
             item.set("label"sv, MUST(String::formatted("Translate to {}", name)));
-            item.set("checked"sv, target_language.has_value() && WebView::is_same_language(*target_language, target.language));
+            item.set("checked"sv,
+                     target_language.has_value() && WebView::is_same_language(*target_language, target.language));
             item.set("download"sv, false);
             item.set("enabled"sv, true);
             MUST(items.append(move(item)));
@@ -701,9 +702,8 @@ static void emit_translation(ElarisLadybirdView& handle) {
             for (auto const& language : target.languages_to_download)
                 download_names.append(language_display_name(language));
             names = MUST(String::join(" and "sv, download_names));
-            if (any_of(target.languages_to_download, [&](auto const& language) {
-                    return WebView::is_same_language(language, target.language);
-                }))
+            if (any_of(target.languages_to_download,
+                       [&](auto const& language) { return WebView::is_same_language(language, target.language); }))
                 suffix = {};
         }
         auto verb = target.downloading ? "Downloading"sv : "Download"sv;
@@ -1573,7 +1573,7 @@ extern "C" int32_t elaris_ladybird_start_download(ElarisLadybird* bridge, char c
 }
 
 extern "C" int32_t elaris_ladybird_start_download_to(ElarisLadybird* bridge, char const* input_url,
-                                                    char const* destination, uint64_t* out_download_id) {
+                                                     char const* destination, uint64_t* out_download_id) {
     if (out_download_id)
         *out_download_id = 0;
     if (!bridge || !input_url || !destination || !destination[0] || !out_download_id)
@@ -2134,19 +2134,19 @@ static AK::JsonObject process_json(ElarisLadybird const& bridge, WebView::Proces
     object.set("kind"sv, WebView::process_name_from_type(process.type));
     object.set("private"sv, process.is_private == WebView::IsPrivate::Yes);
     object.set("title"sv, process.title.has_value() ? AK::JsonValue{process.title->to_utf8()} : AK::JsonValue{});
-    auto has_site = first_is_one_of(process.type, ProcessType::WebContent, ProcessType::RequestServer,
-                                    ProcessType::ImageDecoder);
-    object.set("site"sv, has_site && process.site_url.has_value() ? task_manager_site_label(*process.site_url)
-                                                                   : String{});
-    object.set("owner"sv, process.owner_child_id.has_value() ? AK::JsonValue{*process.owner_child_id} : AK::JsonValue{});
+    auto has_site =
+        first_is_one_of(process.type, ProcessType::WebContent, ProcessType::RequestServer, ProcessType::ImageDecoder);
+    object.set("site"sv,
+               has_site && process.site_url.has_value() ? task_manager_site_label(*process.site_url) : String{});
+    object.set("owner"sv,
+               process.owner_child_id.has_value() ? AK::JsonValue{*process.owner_child_id} : AK::JsonValue{});
     object.set("cpu"sv, static_cast<double>(process.cpu_percent));
     object.set("memory"sv, process.memory_usage_bytes);
     object.set("spare"sv, process.type == ProcessType::WebContent && process.title == "(spare)"_utf16);
     AK::JsonArray tabs;
     for (auto const& tab : process.tabs) {
-        auto view = std::find_if(bridge.views.begin(), bridge.views.end(), [&](auto const* handle) {
-            return handle->view->view_id() == tab.page.view_id;
-        });
+        auto view = std::find_if(bridge.views.begin(), bridge.views.end(),
+                                 [&](auto const* handle) { return handle->view->view_id() == tab.page.view_id; });
         AK::JsonObject entry;
         entry.set("view"sv, view == bridge.views.end() ? 0 : (*view)->id);
         entry.set("title"sv, tab.title.to_utf8());
@@ -2571,8 +2571,8 @@ extern "C" int32_t elaris_ladybird_take_screenshot(ElarisLadybirdView* handle, i
         return fail("view is required");
     if (!on_owner_thread(handle->bridge))
         return fail("screenshots must be taken on the initialization thread");
-    auto type = full ? WebView::ViewImplementation::ScreenshotType::Full
-                     : WebView::ViewImplementation::ScreenshotType::Visible;
+    auto type =
+        full ? WebView::ViewImplementation::ScreenshotType::Full : WebView::ViewImplementation::ScreenshotType::Visible;
     s_application->saving_screenshot = true;
     auto weak_view = handle->view->make_weak_ptr();
     handle->view->take_screenshot(type)

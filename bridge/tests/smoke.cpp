@@ -593,10 +593,11 @@ static bool sleep_and_wake(ElarisLadybird* bridge, EventsByView& events) {
     }
 
     tab = {};
-    passed = check(elaris_ladybird_create_view(bridge, id, &view), "wake view") &&
-             check(elaris_ladybird_resize(view, 400, 300, 1), "resize woken view") &&
-             elaris_ladybird_restore_discarded(view) == 1 &&
-             pump_until(bridge, [&] { return tab.last_title == "Second" && tab.history == ELARIS_LADYBIRD_HISTORY_BACK; });
+    passed =
+        check(elaris_ladybird_create_view(bridge, id, &view), "wake view") &&
+        check(elaris_ladybird_resize(view, 400, 300, 1), "resize woken view") &&
+        elaris_ladybird_restore_discarded(view) == 1 &&
+        pump_until(bridge, [&] { return tab.last_title == "Second" && tab.history == ELARIS_LADYBIRD_HISTORY_BACK; });
     if (!passed)
         std::cerr << "a woken tab should show its page with its history, observed title '" << tab.last_title
                   << "' and history " << tab.history << '\n';
