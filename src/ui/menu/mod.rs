@@ -187,9 +187,6 @@ fn panel(
         .iter()
         .filter(|entry| matches!(entry, Entry::Item(_)))
         .count();
-    let slot = entries
-        .iter()
-        .any(|entry| matches!(entry, Entry::Item(item) if item.has_icon()));
     let stagger = Stagger::new(theme::MENU_ROW_STAGGER);
     let highlighted = highlight::sliding_row(state, key);
     let mut rows = Vec::with_capacity(entries.len());
@@ -211,7 +208,7 @@ fn panel(
             Entry::Item(item) => {
                 let delay = stagger.delay(item_index, items);
                 item_index += 1;
-                item.build(key, index, delay, slot, state, theme)
+                item.build(key, index, delay, state, theme)
             }
             Entry::Separator => el()
                 .key(format!("{key}-sep{index}"))

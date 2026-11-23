@@ -86,7 +86,6 @@ impl MenuItem {
         key: &str,
         index: usize,
         delay: f32,
-        slot: bool,
         state: &AppState,
         theme: &Theme,
     ) -> El {
@@ -139,7 +138,7 @@ impl MenuItem {
         } else {
             theme.text
         };
-        if slot {
+        if self.has_icon() {
             let glyph = match (self.lead, self.animated, self.icon) {
                 (Some(lead), _, _) => Some(lead),
                 (None, Some(animated), _) => Some(animated_icon::glyph(
