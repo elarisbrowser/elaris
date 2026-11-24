@@ -303,19 +303,41 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          path: dist
-          merge-multiple: true
+          name: elaris-macos-arm64
+          path: dist/macos
+      - uses: actions/download-artifact@v4
+        with:
+          name: elaris-linux-x86_64
+          path: dist/linux
 
       - name: Create a draft pre-release with the artifacts
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
+        shell: bash
         run: |
+          shopt -s nullglob
+          mac=(dist/macos/Elaris-*-macos-arm64.dmg)
+          linux=(dist/linux/Elaris-*-linux-x86_64.tar.gz)
+          if (( ${#mac[@]} != 1 || ${#linux[@]} != 1 )); then
+            echo "Expected one macOS DMG and one Linux tarball" >&2
+            exit 1
+          fi
+          mac_package="${mac[0]}"
+          linux_package="${linux[0]}"
+          assets=("$mac_package" "$mac_package.sha256" "${mac_package%.dmg}.BUILD-INFO.txt"
+                  "$linux_package" "$linux_package.sha256" "${linux_package%.tar.gz}.BUILD-INFO.txt")
+          for asset in "${assets[@]}"; do
+            if [[ ! -f "$asset" || ! -s "$asset" ]]; then
+              echo "Missing or empty release asset: $asset" >&2
+              exit 1
+            fi
+          done
           # Drafts stay private until someone checks the artifacts and publishes them by hand.
-          gh release create "$TAG" dist/* \
+          gh release create "$TAG" "${assets[@]}" \
             --draft --prerelease \
             --title "Elaris ${TAG} (experimental alpha)" \
-            --notes "Experimental alpha builds of Elaris. Each archive ships Ladybird's engine; see BUILD-INFO.txt for the exact Elaris, Ladybird and Rune revisions and verify the .sha256 checksum before running."
+            --notes "Experimental alpha builds of Elaris. Each archive ships Ladybird's engine; see the platform's BUILD-INFO.txt file for the exact Elaris, Ladybird and Rune revisions and verify the .sha256 checksum before running."
 
   publish-canary:
     name: Publish rolling canary pre-release
@@ -327,18 +349,40 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          path: dist
-          merge-multiple: true
+          name: elaris-macos-arm64
+          path: dist/macos
+      - uses: actions/download-artifact@v4
+        with:
+          name: elaris-linux-x86_64
+          path: dist/linux
 
       - name: Replace the canary pre-release with tonight's builds
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.sha }}
+        shell: bash
         run: |
+          shopt -s nullglob
+          mac=(dist/macos/Elaris-*-macos-arm64.dmg)
+          linux=(dist/linux/Elaris-*-linux-x86_64.tar.gz)
+          if (( ${#mac[@]} != 1 || ${#linux[@]} != 1 )); then
+            echo "Expected one macOS DMG and one Linux tarball" >&2
+            exit 1
+          fi
+          mac_package="${mac[0]}"
+          linux_package="${linux[0]}"
+          assets=("$mac_package" "$mac_package.sha256" "${mac_package%.dmg}.BUILD-INFO.txt"
+                  "$linux_package" "$linux_package.sha256" "${linux_package%.tar.gz}.BUILD-INFO.txt")
+          for asset in "${assets[@]}"; do
+            if [[ ! -f "$asset" || ! -s "$asset" ]]; then
+              echo "Missing or empty release asset: $asset" >&2
+              exit 1
+            fi
+          done
           # The canary tag always names the newest build, so the previous one is replaced rather than kept.
           gh release delete canary --cleanup-tag --yes 2>/dev/null || true
-          gh release create canary dist/* \
+          gh release create canary "${assets[@]}" \
             --target "$SHA" \
             --prerelease --latest=false \
             --title "Elaris canary ($(date -u +%Y-%m-%d))" \
-            --notes "Built nightly from main at ${SHA:0:7}. Canary builds are unreleased and may break; they share the stable profile, so back up your data first. See BUILD-INFO.txt for the exact revisions and verify the .sha256 checksum before running."
+            --notes "Built nightly from main at ${SHA:0:7}. Canary builds are unreleased and may break; they share the stable profile, so back up your data first. See the platform's BUILD-INFO.txt file for the exact revisions and verify the .sha256 checksum before running."
