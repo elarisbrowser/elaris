@@ -273,12 +273,13 @@ jobs:
           mkdir -p dist
           archive="dist/Elaris-${version}-linux-x86_64.tar.gz"
           # Fixed owners, names and times, and no gzip name or time, so the same build always gives the same archive.
-          epoch="$(git log -1 --format=%ct)"
+          epoch="$(runuser -u elaris-builder -- git log -1 --format=%ct)"
+          ladybird_revision="$(runuser -u elaris-builder -- git rev-parse HEAD:vendor/ladybird)"
           tar -C build/linux --sort=name --owner=0 --group=0 --numeric-owner --mtime="@${epoch}" -cf - Elaris | gzip -n > "$archive"
           cat > dist/BUILD-INFO.txt <<EOF
           Elaris ${version} (Linux x86_64)
           Elaris commit: ${GITHUB_SHA}
-          Ladybird commit: $(git rev-parse HEAD:vendor/ladybird)
+          Ladybird commit: ${ladybird_revision}
           Rune revision: $(grep -m1 'rev = ' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
           Container: ghcr.io/ladybirdbrowser/ladybird-ci:2026.11.12
           EOF
