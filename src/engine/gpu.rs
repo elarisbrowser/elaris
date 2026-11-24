@@ -3,9 +3,10 @@
 //! Page frames Rune's GPU draws in place, with no CPU copy.
 //!
 //! macOS: the bridge copies each frame on the GPU into an IOSurface of its own and the surface is
-//! wrapped for Rune. Rune keeps every surface it has drawn pinned, so it never gets Ladybird's own
-//! backing stores, which the Compositor does not repaint while another process holds them. The
-//! bridge reuses a surface once Rune reports it has drawn a newer frame.
+//! wrapped for Rune. Rune keeps the surfaces it has drawn until its window rests, so it never gets
+//! Ladybird's own backing stores, which the Compositor does not repaint while another process holds
+//! them. The bridge reuses a surface once Rune reports it has drawn a newer frame, and frees its
+//! spare ones once the page stops painting.
 //!
 //! Linux: each frame is the dmabuf of Ladybird's backing store, which Rune copies into a texture of
 //! its own the first time it draws it, and then tells the engine it has read it. Ladybird paints

@@ -339,6 +339,16 @@ class ElarisWebView final : public WebView::HeadlessWebView {
     Elaris::FrameBlitter* blitter() const {
         return m_blitter.get();
     }
+    // Each copy surface is as large as the page, so once the page stops painting only the one on screen is kept.
+    void did_copy_frame() {
+        if (!m_trim_timer) {
+            m_trim_timer = Core::Timer::create_single_shot(BLITTER_IDLE_TRIM, [this] {
+                if (m_blitter)
+                    m_blitter->trim();
+            });
+        }
+        m_trim_timer->restart();
+    }
     bool gpu_frames() const {
         return m_blitter != nullptr;
     }
@@ -412,7 +422,10 @@ class ElarisWebView final : public WebView::HeadlessWebView {
     Gfx::IntRect m_damage;
     uint64_t m_serial{};
 #if defined(AK_OS_MACOS)
+    // How long a page goes without a new frame before its spare copy surfaces are freed.
+    static constexpr auto BLITTER_IDLE_TRIM = AK::Duration::from_seconds(5);
     std::unique_ptr<Elaris::FrameBlitter> m_blitter;
+    RefPtr<Core::Timer> m_trim_timer;
 #endif
 #if defined(AK_OS_LINUX)
     struct HeldStore {
@@ -2878,6 +2891,7 @@ extern "C" int32_t elaris_ladybird_gpu_frame(ElarisLadybirdView* handle, ElarisL
     void* copy = nullptr;
     switch (blitter->copy(source.core_foundation_pointer(), width, height, handle->view->serial(), &copy)) {
     case Elaris::FrameBlitter::Result::Copied:
+        handle->view->did_copy_frame();
         break;
     case Elaris::FrameBlitter::Result::Busy:
         s_last_error.clear();

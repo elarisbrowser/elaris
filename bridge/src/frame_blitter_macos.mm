@@ -146,4 +146,11 @@ void FrameBlitter::release_completed(uint64_t completed_serial) {
     }
 }
 
+void FrameBlitter::trim() {
+    for (auto& slot : m_impl->slots) {
+        if (slot.serial == 0)
+            Impl::discard(slot);
+    }
+}
+
 }
