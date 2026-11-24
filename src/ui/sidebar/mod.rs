@@ -97,6 +97,7 @@ pub(crate) fn view(
         .key("sidebar")
         .w(if collapsed { 0.0 } else { state.sidebar.width })
         .h_full()
+        .window_drag()
         .clip_soft(0.0)
         .pt(theme::HEADER_HEIGHT)
         .on_hover_change(|state: &mut AppState, inside, tx| {

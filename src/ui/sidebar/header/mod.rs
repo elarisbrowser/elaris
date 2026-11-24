@@ -171,6 +171,9 @@ fn header_content(
         .center_y()
         .absolute(0.0, 0.0)
         .window_drag()
+        .on_secondary_press(|state: &mut AppState, press, _| {
+            state.open_context_menu(None, press);
+        })
         .child(lead);
     if state.toolbar_address_bar() {
         header = header.w_full().pr(theme::SIDEBAR_PADDING).child(
