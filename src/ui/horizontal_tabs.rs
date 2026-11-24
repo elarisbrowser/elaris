@@ -204,7 +204,7 @@ pub(super) fn view(
                 .shrink()
                 .h_full()
                 .center_y()
-                .no_window_drag()
+                .window_drag()
                 .scroll_x()
                 .scroll_edge_fade(theme::SIDEBAR_PADDING)
                 .on_layout_tx(move |state: &mut AppState, rect, tx| {

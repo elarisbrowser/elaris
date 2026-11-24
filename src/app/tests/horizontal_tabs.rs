@@ -444,13 +444,25 @@ fn url_bar_edits_in_place_and_anchors_results_below_the_toolbar() {
 #[test]
 fn horizontal_drag_area_keeps_primary_drag_and_secondary_tab_menu() {
     let mut state = AppState::new(Some("one.example"));
+    state.browser.open_tab("two.example").unwrap();
     state.set_tab_layout(TabLayout::Horizontal);
+    let ids: Vec<TabId> = state.browser.tabs().iter().map(Tab::id).collect();
     let mut window = runtime(state, 960.0);
     let strip = rect(&window, horizontal_tabs::SCROLL);
-    let empty_inside = [strip[0] + strip[2] - 8.0, center(strip)[1]];
-    window.pointer_down(empty_inside[0], empty_inside[1]);
+    let first = rect(&window, &horizontal_tabs::key(ids[0]));
+    let second = rect(&window, &horizontal_tabs::key(ids[1]));
+    // The gap between two tabs is empty strip, so it drags the window.
+    let gap = [(first[0] + first[2] + second[0]) / 2.0, center(strip)[1]];
+    window.pointer_down(gap[0], gap[1]);
+    assert!(window.take_titlebar_action().is_some());
+    window.pointer_up(gap[0], gap[1]);
+    window.frame(0.0);
+
+    // A tab keeps its press, so it selects the tab rather than dragging.
+    let on_tab = center(first);
+    window.pointer_down(on_tab[0], on_tab[1]);
     assert_eq!(window.take_titlebar_action(), None);
-    window.pointer_up(empty_inside[0], empty_inside[1]);
+    window.pointer_up(on_tab[0], on_tab[1]);
     window.frame(0.0);
 
     let new_tab = rect(&window, "new-tab");
