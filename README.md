@@ -76,6 +76,36 @@ Run `./elaris check` before opening a pull request. See [CONTRIBUTING.md](CONTRI
 | C++ bridge | [bridge/README.md](bridge/README.md) |
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
 
+## FAQ
+
+### What is Elaris?
+
+Elaris is a cross-platform browser inspired by Arc, built with Rust and Rune. Its browser interface is written in Rune, and web content is powered by Ladybird.
+
+### What browser engine does Elaris use?
+
+Elaris uses LibWeb, the web engine developed by the Ladybird Browser team. Ladybird is pinned to an upstream revision; Elaris keeps its integration code in this repository.
+
+### Who counts as a contributor?
+
+Anyone who helps improve Elaris can contribute. This includes reporting issues with a clear description and steps or examples to reproduce them, improving documentation, fixing bugs, and adding features.
+
+### Is Elaris ready for everyday use?
+
+Elaris is in pre-alpha and under active development. Expect incomplete features, rough edges, and breaking changes.
+
+### Which platforms does Elaris support?
+
+macOS and Linux are first-class development targets. See [Development setup](SETUP.md) for platform requirements and build instructions.
+
+### How can I contribute?
+
+Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [Development setup](SETUP.md). Issues and pull requests are welcome; please run `./elaris check` before opening a pull request.
+
+### Where can I report a bug or request a feature?
+
+Open an issue in the [Elaris GitHub repository](https://github.com/elarisbrowser/elaris/issues). Include clear steps to reproduce a bug and relevant platform details when possible.
+
 ## Support
 
 If you find Elaris useful, you can support its development through [GitHub Sponsors](https://github.com/sponsors/elarisbrowser) or Ko-fi:
