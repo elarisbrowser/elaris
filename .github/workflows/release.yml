@@ -35,6 +35,8 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Install Linux system libraries
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev
       - name: Check formatting, Clippy and tests
         run: |
           cargo fmt -- --check
