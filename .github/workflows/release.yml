@@ -114,10 +114,13 @@ jobs:
           )
 
       - name: Build and bundle Elaris
-        run: ./elaris bundle ${{ inputs.channel == 'canary' && '--canary' || '' }}
+        run: |
+          # An interrupted build can leave a mix of objects from different revisions.
+          rm -f build/cpp-ladybird/elaris-source-revs
+          ./elaris bundle ${{ inputs.channel == 'canary' && '--canary' || '' }}
 
       - name: Record the source revision the build came from
-        # Written only after a successful build, so a failed run keeps the revision of the last good build.
+        # Only a successful build can stamp the objects saved to the cache.
         run: |
           echo "$(git rev-parse HEAD) $(git -C vendor/ladybird rev-parse HEAD)" > build/cpp-ladybird/elaris-source-revs
 
