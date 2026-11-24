@@ -204,7 +204,7 @@ jobs:
           if ! id elaris-builder >/dev/null 2>&1; then
             useradd --create-home --shell /bin/bash elaris-builder
           fi
-          chown -R elaris-builder:elaris-builder "$GITHUB_WORKSPACE"
+          chown -R elaris-builder:elaris-builder "$GITHUB_WORKSPACE" /opt/rustup /opt/cargo
           runuser -u elaris-builder -- git config --global --add safe.directory "$GITHUB_WORKSPACE"
           runuser -u elaris-builder -- ./elaris setup --skip-system-deps
 
