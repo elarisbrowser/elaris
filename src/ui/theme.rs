@@ -458,6 +458,8 @@ pub(crate) const ZOOM_CHIP_WIDTH: f32 = 48.0;
 /// How long the exit hint stays up after a page enters fullscreen.
 pub(crate) const FULLSCREEN_NOTICE_SECONDS: f64 = 4.0;
 pub(crate) const FIND_RADIUS: f32 = radius::LG;
+/// Square icon tile at the head of a permission request.
+pub(crate) const ICON_TILE: f32 = 36.0;
 pub(crate) const FIND_MOTION: Spring = Spring::new(0.22, 0.0);
 pub(crate) const FIND_BUTTON: f32 = 26.0;
 pub(crate) const FIND_PADDING: f32 = 6.0;

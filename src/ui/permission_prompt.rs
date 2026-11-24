@@ -95,47 +95,94 @@ pub(super) fn view(state: &AppState, theme: &Theme, origin: [f32; 2]) -> Option<
             .send(id, ViewCommand::ReplyToPermission { request_id, choice });
     };
     let kit = theme.kit(theme.overlay_panel);
-    let mut actions = row().w_full().justify_end().gap(space::S2);
-    let title = if prompt.os_denied {
-        actions = actions.child(
-            Button::new("OK")
-                .disabled(!armed)
-                .on_press(move |state| answer(state, None))
-                .build(&kit),
-        );
-        format!("System settings block {}", kind.label().to_lowercase())
-    } else {
-        actions = actions
-            .child(
-                Button::new("Block")
-                    .disabled(!armed)
-                    .on_press(move |state| answer(state, Some(false)))
-                    .build(&kit),
-            )
-            .child(
-                Button::new("Allow")
-                    .variant(ButtonVariant::Submit)
-                    .disabled(!armed)
-                    .on_press(move |state| answer(state, Some(true)))
-                    .build(&kit),
-            );
-        format!("Allow access to {}?", kind.label().to_lowercase())
-    };
     let site = if prompt.requesting_origin == prompt.origin {
         prompt.origin.clone()
     } else {
         format!("{} embedded on {}", prompt.requesting_origin, prompt.origin)
     };
-    Some(panel(
+    if prompt.os_denied {
+        let actions = row().w_full().justify_end().child(
+            Button::new("OK")
+                .disabled(!armed)
+                .on_press(move |state| answer(state, None))
+                .build(&kit),
+        );
+        return Some(panel(
+            "website-permission",
+            "Website permission",
+            Some(permission_glyph(kind)),
+            format!("System settings block {}", kind.label().to_lowercase()),
+            site,
+            actions,
+            theme,
+            origin,
+        ));
+    }
+    let allow = Button::new("Allow while visiting the site")
+        .disabled(!armed)
+        .on_press(move |state| answer(state, Some(true)))
+        .build(&kit);
+    let never = Button::new("Never allow")
+        .disabled(!armed)
+        .on_press(move |state| answer(state, Some(false)))
+        .build(&kit);
+    let actions = col()
+        .w_full()
+        .gap(space::S1)
+        .child(col().w_full().child(allow))
+        .child(col().w_full().child(never));
+    Some(prompt_card(
         "website-permission",
         "Website permission",
-        Some(permission_glyph(kind)),
-        title,
-        site,
+        permission_glyph(kind),
+        format!("{site} wants to {}", request_phrase(kind)),
+        "Your system may then ask you to let Elaris use this.".to_owned(),
         actions,
         theme,
         origin,
     ))
+}
+
+/// The permission request card: an icon tile, a bold request line, a muted hint and stacked actions.
+#[allow(clippy::too_many_arguments)]
+fn prompt_card(
+    key: &'static str,
+    label: &'static str,
+    glyph: &'static Icon,
+    title: String,
+    detail: String,
+    actions: El,
+    theme: &Theme,
+    origin: [f32; 2],
+) -> El {
+    let tile = col()
+        .center_y()
+        .w(theme::ICON_TILE)
+        .h(theme::ICON_TILE)
+        .radius(theme::FIND_RADIUS)
+        .fill(theme.overlay_control)
+        .child(rune::icon(glyph, theme::ICON).color(theme.accent));
+    let heading = text(title).font(type_::BODY).color(theme.text).wrap();
+    col()
+        .key(key)
+        .absolute(origin[0] + theme::FIND_INSET, origin[1] + theme::FIND_INSET)
+        .max_w(theme::FIND_WIDTH)
+        .px(space::S3)
+        .py(space::S3)
+        .gap(space::S2)
+        .radius(theme::FIND_RADIUS)
+        .fill(theme.overlay_panel)
+        .border(theme::OMNIBOX_BORDER_WIDTH, theme.overlay_border)
+        .role("group")
+        .label(label)
+        .child(row().center_y().gap(space::S2).child(tile).child(heading))
+        .child(
+            text(detail)
+                .font(type_::LABEL)
+                .color(theme.text_muted)
+                .wrap(),
+        )
+        .child(actions)
 }
 
 fn external_url(state: &AppState, tab: &Tab, theme: &Theme, origin: [f32; 2]) -> Option<El> {
@@ -192,6 +239,15 @@ fn external_url(state: &AppState, tab: &Tab, theme: &Theme, origin: [f32; 2]) ->
         theme,
         origin,
     ))
+}
+
+fn request_phrase(kind: PermissionKind) -> &'static str {
+    match kind {
+        PermissionKind::Microphone => "use your microphone",
+        PermissionKind::Camera => "use your camera",
+        PermissionKind::Location => "know your location",
+        PermissionKind::Notifications => "send you notifications",
+    }
 }
 
 fn permission_glyph(kind: PermissionKind) -> &'static Icon {
