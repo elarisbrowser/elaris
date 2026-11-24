@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Memory Saver's settings: its mode, what it has freed, and the sites it always keeps awake.
+//! Memory Saver's settings: what it has freed, its mode, and the sites it always keeps awake.
 
 use rune::tok::{space, type_};
-use rune::{El, Key, row, text, text_input};
-use rune_kit::{Button, SegmentedControl};
+use rune::{El, Key, col, icon, row, text, text_input};
+use rune_kit::Button;
 
 use crate::app::AppState;
 use crate::ui::components::controls;
@@ -16,43 +16,88 @@ use elaris_memory_saver::MemorySaver;
 
 const SITE_FIELD: &str = "keep-awake-site";
 
+/// Memory Saver's rows for the Performance section.
 pub(super) fn rows(cx: &mut PageContext) -> Vec<El> {
     let mode = cx.state.settings.memory_saver;
-    let control = SegmentedControl::new(
-        &MemorySaver::ALL.map(MemorySaver::label),
-        MemorySaver::ALL.iter().position(|choice| *choice == mode),
-    )
-    .width(Some(theme::PAGE_CONTROL_WIDTH))
-    .label("Memory Saver")
-    .on_pick(|state: &mut AppState, index, _| state.set_memory_saver(MemorySaver::ALL[index]))
-    .build(&cx.kit);
-    let mut rows = vec![setting(
-        cx,
-        "Memory Saver",
-        &format!(
-            "Puts background tabs to sleep to free memory; they pick up where they left off when you return. {}",
-            mode.description()
-        ),
-        control,
-    )];
-    rows.push(setting(cx, "Memory freed", &freed(), el_empty()));
-    rows.push(keep_awake(cx));
-    for site in &cx.state.settings.keep_awake_sites {
-        rows.push(kept_site(site, cx));
+    let mut rows = vec![intro(cx)];
+    rows.extend(modes(mode, cx));
+    // With Memory Saver off no tab sleeps, so there is nothing to keep awake.
+    if mode != MemorySaver::Off {
+        rows.push(keep_awake(cx));
+        for site in &cx.state.settings.keep_awake_sites {
+            rows.push(kept_site(site, cx));
+        }
     }
     rows
 }
 
-/// What sleeping tabs have freed since Elaris started.
-fn freed() -> String {
+/// What Memory Saver does, and what sleeping tabs have freed once any have slept.
+fn intro(cx: &PageContext) -> El {
+    let theme = cx.theme;
+    let mut detail = col().gap(theme::PAGE_ROW_COPY_GAP).child(
+        text("Puts background tabs to sleep to free memory. They pick up where they left off when you return.")
+            .font(type_::BODY)
+            .color(theme.text_muted)
+            .wrap(),
+    );
+    if let Some(freed) = freed() {
+        detail = detail.child(
+            row()
+                .key("memory-freed")
+                .gap(space::S1)
+                .center_y()
+                .child(
+                    icon(&icons::BED, theme::ICON)
+                        .color(theme.icon)
+                        .a11y_hidden(),
+                )
+                .child(text(freed).font(type_::BODY).color(theme.text).wrap()),
+        );
+    }
+    setting_with(cx, "Memory Saver", detail, row())
+}
+
+/// The modes as a list of radio rows, each saying when tabs sleep. The chosen one carries a tick.
+fn modes(mode: MemorySaver, cx: &PageContext) -> Vec<El> {
+    let theme = cx.theme;
+    let count = MemorySaver::ALL.len();
+    MemorySaver::ALL
+        .into_iter()
+        .enumerate()
+        .map(|(index, choice)| {
+            let selected = choice == mode;
+            let tick = rune::canvas(
+                rune::Shape::new()
+                    .stroke(icons::TICK.to_vec(), theme::TICK_STROKE, theme.accent)
+                    .view_box(theme::ICON, theme::ICON),
+            )
+            .size(theme::ICON, theme::ICON)
+            .opacity(if selected { 1.0 } else { 0.0 })
+            .a11y_hidden();
+            setting(cx, choice.label(), choice.description(), tick)
+                .key(format!("memory-saver-{}", choice.label().to_lowercase()))
+                .role("radio")
+                .label(choice.label())
+                .description(choice.description())
+                .checked(selected)
+                .position_in_set(index + 1, count)
+                .focusable(true)
+                .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
+                .on_press(move |state: &mut AppState| state.set_memory_saver(choice))
+        })
+        .collect()
+}
+
+/// What sleeping tabs have freed since Elaris started, once any have slept.
+fn freed() -> Option<String> {
     match crate::app::memory_saver_freed() {
-        (_, 0) => "No tabs have slept since Elaris started.".to_owned(),
-        (0, tabs) => format!("{} slept since Elaris started.", tabs_label(tabs)),
-        (bytes, tabs) => format!(
-            "At least {} freed by putting {} to sleep since Elaris started.",
+        (_, 0) => None,
+        (0, tabs) => Some(format!("{} slept since Elaris started.", tabs_label(tabs))),
+        (bytes, tabs) => Some(format!(
+            "{} freed by putting {} to sleep since Elaris started.",
             elaris_core::processes::format_memory(bytes),
             tabs_label(tabs)
-        ),
+        )),
     }
 }
 
@@ -62,10 +107,6 @@ fn tabs_label(tabs: u64) -> String {
     } else {
         format!("{tabs} tabs")
     }
-}
-
-fn el_empty() -> El {
-    row()
 }
 
 fn keep_awake(cx: &mut PageContext) -> El {
@@ -145,6 +186,17 @@ fn kept_site(site: &str, cx: &PageContext) -> El {
         .w_full()
         .justify_between()
         .center_y()
-        .child(row_title(site, cx.theme))
+        .child(
+            row()
+                .gap(space::S2)
+                .center_y()
+                .min_w(0.0)
+                .child(
+                    icon(&icons::PAGE, theme::ICON)
+                        .color(cx.theme.icon)
+                        .a11y_hidden(),
+                )
+                .child(row_title(site, cx.theme)),
+        )
         .child(remove)
 }
