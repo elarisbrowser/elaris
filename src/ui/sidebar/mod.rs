@@ -124,6 +124,7 @@ fn body(state: &AppState, theme: &Theme, overlays: &mut Vec<El>, reduced_motion:
         .w(state.sidebar.width)
         .grow(1.0)
         .min_h(0.0)
+        .window_drag()
         .px(theme::SIDEBAR_PADDING)
         .pb(theme::VIEWPORT_INSET)
         .gap(theme::SIDEBAR_GAP);

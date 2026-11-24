@@ -287,6 +287,7 @@ fn navigation(
         .px(theme::SIDEBAR_PADDING)
         .gap(theme::NAV_GAP)
         .center_y()
+        .window_drag()
         .children(header::navigation(state, theme))
         .child(super::omnibox::address_bar(
             state, cx, theme, reduced, overlays,
