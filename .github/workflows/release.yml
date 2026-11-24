@@ -115,12 +115,10 @@ jobs:
       - name: Package a disk image and checksums
         run: |
           version="$ELARIS_VERSION"
-          staging="$RUNNER_TEMP/dmg"
-          mkdir -p "$staging" dist
-          cp -R build/Elaris.app "$staging/"
-          ln -s /Applications "$staging/Applications"
+          mkdir -p dist
+          brew install create-dmg
           image="dist/Elaris-${version}-macos-arm64.dmg"
-          hdiutil create -quiet -volname "Elaris" -srcfolder "$staging" -ov -format UDZO "$image"
+          packaging/macos/make-dmg.sh build/Elaris.app "$image" Elaris
           cat > dist/BUILD-INFO.txt <<EOF
           Elaris ${version} (macOS arm64)
           Elaris commit: ${GITHUB_SHA}
