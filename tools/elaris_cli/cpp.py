@@ -61,12 +61,16 @@ def cpp_configure(_args: argparse.Namespace) -> None:
         raise SystemExit(f"elaris: HarfBuzz libraries are missing from {prefix}")
     cmake_prefixes = [str(prefix)]
     cmake_prefixes.extend(path for path in os.environ.get("CMAKE_PREFIX_PATH", "").split(os.pathsep) if path)
+    # Release bundles run on other machines, so they use Ladybird's common CPU baseline instead of the build host's CPU.
+    # Otherwise Rust crates compile for `native`, which differs on each CI runner.
+    baseline = ["-DLADYBIRD_BASELINE_CPU_TARGET=ON"] if os.environ.get("ELARIS_BASELINE_CPU") == "1" else []
     run_step(
         "Bridge configuration", "cmake", "-S", str(ENGINE), "-B", str(CPP_BUILD_DIR), "-G", "Ninja",
         # Ladybird's own Release preset; without a build type everything compiles unoptimised.
         "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON", "-DENABLE_GUI_TARGETS=ON",
         "-DELARIS_BUILD_SMOKE_TESTS=ON",
+        *baseline,
         f"-DVCPKG_INSTALLED_DIR={VCPKG_INSTALLED}",
         f"-DVCPKG_TARGET_TRIPLET={triplet}",
         f"-DELARIS_VCPKG_PREFIX={prefix}",
