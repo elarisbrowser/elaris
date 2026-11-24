@@ -16,27 +16,38 @@ Requirements: macOS 14.4 or newer, on an Apple Silicon Mac. Intel Macs are not s
 
 ## Linux (x86_64)
 
-Requirements: a 64-bit x86 Linux desktop with a Vulkan driver (the system's GPU driver, or Mesa). Other architectures are
-not built.
+Requirements: a 64-bit x86 Linux desktop with glibc 2.43 or newer and a Vulkan driver (the system's GPU driver or Mesa).
+Ubuntu 24.04 does not meet the glibc requirement. Other architectures are not built.
 
-1. Extract the archive into your home directory:
-
-   ```sh
-   tar -xzf Elaris-<version>-linux-x86_64.tar.gz -C ~/.local/share
-   ```
-
-2. Link the launcher and command into your local prefix:
+1. Extract the archive into a separate application directory, outside your browser profile. Replace `<version>` with the
+   version in the filename.
 
    ```sh
-   mkdir -p ~/.local/bin
-   ln -sf ~/.local/share/Elaris/bin/elaris ~/.local/bin/elaris
-   cp -R ~/.local/share/Elaris/share/. ~/.local/share/
-   update-desktop-database ~/.local/share/applications
+   install_root="$HOME/.local/opt"
+   mkdir -p "$install_root"
+   tar -xzf "Elaris-<version>-linux-x86_64.tar.gz" -C "$install_root"
    ```
 
-   Make sure `~/.local/bin` is on your `PATH`. Elaris then appears in your application menu.
+2. Launch the browser:
 
-3. Run `elaris`, or `elaris https://example.com` to open a page.
+   ```sh
+   "$HOME/.local/opt/Elaris/bin/elaris"
+   ```
+
+3. Optional: add the terminal command and desktop entry.
+
+   ```sh
+   install_dir="$HOME/.local/opt/Elaris"
+   data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
+   mkdir -p "$HOME/.local/bin" "$data_home/applications" "$data_home/icons"
+   ln -sf "$install_dir/bin/elaris" "$HOME/.local/bin/elaris"
+   cp "$install_dir/share/applications/org.elarisbrowser.Elaris.desktop" "$data_home/applications/"
+   cp -R "$install_dir/share/icons/." "$data_home/icons/"
+   ```
+
+   The desktop entry runs `elaris` from your desktop session's `PATH`. Make sure that `$HOME/.local/bin` is
+   on that path before launching from the application menu. If it isn't, use the direct command in step 2.
 
 The archive bundles Elaris's own libraries and Ladybird's engine. It uses the system's C library, C++ runtime, and
-graphics stack.
+graphics stack. Your profile stays in `${XDG_DATA_HOME:-$HOME/.local/share}/Elaris`, separate from the install.
+If you used the previous instructions, leave that data directory in place when installing to the new location.
