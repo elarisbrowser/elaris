@@ -118,11 +118,19 @@ pub(super) fn view(state: &AppState, theme: &Theme, origin: [f32; 2]) -> Option<
             origin,
         ));
     }
-    let allow = Button::new("Allow while visiting the site")
+    let (allow_label, block_label) = if state.browser.private {
+        (
+            "Allow for this private session",
+            "Block for this private session",
+        )
+    } else {
+        ("Always allow", "Never allow")
+    };
+    let allow = Button::new(allow_label)
         .disabled(!armed)
         .on_press(move |state| answer(state, Some(true)))
         .build(&kit);
-    let never = Button::new("Never allow")
+    let block = Button::new(block_label)
         .disabled(!armed)
         .on_press(move |state| answer(state, Some(false)))
         .build(&kit);
@@ -130,7 +138,7 @@ pub(super) fn view(state: &AppState, theme: &Theme, origin: [f32; 2]) -> Option<
         .w_full()
         .gap(space::S1)
         .child(col().w_full().child(allow))
-        .child(col().w_full().child(never));
+        .child(col().w_full().child(block));
     Some(prompt_card(
         "website-permission",
         "Website permission",
