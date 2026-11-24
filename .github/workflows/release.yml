@@ -42,6 +42,8 @@ jobs:
           cargo fmt -- --check
           cargo clippy --all-targets --locked -- -D warnings
           cargo test --locked
+      - name: Test release engine cache routing and manifest validation
+        run: python3 -m unittest discover -s tools/tests -p test_release_engine.py
 
   macos:
     name: macOS bundle (Apple Silicon)
@@ -105,11 +107,37 @@ jobs:
             echo "ELARIS_VERSION=${GITHUB_REF_NAME:-dev}" >> "$GITHUB_ENV"
           fi
 
+      - name: Identify exact Ladybird build inputs
+        id: engine-key
+        run: |
+          key="$(python3 -m tools.elaris_cli.release_engine prepare)"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Restore exact Ladybird release outputs
+        id: engine-cache
+        if: ${{ steps.engine-key.outputs.key != '' }}
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: build/release-engine-cache
+          key: ${{ steps.engine-key.outputs.key }}
+
       - name: Build and bundle Elaris
         id: bundle
+        shell: bash
+        env:
+          ENGINE_KEY: ${{ steps.engine-key.outputs.key }}
+          ENGINE_CACHE_HIT: ${{ steps.engine-cache.outputs.cache-hit }}
         run: |
           ccache --zero-stats
-          ./elaris bundle ${{ inputs.channel == 'canary' && '--canary' || '' }}
+          cache_args=()
+          if [ -n "$ENGINE_KEY" ]; then
+            cache_args+=(--release-engine-cache-key "$ENGINE_KEY")
+          fi
+          if [ "$ENGINE_CACHE_HIT" = true ]; then
+            cache_args+=(--release-engine-cache-hit)
+          fi
+          ./elaris bundle "${cache_args[@]}" ${{ inputs.channel == 'canary' && '--canary' || '' }}
 
       - name: Report compiler cache hits
         if: ${{ always() && (steps.bundle.outcome == 'success' || steps.bundle.outcome == 'failure') }}
@@ -136,6 +164,13 @@ jobs:
             exit 1
           fi
 
+      - name: Save verified Ladybird release outputs
+        if: ${{ steps.engine-key.outputs.key != '' && steps.engine-cache.outputs.cache-hit != 'true' && hashFiles('build/release-engine-cache/manifest.json') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: build/release-engine-cache
+          key: ${{ steps.engine-key.outputs.key }}
+
       - name: Package a disk image and checksums
         run: |
           version="$ELARIS_VERSION"
@@ -150,6 +185,11 @@ jobs:
           Rune revision: $(grep -m1 'rev = ' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
           Xcode: $(xcodebuild -version | tr '\n' ' ')
           EOF
+          if [ -f build/release-engine-info.txt ]; then
+            cat build/release-engine-info.txt >> dist/BUILD-INFO.txt
+          else
+            echo "Native engine: built natively (exact cache unavailable)" >> dist/BUILD-INFO.txt
+          fi
           (cd dist && shasum -a 256 "$(basename "$image")" > "$(basename "$image").sha256")
           cp dist/BUILD-INFO.txt dist/Elaris-${version}-macos-arm64.BUILD-INFO.txt
 
@@ -179,6 +219,7 @@ jobs:
     timeout-minutes: 300
     env:
       ELARIS_BASELINE_CPU: "1"
+      ELARIS_RELEASE_IMAGE: ghcr.io/ladybirdbrowser/ladybird-ci:2026.11.12
       CCACHE_COMPILERCHECK: content
       # Hash preprocessed inputs: new or removed headers must invalidate previous results too.
       CCACHE_NODIRECT: "true"
@@ -236,11 +277,38 @@ jobs:
           runuser -u elaris-builder -- git config --global --add safe.directory "$GITHUB_WORKSPACE"
           runuser -u elaris-builder -- ./elaris setup --skip-system-deps
 
+      - name: Identify exact Ladybird build inputs
+        id: engine-key
+        run: |
+          key="$(runuser -u elaris-builder -- python3 -m tools.elaris_cli.release_engine prepare)"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Restore exact Ladybird release outputs
+        id: engine-cache
+        if: ${{ steps.engine-key.outputs.key != '' }}
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: build/release-engine-cache
+          key: ${{ steps.engine-key.outputs.key }}
+
       - name: Build and bundle Elaris
         id: bundle
+        shell: bash
+        env:
+          ENGINE_KEY: ${{ steps.engine-key.outputs.key }}
+          ENGINE_CACHE_HIT: ${{ steps.engine-cache.outputs.cache-hit }}
         run: |
           runuser -u elaris-builder -- env CCACHE_DIR="$CCACHE_DIR" ccache --zero-stats
-          runuser -u elaris-builder -- env CCACHE_DIR="$CCACHE_DIR" ELARIS_JOBS=4 ./elaris bundle ${{ inputs.channel == 'canary' && '--canary' || '' }}
+          cache_args=()
+          if [ -n "$ENGINE_KEY" ]; then
+            cache_args+=(--release-engine-cache-key "$ENGINE_KEY")
+          fi
+          if [ "$ENGINE_CACHE_HIT" = true ] && [ -d build/release-engine-cache ]; then
+            chown -R elaris-builder:elaris-builder build/release-engine-cache
+            cache_args+=(--release-engine-cache-hit)
+          fi
+          runuser -u elaris-builder -- env CCACHE_DIR="$CCACHE_DIR" ELARIS_JOBS=4 ./elaris bundle "${cache_args[@]}" ${{ inputs.channel == 'canary' && '--canary' || '' }}
 
       - name: Report compiler cache hits
         if: ${{ always() && (steps.bundle.outcome == 'success' || steps.bundle.outcome == 'failure') }}
@@ -267,6 +335,13 @@ jobs:
           xvfb-run --auto-servernum "$relocated/Elaris/bin/elaris" "file://$GITHUB_WORKSPACE/bridge/tests/smoke.html" -- --snap "$RUNNER_TEMP/smoke.png"
           test -s "$RUNNER_TEMP/smoke.png"
 
+      - name: Save verified Ladybird release outputs
+        if: ${{ steps.engine-key.outputs.key != '' && steps.engine-cache.outputs.cache-hit != 'true' && hashFiles('build/release-engine-cache/manifest.json') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: build/release-engine-cache
+          key: ${{ steps.engine-key.outputs.key }}
+
       - name: Package the tarball and checksums
         run: |
           version="$ELARIS_VERSION"
@@ -283,6 +358,11 @@ jobs:
           Rune revision: $(grep -m1 'rev = ' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
           Container: ghcr.io/ladybirdbrowser/ladybird-ci:2026.11.12
           EOF
+          if [ -f build/release-engine-info.txt ]; then
+            cat build/release-engine-info.txt >> dist/BUILD-INFO.txt
+          else
+            echo "Native engine: built natively (exact cache unavailable)" >> dist/BUILD-INFO.txt
+          fi
           cp dist/BUILD-INFO.txt "dist/Elaris-${version}-linux-x86_64.BUILD-INFO.txt"
           (cd dist && sha256sum "$(basename "$archive")" > "$(basename "$archive").sha256")
 

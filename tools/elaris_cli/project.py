@@ -128,18 +128,62 @@ def _configure_bridge_environment(bridge_dir: str) -> None:
 
 def bundle(args: argparse.Namespace) -> None:
     """Build an optimised Elaris and package it with Ladybird's engine and the brand icon for this platform."""
-    build(argparse.Namespace(ui=False, rust=False, ladybird=False, release=True, jobs=None))
+    cache_key = getattr(args, "release_engine_cache_key", None)
+    cache_hit = getattr(args, "release_engine_cache_hit", False)
+    manifest = None
+    if cache_hit and not cache_key:
+        raise SystemExit("elaris: a release engine cache hit requires a key")
+    if cache_key is not None:
+        from . import release_engine
+
+        if cache_key != release_engine.key():
+            raise SystemExit("elaris: native build inputs changed after identifying the release engine")
+        if cache_hit:
+            try:
+                manifest = release_engine.restore(cache_key)
+            except (OSError, ValueError, TypeError, KeyError) as error:
+                ui.muted(f"Invalid release engine cache; compiling natively: {error}")
+        if manifest is None:
+            ui.muted("No usable release engine cache; compiling natively.")
+            os.environ["ELARIS_RELEASE_HSTS_DIR"] = str(release_engine.HSTS_FILE.parent)
+            try:
+                engine.build_for_elaris()
+            finally:
+                os.environ.pop("ELARIS_RELEASE_HSTS_DIR", None)
+        else:
+            ui.muted(f"Reusing release engine built at {manifest['producer']}.")
+        _configure_bridge_environment(bridge_lib_dir())
+        run_step("Elaris browser", "cargo", "+stable", "build", "--locked", "--release", "--features", "ladybird-bridge")
+    else:
+        build(argparse.Namespace(ui=False, rust=False, ladybird=False, release=True, jobs=None))
     executable = _executable("release")
     if sys.platform == "darwin":
-        bundled = packaging.macos_release_bundle(executable, "canary" if args.canary else "stable")
+        bundled = packaging.macos_release_bundle(
+            executable, "canary" if args.canary else "stable", fresh=cache_key is not None,
+        )
         ui.success(f"Bundled {bundled.parents[2]}")
     elif sys.platform.startswith("linux"):
         prefix = ROOT / "build" / "linux" / "Elaris"
-        packaging.linux_prefix_bundle(executable, prefix)
+        packaging.linux_prefix_bundle(executable, prefix, fresh=cache_key is not None)
         ui.success(f"Bundled {prefix}")
         ui.info(f"Install with: cp -R {prefix}/. ~/.local/  (then run update-desktop-database ~/.local/share/applications)")
     else:
         raise SystemExit("elaris: bundle supports macOS and Linux")
+
+
+    if cache_key is not None:
+        if manifest is not None:
+            release_engine.write_build_info(cache_key, "reused exact output", manifest)
+        else:
+            state = "built natively"
+            try:
+                manifest = release_engine.export(cache_key)
+            except (OSError, ValueError) as error:
+                # An unusual native layout must not cause an otherwise valid release to fail.
+                ui.muted(f"Not saving release engine outputs: {error}")
+                state = "built natively; not cached"
+                manifest = release_engine.provenance()
+            release_engine.write_build_info(cache_key, state, manifest)
 
 
 def launch(args: argparse.Namespace) -> None:
@@ -376,6 +420,8 @@ def register_commands(commands) -> None:
                 help="Skip package manager installs but still verify required tools",
             )
         elif handler is bundle:
+            subcommand.add_argument("--release-engine-cache-key", help=argparse.SUPPRESS)
+            subcommand.add_argument("--release-engine-cache-hit", action="store_true", help=argparse.SUPPRESS)
             subcommand.add_argument(
                 "--canary", action="store_true", help="Name the build as canary, with the yellow icon (macOS)"
             )

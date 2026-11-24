@@ -17,14 +17,28 @@ publishes the draft by hand.
 
 ## Fast rebuilds
 
-Each platform job restores the previous build's caches before building, so a release only rebuilds what changed:
+The macOS arm64 and Linux x86_64 Release jobs look for an **exact** cache of the compiled, patched Ladybird
+engine. A hit skips the native build and keeps only its helpers, shared libraries, resources and macOS signing
+entitlements; it never restores CMake, Ninja, Cargo, a previous .app, or a previous Linux install prefix.
+Elaris is built from the current Rust sources and bundled fresh on every release. Existing signing, relocation
+checks and smoke tests still run.
 
-- **Ladybird dependencies** (vcpkg packages and `ladybird.py deps`) are skipped when `build/…/elaris-dependencies.stamp`
-  matches the fingerprint of the pinned revision, `bridge/patches/`, and the vcpkg manifests. Changing any of these rebuilds them.
-- **The Elaris bridge and helpers** always go through CMake and Ninja, which rebuild only changed files.
-- **The app bundle** is reused when only Elaris's own code changed. On macOS the executable is swapped and re-signed. On
-  Linux the prefix is kept and only the executable and any newly needed libraries are refreshed. Either path falls back
-  to a full assembly when the engine changed.
+- The engine key covers the Ladybird pin, bridge and native build inputs, portable CPU flags, runner toolchain
+  and ABI, and the Chromium HSTS preload data CMake embeds. A normal Rust-only edit does not invalidate it,
+  but changing the Cargo package version does because LibWebView embeds that version.
+- If the engine key is missing, the existing build runs with the usual compiler and vcpkg caches. If a restored
+  engine is incomplete or corrupt, the workflow logs why and builds native code instead. Use **Actions →
+  Caches** to remove a bad exact key before warming it again; GitHub cannot overwrite an existing key.
+- When changing the Ladybird pin, re-audit upstream mutable build inputs and update the audited pin in
+  `tools/elaris_cli/release_engine.py`. Until then, or when the HSTS fetch is unavailable, Release runs normally
+  without exact engine reuse.
+- To prime the cache for future tags, manually run Release on trusted `main` without publishing. Separate
+  tags cannot share each other's GitHub Actions caches. The first run is cold; runner/SDK and preload updates
+  may also cause later misses.
+
+`BUILD-INFO.txt` reports whether the engine was compiled or reused, its input key and preload hash, and the
+producer commit and Actions run where available. A changed checksum or fresh bundle name alone does not prove
+the engine was rebuilt.
 
 ## Before tagging: third-party notices
 
