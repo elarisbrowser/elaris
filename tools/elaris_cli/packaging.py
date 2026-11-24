@@ -8,7 +8,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from . import ui
+from . import engine, ui
 from .common import ENGINE, ROOT, VCPKG_INSTALLED, run, vcpkg_triplet
 
 ASSETS = ROOT / "assets"
@@ -254,29 +254,39 @@ def linux_prefix_bundle(executable: Path, prefix: Path) -> Path:
     if shutil.which("patchelf") is None:
         raise SystemExit("elaris: patchelf is required to bundle Linux libraries; install it and rerun ./elaris bundle")
 
-    # Assembled from scratch each time, so no stale library or helper survives a rebuild.
-    if prefix.exists():
-        shutil.rmtree(prefix)
     installed = prefix / "bin" / executable.name
-    installed.parent.mkdir(parents=True)
-    shutil.copy2(executable, installed)
     helpers = sorted(path for path in (ENGINE_BUILD / "libexec").iterdir() if path.is_file())
-    (prefix / "libexec").mkdir()
-    for helper in helpers:
-        shutil.copy2(helper, prefix / "libexec" / helper.name)
     library_directory = prefix / "lib"
-    _copy_linux_libraries([installed, *(prefix / "libexec" / helper.name for helper in helpers)], library_directory)
+    if _linux_engine_key() == _read_stamp(LINUX_BUNDLE_STAMP) and installed.parent.is_dir():
+        # The engine did not change, so the prefix stays and only Elaris's executable and any libraries it newly needs
+        # are refreshed. Its helpers and resources are the same files as before.
+        shutil.copy2(executable, installed)
+        _copy_linux_libraries([installed], library_directory)
+    else:
+        # Assembled from scratch, so no stale library or helper survives an engine rebuild. The stamp goes first, so an
+        # interrupted assembly cannot pass for a complete one.
+        LINUX_BUNDLE_STAMP.unlink(missing_ok=True)
+        if prefix.exists():
+            shutil.rmtree(prefix)
+        installed.parent.mkdir(parents=True)
+        shutil.copy2(executable, installed)
+        (prefix / "libexec").mkdir()
+        for helper in helpers:
+            shutil.copy2(helper, prefix / "libexec" / helper.name)
+        _copy_linux_libraries([installed, *(prefix / "libexec" / helper.name for helper in helpers)], library_directory)
 
-    shutil.copytree(ENGINE_BUILD / "share" / "Lagom", prefix / "share" / "Lagom")
-    applications = prefix / "share" / "applications"
-    applications.mkdir(parents=True)
-    shutil.copy2(LINUX_ASSETS / f"{APP_ID}.desktop", applications / f"{APP_ID}.desktop")
-    icon_root = LINUX_ASSETS / "icons"
-    for source in icon_root.rglob("*"):
-        if source.is_file():
-            destination = prefix / "share" / "icons" / source.relative_to(icon_root)
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, destination)
+        shutil.copytree(ENGINE_BUILD / "share" / "Lagom", prefix / "share" / "Lagom")
+        applications = prefix / "share" / "applications"
+        applications.mkdir(parents=True)
+        shutil.copy2(LINUX_ASSETS / f"{APP_ID}.desktop", applications / f"{APP_ID}.desktop")
+        icon_root = LINUX_ASSETS / "icons"
+        for source in icon_root.rglob("*"):
+            if source.is_file():
+                destination = prefix / "share" / "icons" / source.relative_to(icon_root)
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, destination)
+        LINUX_BUNDLE_STAMP.parent.mkdir(parents=True, exist_ok=True)
+        LINUX_BUNDLE_STAMP.write_text(_linux_engine_key())
 
     run_path = {installed: "$ORIGIN/../lib"}
     run_path.update({prefix / "libexec" / helper.name: "$ORIGIN/../lib" for helper in helpers})
@@ -285,6 +295,22 @@ def linux_prefix_bundle(executable: Path, prefix: Path) -> Path:
         subprocess.run(["patchelf", "--set-rpath", origin, str(binary)], check=True)
     _verify_linux_prefix(prefix)
     return installed
+
+
+# What the last full Linux prefix was assembled from. A matching key lets the next bundle skip the engine copy.
+LINUX_BUNDLE_STAMP = ROOT / "build" / "linux" / "Elaris.stamp"
+
+
+def _read_stamp(path: Path) -> str:
+    return path.read_text() if path.is_file() else ""
+
+
+def _linux_engine_key() -> str:
+    """The engine's inputs to the Linux prefix: its dependency fingerprint and when its helpers and bridge last changed."""
+    helpers = [path for path in (ENGINE_BUILD / "libexec").iterdir() if path.is_file()]
+    bridge = list((ENGINE_BUILD / "lib").glob("libelaris_ladybird.*"))
+    newest = max((path.stat().st_mtime_ns for path in helpers + bridge), default=0)
+    return f"{engine.dependencies_fingerprint()} {newest}"
 
 
 def _verify_linux_prefix(prefix: Path) -> None:

@@ -71,9 +71,11 @@ jobs:
             vendor/ladybird/Build
             build/cpp-ladybird
             target
-          key: release-macos-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json') }}-${{ github.run_id }}
+            build/Elaris.app
+            build/Elaris.app.stamp
+          key: release-macos-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'bridge/patches/**') }}-${{ github.run_id }}
           restore-keys: |
-            release-macos-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json') }}-
+            release-macos-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'bridge/patches/**') }}-
             release-macos-
 
       - name: Name this build
@@ -102,7 +104,9 @@ jobs:
             vendor/ladybird/Build
             build/cpp-ladybird
             target
-          key: release-macos-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json') }}-${{ github.run_id }}
+            build/Elaris.app
+            build/Elaris.app.stamp
+          key: release-macos-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'bridge/patches/**') }}-${{ github.run_id }}
 
       - name: Verify the bundle is self-contained
         run: |
@@ -174,9 +178,10 @@ jobs:
             vendor/ladybird/Build
             build/cpp-ladybird
             target
-          key: release-linux-x64-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json') }}-${{ github.run_id }}
+            build/linux
+          key: release-linux-x64-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'bridge/patches/**') }}-${{ github.run_id }}
           restore-keys: |
-            release-linux-x64-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json') }}-
+            release-linux-x64-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'bridge/patches/**') }}-
             release-linux-x64-
 
       - name: Name this build
@@ -212,7 +217,8 @@ jobs:
             vendor/ladybird/Build
             build/cpp-ladybird
             target
-          key: release-linux-x64-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json') }}-${{ github.run_id }}
+            build/linux
+          key: release-linux-x64-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'bridge/patches/**') }}-${{ github.run_id }}
 
       - name: Smoke test the packaged browser
         run: |

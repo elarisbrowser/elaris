@@ -15,6 +15,17 @@ publishes the draft by hand.
 
 `workflow_dispatch` runs the same jobs for a chosen branch and uploads the artifacts without creating a release.
 
+## Fast rebuilds
+
+Each platform job restores the previous build's caches before building, so a release only rebuilds what changed:
+
+- **Ladybird dependencies** (vcpkg packages and `ladybird.py deps`) are skipped when `build/…/elaris-dependencies.stamp`
+  matches the fingerprint of the pinned revision, `bridge/patches/`, and the vcpkg manifests. Changing any of these rebuilds them.
+- **The Elaris bridge and helpers** always go through CMake and Ninja, which rebuild only changed files.
+- **The app bundle** is reused when only Elaris's own code changed. On macOS the executable is swapped and re-signed. On
+  Linux the prefix is kept and only the executable and any newly needed libraries are refreshed. Either path falls back
+  to a full assembly when the engine changed.
+
 ## Before tagging: third-party notices
 
 `THIRD_PARTY_NOTICES.md` covers the Rust crates and the bundled C++ components of both platforms. The Linux bundle is
