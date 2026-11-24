@@ -93,8 +93,33 @@ jobs:
       - name: Set up Elaris and Ladybird
         run: ./elaris setup
 
+      - name: Make restored objects fresh for unchanged sources
+        # Checkout gives every source a new mtime, which would make Ninja rebuild the whole restored build. Sources
+        # start older than the cache, then the files changed since the cached build are touched so they rebuild.
+        run: |
+          stamp=build/cpp-ladybird/elaris-source-revs
+          test -f "$stamp" || { echo "No cached build revision; building from scratch"; exit 0; }
+          read -r cached_top cached_ladybird < "$stamp"
+          if ! git cat-file -e "${cached_top}^{commit}" 2>/dev/null ||
+             ! git -C vendor/ladybird cat-file -e "${cached_ladybird}^{commit}" 2>/dev/null; then
+            echo "Cached revision is not in this history; building from scratch"
+            exit 0
+          fi
+          git ls-files -z | xargs -0 touch -t 200001010000
+          git diff -z --name-only "$cached_top" HEAD | xargs -0 -r touch -c
+          (
+            cd vendor/ladybird
+            git ls-files -z | xargs -0 touch -t 200001010000
+            git diff -z --name-only "$cached_ladybird" HEAD | xargs -0 -r touch -c
+          )
+
       - name: Build and bundle Elaris
         run: ./elaris bundle ${{ inputs.channel == 'canary' && '--canary' || '' }}
+
+      - name: Record the source revision the build came from
+        # Written only after a successful build, so a failed run keeps the revision of the last good build.
+        run: |
+          echo "$(git rev-parse HEAD) $(git -C vendor/ladybird rev-parse HEAD)" > build/cpp-ladybird/elaris-source-revs
 
       - name: Save Ladybird dependency and build caches
         if: always()
