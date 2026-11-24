@@ -29,7 +29,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=ELARIS_LADYBIRD_LIB_DIR");
 }
 
-/// Records the committed Elaris, Ladybird and Rune revisions for the About settings.
+/// Records the committed Elaris, Ladybird and Rune revisions shown at the foot of Settings.
 ///
 /// Ladybird's master has no version number of its own, so Elaris identifies it by the pinned
 /// commit and that commit's date. Each value is empty when Git can't tell, such as in a source

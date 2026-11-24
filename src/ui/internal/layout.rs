@@ -18,6 +18,8 @@ pub(super) struct PageLayout {
     /// Category navigation: a sticky column beside the content, or a row in the toolbar when
     /// the pane is too narrow for both.
     pub(super) nav: Option<El>,
+    /// Quiet text pinned to the bottom right of the page, outside the scrolling content.
+    pub(super) footnote: Option<String>,
     pub(super) content: El,
 }
 
@@ -28,6 +30,7 @@ impl PageLayout {
             icon,
             toolbar: None,
             nav: None,
+            footnote: None,
             content,
         }
     }
@@ -39,6 +42,11 @@ impl PageLayout {
 
     pub(super) fn nav(mut self, nav: El) -> Self {
         self.nav = Some(nav);
+        self
+    }
+
+    pub(super) fn footnote(mut self, footnote: String) -> Self {
+        self.footnote = Some(footnote);
         self
     }
 
@@ -99,6 +107,20 @@ impl PageLayout {
                     })
                     .child(centered(body, width)),
             )
+            .children(self.footnote.map(|footnote| {
+                row()
+                    .key("internal-page-footnote")
+                    .w_full()
+                    .justify_end()
+                    .px(theme::PAGE_GROUP_PADDING)
+                    .py(space::S2)
+                    .child(
+                        text(footnote)
+                            .font(theme::PAGE_FOOTNOTE)
+                            .color(theme.text_muted)
+                            .selectable(true),
+                    )
+            }))
     }
 }
 

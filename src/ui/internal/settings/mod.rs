@@ -5,13 +5,13 @@
 //! To add a category, write a module whose `sections` returns its sections and list it in
 //! [`CATEGORIES`].
 
-mod about;
 mod appearance;
 mod browsing;
 mod keyboard;
 mod memory;
 mod privacy;
 mod system;
+mod versions;
 
 use rune::El;
 
@@ -42,7 +42,7 @@ struct Category {
     sections: fn(&mut PageContext) -> Vec<El>,
 }
 
-static CATEGORIES: [Category; 6] = [
+static CATEGORIES: [Category; 5] = [
     Category {
         nav: NavItem {
             key: "settings-look",
@@ -88,15 +88,6 @@ static CATEGORIES: [Category; 6] = [
         },
         sections: system::sections,
     },
-    Category {
-        nav: NavItem {
-            key: "settings-about",
-            title: "About Elaris",
-            short: "About",
-            icon: &icons::INFO,
-        },
-        sections: about::sections,
-    },
 ];
 
 pub(super) fn view(cx: &mut PageContext) -> PageLayout {
@@ -119,6 +110,7 @@ pub(super) fn view(cx: &mut PageContext) -> PageLayout {
         widgets::category(current.nav.key, current.nav.title, sections, cx.theme),
     )
     .nav(nav)
+    .footnote(versions::summary())
 }
 
 /// A settings section, keyed by its title so tests and focus can find it.
