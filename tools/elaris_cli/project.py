@@ -35,10 +35,15 @@ def _executable(profile: str) -> Path:
     return ROOT / "target" / profile / ("elaris.exe" if os.name == "nt" else "elaris")
 
 
+def _build_stamp(ui_only: bool, profile: str) -> Path:
+    """Touched after a successful build. Outputs keep their mtime when nothing needed relinking, so they cannot mark it."""
+    return ROOT / "target" / profile / f"elaris-{'ui' if ui_only else 'bridge'}-build.stamp"
+
+
 def _run_artifacts_are_current(ui_only: bool, profile: str = "debug") -> bool:
-    """Return whether a previous run's executable and (when enabled) bridge are current."""
-    executable = _executable(profile)
-    if not executable.is_file():
+    """Return whether a previous build's executable and (when enabled) bridge are current."""
+    stamp = _build_stamp(ui_only, profile)
+    if not (_executable(profile).is_file() and stamp.is_file()):
         return False
 
     # Only what the build compiles in. The Python CLI under tools/ is not, and since a CLI-only change never
@@ -56,9 +61,7 @@ def _run_artifacts_are_current(ui_only: bool, profile: str = "debug") -> bool:
         inputs.extend((ROOT / "bridge" / "CMakeLists.txt", ROOT / "bridge" / "Peek.cmake"))
 
     newest_input = max((path.stat().st_mtime_ns for path in inputs if path.is_file()), default=0)
-    if executable.stat().st_mtime_ns < newest_input:
-        return False
-    return ui_only or bridge.stat().st_mtime_ns >= newest_input
+    return stamp.stat().st_mtime_ns >= newest_input
 
 
 def setup(args: argparse.Namespace) -> None:
@@ -93,6 +96,7 @@ def build(args: argparse.Namespace) -> None:
         run_step("Elaris browser", "cargo", "+stable", "build", "--locked", *release, "--features", "ladybird-bridge")
     else:
         run_step("Elaris interface", "cargo", "+stable", "build", "--locked", *release)
+    _build_stamp(not build_ladybird, _profile(args)).touch()
 
 
 def format_sources(_args: argparse.Namespace) -> None:
@@ -213,22 +217,22 @@ def launch(args: argparse.Namespace) -> None:
             *(["--args", *extra] if extra else []),
         )
         return
-    if not args.linux_ui and _run_artifacts_are_current(ui_only, profile):
-        executable = _executable(profile)
-        command = [str(executable)]
+    if not args.linux_ui:
+        if not _run_artifacts_are_current(ui_only, profile):
+            build(argparse.Namespace(ui=ui_only, rust=False, ladybird=False, release=args.release, jobs=args.jobs))
+        if not ui_only:
+            _configure_bridge_environment(bridge_lib_dir())
+        command = [str(_executable(profile))]
         if args.url:
             command.append(args.url)
         command.extend(args.rune_args)
         run(*command)
         return
-    command = ["cargo", "+stable", "run", "--locked", *release]
-    if args.linux_ui:
-        # A separate target directory keeps this build's executable apart from the normal interface build.
-        command += ["--features", "linux-ui", "--target-dir", str(ROOT / "target" / "linux-ui")]
-    elif not ui_only:
-        engine.build_for_elaris(args.jobs)
-        _configure_bridge_environment(bridge_lib_dir())
-        command += ["--features", "ladybird-bridge"]
+    # A separate target directory keeps this build's executable apart from the normal interface build.
+    command = [
+        "cargo", "+stable", "run", "--locked", *release,
+        "--features", "linux-ui", "--target-dir", str(ROOT / "target" / "linux-ui"),
+    ]
     if args.url:
         command += ["--", args.url]
     if args.rune_args:
