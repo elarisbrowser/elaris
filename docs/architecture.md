@@ -250,9 +250,11 @@ converts Rune's flipped logical-point bounds into the AppKit view coordinate spa
 the positioning rectangle after layout changes. Clicking outside or pressing Escape closes it.
 `PermissionStore` keys overrides by normalized HTTP(S) origin; Ask removes an override, while
 Allow and Block are persisted under `[permissions."https://example.com"]` in `config.toml`.
-`AppState::permission_decision` is the request-facing boundary and returns Prompt for Ask. The
-current Ladybird bridge does not expose website permission request callbacks, so these choices are
-stored and queryable but are not yet enforced by camera, microphone, location or notification APIs.
+`AppState::permission_decision` is the request-facing boundary and returns Prompt for Ask. Saved
+Allow and Block choices are pushed into Ladybird through the bridge, and Ladybird's permission
+prompts reach the host as `PermissionPrompt` events that the host answers with
+`reply_to_permission`. Enforcement is therefore code-wired for camera, microphone, location and
+notifications; it has not been exercised by a live run in this document.
 
 ### Sidebar tab hover previews
 
