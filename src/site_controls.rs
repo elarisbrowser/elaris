@@ -61,12 +61,20 @@ pub(crate) struct SiteControlPresentation {
     /// It does not cover subresources or certificate details, which Ladybird does not expose.
     pub(crate) https_scheme: bool,
     pub(crate) permissions: [(PermissionKind, PermissionState); 4],
+    pub(crate) private: bool,
+    pub(crate) permissions_ready: bool,
     /// The site's autoplay exception, or `None` when it follows the browser default.
     pub(crate) autoplay: Option<AutoplayPolicy>,
     pub(crate) autoplay_default: AutoplayPolicy,
 }
 
 impl SiteControlPresentation {
+    pub(crate) fn matches_active_site(&self, state: &AppState) -> bool {
+        self.private == state.browser.private
+            && self.tab == state.browser.active_tab().map(|tab| tab.id())
+            && self.origin == state.current_permission_origin()
+    }
+
     pub(crate) fn from_state(state: &AppState) -> Self {
         let url = state
             .browser
@@ -77,19 +85,33 @@ impl SiteControlPresentation {
         let https_scheme = url
             .as_deref()
             .is_some_and(|url| url.starts_with("https://"));
+        let private = state.browser.private;
+        let private_permissions = state
+            .browser
+            .active_tab()
+            .and_then(|tab| tab.private_site_permissions);
         let permissions = PermissionKind::ALL.map(|kind| {
-            let permission = origin.as_deref().map_or(PermissionState::Ask, |origin| {
-                match state.permission_decision(origin, kind) {
-                    PermissionDecision::Prompt => PermissionState::Ask,
-                    PermissionDecision::Allow => PermissionState::Allow,
-                    PermissionDecision::Block => PermissionState::Block,
-                }
-            });
+            let permission = if private {
+                private_permissions.map_or(PermissionState::Ask, |states| states[kind.index()])
+            } else {
+                origin.as_deref().map_or(PermissionState::Ask, |origin| {
+                    match state.permission_decision(origin, kind) {
+                        PermissionDecision::Prompt => PermissionState::Ask,
+                        PermissionDecision::Allow => PermissionState::Allow,
+                        PermissionDecision::Block => PermissionState::Block,
+                    }
+                })
+            };
             (kind, permission)
         });
-        let autoplay = origin
-            .as_deref()
-            .and_then(|origin| state.permission_store.autoplay(origin));
+        let autoplay = if private {
+            None
+        } else {
+            origin
+                .as_deref()
+                .and_then(|origin| state.permission_store.autoplay(origin))
+        };
+        let permissions_ready = origin.is_some() && (!private || private_permissions.is_some());
         Self {
             autoplay,
             autoplay_default: state.settings.autoplay,
@@ -98,6 +120,8 @@ impl SiteControlPresentation {
             origin,
             https_scheme,
             permissions,
+            private,
+            permissions_ready,
         }
     }
 }

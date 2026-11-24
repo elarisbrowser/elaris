@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use crate::engine::{Command, PRIVATE_PERMISSION_KINDS, PrivatePermissionChange};
 use crate::tab::TabId;
 use elaris_core::address::SearchEngine;
 use elaris_core::appearance::{AccentColor, Appearance, GlassStyle};
@@ -325,6 +326,10 @@ impl super::AppState {
 
     /// Sets the current site's autoplay exception; `None` follows the browser default.
     pub(crate) fn set_site_autoplay(&mut self, policy: Option<AutoplayPolicy>) {
+        // Ladybird's autoplay site list is process-wide.
+        if self.browser.private {
+            return;
+        }
         let Some(origin) = self.current_permission_origin() else {
             return;
         };
@@ -523,11 +528,39 @@ impl super::AppState {
         self.permission_store.decision(origin, kind)
     }
 
+    pub(crate) fn refresh_private_site_permissions(&mut self) {
+        if !self.browser.private {
+            return;
+        }
+        if let Some(id) = self.browser.active_tab().map(|tab| tab.id())
+            && let Some(tab) = self.browser.tab_mut(id)
+        {
+            tab.private_site_permissions = None;
+        }
+        self.send_private_site_permissions(PrivatePermissionChange::Read);
+    }
+
+    fn send_private_site_permissions(&self, change: PrivatePermissionChange) {
+        if let (Some(tab), Some(origin)) = (
+            self.browser.active_tab(),
+            self.current_permission_origin(),
+        ) {
+            self.browser
+                .send_engine(Command::PrivateSitePermissions(tab.id(), origin, change));
+        }
+    }
+
     pub(crate) fn set_site_permission(
         &mut self,
         kind: PermissionKind,
         permission: PermissionState,
     ) {
+        if self.browser.private {
+            if PRIVATE_PERMISSION_KINDS.contains(&kind) {
+                self.send_private_site_permissions(PrivatePermissionChange::Set(kind, permission));
+            }
+            return;
+        }
         let Some(origin) = self.current_permission_origin() else {
             return;
         };
@@ -556,6 +589,10 @@ impl super::AppState {
     }
 
     pub(crate) fn reset_site_permissions(&mut self) {
+        if self.browser.private {
+            self.send_private_site_permissions(PrivatePermissionChange::Reset);
+            return;
+        }
         let Some(origin) = self.current_permission_origin() else {
             return;
         };

@@ -144,11 +144,93 @@ jobs:
         timeout-minutes: 10
         run: ./elaris cpp-tidy
 
-      - name: Run C++ bridge integration smoke test
+      - name: Run C++ bridge integration smoke tests
         timeout-minutes: 10
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
-        run: xvfb-run --auto-servernum --error-file=/tmp/elaris-xvfb.log ctest --test-dir build/cpp-ladybird --output-on-failure --timeout 120 -R '^elaris_ladybird_smoke$'
+        run: xvfb-run --auto-servernum --error-file=/tmp/elaris-xvfb.log ctest --test-dir build/cpp-ladybird --output-on-failure --timeout 120 -R '^elaris_ladybird_(smoke|download_smoke)
+
+      - name: Check C++ smoke test left no Ladybird helpers
+        timeout-minutes: 2
+        run: |
+          sleep 1
+          if ps -eo comm= | grep -E '^(WebContent|RequestServer|Hub|ImageDecoder|Compositor|SystemProbe|AudioServer|MediaServer|VideoDecoderS|WebRTCClient|ProcessReaper)$'; then
+            echo "Ladybird helper process remained after C++ smoke test" >&2
+            exit 1
+          fi
+
+      - name: Run Rust Clippy
+        timeout-minutes: 10
+        env:
+          ELARIS_LADYBIRD_LIB_DIR: ${{ github.workspace }}/build/cpp-ladybird/lib
+          LD_LIBRARY_PATH: ${{ github.workspace }}/build/cpp-ladybird/lib:${{ github.workspace }}/vendor/ladybird/Build/release/vcpkg_installed/x64-linux-dynamic/lib
+        run: cargo clippy --all-targets --all-features --locked -- -D warnings
+
+      - name: Run Rust FFI boundary tests
+        timeout-minutes: 10
+        env:
+          ELARIS_LADYBIRD_LIB_DIR: ${{ github.workspace }}/build/cpp-ladybird/lib
+          LD_LIBRARY_PATH: ${{ github.workspace }}/build/cpp-ladybird/lib:${{ github.workspace }}/vendor/ladybird/Build/release/vcpkg_installed/x64-linux-dynamic/lib
+        run: cargo test --locked --all-features
+
+      - name: Link and run Rust FFI smoke example
+        timeout-minutes: 10
+        env:
+          ELARIS_LADYBIRD_LIB_DIR: ${{ github.workspace }}/build/cpp-ladybird/lib
+          LD_LIBRARY_PATH: ${{ github.workspace }}/build/cpp-ladybird/lib:${{ github.workspace }}/vendor/ladybird/Build/release/vcpkg_installed/x64-linux-dynamic/lib
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: >-
+          xvfb-run --auto-servernum cargo run --locked --features ladybird-bridge
+          --example ladybird_smoke --
+          "$PWD/vendor/ladybird/Base/res"
+          "$PWD/build/cpp-ladybird/elaris-rust-profile"
+          "$PWD/bridge/tests/smoke.html"
+
+      - name: Check Rust smoke test left no Ladybird helpers
+        timeout-minutes: 2
+        run: |
+          sleep 1
+          if ps -eo comm= | grep -E '^(WebContent|RequestServer|Hub|ImageDecoder|Compositor|SystemProbe|AudioServer|MediaServer|VideoDecoderS|WebRTCClient|ProcessReaper)$'; then
+            echo "Ladybird helper process remained after Rust smoke test" >&2
+            exit 1
+          fi
+
+      - name: Upload Linux build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ladybird-bridge-linux-diagnostics
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            vendor/ladybird/Build/release/vcpkg-manifest-install.log
+            vendor/ladybird/Build/release/vcpkg-deps/
+            build/cpp-ladybird/CMakeFiles/CMakeConfigureLog.yaml
+            build/cpp-ladybird/Testing/Temporary/LastTest.log
+            /tmp/elaris-xvfb.log
+
+      - name: Save Ladybird dependency and compiler caches
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .git/modules/Build/vcpkg-release
+            .git/modules/Build/caches/vcpkg-binary-cache
+            .ccache
+            .cargo/registry
+            .cargo/git
+          key: ladybird-bridge-linux-deps-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Save Ladybird and Elaris build progress
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            vendor/ladybird/Build/release
+            build/cpp-ladybird
+            target
+          key: ladybird-bridge-linux-build-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+
 
       - name: Check C++ smoke test left no Ladybird helpers
         timeout-minutes: 2

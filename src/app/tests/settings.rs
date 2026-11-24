@@ -276,3 +276,68 @@ fn menu_highlight_stays_inside_the_panel_over_settings() {
         highlight.path
     );
 }
+
+#[test]
+fn private_site_controls_use_the_view_without_changing_saved_site_settings() {
+    use crate::engine::{Command, Engine, PrivatePermissionChange, TabUpdate};
+    use crate::site_controls::SiteControlPresentation;
+    use elaris_core::permissions::{AutoplayPolicy, PermissionKind, PermissionState};
+
+    let mut state = AppState::new(Some("https://example.com"));
+    state.browser.private = true;
+    let origin = "https://example.com";
+    let tab = state.browser.active_tab().unwrap().id();
+    state
+        .browser
+        .tab_mut(tab)
+        .unwrap()
+        .update(TabUpdate::NavigationCommitted(origin.into()));
+    let kind = PermissionKind::Microphone;
+    state.permission_store.set(origin, kind, PermissionState::Block);
+    state.permission_store.set_autoplay(origin, Some(AutoplayPolicy::Block));
+    let saved = state.permission_store.clone();
+    let (engine, fake) = Engine::fake();
+    state.browser.connect(engine);
+    fake.commands.try_iter().for_each(drop);
+
+    state.refresh_private_site_permissions();
+    let before = SiteControlPresentation::from_state(&state);
+    assert!(before.private);
+    assert!(!before.permissions_ready);
+    assert_eq!(before.autoplay, None);
+
+    state.set_site_permission(kind, PermissionState::Allow);
+    state.set_site_permission(PermissionKind::Camera, PermissionState::Allow);
+    state.set_site_autoplay(Some(AutoplayPolicy::Allow));
+    state.reset_site_permissions();
+    assert_eq!(state.permission_store, saved);
+    assert_eq!(
+        fake.commands.try_iter().collect::<Vec<_>>(),
+        [
+            Command::PrivateSitePermissions(tab, origin.into(), PrivatePermissionChange::Read),
+            Command::PrivateSitePermissions(
+                tab,
+                origin.into(),
+                PrivatePermissionChange::Set(kind, PermissionState::Allow),
+            ),
+            Command::PrivateSitePermissions(tab, origin.into(), PrivatePermissionChange::Reset),
+        ]
+    );
+
+    let mut permissions = [PermissionState::Ask; PermissionKind::ALL.len()];
+    permissions[kind.index()] = PermissionState::Allow;
+    let view = state.browser.tab_mut(tab).unwrap();
+    assert!(!view.update(TabUpdate::PrivateSitePermissions(
+        "https://another.example".into(),
+        permissions,
+    )));
+    assert!(view.update(TabUpdate::PrivateSitePermissions(origin.into(), permissions)));
+    let after = SiteControlPresentation::from_state(&state);
+    assert!(after.permissions_ready);
+    assert_eq!(after.permissions[kind.index()].1, PermissionState::Allow);
+
+    state.browser.private = false;
+    let regular = SiteControlPresentation::from_state(&state);
+    assert_eq!(regular.permissions[kind.index()].1, PermissionState::Block);
+    assert_eq!(regular.autoplay, Some(AutoplayPolicy::Block));
+}

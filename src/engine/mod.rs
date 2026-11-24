@@ -29,6 +29,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use elaris::ladybird::{Favicon, KeyEvent, MediaAction, MouseEvent};
 use elaris_core::downloads::{DownloadId, Request as DownloadRequest, Update as DownloadUpdate};
+use elaris_core::permissions::{PermissionKind, PermissionState};
 use rune::Pixels;
 
 use crate::tab::TabId;
@@ -170,12 +171,28 @@ pub(crate) enum Command {
         elaris_core::permissions::PermissionKind,
         elaris_core::permissions::PermissionState,
     ),
+    /// Reads or changes site permissions in the private session of this tab.
+    PrivateSitePermissions(TabId, String, PrivatePermissionChange),
     /// Describes every engine process for the Task Manager in this tab.
     Processes(TabId),
     /// Ends the engine process with this Ladybird child ID, for the Task Manager in this tab.
     EndProcess(TabId, u64),
     /// Closes every view and stops the engine.
     Shutdown,
+}
+
+/// Site permissions the pinned Ladybird manager supports in private sessions.
+pub(crate) const PRIVATE_PERMISSION_KINDS: [PermissionKind; 3] = [
+    PermissionKind::Microphone,
+    PermissionKind::Location,
+    PermissionKind::Notifications,
+];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PrivatePermissionChange {
+    Read,
+    Set(PermissionKind, PermissionState),
+    Reset,
 }
 
 /// An operation applied to a download on the engine thread.
@@ -399,6 +416,7 @@ pub(crate) enum TabUpdate {
     Cursor(String),
     PageDialog(Option<elaris::ladybird::PageDialog>),
     PermissionPrompt(Option<elaris::ladybird::PermissionPrompt>),
+    PrivateSitePermissions(String, [PermissionState; PermissionKind::ALL.len()]),
     ExternalUrl(Option<elaris::ladybird::ExternalUrl>),
     Accessibility(elaris::ladybird::AccessibilityEvent),
     WebFullscreen(bool),

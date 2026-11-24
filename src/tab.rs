@@ -5,7 +5,7 @@
 
 use crate::engine::{FindResult, Surface, TabUpdate, Thumbnail};
 use elaris_core::internal::InternalRoute;
-use elaris_core::permissions::PermissionKind;
+use elaris_core::permissions::{PermissionKind, PermissionState, PermissionStore};
 use rune::Pixels;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -106,6 +106,8 @@ pub(crate) struct Tab {
     pub(crate) page_cursor: rune::Cursor,
     pub(crate) page_dialog: Option<PageDialog>,
     pub(crate) permission_prompt: Option<elaris::ladybird::PermissionPrompt>,
+    /// Read-back for the open private Site Control Centre, never written to storage.
+    pub(crate) private_site_permissions: Option<[PermissionState; PermissionKind::ALL.len()]>,
     pub(crate) external_url: Option<elaris::ladybird::ExternalUrl>,
     /// Accessibility reports not yet applied; the browser applies them with the page zoom.
     pub(crate) accessibility_events: Vec<elaris::ladybird::AccessibilityEvent>,
@@ -181,6 +183,7 @@ impl Tab {
             page_cursor: rune::Cursor::Default,
             page_dialog: None,
             permission_prompt: None,
+            private_site_permissions: None,
             external_url: None,
             accessibility_events: Vec::new(),
             accessibility: Default::default(),
@@ -229,6 +232,7 @@ impl Tab {
             page_cursor: rune::Cursor::Default,
             page_dialog: None,
             permission_prompt: None,
+            private_site_permissions: None,
             external_url: None,
             accessibility_events: Vec::new(),
             accessibility: Default::default(),
@@ -306,6 +310,12 @@ impl Tab {
             // The browser's swipe tracking takes these before they reach a tab.
             TabUpdate::WheelResult(_) => {}
             TabUpdate::PermissionPrompt(prompt) => self.permission_prompt = prompt,
+            TabUpdate::PrivateSitePermissions(origin, permissions) => {
+                if PermissionStore::origin(&self.committed_url).as_deref() != Some(origin.as_str()) {
+                    return false;
+                }
+                self.private_site_permissions = Some(permissions);
+            }
             TabUpdate::ExternalUrl(request) => self.external_url = request,
             TabUpdate::Accessibility(event) => self.accessibility_events.push(event),
             TabUpdate::PermissionUse(kind, visible) => {
@@ -359,6 +369,7 @@ impl Tab {
                 self.clear_page_hover();
                 self.url.clone_from(&url);
                 self.committed_url = url;
+                self.private_site_permissions = None;
                 self.error = None;
             }
             TabUpdate::Title(title) => self.title = title,

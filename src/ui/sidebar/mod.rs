@@ -311,6 +311,9 @@ pub(super) fn site_controls(theme: &Theme, size: f32) -> El {
         }
         let open = !state.site_permissions_open;
         state.site_permissions_open = open;
+        if open {
+            state.refresh_private_site_permissions();
+        }
         state.site_controls_page = crate::site_controls::SiteControlsPage::Main;
         state.permission_menu = None;
         state.autoplay_menu_open = false;

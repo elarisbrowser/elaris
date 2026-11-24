@@ -72,10 +72,25 @@ pub(super) fn popover(
         );
 
     if presentation.origin.is_some() {
-        for (kind, permission) in presentation.permissions {
-            main = main.child(permission_row(theme, kind, permission).mt(design::ROW_GAP));
+        if presentation.permissions_ready {
+            for (kind, permission) in presentation.permissions {
+                if !presentation.private || crate::engine::PRIVATE_PERMISSION_KINDS.contains(&kind)
+                {
+                    main = main.child(permission_row(theme, kind, permission).mt(design::ROW_GAP));
+                }
+            }
+        } else {
+            main = main.child(
+                text("Private permissions are available when the page is ready.")
+                    .font(type_::BODY)
+                    .color(theme.text_muted)
+                    .wrap()
+                    .py(6.0),
+            );
         }
-        main = main.child(autoplay_row(theme, presentation).mt(design::ROW_GAP));
+        if !presentation.private {
+            main = main.child(autoplay_row(theme, presentation).mt(design::ROW_GAP));
+        }
         main = main
             .child(separator(theme).mt(10.0))
             .child(footer(theme, presentation).mt(8.0));

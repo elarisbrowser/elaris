@@ -400,6 +400,19 @@ static bool test_private_session(ElarisLadybird* bridge, HttpFixture const& fixt
         !load(second, 203, "/privacy/read", "private:private:empty") ||
         !load(normal, 201, "/privacy/read", "normal:normal:normal"))
         return false;
+    auto const site = fixture.url("/");
+    auto permission = [&](View const& view, int32_t choice, int32_t expected) {
+        int32_t result = -1;
+        return check(elaris_ladybird_private_site_permission(view.get(), site.c_str(), "microphone", choice, &result),
+                     "private site permission") &&
+               result == expected;
+    };
+    if (!permission(first, -1, 0) || !permission(first, 1, 1) || !permission(second, -1, 1) ||
+        !permission(second, 2, 2) || !permission(first, -1, 2) || !permission(first, 0, 0) ||
+        !permission(second, -1, 0) || !permission(first, 1, 1)) {
+        std::cerr << "Private site permissions did not follow the shared session's settings\n";
+        return false;
+    }
     if (elaris_ladybird_test_reset_private_session(bridge) == 0) {
         std::cerr << "Private session reset succeeded while views remained open\n";
         return false;
@@ -451,6 +464,7 @@ static bool test_private_session(ElarisLadybird* bridge, HttpFixture const& fixt
     for (uint64_t id = 204; id < 207; ++id) {
         auto fresh = create(id, true);
         if (!load(fresh, id, "/privacy/read", "empty:empty:empty") ||
+            !permission(fresh, -1, 0) ||
             !load(fresh, id, "/privacy/private", "empty:private:private"))
             return false;
         fresh.reset();

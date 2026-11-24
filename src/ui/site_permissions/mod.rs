@@ -72,7 +72,7 @@ pub(crate) fn view(
             .color(theme.overlay_panel),
     );
     layer.push(content::popover(state, theme, &presentation, reduced_motion).absolute(x, y));
-    menus::permission_menu(state, theme, layer);
+    menus::permission_menu(state, theme, layer, &presentation);
     menus::autoplay_menu(state, theme, layer, &presentation);
     menus::overflow_menu(state, theme, layer, &presentation);
 }
