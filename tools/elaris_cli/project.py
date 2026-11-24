@@ -41,7 +41,9 @@ def _run_artifacts_are_current(ui_only: bool, profile: str = "debug") -> bool:
     if not executable.is_file():
         return False
 
-    source_roots = [ROOT / name for name in ("src", "crates", "tools", "assets", "packaging")]
+    # Only what the build compiles in. The Python CLI under tools/ is not, and since a CLI-only change never
+    # relinks the executable, counting it would leave every later launch on the slow build path.
+    source_roots = [ROOT / name for name in ("src", "crates", "assets", "packaging")]
     inputs = [ROOT / name for name in ("Cargo.toml", "Cargo.lock", "build.rs", "rust-toolchain.toml")]
     inputs.extend(path for source_root in source_roots if source_root.is_dir() for path in source_root.rglob("*"))
     if not ui_only:
