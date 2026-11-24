@@ -1,6 +1,5 @@
 """Assemble Elaris's app bundles: a macOS .app and a Linux prefix tree, each with Ladybird's engine and the brand icon."""
 
-import filecmp
 import importlib.util
 import plistlib
 import re
@@ -35,12 +34,13 @@ LADYBIRD_APP_BINARY = "Ladybird"
 
 
 def _copy_if_changed(source: Path, destination: Path) -> bool:
-    """Copy `source` over `destination` when their contents differ. Returns whether it copied.
+    """Copy `source` over `destination` when the source is newer. Returns whether it copied.
 
     The copy takes a fresh modification time on purpose: Launch Services caches an app's icon by file time,
-    so a copy that kept the source's older time can keep showing a stale icon in the Dock.
+    so a copy that kept the source's older time can keep showing a stale icon in the Dock. Times are compared,
+    not contents, because signing rewrites the bundled executable and it would otherwise never match again.
     """
-    if destination.exists() and filecmp.cmp(source, destination, shallow=False):
+    if destination.exists() and destination.stat().st_mtime_ns >= source.stat().st_mtime_ns:
         return False
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source, destination)
