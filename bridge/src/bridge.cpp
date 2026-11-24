@@ -1081,8 +1081,12 @@ extern "C" int32_t elaris_ladybird_private_site_permission(ElarisLadybirdView* h
         return succeed();
 
     auto& manager = *handle->view->session().permission_manager;
-    if (choice >= 0)
-        manager.set_decision(*name, origin, permission_choice(choice));
+    // An ordinary block binds private views. Do not store an Allow that could take effect only after it is lifted.
+    if (choice >= 0) {
+        auto const& ordinary = *WebView::Application::default_session().permission_manager;
+        if (choice != 1 || ordinary.decision(*name, origin) != WebView::PermissionDecision::Block)
+            manager.set_decision(*name, origin, permission_choice(choice));
+    }
     auto decision = manager.decision(*name, origin);
     if (decision == WebView::PermissionDecision::Block)
         *result = 2;

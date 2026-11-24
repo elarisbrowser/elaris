@@ -293,8 +293,12 @@ fn private_site_controls_use_the_view_without_changing_saved_site_settings() {
         .unwrap()
         .update(TabUpdate::NavigationCommitted(origin.into()));
     let kind = PermissionKind::Microphone;
-    state.permission_store.set(origin, kind, PermissionState::Block);
-    state.permission_store.set_autoplay(origin, Some(AutoplayPolicy::Block));
+    state
+        .permission_store
+        .set(origin, kind, PermissionState::Block);
+    state
+        .permission_store
+        .set_autoplay(origin, Some(AutoplayPolicy::Block));
     let saved = state.permission_store.clone();
     let (engine, fake) = Engine::fake();
     state.browser.connect(engine);
@@ -331,7 +335,10 @@ fn private_site_controls_use_the_view_without_changing_saved_site_settings() {
         "https://another.example".into(),
         permissions,
     )));
-    assert!(view.update(TabUpdate::PrivateSitePermissions(origin.into(), permissions)));
+    assert!(view.update(TabUpdate::PrivateSitePermissions(
+        origin.into(),
+        permissions
+    )));
     let after = SiteControlPresentation::from_state(&state);
     assert!(after.permissions_ready);
     assert_eq!(after.permissions[kind.index()].1, PermissionState::Allow);

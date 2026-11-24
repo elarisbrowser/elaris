@@ -409,8 +409,17 @@ static bool test_private_session(ElarisLadybird* bridge, HttpFixture const& fixt
     };
     if (!permission(first, -1, 0) || !permission(first, 1, 1) || !permission(second, -1, 1) ||
         !permission(second, 2, 2) || !permission(first, -1, 2) || !permission(first, 0, 0) ||
-        !permission(second, -1, 0) || !permission(first, 1, 1)) {
+        !permission(second, -1, 0)) {
         std::cerr << "Private site permissions did not follow the shared session's settings\n";
+        return false;
+    }
+    auto ordinary_permission = [&](int32_t choice) {
+        return check(elaris_ladybird_set_permission(bridge, site.c_str(), "microphone", choice),
+                     "ordinary site permission");
+    };
+    if (!ordinary_permission(2) || !permission(first, 1, 2) || !ordinary_permission(0) ||
+        !permission(second, -1, 0) || !permission(first, 1, 1)) {
+        std::cerr << "Private site permission did not respect the ordinary block\n";
         return false;
     }
     if (elaris_ladybird_test_reset_private_session(bridge) == 0) {

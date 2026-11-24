@@ -126,15 +126,17 @@ pub(super) fn overflow_menu(
             "Reset settings for this site"
         };
         let private_site = presentation.private.then(|| presentation.clone());
-        menu = menu.item(MenuItem::new(reset_label).on_select(move |state: &mut AppState| {
-            if private_site
-                .as_ref()
-                .is_none_or(|site| site.matches_active_site(state))
-            {
-                state.reset_site_permissions();
-            }
-            state.site_overflow_open = false;
-        }));
+        menu = menu.item(
+            MenuItem::new(reset_label).on_select(move |state: &mut AppState| {
+                if private_site
+                    .as_ref()
+                    .is_none_or(|site| site.matches_active_site(state))
+                {
+                    state.reset_site_permissions();
+                }
+                state.site_overflow_open = false;
+            }),
+        );
     }
     let menu = if let Some(url) = url {
         menu.item(MenuItem::new("Copy page address").on_select_tx(

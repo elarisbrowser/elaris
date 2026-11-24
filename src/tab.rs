@@ -311,7 +311,8 @@ impl Tab {
             TabUpdate::WheelResult(_) => {}
             TabUpdate::PermissionPrompt(prompt) => self.permission_prompt = prompt,
             TabUpdate::PrivateSitePermissions(origin, permissions) => {
-                if PermissionStore::origin(&self.committed_url).as_deref() != Some(origin.as_str()) {
+                if PermissionStore::origin(&self.committed_url).as_deref() != Some(origin.as_str())
+                {
                     return false;
                 }
                 self.private_site_permissions = Some(permissions);

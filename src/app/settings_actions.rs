@@ -541,10 +541,9 @@ impl super::AppState {
     }
 
     fn send_private_site_permissions(&self, change: PrivatePermissionChange) {
-        if let (Some(tab), Some(origin)) = (
-            self.browser.active_tab(),
-            self.current_permission_origin(),
-        ) {
+        if let (Some(tab), Some(origin)) =
+            (self.browser.active_tab(), self.current_permission_origin())
+        {
             self.browser
                 .send_engine(Command::PrivateSitePermissions(tab.id(), origin, change));
         }
