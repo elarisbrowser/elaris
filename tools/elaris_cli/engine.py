@@ -31,7 +31,8 @@ BUILD_TARGETS = (
     "elaris_ladybird_engine_features",
 )
 if sys.platform == "darwin":
-    BUILD_TARGETS += ("ProcessReaper", "elaris_ladybird_picture_in_picture")
+    # The app bundle's executable is Ladybird's own app target; the bundle step fails without it on a clean build.
+    BUILD_TARGETS += ("ladybird", "ProcessReaper", "elaris_ladybird_picture_in_picture")
 
 
 def dependencies_fingerprint() -> str:
