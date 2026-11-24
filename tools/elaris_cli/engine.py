@@ -1,6 +1,7 @@
 """Commands for building and inspecting upstream Ladybird."""
 
 import argparse
+import hashlib
 import os
 import subprocess
 import sys
@@ -8,9 +9,11 @@ from pathlib import Path
 from typing import Optional
 
 from . import cpp, dependencies, patches, ui
-from .common import CPP_BUILD_DIR, ENGINE, ROOT, prepare_ladybird_paths, require, run_step
+from .common import CPP_BUILD_DIR, ENGINE, ROOT, VCPKG_INSTALLED, prepare_ladybird_paths, require, run_step, vcpkg_triplet
 
 BUILD_DIR = Path(os.environ.get("LADYBIRD_BUILD_DIR", ENGINE / "Build" / "release"))
+# Written after the Ladybird dependencies build, so a later run can skip them while the fingerprint still matches.
+DEPENDENCIES_STAMP = BUILD_DIR / "elaris-dependencies.stamp"
 BUILD_TARGETS = (
     "elaris_ladybird",
     "WebContent",
@@ -31,6 +34,32 @@ if sys.platform == "darwin":
     BUILD_TARGETS += ("ProcessReaper", "elaris_ladybird_picture_in_picture")
 
 
+def dependencies_fingerprint() -> str:
+    """Identifies what Ladybird's dependencies are built from: the pinned revision, Elaris's patches and the vcpkg manifests."""
+    pinned = subprocess.run(
+        ["git", "ls-tree", "HEAD", "vendor/ladybird"], cwd=ROOT, check=True, capture_output=True, text=True,
+    ).stdout
+    digest = hashlib.sha256(pinned.encode())
+    manifests = [ENGINE / "vcpkg.json", ENGINE / "vcpkg-configuration.json"]
+    manifests += sorted(path for path in (ENGINE / "Meta" / "CMake" / "vcpkg").rglob("*") if path.is_file())
+    for path in [*manifests, *sorted(patches.PATCH_DIR.glob("*.patch"))]:
+        if path.is_file():
+            digest.update(str(path.relative_to(ROOT)).encode())
+            digest.update(path.read_bytes())
+    return digest.hexdigest()
+
+
+def dependencies_are_current() -> bool:
+    """True when the dependencies were built from the current fingerprint and their vcpkg packages are installed."""
+    triplet = vcpkg_triplet()
+    return (
+        triplet is not None
+        and (VCPKG_INSTALLED / triplet).is_dir()
+        and DEPENDENCIES_STAMP.is_file()
+        and DEPENDENCIES_STAMP.read_text() == dependencies_fingerprint()
+    )
+
+
 def build_for_elaris(jobs: Optional[str] = None) -> None:
     """Build Ladybird's dependencies, Elaris bridge, and runtime helper processes."""
     if not (ENGINE / ".git").exists():
@@ -40,17 +69,10 @@ def build_for_elaris(jobs: Optional[str] = None) -> None:
     require("cmake", "ninja", "rustup")
     jobs = _jobs(jobs)
 
-    dependencies.install_rust_toolchain()
-    dependencies.install_ladybird_toolchain()
-    ladybird_script = str(ENGINE / "Meta" / "ladybird.py")
-    run_step(
-        "Ladybird vcpkg packages", sys.executable, ladybird_script, "vcpkg", "--preset", "Release", "--jobs", jobs,
-        cwd=ENGINE,
-    )
-    run_step(
-        "Ladybird dependencies", sys.executable, ladybird_script, "deps", "--preset", "Release", "--jobs", jobs,
-        cwd=ENGINE,
-    )
+    if dependencies_are_current():
+        ui.muted("Ladybird dependencies match the pinned revision; skipping them.")
+    else:
+        build_dependencies(jobs)
     cpp.cpp_configure(argparse.Namespace())
     # A build stopped mid-write leaves a torn deps log. Ninja then drops every record after the tear on each
     # load, marks those objects stale, and rebuilds most of LibWeb on every run. Recompacting rewrites it cleanly.
@@ -65,6 +87,24 @@ def build_for_elaris(jobs: Optional[str] = None) -> None:
         "--target",
         *BUILD_TARGETS,
     )
+
+
+def build_dependencies(jobs: str) -> None:
+    # Removed first, so a build interrupted part way cannot leave a stamp that claims the dependencies are complete.
+    DEPENDENCIES_STAMP.unlink(missing_ok=True)
+    dependencies.install_rust_toolchain()
+    dependencies.install_ladybird_toolchain()
+    ladybird_script = str(ENGINE / "Meta" / "ladybird.py")
+    run_step(
+        "Ladybird vcpkg packages", sys.executable, ladybird_script, "vcpkg", "--preset", "Release", "--jobs", jobs,
+        cwd=ENGINE,
+    )
+    run_step(
+        "Ladybird dependencies", sys.executable, ladybird_script, "deps", "--preset", "Release", "--jobs", jobs,
+        cwd=ENGINE,
+    )
+    DEPENDENCIES_STAMP.parent.mkdir(parents=True, exist_ok=True)
+    DEPENDENCIES_STAMP.write_text(dependencies_fingerprint())
 
 
 def _jobs(requested: Optional[str]) -> str:
