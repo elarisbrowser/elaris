@@ -131,6 +131,15 @@ jobs:
           (cd dist && shasum -a 256 "$(basename "$image")" > "$(basename "$image").sha256")
           cp dist/BUILD-INFO.txt dist/Elaris-${version}-macos-arm64.BUILD-INFO.txt
 
+      - name: Keep the app bundle even if packaging failed
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: elaris-macos-arm64-build
+          path: build/Elaris.app
+          if-no-files-found: ignore
+          retention-days: 7
+
       - uses: actions/upload-artifact@v4
         with:
           name: elaris-macos-arm64
@@ -232,6 +241,15 @@ jobs:
           EOF
           cp dist/BUILD-INFO.txt "dist/Elaris-${version}-linux-x86_64.BUILD-INFO.txt"
           (cd dist && sha256sum "$(basename "$archive")" > "$(basename "$archive").sha256")
+
+      - name: Keep the install prefix even if packaging failed
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: elaris-linux-x86_64-build
+          path: build/linux/Elaris
+          if-no-files-found: ignore
+          retention-days: 7
 
       - uses: actions/upload-artifact@v4
         with:
