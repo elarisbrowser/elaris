@@ -5,6 +5,7 @@
 //! To add a category, write a module whose `sections` returns its sections and list it in
 //! [`CATEGORIES`].
 
+mod about;
 mod appearance;
 mod browsing;
 mod keyboard;
@@ -41,7 +42,7 @@ struct Category {
     sections: fn(&mut PageContext) -> Vec<El>,
 }
 
-static CATEGORIES: [Category; 5] = [
+static CATEGORIES: [Category; 6] = [
     Category {
         nav: NavItem {
             key: "settings-look",
@@ -86,6 +87,15 @@ static CATEGORIES: [Category; 5] = [
             icon: &icons::SITE_CONTROLS,
         },
         sections: system::sections,
+    },
+    Category {
+        nav: NavItem {
+            key: "settings-about",
+            title: "About Elaris",
+            short: "About",
+            icon: &icons::INFO,
+        },
+        sections: about::sections,
     },
 ];
 
