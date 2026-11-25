@@ -87,9 +87,8 @@ pub(crate) fn view(
             .h_full()
             .min_h(0.0)
             .fill(theme.page)
-            // Pane bounds follow the surrounding chrome immediately. The last page frame
-            // scales inside those bounds until the engine submits one at the new size.
-            .instant_changes()
+            // The frame scales with the pane's layout spring; its child surface stays clipped
+            // to these same animated bounds while the engine renders the new viewport size.
             .continuous_corners()
             .clip_rounded(radius);
         if let Some(tab) = id
