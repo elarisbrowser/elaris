@@ -259,6 +259,11 @@ fn ui_only_badge(theme: &Theme) -> El {
 /// Shows the page's frames in `pane`: Rune's GPU samples Ladybird's own surface where it can,
 /// and otherwise the engine copies each frame into pixels.
 pub(in crate::ui) fn page_surface(pane: El, surface: &crate::engine::Surface, radius: f32) -> El {
+    #[cfg(target_os = "macos")]
+    if let Some(gpu) = &surface.gpu {
+        gpu.set_corner_radius(radius);
+    }
+
     #[cfg(any(elaris_ui = "macos", elaris_ui = "linux"))]
     let page_surface = surface.gpu.as_ref().map(|gpu| {
         el().key("page-native-surface")
