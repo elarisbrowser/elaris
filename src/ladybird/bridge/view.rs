@@ -8,6 +8,8 @@ use std::os::fd::FromRawFd;
 use std::ptr::NonNull;
 use std::rc::Rc;
 
+use elaris_core::permissions::{PermissionKind, PermissionState};
+
 use super::app::Owner;
 use super::ffi::*;
 use crate::ladybird::{
@@ -113,6 +115,34 @@ impl WebView {
                 request_id,
                 permission_choice(choice),
             )
+        })
+    }
+
+    /// Reads or changes one decision for the committed origin of a private view.
+    pub fn private_site_permission(
+        &mut self,
+        origin: &str,
+        kind: PermissionKind,
+        choice: Option<PermissionState>,
+    ) -> Result<Option<PermissionState>, String> {
+        let origin = CString::new(origin).map_err(|error| error.to_string())?;
+        let key = CString::new(kind.key()).map_err(|error| error.to_string())?;
+        let mut result = -1;
+        // SAFETY: The view is live on its owner thread; the strings and out pointer last for the call.
+        status_result(unsafe {
+            elaris_ladybird_private_site_permission(
+                self.raw.as_ptr(),
+                origin.as_ptr(),
+                key.as_ptr(),
+                choice.map_or(-1, |state| permission_choice(state.choice())),
+                &mut result,
+            )
+        })?;
+        Ok(match result {
+            0 => Some(PermissionState::Ask),
+            1 => Some(PermissionState::Allow),
+            2 => Some(PermissionState::Block),
+            _ => None,
         })
     }
 

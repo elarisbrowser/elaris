@@ -270,6 +270,13 @@ unsafe extern "C" {
         bridge: *mut RawBridge,
         json: *const c_char,
     ) -> i32;
+    pub(super) fn elaris_ladybird_private_site_permission(
+        view: *mut RawView,
+        origin: *const c_char,
+        key: *const c_char,
+        choice: i32,
+        result: *mut i32,
+    ) -> i32;
     pub(super) fn elaris_ladybird_set_permission(
         bridge: *mut RawBridge,
         origin: *const c_char,

@@ -9,17 +9,32 @@ use crate::site_controls::SiteControlsPage;
 use crate::ui::theme::Theme;
 use elaris_core::permissions::{AutoplayPolicy, PermissionState};
 
-pub(super) fn permission_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
+pub(super) fn permission_menu(
+    state: &AppState,
+    theme: &Theme,
+    layer: &mut Vec<El>,
+    presentation: &SiteControlPresentation,
+) {
+    if !presentation.permissions_ready {
+        return;
+    }
     let Some(kind) = state.permission_menu else {
         return;
     };
+    if presentation.private && !crate::engine::PRIVATE_PERMISSION_KINDS.contains(&kind) {
+        return;
+    }
     let Some(rect) = state.permission_row_anchors[kind.index()] else {
         return;
     };
-    let origin = state.current_permission_origin();
-    let selected = origin
-        .as_deref()
-        .map(|origin| state.permission_store.state(origin, kind));
+    let selected = if presentation.private {
+        Some(presentation.permissions[kind.index()].1)
+    } else {
+        state
+            .current_permission_origin()
+            .as_deref()
+            .map(|origin| state.permission_store.state(origin, kind))
+    };
     let point = PointerPress {
         x: rect[0] + rect[2] - 8.0,
         y: rect[1] + rect[3] / 2.0,
@@ -38,9 +53,15 @@ pub(super) fn permission_menu(state: &AppState, theme: &Theme, layer: &mut Vec<E
         } else {
             label.to_owned()
         };
+        let private_site = presentation.private.then(|| presentation.clone());
         menu.item(
             MenuItem::new(label).on_select_tx(move |state: &mut AppState, _| {
-                state.set_site_permission(kind, permission);
+                if private_site
+                    .as_ref()
+                    .is_none_or(|site| site.matches_active_site(state))
+                {
+                    state.set_site_permission(kind, permission);
+                }
                 state.permission_menu = None;
             }),
         )
@@ -54,6 +75,9 @@ pub(super) fn autoplay_menu(
     layer: &mut Vec<El>,
     presentation: &SiteControlPresentation,
 ) {
+    if presentation.private {
+        return;
+    }
     let (true, Some(rect)) = (state.autoplay_menu_open, state.autoplay_row_anchor) else {
         return;
     };
@@ -93,14 +117,27 @@ pub(super) fn overflow_menu(
         return;
     };
     let url = presentation.url.clone();
-    let menu = context_menu("site-controls-overflow-menu", el(), Some(point))
-        .on_close(|state: &mut AppState| state.site_overflow_open = false)
-        .item(
-            MenuItem::new("Reset settings for this site").on_select(|state: &mut AppState| {
-                state.reset_site_permissions();
+    let mut menu = context_menu("site-controls-overflow-menu", el(), Some(point))
+        .on_close(|state: &mut AppState| state.site_overflow_open = false);
+    if !presentation.private || presentation.permissions_ready {
+        let reset_label = if presentation.private {
+            "Reset private permissions for this site"
+        } else {
+            "Reset settings for this site"
+        };
+        let private_site = presentation.private.then(|| presentation.clone());
+        menu = menu.item(
+            MenuItem::new(reset_label).on_select(move |state: &mut AppState| {
+                if private_site
+                    .as_ref()
+                    .is_none_or(|site| site.matches_active_site(state))
+                {
+                    state.reset_site_permissions();
+                }
                 state.site_overflow_open = false;
             }),
         );
+    }
     let menu = if let Some(url) = url {
         menu.item(MenuItem::new("Copy page address").on_select_tx(
             move |state: &mut AppState, tx: &mut Tx| {

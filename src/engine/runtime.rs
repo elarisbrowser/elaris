@@ -204,6 +204,31 @@ impl Runtime {
                 .set_permission(&origin, kind.key(), state.choice())
                 .err()
                 .map(Update::Failed),
+            Command::PrivateSitePermissions(tab, origin, change) => {
+                use super::{PRIVATE_PERMISSION_KINDS, PrivatePermissionChange};
+                use elaris_core::permissions::{PermissionKind, PermissionState};
+
+                let view = self.views.get_mut(&tab).filter(|view| view.private)?;
+                let mut permissions = [PermissionState::Ask; PermissionKind::ALL.len()];
+                for kind in PRIVATE_PERMISSION_KINDS {
+                    let choice = match change {
+                        PrivatePermissionChange::Set(selected, state) if selected == kind => {
+                            Some(state)
+                        }
+                        PrivatePermissionChange::Reset => Some(PermissionState::Ask),
+                        _ => None,
+                    };
+                    permissions[kind.index()] = view
+                        .view
+                        .private_site_permission(&origin, kind, choice)
+                        .ok()
+                        .flatten()?;
+                }
+                Some(Update::Tab(
+                    tab,
+                    TabUpdate::PrivateSitePermissions(origin, permissions),
+                ))
+            }
             Command::Processes(tab) => Some(Update::Processes(tab, self.ladybird.processes())),
             Command::EndProcess(tab, id) => self
                 .ladybird
@@ -349,6 +374,7 @@ impl Runtime {
             | Command::SetPermissionDefault(..)
             | Command::SetPermissions(_)
             | Command::SetPermission(..)
+            | Command::PrivateSitePermissions(..)
             | Command::Processes(_)
             | Command::EndProcess(..) => {
                 return None;

@@ -1113,6 +1113,37 @@ extern "C" int32_t elaris_ladybird_set_permission(ElarisLadybird* bridge, char c
     return succeed();
 }
 
+extern "C" int32_t elaris_ladybird_private_site_permission(ElarisLadybirdView* handle, char const* site,
+                                                           char const* key, int32_t choice, int32_t* result) {
+    if (!handle || !site || !key || !result || choice < -1 || choice > 2)
+        return fail("invalid private site permission");
+    if (!on_owner_thread(handle->bridge) || handle->view->is_private() != WebView::IsPrivate::Yes)
+        return fail("private site permission requires a private view");
+    auto name = permission_name(AK::StringView{key, strlen(key)});
+    auto url = URL::Parser::basic_parse(AK::StringView{site, strlen(site)});
+    if (!name.has_value() || !url.has_value() || (url->scheme() != "http"sv && url->scheme() != "https"sv))
+        return fail("invalid private site permission");
+
+    *result = -1;
+    auto origin = url->origin();
+    if (!origin.is_same_origin(handle->view->permission_origin()))
+        return succeed();
+
+    auto& manager = *handle->view->session().permission_manager;
+    // An ordinary block binds private views. Do not store an Allow that could take effect only after it is lifted.
+    if (choice >= 0) {
+        auto const& ordinary = *WebView::Application::default_session().permission_manager;
+        if (choice != 1 || ordinary.decision(*name, origin) != WebView::PermissionDecision::Block)
+            manager.set_decision(*name, origin, permission_choice(choice));
+    }
+    auto decision = manager.decision(*name, origin);
+    if (decision == WebView::PermissionDecision::Block)
+        *result = 2;
+    else
+        *result = decision.has_value() ? 1 : 0;
+    return succeed();
+}
+
 extern "C" int32_t elaris_ladybird_set_permissions(ElarisLadybird* bridge, char const* json) {
     if (!bridge || !on_owner_thread(bridge) || !json)
         return fail("invalid site permissions");

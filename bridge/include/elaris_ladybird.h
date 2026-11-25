@@ -96,6 +96,9 @@ int32_t elaris_ladybird_accessibility_select(ElarisLadybirdView*, int64_t node_i
 int32_t elaris_ladybird_reply_to_external_url(ElarisLadybirdView*, uint64_t request_id, int32_t open);
 /* Choice 0 resets a permission, 1 allows it, and 2 blocks it. */
 int32_t elaris_ladybird_set_permission(ElarisLadybird*, char const* origin, char const* key, int32_t choice);
+/* Private view only. Choice -1 reads; 0 resets, 1 allows, 2 blocks. A stale origin returns -1 in result. */
+int32_t elaris_ladybird_private_site_permission(ElarisLadybirdView*, char const* origin, char const* key,
+                                                int32_t choice, int32_t* result);
 
 typedef enum {
     ELARIS_LADYBIRD_DIALOG_CLOSED = 0,
