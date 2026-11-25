@@ -269,6 +269,7 @@ pub(in crate::ui) fn page_surface(pane: El, surface: &crate::engine::Surface, ra
         el().key("page-native-surface")
             .w_full()
             .h_full()
+            .inert()
             .native_surface(gpu.native(), rune::SurfaceFit::Fill)
     });
     #[cfg(any(elaris_ui = "macos", elaris_ui = "linux"))]
@@ -276,6 +277,7 @@ pub(in crate::ui) fn page_surface(pane: El, surface: &crate::engine::Surface, ra
         el().key("page-pixels-surface")
             .w_full()
             .h_full()
+            .inert()
             .pixels(&surface.pixels)
     });
     #[cfg(not(any(elaris_ui = "macos", elaris_ui = "linux")))]
@@ -283,6 +285,7 @@ pub(in crate::ui) fn page_surface(pane: El, surface: &crate::engine::Surface, ra
         .key("page-pixels-surface")
         .w_full()
         .h_full()
+        .inert()
         .pixels(&surface.pixels);
 
     // Keep the surface directly under the interactive pane; the pane supplies the Rune clip,
