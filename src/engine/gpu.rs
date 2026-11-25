@@ -188,6 +188,12 @@ impl GpuSurface {
         let layer_ptr = std::ptr::from_ref(&*layer).cast::<objc2_05::runtime::AnyObject>();
         // SAFETY: Both versions model the same Objective-C object pointer, retained by `layer`.
         let layer = unsafe { &*layer_ptr };
+        // SAFETY: `CALayerHost` inherits these properties from `CALayer`.
+        let current_radius: f64 = unsafe { objc2_05::msg_send![layer, cornerRadius] };
+        let current_masks: bool = unsafe { objc2_05::msg_send![layer, masksToBounds] };
+        if (current_radius - radius).abs() < 0.01 && current_masks == (radius > 0.0) {
+            return;
+        }
         // Avoid asking CoreAnimation to interpolate this presentation detail between UI frames.
         unsafe {
             let Some(transaction) = objc2_05::runtime::AnyClass::get("CATransaction") else {

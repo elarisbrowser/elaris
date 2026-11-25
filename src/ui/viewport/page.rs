@@ -285,15 +285,7 @@ pub(in crate::ui) fn page_surface(pane: El, surface: &crate::engine::Surface, ra
         .h_full()
         .pixels(&surface.pixels);
 
-    // Give the streamed frame its own rounded clip. Native surfaces are composed separately from
-    // ordinary fills, so the page mask must be an ancestor of the surface draw itself.
-    pane.child(
-        el().key("page-surface-clip")
-            .w_full()
-            .h_full()
-            .radius(radius)
-            .continuous_corners()
-            .clip_rounded(radius)
-            .child(page_surface),
-    )
+    // Keep the surface directly under the interactive pane; the pane supplies the Rune clip,
+    // while a hosted CALayerHost receives its mask above.
+    pane.child(page_surface)
 }
