@@ -859,6 +859,12 @@ fn an_empty_horizontal_window_keeps_only_the_toolbar_until_a_tab_arrives() {
     let empty_chrome = rect(&window, "horizontal-chrome");
     assert!(empty_chrome[3] < theme::HORIZONTAL_CHROME_HEIGHT);
 
+    window.pointer_down(address_x + address_width / 2.0, address_y + 4.0);
+    window.pointer_up(address_x + address_width / 2.0, address_y + 4.0);
+    window.frame(0.02);
+    assert!(window.state.omnibox.open);
+    window.update(|state, _| state.omnibox.close());
+
     window.update(|state, _| {
         state.browser.open_tab("about:blank").unwrap();
     });

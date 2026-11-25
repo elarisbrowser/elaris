@@ -175,20 +175,29 @@ pub(super) fn view(
         {
             top_row = top_row.pl(theme::SIDEBAR_PADDING);
         }
-        top_row = top_row.children(navigation).child(address);
-        if !state.settings.horizontal_address_bar_full_width {
-            top_row = top_row.child(
-                el().key("horizontal-empty-drag-space")
-                    .grow(1.0)
-                    .min_w(0.0)
-                    .h_full()
-                    .window_drag(),
-            );
-        }
-        top_row = top_row.children(trailing);
-        #[cfg(elaris_ui = "linux")]
-        {
-            top_row = top_row.children(window_controls);
+        top_row = top_row.children(navigation);
+        let full_width = state.settings.horizontal_address_bar_full_width;
+        if full_width {
+            top_row = top_row.child(address).children(trailing);
+            #[cfg(elaris_ui = "linux")]
+            {
+                top_row = top_row.children(window_controls);
+            }
+        } else {
+            top_row = top_row
+                .child(
+                    el().key("horizontal-empty-drag-space")
+                        .grow(1.0)
+                        .min_w(0.0)
+                        .h_full()
+                        .window_drag(),
+                )
+                .children(trailing);
+            #[cfg(elaris_ui = "linux")]
+            {
+                top_row = top_row.children(window_controls);
+            }
+            top_row = top_row.child(address);
         }
         drag_overlay(state, theme, overlays, reduced);
         return col()
