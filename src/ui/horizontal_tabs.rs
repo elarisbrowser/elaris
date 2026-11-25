@@ -70,6 +70,9 @@ pub(super) fn view(
         .gap(theme::NAV_GAP)
         .center_y()
         .window_drag()
+        .on_secondary_press(|state: &mut AppState, press, _| {
+            state.open_context_menu(None, press);
+        })
         .on_layout_tx(|state: &mut AppState, rect, tx| {
             if state.sidebar.horizontal_strip_width == Some(rect[2]) {
                 tx.live_only();
@@ -130,7 +133,10 @@ pub(super) fn view(
             .pr(theme::SIDEBAR_PADDING)
             .gap(theme::NAV_GAP)
             .center_y()
-            .window_drag();
+            .window_drag()
+            .on_secondary_press(|state: &mut AppState, press, _| {
+                state.open_context_menu(None, press);
+            });
         #[cfg(not(elaris_ui = "linux"))]
         {
             top_row = if inset > 0.0 {

@@ -94,7 +94,14 @@ pub(super) fn view(
         })
         .child(scroll_content);
 
-    let mut sidebar_tabs = col().key("tab-sections").w_full().grow(1.0).min_h(0.0);
+    let mut sidebar_tabs = col()
+        .key("tab-sections")
+        .w_full()
+        .grow(1.0)
+        .min_h(0.0)
+        .on_secondary_press(|state: &mut AppState, press, _| {
+            state.open_context_menu(None, press);
+        });
     if has_favourites {
         sidebar_tabs = sidebar_tabs
             .child(favourites(

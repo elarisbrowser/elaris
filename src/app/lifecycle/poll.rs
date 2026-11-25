@@ -309,13 +309,6 @@ fn apply_page_updates(state: &mut AppState, polled: &mut crate::browser::Polled,
         && !state.omnibox.open
     {
         // The menu arrives from the engine rather than from input, so ask Rune to animate it.
-        #[cfg(target_os = "macos")]
-        let received = if state.settings.native_context_menu {
-            state.page_menu.receive_native(id, menu)
-        } else {
-            state.page_menu.receive(id, menu)
-        };
-        #[cfg(not(target_os = "macos"))]
         let received = state.page_menu.receive(id, menu);
         if received {
             tx.animated();

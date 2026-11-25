@@ -245,14 +245,6 @@ impl super::AppState {
         self.save_setting(SettingsChange::Startup(startup));
     }
 
-    #[cfg(target_os = "macos")]
-    pub(crate) fn set_native_context_menu(&mut self, enabled: bool) {
-        if self.settings.native_context_menu != enabled {
-            self.settings.native_context_menu = enabled;
-            self.save_setting(SettingsChange::NativeContextMenu(enabled));
-        }
-    }
-
     pub(crate) fn set_glass_enabled(&mut self, enabled: bool) {
         if self.settings.glass_enabled == enabled {
             return;

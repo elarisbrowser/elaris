@@ -480,6 +480,14 @@ fn horizontal_drag_area_keeps_primary_drag_and_secondary_tab_menu() {
     window.frame(0.0);
     assert!(matches!(window.state.context_menu(), Some((None, _))));
     assert_eq!(window.take_titlebar_action(), None);
+
+    window.update(|state, _| state.dismiss_context_menu());
+    let strip = rect(&window, "horizontal-tab-strip");
+    let empty_space = [strip[0] + strip[2] - 2.0, center(strip)[1]];
+    window.secondary_down(empty_space[0], empty_space[1]);
+    window.secondary_up(empty_space[0], empty_space[1]);
+    window.frame(0.0);
+    assert!(matches!(window.state.context_menu(), Some((None, _))));
 }
 
 #[test]

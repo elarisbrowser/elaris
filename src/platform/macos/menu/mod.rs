@@ -5,7 +5,6 @@
 mod construct;
 mod dispatch;
 mod items;
-mod page_menu;
 mod quit;
 mod state;
 mod target;
@@ -23,7 +22,6 @@ use self::state::MenuState;
 use crate::app::AppState;
 
 pub(crate) use self::construct::{apply_key_equivalents, install};
-pub(crate) use self::page_menu::show_page_menu;
 pub(crate) use self::quit::{quit_cancelled, quit_window_approved};
 #[cfg_attr(elaris_ui = "linux", allow(unused_imports))]
 pub(crate) use self::window::refresh;

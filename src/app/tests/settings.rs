@@ -176,7 +176,7 @@ fn content_blocking_settings_keep_the_enabled_lists() {
 }
 
 #[test]
-fn internal_pages_open_a_native_context_menu_with_page_actions() {
+fn internal_pages_open_a_context_menu_with_page_actions() {
     let state = AppState::new(Some("elaris://settings"));
     let mut runtime = rune::Runtime::new(
         state,

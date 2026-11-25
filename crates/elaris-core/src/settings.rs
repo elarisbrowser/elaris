@@ -317,8 +317,6 @@ pub struct Settings {
     pub custom_search_engines: Vec<CustomSearchEngine>,
     pub download_directory: DownloadDirectory,
     pub startup: StartupMode,
-    /// Uses AppKit menus for webpage context menus on macOS.
-    pub native_context_menu: bool,
     pub glass_enabled: bool,
     pub glass_style: GlassStyle,
     /// How much of the window's colour tints the glass, 0 through 100. The settings page shows
@@ -359,7 +357,6 @@ impl Default for Settings {
             custom_search_engines: Vec::new(),
             download_directory: DownloadDirectory::Default,
             startup: StartupMode::RestoreSession,
-            native_context_menu: true,
             glass_enabled: true,
             glass_style: GlassStyle::default(),
             tint_opacity: 100,
@@ -528,7 +525,6 @@ pub enum SettingsChange {
     KeyBindings(crate::keybindings::KeyBindings),
     DownloadDirectory(DownloadDirectory),
     Startup(StartupMode),
-    NativeContextMenu(bool),
     GlassEnabled(bool),
     GlassStyle(GlassStyle),
     TintOpacity(u8),

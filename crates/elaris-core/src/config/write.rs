@@ -183,9 +183,6 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
                 StartupMode::BlankWindow => "blank".to_owned(),
             },
         ),
-        SettingsChange::NativeContextMenu(value) => {
-            ("macos", "native_context_menu", value.to_string())
-        }
         SettingsChange::GlassEnabled(value) => ("appearance", "glass", value.to_string()),
         SettingsChange::GlassStyle(value) => {
             ("appearance", "glass_style", value.config_key().to_owned())
@@ -213,7 +210,6 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
         || key == "bookmarks_bar"
         || key == "compact_tabs"
         || key == "open_tab_on_startup"
-        || key == "native_context_menu"
     {
         Value::from(value == "true")
     } else if matches!(key, "tint_opacity" | "grain" | "max_panes" | "zoom") {

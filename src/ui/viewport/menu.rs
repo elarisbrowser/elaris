@@ -25,7 +25,7 @@ pub(crate) struct PageMenuState {
     pub(super) anchor: Option<(TabId, PointerPress)>,
     current: Option<(TabId, PointerPress, PageMenu)>,
     /// A menu on a native page, which Elaris builds without asking the engine.
-    native: Option<(TabId, PointerPress)>,
+    internal: Option<(TabId, PointerPress)>,
 }
 impl PageMenuState {
     /// Opens the menu the engine built for tab `id`, if it answers the pending press.
@@ -37,21 +37,13 @@ impl PageMenuState {
         true
     }
 
-    #[cfg(target_os = "macos")]
-    pub(crate) fn receive_native(&mut self, id: TabId, menu: PageMenu) -> bool {
-        let Some((owner, point)) = self.anchor.take().filter(|(owner, _)| *owner == id) else {
-            return false;
-        };
-        crate::platform::macos::menu::show_page_menu(owner, point, menu);
-        true
-    }
     pub(crate) fn open(&self) -> bool {
-        self.current.is_some() || self.native.is_some()
+        self.current.is_some() || self.internal.is_some()
     }
 
-    pub(super) fn open_native(&mut self, id: TabId, point: PointerPress) {
+    pub(super) fn open_internal(&mut self, id: TabId, point: PointerPress) {
         *self = Self {
-            native: Some((id, point)),
+            internal: Some((id, point)),
             ..Self::default()
         };
     }
@@ -217,7 +209,7 @@ fn nav_button(
 }
 
 pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
-    if let Some((id, point)) = state.page_menu.native {
+    if let Some((id, point)) = state.page_menu.internal {
         crate::ui::internal::context_menu(state, id, point, theme, layer);
         return;
     }

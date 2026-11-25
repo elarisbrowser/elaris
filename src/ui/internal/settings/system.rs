@@ -20,31 +20,7 @@ pub(super) fn sections(cx: &mut PageContext) -> Vec<El> {
     #[cfg(elaris_ui = "linux")]
     sections.push(window_frame(cx));
     sections.extend([default_browser(cx), configuration(cx)]);
-    #[cfg(target_os = "macos")]
-    sections.push(context_menu(cx));
     sections
-}
-
-#[cfg(target_os = "macos")]
-fn context_menu(cx: &mut PageContext) -> El {
-    let control = rune_kit::Switch::new(cx.state.settings.native_context_menu)
-        .standard()
-        .label("Use native context menus")
-        .hide_label()
-        .on_toggle(|state: &mut AppState| {
-            state.set_native_context_menu(!state.settings.native_context_menu)
-        })
-        .build(&cx.kit);
-    section(
-        "Browsing",
-        cx.theme,
-        [setting(
-            cx,
-            "Context menus",
-            "Use the macOS context menu for webpages. Turn this off to use Elaris's menu.",
-            control,
-        )],
-    )
 }
 
 #[cfg(elaris_ui = "linux")]
