@@ -48,13 +48,21 @@ fn horizontal_session_startup_opens_a_new_tab_without_discarding_restored_tabs()
 
     state.open_start_page(None, Some(&session));
 
-    assert_eq!(state.browser.tabs().len(), 1);
-    assert_eq!(
-        state.browser.active_tab().unwrap().url,
-        "https://restored.example/"
-    );
+    assert_eq!(state.browser.tabs().len(), 2);
+    assert_eq!(state.browser.tabs()[0].url, "https://restored.example/");
+    assert_eq!(state.browser.active_tab().unwrap().url, "about:blank");
     assert!(state.omnibox.open);
     assert_eq!(state.omnibox.mode, omnibox::Mode::New);
+}
+
+#[test]
+fn horizontal_startup_can_leave_the_window_without_tabs() {
+    let mut state = AppState::new(None);
+    state.settings.tab_layout = elaris_core::settings::TabLayout::Horizontal;
+    state.settings.open_tab_on_startup = false;
+    state.open_start_page(None, None);
+    assert!(state.browser.tabs().is_empty());
+    assert!(!state.omnibox.open);
 }
 
 #[test]

@@ -799,6 +799,26 @@ fn compact_tabs_fold_the_toolbar_into_the_tab_strip() {
 }
 
 #[test]
+fn an_empty_horizontal_window_keeps_only_the_toolbar_until_a_tab_arrives() {
+    let mut state = AppState::new(None);
+    state.set_tab_layout(TabLayout::Horizontal);
+    state.settings.open_tab_on_startup = false;
+    let mut runtime = runtime(state, 1000.0);
+
+    assert!(runtime.presented("horizontal-tab-strip").is_none());
+    assert!(runtime.presented("horizontal-navigation").is_some());
+    assert!(runtime.presented("horizontal-address-bar").is_some());
+    let empty_chrome = rect(&runtime, "horizontal-chrome");
+    assert!(empty_chrome[3] < theme::HORIZONTAL_CHROME_HEIGHT);
+
+    runtime.update(|state, _| {
+        state.browser.open_tab("about:blank").unwrap();
+    });
+    runtime.frame(0.01);
+    assert!(runtime.presented("horizontal-tab-strip").is_some());
+}
+
+#[test]
 fn the_vertical_layout_can_hold_its_address_bar_in_a_toolbar() {
     let mut state = AppState::new(Some("https://example.com/"));
     state.set_address_bar(elaris_core::settings::AddressBarPosition::Toolbar);

@@ -82,6 +82,9 @@ pub fn parse(contents: &str) -> Result<ConfigLoad, String> {
     if let Some(value) = bool_value(&document, "appearance", "compact_tabs", &mut issues) {
         settings.compact_tabs = value;
     }
+    if let Some(value) = bool_value(&document, "appearance", "open_tab_on_startup", &mut issues) {
+        settings.open_tab_on_startup = value;
+    }
     if let Some(value) = string_value(&document, "appearance", "sidebar_side", &mut issues) {
         if let Some(side) = SidebarSide::ALL
             .into_iter()

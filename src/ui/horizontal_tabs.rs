@@ -18,6 +18,10 @@ use crate::ui::components::controls::{icon_button, icon_button_style, row_button
 
 pub(crate) const SCROLL: &str = "horizontal-tabs-scroll";
 
+pub(crate) fn tab_bar_visible(state: &AppState) -> bool {
+    !state.browser.tabs().is_empty() || state.settings.open_tab_on_startup
+}
+
 pub(crate) fn key(id: TabId) -> String {
     format!("horizontal-tab-{}", id.raw())
 }
@@ -116,6 +120,34 @@ pub(super) fn view(
                 .grow(0.0),
         );
         toolbar_width += theme::COMPACT_ADDRESS_WIDTH + theme::NAV_GAP;
+    }
+
+    if !tab_bar_visible(state) {
+        let top_row = if compact {
+            row()
+                .key("horizontal-navigation")
+                .w_full()
+                .h(theme::HORIZONTAL_NAV_HEIGHT)
+                .px(theme::SIDEBAR_PADDING)
+                .gap(theme::NAV_GAP)
+                .center_y()
+                .window_drag()
+                .children(toolbar)
+                .child(new_tab_button(theme))
+                .children(trailing)
+        } else {
+            navigation(state, cx, theme, overlays, reduced).child(new_tab_button(theme))
+        };
+        drag_overlay(state, theme, overlays, reduced);
+        return col()
+            .key("horizontal-chrome")
+            .w_full()
+            .transition(if reduced {
+                Transition::none()
+            } else {
+                Transition::opacity()
+            })
+            .child(top_row);
     }
 
     let strip_width = state.sidebar.horizontal_strip_width.unwrap_or_else(|| {
@@ -224,17 +256,7 @@ pub(super) fn view(
                 })
                 .child(content),
         )
-        .child(
-            icon_button(
-                "new-tab",
-                "New Tab",
-                &icons::PLUS,
-                theme::ICON_BUTTON,
-                theme,
-            )
-            .shortcut_hint("cmd+t")
-            .on_press_tx(app::new_tab),
-        );
+        .child(new_tab_button(theme));
     if overflow {
         strip = strip.child(overflow_menu(state, cx, theme, overlays));
     }
@@ -264,12 +286,24 @@ pub(super) fn view(
         } else {
             Transition::opacity()
         })
-        .child(strip);
+        .child(strip.arrives_whole());
     if compact {
         chrome
     } else {
         chrome.child(navigation(state, cx, theme, overlays, reduced))
     }
+}
+
+fn new_tab_button(theme: &Theme) -> El {
+    icon_button(
+        "new-tab",
+        "New Tab",
+        &icons::PLUS,
+        theme::ICON_BUTTON,
+        theme,
+    )
+    .shortcut_hint("cmd+t")
+    .on_press_tx(app::new_tab)
 }
 
 /// The toolbar row below the tab strip: navigation, the address bar, and downloads.

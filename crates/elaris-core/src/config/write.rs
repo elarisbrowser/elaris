@@ -130,6 +130,9 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
             ("appearance", "address_bar", value.config_key().to_owned())
         }
         SettingsChange::CompactTabs(value) => ("appearance", "compact_tabs", value.to_string()),
+        SettingsChange::OpenTabOnStartup(value) => {
+            ("appearance", "open_tab_on_startup", value.to_string())
+        }
         SettingsChange::SidebarSide(value) => {
             ("appearance", "sidebar_side", value.config_key().to_owned())
         }
@@ -209,6 +212,7 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
         || key == "force_dark"
         || key == "bookmarks_bar"
         || key == "compact_tabs"
+        || key == "open_tab_on_startup"
         || key == "native_context_menu"
     {
         Value::from(value == "true")

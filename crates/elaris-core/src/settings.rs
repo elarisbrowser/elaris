@@ -301,6 +301,8 @@ pub struct Settings {
     pub address_bar: AddressBarPosition,
     /// The horizontal layout puts its tabs, navigation and address bar in a single row.
     pub compact_tabs: bool,
+    /// Opens a blank tab when a horizontal window starts without an explicit page.
+    pub open_tab_on_startup: bool,
     pub sidebar_side: SidebarSide,
     pub new_tab_position: NewTabPosition,
     pub page_style: PageStyle,
@@ -344,6 +346,7 @@ impl Default for Settings {
             tab_layout: TabLayout::default(),
             address_bar: AddressBarPosition::default(),
             compact_tabs: false,
+            open_tab_on_startup: true,
             sidebar_side: SidebarSide::default(),
             new_tab_position: NewTabPosition::default(),
             page_style: PageStyle::default(),
@@ -509,6 +512,7 @@ pub enum SettingsChange {
     TabLayout(TabLayout),
     AddressBar(AddressBarPosition),
     CompactTabs(bool),
+    OpenTabOnStartup(bool),
     SidebarSide(SidebarSide),
     NewTabPosition(NewTabPosition),
     PageStyle(PageStyle),

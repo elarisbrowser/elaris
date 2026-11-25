@@ -112,6 +112,14 @@ fn appearance(cx: &mut PageContext) -> El {
             tx.motion(theme::SIDEBAR_TOGGLE);
         })
         .build(&switch_kit(&cx.kit));
+    let open_tab_on_startup = rune_kit::Switch::new(state.settings.open_tab_on_startup)
+        .standard()
+        .label("Open a new tab on startup")
+        .hide_label()
+        .on_toggle(|state: &mut AppState| {
+            state.set_open_tab_on_startup(!state.settings.open_tab_on_startup)
+        })
+        .build(&switch_kit(&cx.kit));
     let sidebar_side = SegmentedControl::new(
         &SidebarSide::ALL.map(SidebarSide::label),
         SidebarSide::ALL
@@ -167,6 +175,12 @@ fn appearance(cx: &mut PageContext) -> El {
             "Compact tabs",
             "Put the tabs, navigation and address bar in a single row.",
             compact_tabs,
+        ));
+        rows.push(setting(
+            cx,
+            "Open a new tab on startup",
+            "Start horizontal windows with a blank tab ready for an address.",
+            open_tab_on_startup,
         ));
     } else {
         rows.push(setting(

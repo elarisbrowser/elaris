@@ -58,6 +58,13 @@ impl super::AppState {
         }
     }
 
+    pub(crate) fn set_open_tab_on_startup(&mut self, enabled: bool) {
+        if self.settings.open_tab_on_startup != enabled {
+            self.settings.open_tab_on_startup = enabled;
+            self.save_setting(SettingsChange::OpenTabOnStartup(enabled));
+        }
+    }
+
     pub(crate) fn sidebar_on_right(&self) -> bool {
         !self.horizontal_tabs() && self.settings.sidebar_side == SidebarSide::Right
     }
