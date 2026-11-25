@@ -8,9 +8,11 @@
 //! them. The bridge reuses a surface once Rune reports it has drawn a newer frame, and frees its
 //! spare ones once the page stops painting.
 //!
-//! Linux: each frame is the dmabuf of Ladybird's backing store, which Rune copies into a texture of
-//! its own the first time it draws it, and then tells the engine it has read it. Ladybird paints
-//! into the store again only after that.
+//! Linux: each frame is the dmabuf of Ladybird's backing store. Under Wayland a tab's frames go to
+//! a subsurface of its own under the window (`wayland`), which the desktop's compositor shows as
+//! they are committed; it releases each buffer once it no longer reads it. Elsewhere, and for a
+//! Peek card, Rune copies the dmabuf into a texture of its own the first time it draws it, and
+//! then tells the engine it has read it. Ladybird paints into a store again only after that.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -31,8 +33,9 @@ const CPU_FRAMES_VARIABLE: &str = "ELARIS_CPU_FRAMES";
 const GPU_FRAMES_VARIABLE: &str = "ELARIS_GPU_FRAMES";
 
 /// Whether new tabs show their frames through the GPU. On macOS that is the default and
-/// `ELARIS_CPU_FRAMES=1` copies through the CPU instead; on Linux it is opt-in with
-/// `ELARIS_GPU_FRAMES=1` while it is untested on real hardware, and only when Ladybird was built with
+/// `ELARIS_CPU_FRAMES=1` copies through the CPU instead. On Linux it is the default under Wayland,
+/// where the frames show in subsurfaces, and opt-in with `ELARIS_GPU_FRAMES=1` elsewhere (X11),
+/// where Rune draws them; `ELARIS_GPU_FRAMES=0` turns it off. Either needs a Ladybird built with
 /// Vulkan dmabuf images.
 pub(super) fn enabled() -> bool {
     #[cfg(target_os = "macos")]
@@ -46,7 +49,13 @@ pub(super) fn enabled() -> bool {
     {
         static ENABLED: OnceLock<bool> = OnceLock::new();
         *ENABLED.get_or_init(|| {
-            elaris_core::dev::var(GPU_FRAMES_VARIABLE).is_some_and(|value| value != "0")
+            let wanted = match elaris_core::dev::var(GPU_FRAMES_VARIABLE) {
+                Some(value) => value != "0",
+                None => super::wayland::session(),
+            };
+            #[cfg(feature = "ladybird-bridge")]
+            let wanted = wanted && elaris::ladybird::gpu_frames_supported();
+            wanted
         })
     }
 }
@@ -85,8 +94,14 @@ pub(crate) struct GpuSurface {
 #[cfg(target_os = "linux")]
 #[derive(Default)]
 struct Linux {
-    /// Wakes the engine thread when Rune has read a frame.
+    /// Wakes the engine thread when Rune or the compositor has read a frame.
     wake: Mutex<Option<Wake>>,
+    /// The subsurface the frames show in under Wayland, made the first time the tab is hosted.
+    page: OnceLock<Option<Arc<super::wayland::PageSurface>>>,
+    /// Frames go to `page` rather than to Rune.
+    hosted: std::sync::atomic::AtomicBool,
+    /// The compositor refused the page's frames, which Rune shows from then on.
+    refused: std::sync::atomic::AtomicBool,
     /// Each backing store's buffer as Rune imported it, which it does once per buffer.
     buffers: Mutex<std::collections::HashMap<BufferKey, Arc<DmabufBuffer>>>,
 }
@@ -162,9 +177,55 @@ impl GpuSurface {
         };
     }
 
-    /// Shows `frame` once Rune next draws, replacing any frame it has not drawn yet.
+    /// Whether the frames can show in a subsurface of their own (Wayland).
+    #[cfg(target_os = "linux")]
+    pub(crate) fn can_host(&self) -> bool {
+        super::wayland::available() && !self.linux.refused.load(Ordering::Acquire)
+    }
+
+    /// Shows the frames in the tab's own subsurface, or goes back to handing them to Rune. Rune
+    /// shows whichever the window draws next. Engine thread only.
+    #[cfg(target_os = "linux")]
     #[cfg_attr(not(feature = "ladybird-bridge"), allow(dead_code))]
-    pub(super) fn show(&self, frame: GpuFrame) -> Result<(), String> {
+    pub(super) fn set_hosted(&self, hosted: bool) {
+        let page = (hosted && self.can_host()).then(|| self.page()).flatten();
+        let handle = page.as_ref().and_then(super::wayland::PageSurface::handle);
+        if handle.is_none()
+            && let Some(Some(page)) = self.linux.page.get()
+        {
+            page.detach();
+        }
+        self.linux.hosted.store(handle.is_some(), Ordering::Release);
+        self.native.set_wayland_surface(handle);
+        super::wake_all_windows();
+    }
+
+    #[cfg(target_os = "linux")]
+    fn page(&self) -> Option<Arc<super::wayland::PageSurface>> {
+        self.linux
+            .page
+            .get_or_init(|| {
+                let linux = Arc::clone(&self.linux);
+                let wake: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
+                    if let Some(wake) = linux
+                        .wake
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .clone()
+                    {
+                        wake();
+                    }
+                });
+                super::wayland::PageSurface::new(Arc::clone(&self.completed), wake)
+            })
+            .clone()
+    }
+
+    /// Shows `frame`: in the tab's subsurface as soon as it is committed, or in Rune's next draw,
+    /// replacing any frame it has not drawn yet. False when the frame has to wait, for the
+    /// subsurface's buffer to be made; the engine is woken to show it again.
+    #[cfg_attr(not(feature = "ladybird-bridge"), allow(dead_code))]
+    pub(super) fn show(&self, frame: GpuFrame) -> Result<bool, String> {
         #[cfg(target_os = "macos")]
         {
             // SAFETY: The bridge finished its copy before returning the surface, and does not
@@ -174,15 +235,19 @@ impl GpuSurface {
             self.native.push(buffer, frame.serial)?;
         }
         #[cfg(target_os = "linux")]
-        self.show_dmabuf(frame)?;
+        match self.show_dmabuf(frame)? {
+            Shown::Subsurface => return Ok(true),
+            Shown::Waiting => return Ok(false),
+            Shown::Rune => {}
+        }
         // `Pixels::set` wakes the window for a new frame; pushing a surface frame does not, and
         // without it the page only redraws when something else, such as the pointer, does.
         super::wake_all_windows();
-        Ok(())
+        Ok(true)
     }
 
     #[cfg(target_os = "linux")]
-    fn show_dmabuf(&self, frame: GpuFrame) -> Result<(), String> {
+    fn show_dmabuf(&self, frame: GpuFrame) -> Result<Shown, String> {
         use std::os::fd::OwnedFd;
         use std::os::unix::fs::MetadataExt;
 
@@ -191,6 +256,7 @@ impl GpuSurface {
             bitmap_id,
             width,
             height,
+            scale,
             serial,
             ..
         } = frame;
@@ -200,6 +266,31 @@ impl GpuSurface {
         let metadata = file.metadata().map_err(|error| error.to_string())?;
         let fd = OwnedFd::from(file);
         let key = (bitmap_id, metadata.dev(), metadata.ino(), [width, height]);
+        if self.linux.hosted.load(Ordering::Acquire)
+            && let Some(page) = self.page()
+        {
+            let shown = page.present(&super::wayland::Frame {
+                key,
+                fd: &fd,
+                offset: dmabuf.offset,
+                stride: dmabuf.stride,
+                modifier: dmabuf.modifier,
+                format: dmabuf.format,
+                width,
+                height,
+                scale,
+                serial,
+            });
+            match shown {
+                super::wayland::Presented::Shown => return Ok(Shown::Subsurface),
+                super::wayland::Presented::Pending => return Ok(Shown::Waiting),
+                // Rune shows this frame and those after it.
+                super::wayland::Presented::Failed => {
+                    self.linux.refused.store(true, Ordering::Release);
+                    self.set_hosted(false);
+                }
+            }
+        }
         let buffer = {
             let mut buffers = self
                 .linux
@@ -242,8 +333,20 @@ impl GpuSurface {
                 wake();
             }
         });
-        self.native.push_dmabuf(read, serial)
+        self.native.push_dmabuf(read, serial)?;
+        Ok(Shown::Rune)
     }
+}
+
+/// Where a Linux frame went.
+#[cfg(target_os = "linux")]
+enum Shown {
+    /// To the tab's subsurface, which needs no frame of the window's.
+    Subsurface,
+    /// To Rune, which draws it in the window's next frame.
+    Rune,
+    /// Nowhere yet: its subsurface buffer is still being made.
+    Waiting,
 }
 
 /// `CALayerHost` shows the layers another process commits into a CoreAnimation context. It is

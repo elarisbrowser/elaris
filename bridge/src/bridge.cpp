@@ -1,4 +1,5 @@
 #include <cmath>
+#include <sys/types.h>
 #ifdef ELARIS_BUILD_SMOKE_TESTS
 #include <LibWebView/RequestServerManager.h>
 
@@ -6,6 +7,9 @@
 #endif
 
 #include <elaris_ladybird.h>
+#if defined(AK_OS_LINUX) && defined(USE_VULKAN_DMABUF_IMAGES)
+#include "presentation_gpu_linux.h"
+#endif
 
 #include <AK/ByteString.h>
 #include <AK/JsonArray.h>
@@ -143,9 +147,14 @@ class TestLocationProvider final : public Core::GeolocationProvider {
 static uint32_t s_dev_options = 0;
 
 #if defined(AK_OS_LINUX)
+// Whether the host asked for frames in GPU memory (elaris_ladybird_request_gpu_frames).
+static bool s_gpu_frames_requested = false;
+// The DRM device the window system presents on (elaris_ladybird_set_presentation_device), or 0 when unknown.
+static dev_t s_presentation_device = 0;
+
 // Whether the host asked for frames in GPU memory.
 static bool gpu_frames_requested() {
-    return (s_dev_options & ELARIS_LADYBIRD_DEV_GPU_FRAMES) != 0;
+    return s_gpu_frames_requested || (s_dev_options & ELARIS_LADYBIRD_DEV_GPU_FRAMES) != 0;
 }
 #endif
 
@@ -233,12 +242,22 @@ class ElarisApplication final : public WebView::Application {
 
 #if defined(AK_OS_LINUX)
     // Rune imports only linear dmabufs, so that is the only layout the Compositor may give a frame when frames are
-    // shared with the host's GPU.
+    // shared with the host's GPU. A Wayland compositor takes them too, and a Peek page's frames go to Rune even there.
     Vector<u64> platform_presentation_drm_format_modifiers() const override {
         if (!gpu_frames_requested())
             return {};
         return {0 /* DRM_FORMAT_MOD_LINEAR */};
     }
+
+#if defined(USE_VULKAN_DMABUF_IMAGES)
+    // The Compositor paints on the GPU the window system presents on, as in Ladybird's own Linux UI, so the frames it
+    // shares need no copy from another GPU.
+    Optional<Gfx::GpuDeviceIdentity> platform_presentation_gpu_device() const override {
+        if (!gpu_frames_requested() || s_presentation_device == 0)
+            return {};
+        return Elaris::presentation_gpu_identity(s_presentation_device);
+    }
+#endif
 #endif
 };
 
@@ -1487,6 +1506,23 @@ static Optional<AK::ByteString> helper_directory() {
 
 extern "C" void elaris_ladybird_set_dev_options(uint32_t options) {
     s_dev_options = options;
+}
+
+extern "C" void elaris_ladybird_set_presentation_device(uint64_t device) {
+#if defined(AK_OS_LINUX)
+    s_presentation_device = static_cast<dev_t>(device);
+#else
+    (void)device;
+#endif
+}
+
+extern "C" void elaris_ladybird_request_gpu_frames(int32_t requested) {
+#if defined(AK_OS_LINUX)
+    s_gpu_frames_requested = requested != 0;
+#else
+    // macOS views ask for GPU frames one by one (elaris_ladybird_set_gpu_frames).
+    (void)requested;
+#endif
 }
 
 extern "C" int32_t elaris_ladybird_create(char const* resource_dir, char const* profile_dir,

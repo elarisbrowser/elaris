@@ -104,6 +104,8 @@ pub(super) struct RawKeyEvent {
 
 unsafe extern "C" {
     pub(super) fn elaris_ladybird_set_dev_options(options: u32);
+    pub(super) fn elaris_ladybird_request_gpu_frames(requested: i32);
+    pub(super) fn elaris_ladybird_set_presentation_device(device: u64);
     pub(super) fn elaris_ladybird_create(
         resource_dir: *const c_char,
         profile_dir: *const c_char,

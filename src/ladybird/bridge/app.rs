@@ -82,6 +82,20 @@ pub fn gpu_frames_supported() -> bool {
     unsafe { elaris_ladybird_gpu_frames_supported() != 0 }
 }
 
+/// Asks Ladybird for frames the host shows from GPU memory, before [`Ladybird::new`]: on Linux,
+/// dmabufs Rune or the window system reads in place.
+pub fn request_gpu_frames(requested: bool) {
+    // SAFETY: The setter only stores a value.
+    unsafe { elaris_ladybird_request_gpu_frames(requested.into()) };
+}
+
+/// Names the DRM device (`dev_t`) the window system presents on, before [`Ladybird::new`], so
+/// Ladybird's Compositor paints its GPU frames there (Linux).
+pub fn set_presentation_device(device: u64) {
+    // SAFETY: The setter only stores a value.
+    unsafe { elaris_ladybird_set_presentation_device(device) };
+}
+
 impl Ladybird {
     /// Starts Ladybird. `callback` receives every view's events with the id the view was
     /// created with, synchronously while [`Self::wait`] or [`Self::pump`] runs.

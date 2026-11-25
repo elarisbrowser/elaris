@@ -86,21 +86,37 @@ seven-second gesture.
 
 The holds left are refreshes for which the Compositor produced no frame.
 
-### Linux (opt-in, untested on a GPU)
+### Linux (untested on a GPU)
 
-`ELARIS_GPU_FRAMES=1` shares each frame as the dmabuf of Ladybird's own backing store. The
-bridge asks the Compositor for linear buffers only (what Rune imports), presents without CPU
-memory, and returns a duplicate of the store's descriptor with its stride, offset, format and
-modifier. The engine caches one Rune `DmabufBuffer` per store and pushes a `Dmabuf` per frame.
-Rune copies it into a texture of its own and calls back when it has read it; until then the
-bridge holds the store, since the Compositor would otherwise paint into it
-(`ElarisWebView::release_backing_store`). A frame Rune replaced before drawing it is covered by
-the next one it read.
+Frames are shared as the dmabuf of Ladybird's own backing store, by default under Wayland and with
+`ELARIS_GPU_FRAMES=1` elsewhere (`ELARIS_GPU_FRAMES=0` turns them off). The engine asks for them
+before Ladybird starts (`elaris_ladybird_request_gpu_frames`), and the bridge asks the Compositor
+for linear buffers only (what Rune imports), presents without CPU memory, and returns a duplicate
+of the store's descriptor with its stride, offset, format and modifier.
+
+**Wayland**, as Ladybird's own Linux UI does (`UI/Qt/WaylandPageSurface.cpp`): each tab's frames
+go to a `wl_surface` of its own (`src/engine/wayland.rs`), on the windows' display connection in a
+queue a thread of Elaris's dispatches. Rune makes it a desynchronized subsurface below the window,
+at the page's place, punches that place out of its pixels, and switches the window to
+premultiplied alpha with no opaque region (`NativeSurface::set_wayland_surface`). Each frame is
+attached and committed as it arrives: the desktop's compositor shows it, or scans it out, with no
+copy, no push to Rune and no frame of the window's. Each backing store's `wl_buffer` is made once,
+asynchronously (`zwp_linux_buffer_params_v1.create`), so a dmabuf the compositor refuses fails
+only that tab, which then goes back to Rune. A store stays out of Ladybird's hands until the
+compositor releases its buffer. Ladybird's Compositor paints on the GPU the compositor presents
+on: its main device from the default dmabuf feedback, matched to a Vulkan device by its DRM node
+(`presentation_gpu_linux.cpp`).
+
+**X11**, and Peek cards anywhere (they scale the page, which a subsurface can't follow): the engine
+caches one Rune `DmabufBuffer` per store and pushes a `Dmabuf` per frame. Rune copies it into a
+texture of its own and calls back when it has read it; until then the bridge holds the store,
+since the Compositor would otherwise paint into it (`ElarisWebView::release_backing_store`). A
+frame Rune replaced before drawing it is covered by the next one it read.
 
 It needs a Ladybird built with Vulkan dmabuf images (`USE_VULKAN_DMABUF_IMAGES`, which wants
 `glslangValidator`); the devcontainer image lacks it, so there the bridge reports no support and
-frames are copied as before. Known gaps: the Compositor's GPU is not matched to Rune's (a hybrid
-laptop can fail to import and show nothing), and there are no tab thumbnails from GPU frames.
+frames are copied as before. Thumbnails come from Compositor snapshots, as for macOS remote layers,
+since the CPU can't read the dmabufs. The subsurface path has not run on real hardware.
 
 ## Measuring
 

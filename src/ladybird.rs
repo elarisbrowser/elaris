@@ -7,7 +7,9 @@ mod accessibility;
 mod bridge;
 pub use accessibility::{AccessibilityEvent, AccessibilityNode};
 #[cfg(feature = "ladybird-bridge")]
-pub use bridge::{Ladybird, Waker, WebView, gpu_frames_supported};
+pub use bridge::{
+    Ladybird, Waker, WebView, gpu_frames_supported, request_gpu_frames, set_presentation_device,
+};
 
 /// Display timing for Ladybird's compositor. An absent ID uses timer-based pacing.
 #[derive(Clone, Copy)]

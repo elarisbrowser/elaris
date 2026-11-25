@@ -88,6 +88,13 @@ impl Runtime {
         })?;
         let events = Rc::new(RefCell::new(Vec::new()));
         let sink = Rc::clone(&events);
+        #[cfg(target_os = "linux")]
+        if super::gpu::enabled() {
+            elaris::ladybird::request_gpu_frames(true);
+            if let Some(device) = super::wayland::compositor_device() {
+                elaris::ladybird::set_presentation_device(device);
+            }
+        }
         let mut ladybird = Ladybird::new(resources.as_deref(), &profile, move |view, event| {
             sink.borrow_mut().push((view, event));
         })?;
@@ -411,11 +418,11 @@ impl Runtime {
                 continue;
             };
             let completed = gpu.completed();
-            if completed <= view.released_serial {
-                continue;
+            if completed > view.released_serial {
+                view.released_serial = completed;
+                let _ = view.view.release_frames(completed);
             }
-            view.released_serial = completed;
-            let _ = view.view.release_frames(completed);
+            // A frame waits for a surface to come free, or for its subsurface buffer to be made.
             if std::mem::take(&mut view.gpu_waiting)
                 && let Err(error) = show_frame(view, &mut self.timing, false)
             {
@@ -779,7 +786,12 @@ fn apply_to_view(view: &mut View, command: ViewCommand, timing: &mut Timing) -> 
         }
         ViewCommand::HostLayer(hosted) if hosted == view.hosted => Ok(()),
         ViewCommand::HostLayer(hosted) => {
+            #[cfg(target_os = "macos")]
             web.set_remote_layer(hosted)?;
+            #[cfg(target_os = "linux")]
+            if let Some(gpu) = &view.surface.gpu {
+                gpu.set_hosted(hosted);
+            }
             view.hosted = hosted;
             Ok(())
         }

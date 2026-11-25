@@ -296,6 +296,12 @@ typedef struct {
 #define ELARIS_LADYBIRD_DEV_GPU_FRAMES 8u
 /* Call before elaris_ladybird_create. */
 void elaris_ladybird_set_dev_options(uint32_t options);
+/* Whether the host shows frames from GPU memory (Linux: as dmabufs it reads in place, or hands to the window system),
+ * as ELARIS_LADYBIRD_DEV_GPU_FRAMES also asks. Call before elaris_ladybird_create. */
+void elaris_ladybird_request_gpu_frames(int32_t requested);
+/* The DRM device (dev_t) the window system presents on, for the Compositor to paint on that GPU too. Linux only; 0 is
+ * unknown. Call before elaris_ladybird_create. */
+void elaris_ladybird_set_presentation_device(uint64_t device);
 /* All calls, including callbacks, run on the thread that initializes the bridge. resource_dir may be NULL to use
  * the resources Ladybird finds beside its helper processes. */
 int32_t elaris_ladybird_create(const char* resource_dir, const char* profile_dir, ElarisLadybirdEventCallback callback,

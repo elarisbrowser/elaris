@@ -20,6 +20,8 @@ mod runtime;
 mod thread;
 #[cfg(any(test, feature = "ladybird-bridge"))]
 mod thumbnails;
+#[cfg(target_os = "linux")]
+pub(crate) mod wayland;
 
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
@@ -99,12 +101,14 @@ impl Default for Surface {
 
 impl Surface {
     /// Whether the surface can show its frames in a layer the window server composites (macOS,
-    /// unless `ELARIS_REMOTE_LAYERS=0`): each frame reaches the screen on the next refresh, with no
+    /// unless `ELARIS_REMOTE_LAYERS=0`; a Wayland subsurface on Linux): each frame reaches the screen on the next refresh, with no
     /// copy and no redraw of the window's.
     pub(crate) fn hosts_layer(&self) -> bool {
         #[cfg(target_os = "macos")]
         return self.gpu.is_some() && gpu::remote_layers();
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "linux")]
+        return self.gpu.as_ref().is_some_and(gpu::GpuSurface::can_host);
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
         false
     }
 
