@@ -71,7 +71,7 @@ mod tests;
 pub(crate) use bookmarks::open_bookmarks;
 pub(crate) use lifecycle::{
     new_tab, omnibox_input_key, on_reopen, on_window_focus, open_from_launcher, open_history,
-    open_settings, poll, search_bookmarks, setup_headless, shut_down, start_workers,
-    submit_omnibox, window_closed,
+    open_privacy_notice, open_settings, poll, search_bookmarks, setup_headless, shut_down,
+    start_workers, submit_omnibox, window_closed,
 };
 pub(crate) use task_manager::open_task_manager;

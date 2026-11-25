@@ -40,6 +40,7 @@ internal_pages! {
     Downloads => ("downloads", "Downloads"),
     TaskManager => ("processes", "Task Manager"),
     About => ("about", "About Elaris"),
+    Privacy => ("privacy", "Privacy Notice"),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -85,6 +86,7 @@ mod tests {
             ("elaris://downloads", InternalPage::Downloads),
             ("elaris://processes", InternalPage::TaskManager),
             ("elaris://about", InternalPage::About),
+            ("elaris://privacy", InternalPage::Privacy),
             ("ELARIS://settings", InternalPage::Settings),
         ] {
             assert_eq!(InternalRoute::parse(url), Some(InternalRoute::Page(page)));

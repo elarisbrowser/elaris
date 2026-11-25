@@ -137,6 +137,22 @@ pub(crate) fn open_history(state: &mut AppState, tx: &mut Tx) {
     tx.focus(crate::ui::HISTORY_SEARCH, false);
 }
 
+pub(crate) fn open_privacy_notice(state: &mut AppState, tx: &mut Tx) {
+    state.dismiss_find();
+    state.omnibox.close();
+    let tab = state
+        .browser
+        .internal_tab(InternalPage::Privacy)
+        .unwrap_or_else(|| {
+            state
+                .browser
+                .open_tab(InternalPage::Privacy.address())
+                .expect("valid built-in Privacy route")
+        });
+    state.activate(tab);
+    tx.focus(focus_key(&state.browser), false);
+}
+
 /// Keyboard input the omnibox uses before the text editor handles it.
 pub(crate) fn omnibox_input_key(state: &mut AppState, event: &KeyEvent, tx: &mut Tx) -> bool {
     if crate::ui::tab_switcher::cycle_key(state, event, tx) {

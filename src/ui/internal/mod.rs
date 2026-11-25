@@ -14,6 +14,7 @@ mod clear_data;
 mod history;
 mod layout;
 mod placeholders;
+mod privacy_notice;
 mod settings;
 mod task_manager;
 use crate::ui::components::widgets;
@@ -83,6 +84,10 @@ fn page(page: InternalPage) -> Page {
         },
         InternalPage::About => Page {
             view: placeholders::about,
+            actions: &[],
+        },
+        InternalPage::Privacy => Page {
+            view: privacy_notice::view,
             actions: &[],
         },
     }

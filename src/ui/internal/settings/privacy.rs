@@ -5,7 +5,7 @@
 use rune::El;
 use rune_kit::{Button, ButtonVariant};
 
-use crate::app::AppState;
+use crate::app::{self, AppState};
 use crate::ui::components::widgets::{setting, switch_kit};
 use crate::ui::internal::PageContext;
 use crate::ui::internal::clear_data;
@@ -14,7 +14,25 @@ use elaris_core::settings::ContentBlockList;
 use super::section;
 
 pub(super) fn sections(cx: &mut PageContext) -> Vec<El> {
-    vec![browsing_data(cx), content_blocking(cx)]
+    vec![notice(cx), browsing_data(cx), content_blocking(cx)]
+}
+
+fn notice(cx: &mut PageContext) -> El {
+    let control = Button::new("Read")
+        .variant(ButtonVariant::Neutral)
+        .on_press_tx(app::open_privacy_notice)
+        .build(&cx.kit)
+        .key("settings-privacy-notice");
+    section(
+        "Privacy notice",
+        cx.theme,
+        [setting(
+            cx,
+            "How Elaris handles your data",
+            "What stays on this device, what is sent to websites and providers, and how private windows work.",
+            control,
+        )],
+    )
 }
 
 fn browsing_data(cx: &mut PageContext) -> El {
