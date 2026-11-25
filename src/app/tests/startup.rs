@@ -34,6 +34,19 @@ fn blank_window_startup_does_not_create_a_web_tab() {
 }
 
 #[test]
+fn horizontal_blank_window_startup_opens_the_configured_new_tab() {
+    let mut state = AppState::new(None);
+    state.settings.set_startup(StartupMode::BlankWindow);
+    state.settings.tab_layout = elaris_core::settings::TabLayout::Horizontal;
+    state.open_start_page(None, None);
+
+    assert_eq!(state.browser.tabs().len(), 1);
+    assert_eq!(state.browser.active_tab().unwrap().label(), "New Tab");
+    assert!(state.omnibox.open);
+    assert_eq!(state.omnibox.mode, omnibox::Mode::New);
+}
+
+#[test]
 fn horizontal_session_startup_opens_a_new_tab_without_discarding_restored_tabs() {
     let mut state = AppState::new(None);
     state.settings.tab_layout = elaris_core::settings::TabLayout::Horizontal;

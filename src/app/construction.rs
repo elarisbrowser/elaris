@@ -303,11 +303,7 @@ impl AppState {
         } else if let Some(session) = session {
             self.restore_session(session);
         }
-        if start.is_none()
-            && self.settings.startup == StartupMode::RestoreSession
-            && self.horizontal_tabs()
-            && self.settings.open_tab_on_startup
-        {
+        if start.is_none() && self.horizontal_tabs() && self.settings.open_tab_on_startup {
             if let Ok(tab) = self.browser.open_tab("about:blank") {
                 self.browser.activate_tab(tab);
             }
