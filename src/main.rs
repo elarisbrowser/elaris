@@ -90,6 +90,8 @@ fn configure_app(app: App<app::AppState>) -> App<app::AppState> {
     let app = {
         let app_handle = app.handle();
         app.on_window(move |window| {
+            #[cfg(target_os = "linux")]
+            engine::wayland::start_for(window);
             let retained_window = window.clone();
             let register_handle = app_handle.clone();
             register_handle.update(move |state, _| {

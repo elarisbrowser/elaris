@@ -211,6 +211,10 @@ pub(super) unsafe extern "C" fn dispatch(context: *mut c_void, raw: *const RawEv
             33 => Event::WheelResult {
                 cancelled: raw.value != 0,
             },
+            39 => Event::RemoteLayer {
+                context_id: raw.request_id,
+            },
+            40 => Event::Snapshot(copy_favicon(raw)),
             28 => Event::Popup {
                 request: raw.request_id,
                 activate: raw.value != 0,

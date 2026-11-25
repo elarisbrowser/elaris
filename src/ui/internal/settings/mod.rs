@@ -11,6 +11,7 @@ mod keyboard;
 mod memory;
 mod privacy;
 mod system;
+mod versions;
 
 use rune::El;
 
@@ -109,6 +110,7 @@ pub(super) fn view(cx: &mut PageContext) -> PageLayout {
         widgets::category(current.nav.key, current.nav.title, sections, cx.theme),
     )
     .nav(nav)
+    .footnote(versions::summary())
 }
 
 /// A settings section, keyed by its title so tests and focus can find it.

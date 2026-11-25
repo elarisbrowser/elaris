@@ -7,5 +7,5 @@ mod callback;
 mod ffi;
 mod view;
 
-pub use app::{Ladybird, Waker, gpu_frames_supported};
+pub use app::{Ladybird, Waker, gpu_frames_supported, request_gpu_frames, set_presentation_device};
 pub use view::WebView;

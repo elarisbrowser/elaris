@@ -104,6 +104,8 @@ pub(super) struct RawKeyEvent {
 
 unsafe extern "C" {
     pub(super) fn elaris_ladybird_set_dev_options(options: u32);
+    pub(super) fn elaris_ladybird_request_gpu_frames(requested: i32);
+    pub(super) fn elaris_ladybird_set_presentation_device(device: u64);
     pub(super) fn elaris_ladybird_create(
         resource_dir: *const c_char,
         profile_dir: *const c_char,
@@ -168,6 +170,8 @@ unsafe extern "C" {
     ) -> i32;
     pub(super) fn elaris_ladybird_gpu_frames_supported() -> i32;
     pub(super) fn elaris_ladybird_set_gpu_frames(view: *mut RawView, enabled: i32) -> i32;
+    pub(super) fn elaris_ladybird_set_remote_layer(view: *mut RawView, enabled: i32) -> i32;
+    pub(super) fn elaris_ladybird_request_snapshot(view: *mut RawView) -> i32;
     pub(super) fn elaris_ladybird_gpu_frame(view: *mut RawView, out_frame: *mut RawGpuFrame)
     -> i32;
     pub(super) fn elaris_ladybird_release_frames(view: *mut RawView, completed_serial: u64) -> i32;

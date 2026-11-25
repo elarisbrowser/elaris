@@ -332,6 +332,22 @@ impl WebView {
         status_result(unsafe { elaris_ladybird_set_gpu_frames(self.raw.as_ptr(), enabled.into()) })
     }
 
+    /// Lets the Compositor show the view's frames itself, in a CoreAnimation context it reports
+    /// with [`Event::RemoteLayer`] (macOS). Frames then arrive there, not through [`Self::gpu_frame`].
+    pub fn set_remote_layer(&mut self, enabled: bool) -> Result<(), String> {
+        // SAFETY: The view is live on its owner's thread.
+        status_result(unsafe {
+            elaris_ladybird_set_remote_layer(self.raw.as_ptr(), enabled.into())
+        })
+    }
+
+    /// Asks for the frame on display; it arrives as [`Event::Snapshot`]. Unlike
+    /// [`Self::copy_frame`], it works while a remote layer shows the frames.
+    pub fn request_snapshot(&mut self) -> Result<(), String> {
+        // SAFETY: The view is live on its owner's thread.
+        status_result(unsafe { elaris_ladybird_request_snapshot(self.raw.as_ptr()) })
+    }
+
     /// Copies the frame on display into a GPU surface of the bridge's own.
     pub fn gpu_frame(&self) -> Result<GpuPoll, String> {
         let mut raw = RawGpuFrame::default();

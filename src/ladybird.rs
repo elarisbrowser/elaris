@@ -7,7 +7,9 @@ mod accessibility;
 mod bridge;
 pub use accessibility::{AccessibilityEvent, AccessibilityNode};
 #[cfg(feature = "ladybird-bridge")]
-pub use bridge::{Ladybird, Waker, WebView, gpu_frames_supported};
+pub use bridge::{
+    Ladybird, Waker, WebView, gpu_frames_supported, request_gpu_frames, set_presentation_device,
+};
 
 /// Display timing for Ladybird's compositor. An absent ID uses timer-based pacing.
 #[derive(Clone, Copy)]
@@ -212,6 +214,13 @@ pub enum Event {
     WheelResult {
         cancelled: bool,
     },
+    /// The Compositor shows the view's frames in this CoreAnimation context (0: no longer).
+    RemoteLayer {
+        context_id: u64,
+    },
+    /// The frame snapshot [`WebView::request_snapshot`] asked for, as favicon-style RGBA pixels;
+    /// `None` when the view had no frame.
+    Snapshot(Option<Favicon>),
     Popup {
         request: u64,
         activate: bool,

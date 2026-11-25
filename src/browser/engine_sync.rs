@@ -329,6 +329,9 @@ impl Browser {
                 continue;
             }
             let id = tab.id();
+            // A Peek card scales its page, which a layer of its own can't follow; once promoted
+            // to a tab, the page moves to one.
+            let hosted = peek_id != Some(id) && tab.surface.hosts_layer();
             let active = input_page == Some(id);
             let side = panes.iter().position(|pane| *pane == Some(id));
             let is_peek = peek_id == Some(id);
@@ -372,6 +375,10 @@ impl Browser {
             if applied.hidden == visible {
                 applied.hidden = !visible;
                 send(ViewCommand::Visible(visible));
+            }
+            if applied.hosted != hosted {
+                applied.hosted = hosted;
+                send(ViewCommand::HostLayer(hosted));
             }
             // Hidden tabs keep their last layout, unless they have yet to load their first page.
             if (visible || (applied.pending_load.is_some() && !applied.deferred_load))

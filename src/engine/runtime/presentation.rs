@@ -78,13 +78,7 @@ pub(super) fn show_frame(
         }
     };
     let rgba = perf::time(Stage::Copy, || view.view.copy_frame(&frame))?;
-    let thumbnail = if sample
-        && view.visible
-        && view.surface.preview_source.revision() == view.preview_revision
-        && view
-            .last_thumbnail
-            .is_none_or(|last| last.elapsed() >= THUMBNAIL_INTERVAL)
-    {
+    let thumbnail = if sample && wants_thumbnail(view) {
         view.last_thumbnail = Some(Instant::now());
         thumbnails::sample(frame.width, frame.height, &rgba)
     } else {
@@ -100,14 +94,21 @@ pub(super) fn show_frame(
     Ok(thumbnail)
 }
 
-/// Shows the view's newest frame by handing Rune a GPU copy of it; no pixel reaches the CPU. Only
-/// the thumbnail sample, at most once a second, reads them back.
+/// Shows the view's newest frame from GPU memory: a copy Rune draws on macOS, and on Linux the
+/// dmabuf itself, in the tab's own Wayland subsurface or drawn by Rune. No pixel reaches the CPU
+/// but the thumbnail's, at most once a second.
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 fn show_gpu_frame(
     view: &mut View,
     timing: &mut Timing,
     sample: bool,
 ) -> Result<Option<Sample>, String> {
+    // A macOS remote layer shows the Compositor's frames itself.
+    #[cfg(target_os = "macos")]
+    if view.hosted {
+        show_hosted_frame(view, timing, sample)?;
+        return Ok(None);
+    }
     if view.gpu_waiting {
         return Ok(None);
     }
@@ -135,19 +136,9 @@ fn show_gpu_frame(
             return Ok(None);
         }
     };
-    let thumbnail = if sample
-        && view.visible
-        && view.surface.preview_source.revision() == view.preview_revision
-        && view
-            .last_thumbnail
-            .is_none_or(|last| last.elapsed() >= THUMBNAIL_INTERVAL)
-    {
+    let thumbnail = if sample && wants_thumbnail(view) {
         view.last_thumbnail = Some(Instant::now());
-        // A frame in GPU memory may have no pixels the CPU can read; then it has no thumbnail.
-        view.view
-            .copy_frame(&cpu)
-            .ok()
-            .and_then(|rgba| thumbnails::sample(cpu.width, cpu.height, &rgba))
+        thumbnail_of(view, &cpu)?
     } else {
         None
     };
@@ -155,12 +146,61 @@ fn show_gpu_frame(
         return Err("a GPU frame arrived for a surface without a GPU".to_owned());
     };
     let (width, height, serial) = (frame.width, frame.height, frame.serial);
-    perf::time(Stage::Set, || gpu.show(frame))?;
+    if !perf::time(Stage::Set, || gpu.show(frame))? {
+        // Its buffer is being made; the engine is woken to show the newest frame then.
+        view.gpu_waiting = true;
+        return Ok(None);
+    }
     view.surface.count_frame();
     timing.shown(width, height, skipped);
     view.gate.shown(serial);
     view.showing_fallback = false;
     Ok(thumbnail)
+}
+
+/// A thumbnail of a GPU frame: read back from the bridge's copy on macOS, and on Linux, whose
+/// dmabufs the CPU can't read, a snapshot that arrives as `Event::Snapshot`.
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn thumbnail_of(
+    view: &mut View,
+    frame: &elaris::ladybird::Frame,
+) -> Result<Option<Sample>, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let _ = frame;
+        view.view.request_snapshot()?;
+        Ok(None)
+    }
+    #[cfg(target_os = "macos")]
+    Ok(view
+        .view
+        .copy_frame(frame)
+        .ok()
+        .and_then(|rgba| thumbnails::sample(frame.width, frame.height, &rgba)))
+}
+
+/// The Compositor showed a frame in the view's own layer, which the window server shows: the
+/// window has nothing to draw. A thumbnail, at most once a second, comes as a snapshot
+/// (`Event::Snapshot`), since the frame is in no memory the engine can read.
+#[cfg(target_os = "macos")]
+fn show_hosted_frame(view: &mut View, timing: &mut Timing, sample: bool) -> Result<(), String> {
+    if let Some(frame) = view.view.frame()? {
+        timing.shown(frame.width, frame.height, 0);
+    }
+    if sample && wants_thumbnail(view) {
+        view.last_thumbnail = Some(Instant::now());
+        view.view.request_snapshot()?;
+    }
+    Ok(())
+}
+
+/// Whether the view's newest frame should refresh its thumbnail.
+fn wants_thumbnail(view: &View) -> bool {
+    view.visible
+        && view.surface.preview_source.revision() == view.preview_revision
+        && view
+            .last_thumbnail
+            .is_none_or(|last| last.elapsed() >= THUMBNAIL_INTERVAL)
 }
 
 /// Development timing (`ELARIS_PERF`): the last frame shown, the oldest input not yet on screen,

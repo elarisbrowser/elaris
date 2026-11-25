@@ -35,13 +35,20 @@ def _executable(profile: str) -> Path:
     return ROOT / "target" / profile / ("elaris.exe" if os.name == "nt" else "elaris")
 
 
+def _build_stamp(ui_only: bool, profile: str) -> Path:
+    """Touched after a successful build. Outputs keep their mtime when nothing needed relinking, so they cannot mark it."""
+    return ROOT / "target" / profile / f"elaris-{'ui' if ui_only else 'bridge'}-build.stamp"
+
+
 def _run_artifacts_are_current(ui_only: bool, profile: str = "debug") -> bool:
-    """Return whether a previous run's executable and (when enabled) bridge are current."""
-    executable = _executable(profile)
-    if not executable.is_file():
+    """Return whether a previous build's executable and (when enabled) bridge are current."""
+    stamp = _build_stamp(ui_only, profile)
+    if not (_executable(profile).is_file() and stamp.is_file()):
         return False
 
-    source_roots = [ROOT / name for name in ("src", "crates", "tools", "assets", "packaging")]
+    # Only what the build compiles in. The Python CLI under tools/ is not, and since a CLI-only change never
+    # relinks the executable, counting it would leave every later launch on the slow build path.
+    source_roots = [ROOT / name for name in ("src", "crates", "assets", "packaging")]
     inputs = [ROOT / name for name in ("Cargo.toml", "Cargo.lock", "build.rs", "rust-toolchain.toml")]
     inputs.extend(path for source_root in source_roots if source_root.is_dir() for path in source_root.rglob("*"))
     if not ui_only:
@@ -54,9 +61,7 @@ def _run_artifacts_are_current(ui_only: bool, profile: str = "debug") -> bool:
         inputs.extend((ROOT / "bridge" / "CMakeLists.txt", ROOT / "bridge" / "Peek.cmake"))
 
     newest_input = max((path.stat().st_mtime_ns for path in inputs if path.is_file()), default=0)
-    if executable.stat().st_mtime_ns < newest_input:
-        return False
-    return ui_only or bridge.stat().st_mtime_ns >= newest_input
+    return stamp.stat().st_mtime_ns >= newest_input
 
 
 def setup(args: argparse.Namespace) -> None:
@@ -91,6 +96,7 @@ def build(args: argparse.Namespace) -> None:
         run_step("Elaris browser", "cargo", "+stable", "build", "--locked", *release, "--features", "ladybird-bridge")
     else:
         run_step("Elaris interface", "cargo", "+stable", "build", "--locked", *release)
+    _build_stamp(not build_ladybird, _profile(args)).touch()
 
 
 def format_sources(_args: argparse.Namespace) -> None:
@@ -128,18 +134,62 @@ def _configure_bridge_environment(bridge_dir: str) -> None:
 
 def bundle(args: argparse.Namespace) -> None:
     """Build an optimised Elaris and package it with Ladybird's engine and the brand icon for this platform."""
-    build(argparse.Namespace(ui=False, rust=False, ladybird=False, release=True, jobs=None))
+    cache_key = getattr(args, "release_engine_cache_key", None)
+    cache_hit = getattr(args, "release_engine_cache_hit", False)
+    manifest = None
+    if cache_hit and not cache_key:
+        raise SystemExit("elaris: a release engine cache hit requires a key")
+    if cache_key is not None:
+        from . import release_engine
+
+        if cache_key != release_engine.key():
+            raise SystemExit("elaris: native build inputs changed after identifying the release engine")
+        if cache_hit:
+            try:
+                manifest = release_engine.restore(cache_key)
+            except (OSError, ValueError, TypeError, KeyError) as error:
+                ui.muted(f"Invalid release engine cache; compiling natively: {error}")
+        if manifest is None:
+            ui.muted("No usable release engine cache; compiling natively.")
+            os.environ["ELARIS_RELEASE_HSTS_DIR"] = str(release_engine.HSTS_FILE.parent)
+            try:
+                engine.build_for_elaris()
+            finally:
+                os.environ.pop("ELARIS_RELEASE_HSTS_DIR", None)
+        else:
+            ui.muted(f"Reusing release engine built at {manifest['producer']}.")
+        _configure_bridge_environment(bridge_lib_dir())
+        run_step("Elaris browser", "cargo", "+stable", "build", "--locked", "--release", "--features", "ladybird-bridge")
+    else:
+        build(argparse.Namespace(ui=False, rust=False, ladybird=False, release=True, jobs=None))
     executable = _executable("release")
     if sys.platform == "darwin":
-        bundled = packaging.macos_release_bundle(executable, "canary" if args.canary else "stable")
+        bundled = packaging.macos_release_bundle(
+            executable, "canary" if args.canary else "stable", fresh=cache_key is not None,
+        )
         ui.success(f"Bundled {bundled.parents[2]}")
     elif sys.platform.startswith("linux"):
         prefix = ROOT / "build" / "linux" / "Elaris"
-        packaging.linux_prefix_bundle(executable, prefix)
+        packaging.linux_prefix_bundle(executable, prefix, fresh=cache_key is not None)
         ui.success(f"Bundled {prefix}")
         ui.info(f"Install with: cp -R {prefix}/. ~/.local/  (then run update-desktop-database ~/.local/share/applications)")
     else:
         raise SystemExit("elaris: bundle supports macOS and Linux")
+
+
+    if cache_key is not None:
+        if manifest is not None:
+            release_engine.write_build_info(cache_key, "reused exact output", manifest)
+        else:
+            state = "built natively"
+            try:
+                manifest = release_engine.export(cache_key)
+            except (OSError, ValueError) as error:
+                # An unusual native layout must not cause an otherwise valid release to fail.
+                ui.muted(f"Not saving release engine outputs: {error}")
+                state = "built natively; not cached"
+                manifest = release_engine.provenance()
+            release_engine.write_build_info(cache_key, state, manifest)
 
 
 def launch(args: argparse.Namespace) -> None:
@@ -167,22 +217,22 @@ def launch(args: argparse.Namespace) -> None:
             *(["--args", *extra] if extra else []),
         )
         return
-    if not args.linux_ui and _run_artifacts_are_current(ui_only, profile):
-        executable = _executable(profile)
-        command = [str(executable)]
+    if not args.linux_ui:
+        if not _run_artifacts_are_current(ui_only, profile):
+            build(argparse.Namespace(ui=ui_only, rust=False, ladybird=False, release=args.release, jobs=args.jobs))
+        if not ui_only:
+            _configure_bridge_environment(bridge_lib_dir())
+        command = [str(_executable(profile))]
         if args.url:
             command.append(args.url)
         command.extend(args.rune_args)
         run(*command)
         return
-    command = ["cargo", "+stable", "run", "--locked", *release]
-    if args.linux_ui:
-        # A separate target directory keeps this build's executable apart from the normal interface build.
-        command += ["--features", "linux-ui", "--target-dir", str(ROOT / "target" / "linux-ui")]
-    elif not ui_only:
-        engine.build_for_elaris(args.jobs)
-        _configure_bridge_environment(bridge_lib_dir())
-        command += ["--features", "ladybird-bridge"]
+    # A separate target directory keeps this build's executable apart from the normal interface build.
+    command = [
+        "cargo", "+stable", "run", "--locked", *release,
+        "--features", "linux-ui", "--target-dir", str(ROOT / "target" / "linux-ui"),
+    ]
     if args.url:
         command += ["--", args.url]
     if args.rune_args:
@@ -376,6 +426,8 @@ def register_commands(commands) -> None:
                 help="Skip package manager installs but still verify required tools",
             )
         elif handler is bundle:
+            subcommand.add_argument("--release-engine-cache-key", help=argparse.SUPPRESS)
+            subcommand.add_argument("--release-engine-cache-hit", action="store_true", help=argparse.SUPPRESS)
             subcommand.add_argument(
                 "--canary", action="store_true", help="Name the build as canary, with the yellow icon (macOS)"
             )

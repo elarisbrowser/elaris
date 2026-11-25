@@ -366,6 +366,8 @@ pub(crate) const PAGE_SECTION_TITLE_GAP: f32 = 9.0;
 pub(crate) const PAGE_CATEGORY_TITLE: rune::TextStyle = rune::TextStyle::new(20.0, 600.0).lh(26.0);
 /// The title of a single row inside a grouped surface.
 pub(crate) const PAGE_ROW_TITLE: rune::TextStyle = rune::TextStyle::new(14.0, 500.0).lh(19.0);
+/// Quiet build details tucked into a corner of a native page, such as Settings' versions.
+pub(crate) const PAGE_FOOTNOTE: rune::TextStyle = rune::TextStyle::new(11.0, 400.0).lh(14.0);
 /// The rounded surface that groups a native page's rows.
 pub(crate) const PAGE_GROUP_RADIUS: f32 = radius::LG;
 pub(crate) const PAGE_GROUP_PADDING: f32 = space::S3 + space::S1;

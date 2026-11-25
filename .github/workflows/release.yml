@@ -42,6 +42,8 @@ jobs:
           cargo fmt -- --check
           cargo clippy --all-targets --locked -- -D warnings
           cargo test --locked
+      - name: Test release engine cache routing and manifest validation
+        run: python3 -m unittest discover -s tools/tests -p test_release_engine.py
 
   macos:
     name: macOS bundle (Apple Silicon)
@@ -50,6 +52,10 @@ jobs:
     timeout-minutes: 300
     env:
       ELARIS_BASELINE_CPU: "1"
+      CCACHE_COMPILERCHECK: content
+      # Hash preprocessed inputs: new or removed headers must invalidate previous results too.
+      CCACHE_NODIRECT: "true"
+      CCACHE_MAXSIZE: 2G
     steps:
       - uses: actions/checkout@v4
         with:
@@ -64,21 +70,32 @@ jobs:
             exit 1
           }
 
-      - name: Restore Ladybird dependency and build caches
+      - name: Set up Elaris and Ladybird
+        run: ./elaris setup
+
+      - name: Identify the native cache toolchain
+        id: native-cache-key
+        shell: bash
+        run: |
+          toolchain="$({
+            set -e
+            xcodebuild -version
+            xcrun --sdk macosx --show-sdk-build-version
+            sw_vers -buildVersion
+            ccache --version
+          } | shasum -a 256 | cut -d ' ' -f 1)"
+          echo "prefix=release-native-v1-${RUNNER_OS}-${RUNNER_ARCH}-${ELARIS_BASELINE_CPU}-${toolchain}" >> "$GITHUB_OUTPUT"
+          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.release-ccache" >> "$GITHUB_ENV"
+
+      - name: Restore Ladybird compiler and vcpkg archives
+        id: native-cache
         uses: actions/cache/restore@v4
         with:
           path: |
-            .git/modules/Build/vcpkg-release
+            .release-ccache
             .git/modules/Build/caches/vcpkg-binary-cache
-            vendor/ladybird/Build
-            build/cpp-ladybird
-            target
-            build/Elaris.app
-            build/Elaris.app.stamp
-          key: release-macos-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'bridge/patches/**') }}-${{ github.run_id }}
-          restore-keys: |
-            release-macos-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'bridge/patches/**') }}-
-            release-macos-
+          key: ${{ steps.native-cache-key.outputs.prefix }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ${{ steps.native-cache-key.outputs.prefix }}-
 
       - name: Name this build
         env:
@@ -90,53 +107,52 @@ jobs:
             echo "ELARIS_VERSION=${GITHUB_REF_NAME:-dev}" >> "$GITHUB_ENV"
           fi
 
-      - name: Set up Elaris and Ladybird
-        run: ./elaris setup
-
-      - name: Make restored objects fresh for unchanged sources
-        # Checkout gives every source a new mtime, which would make Ninja rebuild the whole restored build. Sources
-        # start older than the cache, then the files changed since the cached build are touched so they rebuild.
+      - name: Identify exact Ladybird build inputs
+        id: engine-key
         run: |
-          stamp=build/cpp-ladybird/elaris-source-revs
-          test -f "$stamp" || { echo "No cached build revision; building from scratch"; exit 0; }
-          read -r cached_top cached_ladybird < "$stamp"
-          if ! git cat-file -e "${cached_top}^{commit}" 2>/dev/null ||
-             ! git -C vendor/ladybird cat-file -e "${cached_ladybird}^{commit}" 2>/dev/null; then
-            echo "Cached revision is not in this history; building from scratch"
-            exit 0
-          fi
-          git ls-files -z | xargs -0 touch -t 200001010000
-          git diff -z --name-only "$cached_top" HEAD | xargs -0 -r touch -c
-          (
-            cd vendor/ladybird
-            git ls-files -z | xargs -0 touch -t 200001010000
-            git diff -z --name-only "$cached_ladybird" HEAD | xargs -0 -r touch -c
-          )
+          key="$(python3 -m tools.elaris_cli.release_engine prepare)"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Restore exact Ladybird release outputs
+        id: engine-cache
+        if: ${{ steps.engine-key.outputs.key != '' }}
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: build/release-engine-cache
+          key: ${{ steps.engine-key.outputs.key }}
 
       - name: Build and bundle Elaris
+        id: bundle
+        shell: bash
+        env:
+          ENGINE_KEY: ${{ steps.engine-key.outputs.key }}
+          ENGINE_CACHE_HIT: ${{ steps.engine-cache.outputs.cache-hit }}
         run: |
-          # An interrupted build can leave a mix of objects from different revisions.
-          rm -f build/cpp-ladybird/elaris-source-revs
-          ./elaris bundle ${{ inputs.channel == 'canary' && '--canary' || '' }}
+          ccache --zero-stats
+          cache_args=()
+          if [ -n "$ENGINE_KEY" ]; then
+            cache_args+=(--release-engine-cache-key "$ENGINE_KEY")
+          fi
+          if [ "$ENGINE_CACHE_HIT" = true ]; then
+            cache_args+=(--release-engine-cache-hit)
+          fi
+          ./elaris bundle "${cache_args[@]}" ${{ inputs.channel == 'canary' && '--canary' || '' }}
 
-      - name: Record the source revision the build came from
-        # Only a successful build can stamp the objects saved to the cache.
-        run: |
-          echo "$(git rev-parse HEAD) $(git -C vendor/ladybird rev-parse HEAD)" > build/cpp-ladybird/elaris-source-revs
+      - name: Report compiler cache hits
+        if: ${{ always() && (steps.bundle.outcome == 'success' || steps.bundle.outcome == 'failure') }}
+        continue-on-error: true
+        run: ccache --show-stats
 
-      - name: Save Ladybird dependency and build caches
-        if: always()
+      - name: Save Ladybird compiler and vcpkg archives
+        # These caches validate content, so completed entries from an otherwise failed build are useful.
+        if: ${{ always() && (steps.bundle.outcome == 'success' || steps.bundle.outcome == 'failure') }}
         uses: actions/cache/save@v4
         with:
           path: |
-            .git/modules/Build/vcpkg-release
+            .release-ccache
             .git/modules/Build/caches/vcpkg-binary-cache
-            vendor/ladybird/Build
-            build/cpp-ladybird
-            target
-            build/Elaris.app
-            build/Elaris.app.stamp
-          key: release-macos-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'bridge/patches/**') }}-${{ github.run_id }}
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
 
       - name: Verify the bundle is self-contained
         run: |
@@ -147,6 +163,13 @@ jobs:
             echo "The bundle still points into the build tree" >&2
             exit 1
           fi
+
+      - name: Save verified Ladybird release outputs
+        if: ${{ steps.engine-key.outputs.key != '' && steps.engine-cache.outputs.cache-hit != 'true' && hashFiles('build/release-engine-cache/manifest.json') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: build/release-engine-cache
+          key: ${{ steps.engine-key.outputs.key }}
 
       - name: Package a disk image and checksums
         run: |
@@ -162,6 +185,11 @@ jobs:
           Rune revision: $(grep -m1 'rev = ' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
           Xcode: $(xcodebuild -version | tr '\n' ' ')
           EOF
+          if [ -f build/release-engine-info.txt ]; then
+            cat build/release-engine-info.txt >> dist/BUILD-INFO.txt
+          else
+            echo "Native engine: built natively (exact cache unavailable)" >> dist/BUILD-INFO.txt
+          fi
           (cd dist && shasum -a 256 "$(basename "$image")" > "$(basename "$image").sha256")
           cp dist/BUILD-INFO.txt dist/Elaris-${version}-macos-arm64.BUILD-INFO.txt
 
@@ -191,6 +219,11 @@ jobs:
     timeout-minutes: 300
     env:
       ELARIS_BASELINE_CPU: "1"
+      ELARIS_RELEASE_IMAGE: ghcr.io/ladybirdbrowser/ladybird-ci:2026.11.12
+      CCACHE_COMPILERCHECK: content
+      # Hash preprocessed inputs: new or removed headers must invalidate previous results too.
+      CCACHE_NODIRECT: "true"
+      CCACHE_MAXSIZE: 2G
     steps:
       - uses: actions/checkout@v4
         with:
@@ -199,22 +232,30 @@ jobs:
       - name: Install bundling and headless test tools
         run: |
           apt-get update -o APT::Update::Error-Mode=any
-          apt-get install -y --no-install-recommends patchelf xvfb mesa-vulkan-drivers libvulkan1 ca-certificates clang-tidy
+          apt-get install -y --no-install-recommends patchelf xvfb mesa-vulkan-drivers libvulkan1 ca-certificates clang-tidy ccache
 
-      - name: Restore Ladybird dependency and build caches
+      - name: Identify the native cache toolchain
+        id: native-cache-key
+        shell: bash
+        run: |
+          toolchain="$({
+            set -e
+            cat /etc/os-release
+            clang++ --version
+            ccache --version
+          } | sha256sum | cut -d ' ' -f 1)"
+          echo "prefix=release-native-v1-${RUNNER_OS}-${RUNNER_ARCH}-${ELARIS_BASELINE_CPU}-${toolchain}" >> "$GITHUB_OUTPUT"
+          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.release-ccache" >> "$GITHUB_ENV"
+
+      - name: Restore Ladybird compiler and vcpkg archives
+        id: native-cache
         uses: actions/cache/restore@v4
         with:
           path: |
-            .git/modules/Build/vcpkg-release
+            .release-ccache
             .git/modules/Build/caches/vcpkg-binary-cache
-            vendor/ladybird/Build
-            build/cpp-ladybird
-            target
-            build/linux
-          key: release-linux-x64-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'bridge/patches/**') }}-${{ github.run_id }}
-          restore-keys: |
-            release-linux-x64-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'bridge/patches/**') }}-
-            release-linux-x64-
+          key: ${{ steps.native-cache-key.outputs.prefix }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ${{ steps.native-cache-key.outputs.prefix }}-
 
       - name: Name this build
         env:
@@ -236,21 +277,53 @@ jobs:
           runuser -u elaris-builder -- git config --global --add safe.directory "$GITHUB_WORKSPACE"
           runuser -u elaris-builder -- ./elaris setup --skip-system-deps
 
-      - name: Build and bundle Elaris
-        run: runuser -u elaris-builder -- env ELARIS_JOBS=4 ./elaris bundle ${{ inputs.channel == 'canary' && '--canary' || '' }}
+      - name: Identify exact Ladybird build inputs
+        id: engine-key
+        run: |
+          key="$(runuser -u elaris-builder -- python3 -m tools.elaris_cli.release_engine prepare)"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
 
-      - name: Save Ladybird dependency and build caches
-        if: always()
+      - name: Restore exact Ladybird release outputs
+        id: engine-cache
+        if: ${{ steps.engine-key.outputs.key != '' }}
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: build/release-engine-cache
+          key: ${{ steps.engine-key.outputs.key }}
+
+      - name: Build and bundle Elaris
+        id: bundle
+        shell: bash
+        env:
+          ENGINE_KEY: ${{ steps.engine-key.outputs.key }}
+          ENGINE_CACHE_HIT: ${{ steps.engine-cache.outputs.cache-hit }}
+        run: |
+          runuser -u elaris-builder -- env CCACHE_DIR="$CCACHE_DIR" ccache --zero-stats
+          cache_args=()
+          if [ -n "$ENGINE_KEY" ]; then
+            cache_args+=(--release-engine-cache-key "$ENGINE_KEY")
+          fi
+          if [ "$ENGINE_CACHE_HIT" = true ] && [ -d build/release-engine-cache ]; then
+            chown -R elaris-builder:elaris-builder build/release-engine-cache
+            cache_args+=(--release-engine-cache-hit)
+          fi
+          runuser -u elaris-builder -- env CCACHE_DIR="$CCACHE_DIR" ELARIS_JOBS=4 ./elaris bundle "${cache_args[@]}" ${{ inputs.channel == 'canary' && '--canary' || '' }}
+
+      - name: Report compiler cache hits
+        if: ${{ always() && (steps.bundle.outcome == 'success' || steps.bundle.outcome == 'failure') }}
+        continue-on-error: true
+        run: runuser -u elaris-builder -- env CCACHE_DIR="$CCACHE_DIR" ccache --show-stats
+
+      - name: Save Ladybird compiler and vcpkg archives
+        # These caches validate content, so completed entries from an otherwise failed build are useful.
+        if: ${{ always() && (steps.bundle.outcome == 'success' || steps.bundle.outcome == 'failure') }}
         uses: actions/cache/save@v4
         with:
           path: |
-            .git/modules/Build/vcpkg-release
+            .release-ccache
             .git/modules/Build/caches/vcpkg-binary-cache
-            vendor/ladybird/Build
-            build/cpp-ladybird
-            target
-            build/linux
-          key: release-linux-x64-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'bridge/patches/**') }}-${{ github.run_id }}
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
 
       - name: Smoke test the packaged browser
         run: |
@@ -262,21 +335,34 @@ jobs:
           xvfb-run --auto-servernum "$relocated/Elaris/bin/elaris" "file://$GITHUB_WORKSPACE/bridge/tests/smoke.html" -- --snap "$RUNNER_TEMP/smoke.png"
           test -s "$RUNNER_TEMP/smoke.png"
 
+      - name: Save verified Ladybird release outputs
+        if: ${{ steps.engine-key.outputs.key != '' && steps.engine-cache.outputs.cache-hit != 'true' && hashFiles('build/release-engine-cache/manifest.json') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: build/release-engine-cache
+          key: ${{ steps.engine-key.outputs.key }}
+
       - name: Package the tarball and checksums
         run: |
           version="$ELARIS_VERSION"
           mkdir -p dist
           archive="dist/Elaris-${version}-linux-x86_64.tar.gz"
           # Fixed owners, names and times, and no gzip name or time, so the same build always gives the same archive.
-          epoch="$(git log -1 --format=%ct)"
+          epoch="$(runuser -u elaris-builder -- git log -1 --format=%ct)"
+          ladybird_revision="$(runuser -u elaris-builder -- git rev-parse HEAD:vendor/ladybird)"
           tar -C build/linux --sort=name --owner=0 --group=0 --numeric-owner --mtime="@${epoch}" -cf - Elaris | gzip -n > "$archive"
           cat > dist/BUILD-INFO.txt <<EOF
           Elaris ${version} (Linux x86_64)
           Elaris commit: ${GITHUB_SHA}
-          Ladybird commit: $(git rev-parse HEAD:vendor/ladybird)
+          Ladybird commit: ${ladybird_revision}
           Rune revision: $(grep -m1 'rev = ' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
           Container: ghcr.io/ladybirdbrowser/ladybird-ci:2026.11.12
           EOF
+          if [ -f build/release-engine-info.txt ]; then
+            cat build/release-engine-info.txt >> dist/BUILD-INFO.txt
+          else
+            echo "Native engine: built natively (exact cache unavailable)" >> dist/BUILD-INFO.txt
+          fi
           cp dist/BUILD-INFO.txt "dist/Elaris-${version}-linux-x86_64.BUILD-INFO.txt"
           (cd dist && sha256sum "$(basename "$archive")" > "$(basename "$archive").sha256")
 

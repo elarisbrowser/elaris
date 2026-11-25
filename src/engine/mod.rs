@@ -20,6 +20,8 @@ mod runtime;
 mod thread;
 #[cfg(any(test, feature = "ladybird-bridge"))]
 mod thumbnails;
+#[cfg(target_os = "linux")]
+pub(crate) mod wayland;
 
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
@@ -99,6 +101,18 @@ impl Default for Surface {
 }
 
 impl Surface {
+    /// Whether the surface can show its frames in a layer the window server composites (macOS,
+    /// unless `ELARIS_REMOTE_LAYERS=0`; a Wayland subsurface on Linux): each frame reaches the screen on the next refresh, with no
+    /// copy and no redraw of the window's.
+    pub(crate) fn hosts_layer(&self) -> bool {
+        #[cfg(target_os = "macos")]
+        return self.gpu.is_some() && gpu::remote_layers();
+        #[cfg(target_os = "linux")]
+        return self.gpu.as_ref().is_some_and(gpu::GpuSurface::can_host);
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        false
+    }
+
     pub(crate) fn request_preview_invalidation(&self) {
         self.preview_source.0.fetch_add(1, Ordering::Relaxed);
     }
@@ -307,6 +321,9 @@ pub(crate) enum ViewCommand {
     Focus(bool),
     /// Whether the view is on screen; hidden ones stop painting.
     Visible(bool),
+    /// Whether the Compositor shows the view's frames itself, in a layer under the window's UI
+    /// (`Surface::hosts_layer`), rather than handing them to the engine to show.
+    HostLayer(bool),
 }
 
 impl ViewCommand {
@@ -430,6 +447,8 @@ pub(crate) enum TabUpdate {
     },
     /// Whether the page cancelled a wheel event; a cancelled wheel keeps its gesture from becoming a swipe.
     WheelResult(bool),
+    /// The Compositor shows the page's frames in this CoreAnimation context (0: no longer).
+    RemoteLayer(u64),
     PermissionUse(elaris_core::permissions::PermissionKind, bool),
     Error(String),
 }

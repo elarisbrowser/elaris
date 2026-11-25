@@ -1,6 +1,5 @@
 """Assemble Elaris's app bundles: a macOS .app and a Linux prefix tree, each with Ladybird's engine and the brand icon."""
 
-import filecmp
 import importlib.util
 import plistlib
 import re
@@ -35,12 +34,13 @@ LADYBIRD_APP_BINARY = "Ladybird"
 
 
 def _copy_if_changed(source: Path, destination: Path) -> bool:
-    """Copy `source` over `destination` when their contents differ. Returns whether it copied.
+    """Copy `source` over `destination` when the source is newer. Returns whether it copied.
 
     The copy takes a fresh modification time on purpose: Launch Services caches an app's icon by file time,
-    so a copy that kept the source's older time can keep showing a stale icon in the Dock.
+    so a copy that kept the source's older time can keep showing a stale icon in the Dock. Times are compared,
+    not contents, because signing rewrites the bundled executable and it would otherwise never match again.
     """
-    if destination.exists() and filecmp.cmp(source, destination, shallow=False):
+    if destination.exists() and destination.stat().st_mtime_ns >= source.stat().st_mtime_ns:
         return False
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source, destination)
@@ -142,7 +142,7 @@ def _bundle_inputs(executable: Path) -> tuple[str, str]:
     return str(engine), str(executable.stat().st_mtime_ns)
 
 
-def macos_release_bundle(executable: Path, channel: str = "stable") -> Path:
+def macos_release_bundle(executable: Path, channel: str = "stable", *, fresh: bool = False) -> Path:
     """build/Elaris.app with Ladybird's helpers, resources and libraries, relocatable and signed.
 
     A full assembly copies and verifies every engine library, which takes about half a minute, so it runs only
@@ -158,7 +158,7 @@ def macos_release_bundle(executable: Path, channel: str = "stable") -> Path:
     bundled_executable = contents / "MacOS" / executable.name
     engine, elaris = _bundle_inputs(executable)
     previous = RELEASE_BUNDLE_STAMP.read_text().split() if RELEASE_BUNDLE_STAMP.is_file() else []
-    if bundled_executable.is_file() and len(previous) == 2 and previous[0] == engine:
+    if not fresh and bundled_executable.is_file() and len(previous) == 2 and previous[0] == engine:
         icon_changed = _macos_bundle_metadata(contents, channel)
         if previous[1] != elaris or icon_changed:
             ui.info("Updating Elaris in Elaris.app…")
@@ -243,7 +243,7 @@ def _copy_linux_libraries(binaries: list[Path], library_directory: Path) -> list
     return copied
 
 
-def linux_prefix_bundle(executable: Path, prefix: Path) -> Path:
+def linux_prefix_bundle(executable: Path, prefix: Path, *, fresh: bool = False) -> Path:
     """A prefix tree (bin/, lib/, libexec/, share/) that copying into ~/.local or /usr installs whole.
 
     Ladybird's layout is what its helpers search: they live in libexec/, their resources in share/Lagom, and each
@@ -257,7 +257,7 @@ def linux_prefix_bundle(executable: Path, prefix: Path) -> Path:
     installed = prefix / "bin" / executable.name
     helpers = sorted(path for path in (ENGINE_BUILD / "libexec").iterdir() if path.is_file())
     library_directory = prefix / "lib"
-    if _linux_engine_key() == _read_stamp(LINUX_BUNDLE_STAMP) and installed.parent.is_dir():
+    if not fresh and _linux_engine_key() == _read_stamp(LINUX_BUNDLE_STAMP) and installed.parent.is_dir():
         # The engine did not change, so the prefix stays and only Elaris's executable and any libraries it newly needs
         # are refreshed. Its helpers and resources are the same files as before.
         shutil.copy2(executable, installed)

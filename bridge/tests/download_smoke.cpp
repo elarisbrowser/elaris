@@ -403,9 +403,13 @@ static bool test_private_session(ElarisLadybird* bridge, HttpFixture const& fixt
     auto const site = fixture.url("/");
     auto permission = [&](View const& view, int32_t choice, int32_t expected) {
         int32_t result = -1;
-        return check(elaris_ladybird_private_site_permission(view.get(), site.c_str(), "microphone", choice, &result),
-                     "private site permission") &&
-               result == expected;
+        if (!check(elaris_ladybird_private_site_permission(view.get(), site.c_str(), "microphone", choice, &result),
+                   "private site permission"))
+            return false;
+        if (result == expected)
+            return true;
+        std::cerr << "Private microphone permission: expected " << expected << ", observed " << result << '\n';
+        return false;
     };
     if (!permission(first, -1, 0) || !permission(first, 1, 1) || !permission(second, -1, 1) ||
         !permission(second, 2, 2) || !permission(first, -1, 2) || !permission(first, 0, 0) ||
@@ -417,9 +421,12 @@ static bool test_private_session(ElarisLadybird* bridge, HttpFixture const& fixt
         return check(elaris_ladybird_set_permission(bridge, site.c_str(), "microphone", choice),
                      "ordinary site permission");
     };
-    if (!ordinary_permission(2) || !permission(first, 1, 2) || !ordinary_permission(0) ||
-        !permission(second, -1, 0) || !permission(first, 1, 1)) {
+    if (!ordinary_permission(2) || !permission(first, 1, 2) || !ordinary_permission(0)) {
         std::cerr << "Private site permission did not respect the ordinary block\n";
+        return false;
+    }
+    if (!permission(second, -1, 0) || !permission(first, 1, 1)) {
+        std::cerr << "Private site permission stored a grant while the ordinary block was active\n";
         return false;
     }
     if (elaris_ladybird_test_reset_private_session(bridge) == 0) {
@@ -472,9 +479,9 @@ static bool test_private_session(ElarisLadybird* bridge, HttpFixture const& fixt
     }
     for (uint64_t id = 204; id < 207; ++id) {
         auto fresh = create(id, true);
-        if (!load(fresh, id, "/privacy/read", "empty:empty:empty") ||
-            !permission(fresh, -1, 0) ||
-            !load(fresh, id, "/privacy/private", "empty:private:private"))
+        if (!load(fresh, id, "/privacy/read", "empty:empty:empty") || !permission(fresh, -1, 0))
+            return false;
+        if (!load(fresh, id, "/privacy/private", "empty:private:private"))
             return false;
         fresh.reset();
         if (!check(elaris_ladybird_test_reset_private_session(bridge), "reset after reopening private session"))

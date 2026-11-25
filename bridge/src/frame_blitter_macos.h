@@ -29,6 +29,10 @@ class FrameBlitter {
     // Frees the surfaces of frames the host replaced with a frame its GPU has finished drawing.
     void release_completed(uint64_t completed_serial);
 
+    // Frees every surface not on screen or waiting for the host's GPU. The next copy makes a new one, so call it
+    // only once the page has stopped painting.
+    void trim();
+
     struct Impl;
 
   private:
