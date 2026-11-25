@@ -177,36 +177,6 @@ impl GpuSurface {
         };
     }
 
-    /// Rounds the compositor-owned page layer without routing its frames through Rune's renderer.
-    #[cfg(target_os = "macos")]
-    pub(crate) fn set_corner_radius(&self, radius: f32) {
-        let Some(layer) = self.native.layer() else {
-            return;
-        };
-        let radius = f64::from(radius.max(0.0));
-        // Rune's `NativeSurface` uses objc2 0.6 while Elaris creates CALayerHost with objc2 0.5.
-        let layer_ptr = std::ptr::from_ref(&*layer).cast::<objc2_05::runtime::AnyObject>();
-        // SAFETY: Both versions model the same Objective-C object pointer, retained by `layer`.
-        let layer = unsafe { &*layer_ptr };
-        // SAFETY: `CALayerHost` inherits these properties from `CALayer`.
-        let current_radius: f64 = unsafe { objc2_05::msg_send![layer, cornerRadius] };
-        let current_masks: bool = unsafe { objc2_05::msg_send![layer, masksToBounds] };
-        if (current_radius - radius).abs() < 0.01 && current_masks == (radius > 0.0) {
-            return;
-        }
-        // Avoid asking CoreAnimation to interpolate this presentation detail between UI frames.
-        unsafe {
-            let Some(transaction) = objc2_05::runtime::AnyClass::get("CATransaction") else {
-                return;
-            };
-            let _: () = objc2_05::msg_send![transaction, begin];
-            let _: () = objc2_05::msg_send![transaction, setDisableActions: true];
-            let _: () = objc2_05::msg_send![layer, setCornerRadius: radius];
-            let _: () = objc2_05::msg_send![layer, setMasksToBounds: radius > 0.0];
-            let _: () = objc2_05::msg_send![transaction, commit];
-        }
-    }
-
     /// Whether the frames can show in a subsurface of their own (Wayland).
     #[cfg(target_os = "linux")]
     pub(crate) fn can_host(&self) -> bool {

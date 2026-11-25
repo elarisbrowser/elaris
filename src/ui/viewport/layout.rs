@@ -97,7 +97,7 @@ pub(crate) fn view(
             .filter(|tab| !tab.is_internal())
         {
             // The surface stays on the tab's keyed container when the input region changes sides.
-            pane = page_surface(pane, &tab.surface, radius);
+            pane = page_surface(pane, &tab.surface);
         }
         pane = pane.child(child);
         if !horizontal

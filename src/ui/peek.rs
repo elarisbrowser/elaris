@@ -98,7 +98,7 @@ fn paint_page(content: El, frame: &Surface, status: Option<&str>, theme: &theme:
             .center()
             .child(text(status).font(type_::BODY).color(theme.text_muted))
     } else {
-        super::viewport::page_surface(content, frame, theme::VIEWPORT_RADIUS)
+        super::viewport::page_surface(content, frame)
     }
 }
 
