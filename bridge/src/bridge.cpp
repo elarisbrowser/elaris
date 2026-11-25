@@ -2923,8 +2923,8 @@ extern "C" int32_t elaris_ladybird_request_snapshot(ElarisLadybirdView* handle) 
     auto* bridge = handle->bridge;
     auto id = handle->id;
     handle->view->take_frame_snapshot([bridge, id](Optional<Gfx::ShareableBitmap> snapshot) {
-        auto it = std::find_if(bridge->views.begin(), bridge->views.end(),
-                               [id](auto const* view) { return view->id == id; });
+        auto it =
+            std::find_if(bridge->views.begin(), bridge->views.end(), [id](auto const* view) { return view->id == id; });
         if (it == bridge->views.end())
             return;
         auto const* bitmap = snapshot.has_value() && snapshot->is_valid() ? snapshot->bitmap() : nullptr;
