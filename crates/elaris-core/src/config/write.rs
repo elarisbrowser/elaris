@@ -133,6 +133,11 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
         SettingsChange::OpenTabOnStartup(value) => {
             ("appearance", "open_tab_on_startup", value.to_string())
         }
+        SettingsChange::HorizontalAddressBarFullWidth(value) => (
+            "appearance",
+            "horizontal_address_bar_full_width",
+            value.to_string(),
+        ),
         SettingsChange::SidebarSide(value) => {
             ("appearance", "sidebar_side", value.config_key().to_owned())
         }
@@ -210,6 +215,7 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
         || key == "bookmarks_bar"
         || key == "compact_tabs"
         || key == "open_tab_on_startup"
+        || key == "horizontal_address_bar_full_width"
     {
         Value::from(value == "true")
     } else if matches!(key, "tint_opacity" | "grain" | "max_panes" | "zoom") {

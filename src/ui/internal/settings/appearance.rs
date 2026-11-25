@@ -120,6 +120,20 @@ fn appearance(cx: &mut PageContext) -> El {
             state.set_open_tab_on_startup(!state.settings.open_tab_on_startup)
         })
         .build(&switch_kit(&cx.kit));
+    let address_bar_width = SegmentedControl::new(
+        &["Centered compact", "Full width"],
+        Some(usize::from(
+            state.settings.horizontal_address_bar_full_width,
+        )),
+    )
+    .width(Some(theme::PAGE_CONTROL_WIDTH))
+    .label("Empty window address bar")
+    .on_pick(|state: &mut AppState, index, tx| {
+        state.set_horizontal_address_bar_full_width(index == 1);
+        tx.animated();
+        tx.motion(theme::SIDEBAR_TOGGLE);
+    })
+    .build(&cx.kit);
     let sidebar_side = SegmentedControl::new(
         &SidebarSide::ALL.map(SidebarSide::label),
         SidebarSide::ALL
@@ -181,6 +195,12 @@ fn appearance(cx: &mut PageContext) -> El {
             "Open a new tab on startup",
             "Start horizontal windows with a blank tab ready for an address.",
             open_tab_on_startup,
+        ));
+        rows.push(setting(
+            cx,
+            "Empty window address bar",
+            "Choose a centered compact field or one that fills the available width.",
+            address_bar_width,
         ));
     } else {
         rows.push(setting(

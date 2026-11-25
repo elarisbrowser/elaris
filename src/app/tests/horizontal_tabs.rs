@@ -823,40 +823,56 @@ fn an_empty_horizontal_window_keeps_only_the_toolbar_until_a_tab_arrives() {
     let mut state = AppState::new(None);
     state.set_tab_layout(TabLayout::Horizontal);
     state.settings.open_tab_on_startup = false;
-    let mut runtime = runtime(state, 1000.0);
+    let mut window = runtime(state, 1000.0);
 
-    assert!(runtime.presented("horizontal-tab-strip").is_none());
-    assert!(runtime.presented("horizontal-navigation").is_some());
-    assert!(runtime.presented("horizontal-address-bar").is_some());
+    assert!(window.presented("horizontal-tab-strip").is_none());
+    assert!(window.presented("horizontal-navigation").is_some());
+    assert!(window.presented("horizontal-address-bar").is_some());
     assert_eq!(
-        rect(&runtime, "horizontal-address-bar")[2],
+        rect(&window, "horizontal-address-bar")[2],
         theme::COMPACT_ADDRESS_WIDTH
     );
+    let [address_x, address_y, address_width, _] = rect(&window, "horizontal-address-bar");
+    assert!((address_x + address_width / 2.0 - 500.0).abs() < 1.0);
     assert_eq!(
-        rect(&runtime, "horizontal-navigation")[3],
+        address_y,
+        (theme::HORIZONTAL_STRIP_HEIGHT - theme::HORIZONTAL_FIELD_HEIGHT) / 2.0
+    );
+    assert_eq!(
+        rect(&window, "horizontal-navigation")[3],
         theme::HORIZONTAL_STRIP_HEIGHT
     );
     assert_eq!(
-        crate::ui::viewport::page_origin(&runtime.state)[1],
+        crate::ui::viewport::page_origin(&window.state)[1],
         theme::HORIZONTAL_STRIP_HEIGHT
     );
-    assert!(rect(&runtime, "new-tab")[0] < rect(&runtime, "horizontal-empty-drag-space")[0]);
+    assert!(rect(&window, "horizontal-empty-drag-space")[0] < rect(&window, "new-tab")[0]);
     assert!(
-        rect(&runtime, "horizontal-empty-drag-space")[0]
-            + rect(&runtime, "horizontal-empty-drag-space")[2]
-            <= rect(&runtime, "downloads-button")[0],
-        "spacer={:?}, downloads={:?}",
-        rect(&runtime, "horizontal-empty-drag-space"),
-        rect(&runtime, "downloads-button")
+        rect(&window, "horizontal-empty-drag-space")[0]
+            + rect(&window, "horizontal-empty-drag-space")[2]
+            <= rect(&window, "new-tab")[0],
+        "spacer={:?}, new tab={:?}",
+        rect(&window, "horizontal-empty-drag-space"),
+        rect(&window, "new-tab")
     );
-    let empty_chrome = rect(&runtime, "horizontal-chrome");
+    assert!(rect(&window, "new-tab")[0] < rect(&window, "downloads-button")[0]);
+    let empty_chrome = rect(&window, "horizontal-chrome");
     assert!(empty_chrome[3] < theme::HORIZONTAL_CHROME_HEIGHT);
 
-    runtime.update(|state, _| {
+    window.update(|state, _| {
         state.browser.open_tab("about:blank").unwrap();
     });
-    runtime.frame(0.01);
-    assert!(runtime.presented("horizontal-tab-strip").is_some());
+    window.frame(0.01);
+    assert!(window.presented("horizontal-tab-strip").is_some());
+
+    let mut full_width = AppState::new(None);
+    full_width.set_tab_layout(TabLayout::Horizontal);
+    full_width.settings.open_tab_on_startup = false;
+    full_width.settings.horizontal_address_bar_full_width = true;
+    let full_width = runtime(full_width, 1000.0);
+    let address = rect(&full_width, "horizontal-address-bar");
+    assert!(address[2] > theme::COMPACT_ADDRESS_WIDTH);
+    assert!(address[0] + address[2] < rect(&full_width, "new-tab")[0]);
 }
 
 #[test]

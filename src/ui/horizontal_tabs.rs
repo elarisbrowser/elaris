@@ -104,32 +104,54 @@ pub(super) fn view(
     // Compact tabs share their row with the toolbar: navigation and the address bar lead, the
     // tabs follow, and downloads trail.
     let compact = state.compact_tabs();
-    let mut toolbar = Vec::new();
-    let mut trailing = Vec::new();
-    if compact {
-        toolbar.extend(header::navigation(state, theme));
+    if !tab_bar_visible(state) {
+        let navigation: Vec<_> = header::navigation(state, theme).collect();
+        let address = super::omnibox::address_bar(state, cx, theme, reduced, overlays);
+        let mut trailing = vec![new_tab_button(theme)];
         trailing.extend(super::bookmarks::expand_button(state, theme));
         trailing.push(downloads::trigger(state, theme, overlays));
-    }
-    // Each button in the strip takes its width and the gap after it; the address bar holds its
-    // width so the tabs, not it, give way in a narrow window.
-    let mut toolbar_width = (toolbar.len() + trailing.len().saturating_sub(1)) as f32
-        * (theme::ICON_BUTTON + theme::NAV_GAP);
-    if compact {
-        toolbar.push(
-            super::omnibox::address_bar(state, cx, theme, reduced, overlays)
-                .w(theme::COMPACT_ADDRESS_WIDTH)
-                .min_w(theme::COMPACT_ADDRESS_WIDTH)
-                .grow(0.0),
+        #[cfg(elaris_ui = "linux")]
+        let trailing_button_count = trailing.len() + window_controls.len();
+        #[cfg(not(elaris_ui = "linux"))]
+        let trailing_button_count = trailing.len();
+        #[cfg(not(elaris_ui = "linux"))]
+        let leading_width = if inset > 0.0 {
+            inset
+        } else {
+            theme::SIDEBAR_PADDING
+        };
+        #[cfg(elaris_ui = "linux")]
+        let leading_width = theme::SIDEBAR_PADDING;
+        let navigation_width = navigation.len() as f32 * (theme::ICON_BUTTON + theme::NAV_GAP);
+        let trailing_width = trailing_button_count as f32 * (theme::ICON_BUTTON + theme::NAV_GAP)
+            + theme::SIDEBAR_PADDING;
+        let window_width = cx
+            .layout_size("window")
+            .map_or(theme::WINDOW_MIN_SIZE.0, |size| size[0]);
+        let minimum_left = leading_width + navigation_width + theme::NAV_GAP;
+        let maximum_right = window_width - trailing_width - theme::NAV_GAP;
+        let available = (maximum_right - minimum_left).max(0.0);
+        let address_width = if state.settings.horizontal_address_bar_full_width {
+            available
+        } else {
+            theme::COMPACT_ADDRESS_WIDTH.min(available)
+        };
+        let address_left = ((window_width - address_width) / 2.0).clamp(
+            minimum_left,
+            (maximum_right - address_width).max(minimum_left),
         );
-        toolbar_width += theme::COMPACT_ADDRESS_WIDTH + theme::NAV_GAP;
-    }
-
-    if !tab_bar_visible(state) {
-        if !compact {
-            trailing.extend(super::bookmarks::expand_button(state, theme));
-            trailing.push(downloads::trigger(state, theme, overlays));
-        }
+        let address = if state.settings.horizontal_address_bar_full_width {
+            address.grow(1.0)
+        } else {
+            address
+                .absolute(
+                    address_left,
+                    (theme::HORIZONTAL_STRIP_HEIGHT - theme::HORIZONTAL_FIELD_HEIGHT) / 2.0,
+                )
+                .w(address_width)
+                .min_w(address_width)
+                .grow(0.0)
+        };
         let mut top_row = row()
             .key("horizontal-navigation")
             .w_full()
@@ -153,23 +175,17 @@ pub(super) fn view(
         {
             top_row = top_row.pl(theme::SIDEBAR_PADDING);
         }
-        if compact {
-            top_row = top_row.children(toolbar);
-        } else {
-            top_row = top_row.children(navigation_contents(
-                state, cx, theme, overlays, reduced, true,
-            ));
-        }
-        top_row = top_row
-            .child(new_tab_button(theme))
-            .child(
+        top_row = top_row.children(navigation).child(address);
+        if !state.settings.horizontal_address_bar_full_width {
+            top_row = top_row.child(
                 el().key("horizontal-empty-drag-space")
                     .grow(1.0)
                     .min_w(0.0)
                     .h_full()
                     .window_drag(),
-            )
-            .children(trailing);
+            );
+        }
+        top_row = top_row.children(trailing);
         #[cfg(elaris_ui = "linux")]
         {
             top_row = top_row.children(window_controls);
@@ -184,6 +200,27 @@ pub(super) fn view(
                 Transition::opacity()
             })
             .child(top_row);
+    }
+
+    let mut toolbar = Vec::new();
+    let mut trailing = Vec::new();
+    if compact {
+        toolbar.extend(header::navigation(state, theme));
+        trailing.extend(super::bookmarks::expand_button(state, theme));
+        trailing.push(downloads::trigger(state, theme, overlays));
+    }
+    // Each button in the strip takes its width and the gap after it; the address bar holds its
+    // width so the tabs, not it, give way in a narrow window.
+    let mut toolbar_width = (toolbar.len() + trailing.len().saturating_sub(1)) as f32
+        * (theme::ICON_BUTTON + theme::NAV_GAP);
+    if compact {
+        toolbar.push(
+            super::omnibox::address_bar(state, cx, theme, reduced, overlays)
+                .w(theme::COMPACT_ADDRESS_WIDTH)
+                .min_w(theme::COMPACT_ADDRESS_WIDTH)
+                .grow(0.0),
+        );
+        toolbar_width += theme::COMPACT_ADDRESS_WIDTH + theme::NAV_GAP;
     }
 
     let strip_width = state.sidebar.horizontal_strip_width.unwrap_or_else(|| {
@@ -358,9 +395,7 @@ fn navigation(
         .gap(theme::NAV_GAP)
         .center_y()
         .window_drag()
-        .children(navigation_contents(
-            state, cx, theme, overlays, reduced, false,
-        ))
+        .children(navigation_contents(state, cx, theme, overlays, reduced))
 }
 
 fn navigation_contents(
@@ -369,22 +404,13 @@ fn navigation_contents(
     theme: &Theme,
     overlays: &mut Vec<El>,
     reduced: bool,
-    fixed_address: bool,
 ) -> Vec<El> {
     let mut contents: Vec<_> = header::navigation(state, theme).collect();
-    let address = super::omnibox::address_bar(state, cx, theme, reduced, overlays);
-    contents.push(if fixed_address {
-        address
-            .w(theme::COMPACT_ADDRESS_WIDTH)
-            .min_w(theme::COMPACT_ADDRESS_WIDTH)
-            .grow(0.0)
-    } else {
-        address
-    });
-    if !fixed_address {
-        contents.extend(super::bookmarks::expand_button(state, theme));
-        contents.push(downloads::trigger(state, theme, overlays));
-    }
+    contents.push(super::omnibox::address_bar(
+        state, cx, theme, reduced, overlays,
+    ));
+    contents.extend(super::bookmarks::expand_button(state, theme));
+    contents.push(downloads::trigger(state, theme, overlays));
     contents
 }
 

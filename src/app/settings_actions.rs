@@ -65,6 +65,13 @@ impl super::AppState {
         }
     }
 
+    pub(crate) fn set_horizontal_address_bar_full_width(&mut self, full_width: bool) {
+        if self.settings.horizontal_address_bar_full_width != full_width {
+            self.settings.horizontal_address_bar_full_width = full_width;
+            self.save_setting(SettingsChange::HorizontalAddressBarFullWidth(full_width));
+        }
+    }
+
     pub(crate) fn sidebar_on_right(&self) -> bool {
         !self.horizontal_tabs() && self.settings.sidebar_side == SidebarSide::Right
     }

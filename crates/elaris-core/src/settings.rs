@@ -303,6 +303,8 @@ pub struct Settings {
     pub compact_tabs: bool,
     /// Opens a blank tab when a horizontal window starts without an explicit page.
     pub open_tab_on_startup: bool,
+    /// Lets the horizontal layout's address field use the full width in an empty window.
+    pub horizontal_address_bar_full_width: bool,
     pub sidebar_side: SidebarSide,
     pub new_tab_position: NewTabPosition,
     pub page_style: PageStyle,
@@ -345,6 +347,7 @@ impl Default for Settings {
             address_bar: AddressBarPosition::default(),
             compact_tabs: false,
             open_tab_on_startup: true,
+            horizontal_address_bar_full_width: false,
             sidebar_side: SidebarSide::default(),
             new_tab_position: NewTabPosition::default(),
             page_style: PageStyle::default(),
@@ -510,6 +513,7 @@ pub enum SettingsChange {
     AddressBar(AddressBarPosition),
     CompactTabs(bool),
     OpenTabOnStartup(bool),
+    HorizontalAddressBarFullWidth(bool),
     SidebarSide(SidebarSide),
     NewTabPosition(NewTabPosition),
     PageStyle(PageStyle),
