@@ -117,9 +117,9 @@ fn layout_switch_preserves_split_tabs_and_window_state() {
         page,
         [
             inset,
-            theme::HORIZONTAL_CHROME_HEIGHT + inset,
+            theme::HORIZONTAL_CHROME_HEIGHT,
             960.0 - 2.0 * inset,
-            640.0 - theme::HORIZONTAL_CHROME_HEIGHT - 2.0 * inset
+            640.0 - theme::HORIZONTAL_CHROME_HEIGHT - inset
         ]
     );
     window.frame(0.0);
@@ -558,6 +558,18 @@ fn traffic_light_placeholders_follow_the_native_titlebar_position() {
             .unwrap();
         assert_eq!(rect(&window, "window-controls")[1], native_y);
     }
+
+    let mut empty = AppState::new(None);
+    empty.set_tab_layout(TabLayout::Horizontal);
+    empty.settings.open_tab_on_startup = false;
+    let mut empty = runtime(empty, 960.0);
+    empty.set_titlebar_inset(
+        theme::TRAFFIC_LIGHTS.0 + 2.0 * rune::Chrome::TRAFFIC_PITCH + rune::Chrome::TRAFFIC_LIGHT,
+    );
+    settle(&mut empty);
+    let controls = rect(&empty, "window-controls");
+    let address = rect(&empty, "horizontal-address-bar");
+    assert!(address[0] >= controls[0] + controls[2] + theme::NAV_GAP);
 }
 
 #[test]

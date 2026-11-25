@@ -122,14 +122,9 @@ impl super::AppState {
         }
     }
 
-    /// The gap above the page in the horizontal layout. Compact tabs already leave the strip's
-    /// own margin below the tabs, so the page meets it there and they sit evenly in their row.
+    /// Horizontal browser chrome owns the top spacing; the page begins directly below it.
     pub(crate) fn page_top_inset(&self) -> f32 {
-        if self.compact_tabs() {
-            0.0
-        } else {
-            self.page_inset()
-        }
+        0.0
     }
 
     /// The page's corner radius; square when edge to edge.

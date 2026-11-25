@@ -123,21 +123,36 @@ pub(super) fn view(
     }
 
     if !tab_bar_visible(state) {
-        let top_row = if compact {
-            row()
-                .key("horizontal-navigation")
-                .w_full()
-                .h(theme::HORIZONTAL_NAV_HEIGHT)
-                .px(theme::SIDEBAR_PADDING)
-                .gap(theme::NAV_GAP)
-                .center_y()
-                .window_drag()
-                .children(toolbar)
-                .child(new_tab_button(theme))
-                .children(trailing)
+        let mut top_row = row()
+            .key("horizontal-navigation")
+            .w_full()
+            .h(theme::HORIZONTAL_NAV_HEIGHT)
+            .pr(theme::SIDEBAR_PADDING)
+            .gap(theme::NAV_GAP)
+            .center_y()
+            .window_drag();
+        #[cfg(not(elaris_ui = "linux"))]
+        {
+            top_row = if inset > 0.0 {
+                top_row.child(header::window_controls(inset, theme))
+            } else {
+                top_row.pl(theme::SIDEBAR_PADDING)
+            };
+        }
+        #[cfg(elaris_ui = "linux")]
+        {
+            top_row = top_row.pl(theme::SIDEBAR_PADDING);
+        }
+        if compact {
+            top_row = top_row.children(toolbar);
         } else {
-            navigation(state, cx, theme, overlays, reduced).child(new_tab_button(theme))
-        };
+            top_row = top_row.children(navigation_contents(state, cx, theme, overlays, reduced));
+        }
+        top_row = top_row.child(new_tab_button(theme)).children(trailing);
+        #[cfg(elaris_ui = "linux")]
+        {
+            top_row = top_row.children(window_controls);
+        }
         drag_overlay(state, theme, overlays, reduced);
         return col()
             .key("horizontal-chrome")
@@ -322,12 +337,23 @@ fn navigation(
         .gap(theme::NAV_GAP)
         .center_y()
         .window_drag()
-        .children(header::navigation(state, theme))
-        .child(super::omnibox::address_bar(
-            state, cx, theme, reduced, overlays,
-        ))
-        .children(super::bookmarks::expand_button(state, theme))
-        .child(downloads::trigger(state, theme, overlays))
+        .children(navigation_contents(state, cx, theme, overlays, reduced))
+}
+
+fn navigation_contents(
+    state: &AppState,
+    cx: &mut Cx<AppState>,
+    theme: &Theme,
+    overlays: &mut Vec<El>,
+    reduced: bool,
+) -> Vec<El> {
+    let mut contents: Vec<_> = header::navigation(state, theme).collect();
+    contents.push(super::omnibox::address_bar(
+        state, cx, theme, reduced, overlays,
+    ));
+    contents.extend(super::bookmarks::expand_button(state, theme));
+    contents.push(downloads::trigger(state, theme, overlays));
+    contents
 }
 
 fn overflow_menu(state: &AppState, cx: &Cx<AppState>, theme: &Theme, overlays: &mut Vec<El>) -> El {
