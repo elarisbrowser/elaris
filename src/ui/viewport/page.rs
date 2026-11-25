@@ -258,22 +258,37 @@ fn ui_only_badge(theme: &Theme) -> El {
 
 /// Shows the page's frames in `pane`: Rune's GPU samples Ladybird's own surface where it can,
 /// and otherwise the engine copies each frame into pixels.
-pub(in crate::ui) fn page_surface(pane: El, surface: &crate::engine::Surface) -> El {
+pub(in crate::ui) fn page_surface(pane: El, surface: &crate::engine::Surface, radius: f32) -> El {
     #[cfg(any(elaris_ui = "macos", elaris_ui = "linux"))]
-    if let Some(gpu) = &surface.gpu {
-        // Keep the surface as a child so the pane's rounded clip masks the GPU frame too. Scale
-        // the last frame to the new pane bounds while the engine renders at its new viewport size.
-        return pane.child(
-            el().key("page-native-surface")
-                .w_full()
-                .h_full()
-                .native_surface(gpu.native(), rune::SurfaceFit::Fill),
-        );
-    }
-    pane.child(
+    let page_surface = surface.gpu.as_ref().map(|gpu| {
+        el().key("page-native-surface")
+            .w_full()
+            .h_full()
+            .native_surface(gpu.native(), rune::SurfaceFit::Fill)
+    });
+    #[cfg(any(elaris_ui = "macos", elaris_ui = "linux"))]
+    let page_surface = page_surface.unwrap_or_else(|| {
         el().key("page-pixels-surface")
             .w_full()
             .h_full()
-            .pixels(&surface.pixels),
+            .pixels(&surface.pixels)
+    });
+    #[cfg(not(any(elaris_ui = "macos", elaris_ui = "linux")))]
+    let page_surface = el()
+        .key("page-pixels-surface")
+        .w_full()
+        .h_full()
+        .pixels(&surface.pixels);
+
+    // Give the streamed frame its own rounded clip. Native surfaces are composed separately from
+    // ordinary fills, so the page mask must be an ancestor of the surface draw itself.
+    pane.child(
+        el().key("page-surface-clip")
+            .w_full()
+            .h_full()
+            .radius(radius)
+            .continuous_corners()
+            .clip_rounded(radius)
+            .child(page_surface),
     )
 }

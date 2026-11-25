@@ -87,6 +87,7 @@ pub(crate) fn view(
             .h_full()
             .min_h(0.0)
             .fill(theme.page)
+            .radius(radius)
             // The frame scales with the pane's layout spring; its child surface stays clipped
             // to these same animated bounds while the engine renders the new viewport size.
             .continuous_corners()
@@ -96,7 +97,7 @@ pub(crate) fn view(
             .filter(|tab| !tab.is_internal())
         {
             // The surface stays on the tab's keyed container when the input region changes sides.
-            pane = page_surface(pane, &tab.surface);
+            pane = page_surface(pane, &tab.surface, radius);
         }
         pane = pane.child(child);
         if !horizontal
