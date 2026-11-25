@@ -18,7 +18,7 @@ pub(in crate::ui) fn mouse_kind(phase: Phase, cancelled: bool) -> MouseKind {
     }
 }
 
-pub(super) fn paste(id: TabId, tx: &mut Tx) {
+pub(crate) fn paste(id: TabId, tx: &mut Tx) {
     tx.read_clipboard(move |s: &mut AppState, content, tx| {
         if !s.omnibox.open
             && tx.focused() == Some(page_focus_key(&s.browser))

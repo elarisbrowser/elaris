@@ -58,6 +58,10 @@ pub(super) fn menu_target_class() -> &'static AnyClass {
             menu_action as unsafe extern "C" fn(_, _, _),
         );
         builder.add_method(
+            sel!(pageMenuAction:),
+            super::page_menu::selected as unsafe extern "C" fn(_, _, _),
+        );
+        builder.add_method(
             sel!(menuNeedsUpdate:),
             refresh_from_menu as unsafe extern "C" fn(_, _, _),
         );

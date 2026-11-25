@@ -13,7 +13,7 @@ mod panes;
 mod picker;
 
 pub(crate) use input::ime;
-use input::paste;
+pub(crate) use input::paste;
 #[cfg(target_os = "macos")]
 pub(crate) use input::{PageEdit, menu_edit};
 pub(super) use input::{mouse_kind, page_key};

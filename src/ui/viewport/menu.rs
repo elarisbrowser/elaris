@@ -36,6 +36,15 @@ impl PageMenuState {
         self.current = Some((owner, point, menu));
         true
     }
+
+    #[cfg(target_os = "macos")]
+    pub(crate) fn receive_native(&mut self, id: TabId, menu: PageMenu) -> bool {
+        let Some((owner, point)) = self.anchor.take().filter(|(owner, _)| *owner == id) else {
+            return false;
+        };
+        crate::platform::macos::menu::show_page_menu(owner, point, menu);
+        true
+    }
     pub(crate) fn open(&self) -> bool {
         self.current.is_some() || self.native.is_some()
     }
