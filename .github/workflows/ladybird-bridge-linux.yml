@@ -15,6 +15,8 @@ jobs:
     # system build dependencies for the pinned Ladybird revision.
     container:
       image: ghcr.io/ladybirdbrowser/ladybird-ci:2026.11.12
+      # Reap exited helper children in the test container; keep detecting live helpers.
+      options: --init
     timeout-minutes: 240
     steps:
       - name: Check out Elaris and pinned Ladybird
@@ -67,27 +69,14 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: |
-            .git/modules/Build/vcpkg-release
             .git/modules/Build/caches/vcpkg-binary-cache
             .ccache
             .cargo/registry
             .cargo/git
-          key: ladybird-bridge-linux-deps-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ladybird-bridge-linux-inputs-v2-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            ladybird-bridge-linux-deps-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-
-            ladybird-bridge-linux-deps-2026.11.12-
-
-      - name: Restore Ladybird and Elaris build progress
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            vendor/ladybird/Build/release
-            build/cpp-ladybird
-            target
-          key: ladybird-bridge-linux-build-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: |
-            ladybird-bridge-linux-build-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-
-            ladybird-bridge-linux-build-2026.11.12-
+            ladybird-bridge-linux-inputs-v2-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-
+            ladybird-bridge-linux-inputs-v2-2026.11.12-
 
       - name: Install Ladybird vcpkg
         timeout-minutes: 15
@@ -101,22 +90,15 @@ jobs:
       - name: Enable ccache for Ladybird builds
         run: |
           mkdir -p /tmp/elaris-ccache
-          cat > /tmp/elaris-ccache/clang <<'EOF'
-          #!/bin/sh
-          exec ccache /usr/bin/clang-22 "$@"
-          EOF
-          cat > /tmp/elaris-ccache/clang++ <<'EOF'
-          #!/bin/sh
-          exec ccache /usr/bin/clang++-22 "$@"
-          EOF
+          # Ladybird CMake adds the compiler launcher; keep the real compiler path for cache validation.
           ln -s /usr/bin/clang-format-22 /tmp/elaris-ccache/clang-format
           ln -s "$(command -v clang-tidy-22)" /tmp/elaris-ccache/clang-tidy
-          chmod +x /tmp/elaris-ccache/clang /tmp/elaris-ccache/clang++
           echo "/tmp/elaris-ccache" >> "$GITHUB_PATH"
-          echo "CC=/tmp/elaris-ccache/clang" >> "$GITHUB_ENV"
-          echo "CXX=/tmp/elaris-ccache/clang++" >> "$GITHUB_ENV"
+          echo "CC=/usr/bin/clang-22" >> "$GITHUB_ENV"
+          echo "CXX=/usr/bin/clang++-22" >> "$GITHUB_ENV"
           echo "CCACHE_DIR=${GITHUB_WORKSPACE}/.ccache" >> "$GITHUB_ENV"
           echo "CCACHE_COMPILERCHECK=content" >> "$GITHUB_ENV"
+          echo "CCACHE_NODIRECT=true" >> "$GITHUB_ENV"
           export CCACHE_DIR="${GITHUB_WORKSPACE}/.ccache"
           ccache -M 3G
 
@@ -134,7 +116,7 @@ jobs:
       - name: Build Ladybird dependencies
         timeout-minutes: 120
         working-directory: vendor/ladybird
-        run: runuser -u elaris-builder -- ./Meta/ladybird.py deps --preset Release --jobs 4 --cc /tmp/elaris-ccache/clang --cxx /tmp/elaris-ccache/clang++
+        run: runuser -u elaris-builder -- ./Meta/ladybird.py deps --preset Release --jobs 4 --cc /usr/bin/clang-22 --cxx /usr/bin/clang++-22
 
       - name: Build Elaris, bridge, and Ladybird helpers
         timeout-minutes: 120
@@ -154,7 +136,7 @@ jobs:
         timeout-minutes: 2
         run: |
           sleep 1
-          if ps -eo comm= | grep -E '^(WebContent|RequestServer|Hub|ImageDecoder|Compositor|SystemProbe|AudioServer|MediaServer|VideoDecoderS|WebRTCClient|ProcessReaper)$'; then
+          if ps -eo pid=,ppid=,stat=,comm= | grep -E '[[:space:]](WebContent|RequestServer|Hub|ImageDecoder|Compositor|SystemProbe|AudioServer|MediaServer|VideoDecoderS|WebRTCClient|ProcessReaper)$'; then
             echo "Ladybird helper process remained after C++ smoke test" >&2
             exit 1
           fi
@@ -190,7 +172,7 @@ jobs:
         timeout-minutes: 2
         run: |
           sleep 1
-          if ps -eo comm= | grep -E '^(WebContent|RequestServer|Hub|ImageDecoder|Compositor|SystemProbe|AudioServer|MediaServer|VideoDecoderS|WebRTCClient|ProcessReaper)$'; then
+          if ps -eo pid=,ppid=,stat=,comm= | grep -E '[[:space:]](WebContent|RequestServer|Hub|ImageDecoder|Compositor|SystemProbe|AudioServer|MediaServer|VideoDecoderS|WebRTCClient|ProcessReaper)$'; then
             echo "Ladybird helper process remained after Rust smoke test" >&2
             exit 1
           fi
@@ -214,19 +196,8 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: |
-            .git/modules/Build/vcpkg-release
             .git/modules/Build/caches/vcpkg-binary-cache
             .ccache
             .cargo/registry
             .cargo/git
-          key: ladybird-bridge-linux-deps-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
-
-      - name: Save Ladybird and Elaris build progress
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            vendor/ladybird/Build/release
-            build/cpp-ladybird
-            target
-          key: ladybird-bridge-linux-build-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: ladybird-bridge-linux-inputs-v2-2026.11.12-${{ hashFiles('vendor/ladybird/vcpkg.json', 'vendor/ladybird/vcpkg-configuration.json', 'vendor/ladybird/Meta/CMake/vcpkg/**') }}-${{ github.run_id }}-${{ github.run_attempt }}
