@@ -261,12 +261,19 @@ fn ui_only_badge(theme: &Theme) -> El {
 pub(in crate::ui) fn page_surface(pane: El, surface: &crate::engine::Surface) -> El {
     #[cfg(any(elaris_ui = "macos", elaris_ui = "linux"))]
     if let Some(gpu) = &surface.gpu {
-        // Frames are laid out at the pane's device size. One texel per device pixel, pinned to the
-        // corner, keeps the last frame still, not stretched, while a resize waits for the next.
-        return pane
-            .native_surface(gpu.native(), rune::SurfaceFit::Fill)
-            .surface_anchor(rune::Align::Start, rune::Align::Start)
-            .surface_unscaled(true);
+        // Keep the surface as a child so the pane's rounded clip masks the GPU frame too. Scale
+        // the last frame to the new pane bounds while the engine renders at its new viewport size.
+        return pane.child(
+            el().key("page-native-surface")
+                .w_full()
+                .h_full()
+                .native_surface(gpu.native(), rune::SurfaceFit::Fill),
+        );
     }
-    pane.pixels(&surface.pixels)
+    pane.child(
+        el().key("page-pixels-surface")
+            .w_full()
+            .h_full()
+            .pixels(&surface.pixels),
+    )
 }
