@@ -63,8 +63,9 @@ bundle version fields accept only numbers and dots.
 | --- | --- | --- |
 | macOS, Apple Silicon | `Elaris-<version>-macos-arm64.dmg` | `Elaris.app`: the browser, Ladybird's helper processes, its resources, and the libraries it links, ad-hoc signed |
 | Linux, x86_64 | `Elaris-<version>-linux-x86_64.tar.gz` | A prefix tree: `bin/elaris`, `libexec/` helpers, `lib/` libraries, `share/` resources, desktop entry and icons |
+| Linux, x86_64 | `Elaris-<version>-linux-x86_64.AppImage` | Portable AppImage built from the same tested prefix tree, with Ladybird resources and bundled libraries |
 
-Each archive comes with a `.sha256` checksum and a `BUILD-INFO.txt` that records the Elaris commit, the pinned Ladybird
+Each package comes with a `.sha256` checksum and a `BUILD-INFO.txt` that records the Elaris commit, the pinned Ladybird
 commit, the Rune revision, and the toolchain used.
 
 ## Limitations of this release process

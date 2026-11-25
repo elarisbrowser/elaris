@@ -342,11 +342,12 @@ jobs:
           path: build/release-engine-cache
           key: ${{ steps.engine-key.outputs.key }}
 
-      - name: Package the tarball and checksums
+      - name: Package Linux archives and checksums
         run: |
           version="$ELARIS_VERSION"
           mkdir -p dist
           archive="dist/Elaris-${version}-linux-x86_64.tar.gz"
+          image="dist/Elaris-${version}-linux-x86_64.AppImage"
           # Fixed owners, names and times, and no gzip name or time, so the same build always gives the same archive.
           epoch="$(runuser -u elaris-builder -- git log -1 --format=%ct)"
           ladybird_revision="$(runuser -u elaris-builder -- git rev-parse HEAD:vendor/ladybird)"
@@ -365,6 +366,17 @@ jobs:
           fi
           cp dist/BUILD-INFO.txt "dist/Elaris-${version}-linux-x86_64.BUILD-INFO.txt"
           (cd dist && sha256sum "$(basename "$archive")" > "$(basename "$archive").sha256")
+
+          tool="$RUNNER_TEMP/appimagetool-x86_64.AppImage"
+          curl --fail --location --retry 3 --output "$tool" \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          packaging/linux/make-appimage.sh build/linux/Elaris "$image" "$tool"
+          (cd dist && sha256sum "$(basename "$image")" > "$(basename "$image").sha256")
+
+          APPIMAGE_EXTRACT_AND_RUN=1 "$image" \
+            "file://$GITHUB_WORKSPACE/bridge/tests/smoke.html" -- \
+            --snap "$RUNNER_TEMP/appimage-smoke.png"
+          test -s "$RUNNER_TEMP/appimage-smoke.png"
 
       - name: Keep the install prefix even if packaging failed
         if: always()
@@ -408,14 +420,17 @@ jobs:
           shopt -s nullglob
           mac=(dist/macos/Elaris-*-macos-arm64.dmg)
           linux=(dist/linux/Elaris-*-linux-x86_64.tar.gz)
-          if (( ${#mac[@]} != 1 || ${#linux[@]} != 1 )); then
-            echo "Expected one macOS DMG and one Linux tarball" >&2
+          appimage=(dist/linux/Elaris-*-linux-x86_64.AppImage)
+          if (( ${#mac[@]} != 1 || ${#linux[@]} != 1 || ${#appimage[@]} != 1 )); then
+            echo "Expected one macOS DMG, one Linux tarball and one Linux AppImage" >&2
             exit 1
           fi
           mac_package="${mac[0]}"
           linux_package="${linux[0]}"
+          appimage_package="${appimage[0]}"
           assets=("$mac_package" "$mac_package.sha256" "${mac_package%.dmg}.BUILD-INFO.txt"
-                  "$linux_package" "$linux_package.sha256" "${linux_package%.tar.gz}.BUILD-INFO.txt")
+                  "$linux_package" "$linux_package.sha256" "${linux_package%.tar.gz}.BUILD-INFO.txt"
+                  "$appimage_package" "$appimage_package.sha256" "${appimage_package%.AppImage}.BUILD-INFO.txt")
           for asset in "${assets[@]}"; do
             if [[ ! -f "$asset" || ! -s "$asset" ]]; then
               echo "Missing or empty release asset: $asset" >&2
@@ -454,14 +469,17 @@ jobs:
           shopt -s nullglob
           mac=(dist/macos/Elaris-*-macos-arm64.dmg)
           linux=(dist/linux/Elaris-*-linux-x86_64.tar.gz)
-          if (( ${#mac[@]} != 1 || ${#linux[@]} != 1 )); then
-            echo "Expected one macOS DMG and one Linux tarball" >&2
+          appimage=(dist/linux/Elaris-*-linux-x86_64.AppImage)
+          if (( ${#mac[@]} != 1 || ${#linux[@]} != 1 || ${#appimage[@]} != 1 )); then
+            echo "Expected one macOS DMG, one Linux tarball and one Linux AppImage" >&2
             exit 1
           fi
           mac_package="${mac[0]}"
           linux_package="${linux[0]}"
+          appimage_package="${appimage[0]}"
           assets=("$mac_package" "$mac_package.sha256" "${mac_package%.dmg}.BUILD-INFO.txt"
-                  "$linux_package" "$linux_package.sha256" "${linux_package%.tar.gz}.BUILD-INFO.txt")
+                  "$linux_package" "$linux_package.sha256" "${linux_package%.tar.gz}.BUILD-INFO.txt"
+                  "$appimage_package" "$appimage_package.sha256" "${appimage_package%.AppImage}.BUILD-INFO.txt")
           for asset in "${assets[@]}"; do
             if [[ ! -f "$asset" || ! -s "$asset" ]]; then
               echo "Missing or empty release asset: $asset" >&2
