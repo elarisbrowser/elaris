@@ -360,6 +360,8 @@ class ElarisWebView final : public WebView::HeadlessWebView {
     AK::Function<void(Web::HTML::PreparedNavigationDescriptor, Web::HTML::ActivateTab)> on_open_tab;
     // Called on the owner thread each time the view presents a frame.
     AK::Function<void()> on_presented;
+    // The Compositor's CoreAnimation context showing the view's frames, or 0 for none.
+    AK::Function<void(u64)> on_remote_layer;
 
     void set_owner(WebView::ViewImplementation& owner) {
         set_owner_view(owner);
@@ -406,6 +408,19 @@ class ElarisWebView final : public WebView::HeadlessWebView {
             ViewImplementation::release_backing_store(bitmap_id);
     }
 #endif
+
+    void did_create_remote_layer(Compositing::RemoteLayerHostHandle handle) override {
+        auto context_id = handle.kind == Compositing::RemoteLayerHostKind::CoreAnimationContext ? handle.id : 0;
+        if (on_remote_layer)
+            on_remote_layer(context_id);
+    }
+
+    // The frame is on screen already; the host only hears that there is a new one.
+    void did_present_frame_in_remote_layer(Gfx::IntSize, double) override {
+        ++m_serial;
+        if (on_ready_to_paint)
+            on_ready_to_paint();
+    }
 
     void did_accept_presented_backing_store(i32 bitmap_id, Gfx::IntRect damage_rect) override {
         m_damage = m_damage.is_empty() ? damage_rect : m_damage.united(damage_rect);
@@ -674,8 +689,8 @@ static bool on_owner_thread(ElarisLadybird const* bridge) {
     return bridge->owner_thread == std::this_thread::get_id();
 }
 
-static void emit(ElarisLadybirdView const* view, ElarisLadybirdEventKind kind, std::string text = {},
-                 int32_t value = 0) {
+static void emit(ElarisLadybirdView const* view, ElarisLadybirdEventKind kind, std::string text = {}, int32_t value = 0,
+                 uint64_t request_id = 0) {
     if (!view->bridge->callback)
         return;
     ElarisLadybirdEvent event{};
@@ -683,6 +698,7 @@ static void emit(ElarisLadybirdView const* view, ElarisLadybirdEventKind kind, s
     event.view_id = view->id;
     event.text = text.c_str();
     event.value = value;
+    event.request_id = request_id;
     view->bridge->callback(view->bridge->context, &event);
 }
 
@@ -1137,48 +1153,59 @@ extern "C" int32_t elaris_ladybird_reply_to_permission(ElarisLadybirdView* handl
     return succeed();
 }
 
-static void emit_favicon(ElarisLadybirdView const* view, Optional<Gfx::Bitmap const&> favicon) {
-    if (!view->bridge->callback)
-        return;
-
+// The bitmap's pixels as straight-alpha RGBA8 rows.
+static std::vector<uint8_t> straight_rgba(Gfx::Bitmap const& bitmap) {
+    auto const width = bitmap.width();
+    auto const height = bitmap.height();
     std::vector<uint8_t> rgba;
-    ElarisLadybirdEvent event{};
-    event.kind = ELARIS_LADYBIRD_FAVICON;
-    event.view_id = view->id;
-    event.text = "";
-    if (favicon.has_value()) {
-        auto const& bitmap = *favicon;
-        auto const width = bitmap.width();
-        auto const height = bitmap.height();
-        if (width > 0 && height > 0) {
-            auto const row_bytes = static_cast<size_t>(width) * 4;
-            rgba.resize(row_bytes * static_cast<size_t>(height));
-            for (int y = 0; y < height; ++y) {
-                for (int x = 0; x < width; ++x) {
-                    auto color = bitmap.get_pixel(x, y);
-                    auto alpha = color.alpha();
-                    auto straight_alpha = [alpha, premultiplied = bitmap.alpha_type() ==
-                                                                  Gfx::AlphaType::Premultiplied](uint8_t channel) {
-                        if (alpha == 0)
-                            return uint8_t{0};
-                        if (!premultiplied)
-                            return channel;
-                        return static_cast<uint8_t>(std::min(255, (channel * 255 + alpha / 2) / alpha));
-                    };
-                    auto offset = static_cast<size_t>(y) * row_bytes + static_cast<size_t>(x) * 4;
-                    rgba[offset] = straight_alpha(color.red());
-                    rgba[offset + 1] = straight_alpha(color.green());
-                    rgba[offset + 2] = straight_alpha(color.blue());
-                    rgba[offset + 3] = alpha;
-                }
-            }
-            event.favicon_rgba = rgba.data();
-            event.favicon_width = width;
-            event.favicon_height = height;
-            event.favicon_stride = static_cast<int32_t>(row_bytes);
+    if (width <= 0 || height <= 0)
+        return rgba;
+    auto const row_bytes = static_cast<size_t>(width) * 4;
+    auto const premultiplied = bitmap.alpha_type() == Gfx::AlphaType::Premultiplied;
+    rgba.resize(row_bytes * static_cast<size_t>(height));
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            auto color = bitmap.get_pixel(x, y);
+            auto alpha = color.alpha();
+            auto straight_alpha = [alpha, premultiplied](uint8_t channel) {
+                if (alpha == 0)
+                    return uint8_t{0};
+                if (!premultiplied)
+                    return channel;
+                return static_cast<uint8_t>(std::min(255, (channel * 255 + alpha / 2) / alpha));
+            };
+            auto offset = static_cast<size_t>(y) * row_bytes + static_cast<size_t>(x) * 4;
+            rgba[offset] = straight_alpha(color.red());
+            rgba[offset + 1] = straight_alpha(color.green());
+            rgba[offset + 2] = straight_alpha(color.blue());
+            rgba[offset + 3] = alpha;
         }
     }
+    return rgba;
+}
+
+// Raises an event carrying `bitmap`'s pixels, or none when it has none.
+static void emit_bitmap(ElarisLadybirdView const* view, ElarisLadybirdEventKind kind, Gfx::Bitmap const* bitmap) {
+    if (!view->bridge->callback)
+        return;
+    ElarisLadybirdEvent event{};
+    event.kind = kind;
+    event.view_id = view->id;
+    event.text = "";
+    std::vector<uint8_t> rgba;
+    if (bitmap)
+        rgba = straight_rgba(*bitmap);
+    if (!rgba.empty()) {
+        event.favicon_rgba = rgba.data();
+        event.favicon_width = bitmap->width();
+        event.favicon_height = bitmap->height();
+        event.favicon_stride = bitmap->width() * 4;
+    }
     view->bridge->callback(view->bridge->context, &event);
+}
+
+static void emit_favicon(ElarisLadybirdView const* view, Optional<Gfx::Bitmap const&> favicon) {
+    emit_bitmap(view, ELARIS_LADYBIRD_FAVICON, favicon.has_value() ? &*favicon : nullptr);
 }
 
 static std::string to_utf8(AK::Utf16String const& value) {
@@ -1834,6 +1861,9 @@ static int32_t create_view(ElarisLadybird* bridge, uint64_t view_id, WebView::Is
         }
         s_discarded_tabs[handle->id] = DiscardedTab{view.session_history_snapshot(), *state_id};
         emit_discard(*handle, true);
+    };
+    handle->view->on_remote_layer = [handle](u64 context_id) {
+        emit(handle, ELARIS_LADYBIRD_REMOTE_LAYER, {}, 0, context_id);
     };
     handle->view->on_navigation_state_change = [handle] {
         emit_translation(*handle);
@@ -2868,6 +2898,39 @@ extern "C" int32_t elaris_ladybird_set_gpu_frames(ElarisLadybirdView* handle, in
     (void)enabled;
     return fail("GPU frames are not available on this platform");
 #endif
+}
+
+extern "C" int32_t elaris_ladybird_set_remote_layer(ElarisLadybirdView* handle, int32_t enabled) {
+    if (!handle)
+        return fail("view is required");
+    if (!on_owner_thread(handle->bridge))
+        return fail("frame presentation must change on the initialization thread");
+#if defined(AK_OS_MACOS)
+    handle->view->set_hosts_remote_layer(enabled != 0);
+    return succeed();
+#else
+    (void)enabled;
+    return fail("remote layers are only available on macOS");
+#endif
+}
+
+extern "C" int32_t elaris_ladybird_request_snapshot(ElarisLadybirdView* handle) {
+    if (!handle)
+        return fail("view is required");
+    if (!on_owner_thread(handle->bridge))
+        return fail("snapshots must be requested on the initialization thread");
+    // The view may close before the snapshot arrives, so the reply finds it again by id.
+    auto* bridge = handle->bridge;
+    auto id = handle->id;
+    handle->view->take_frame_snapshot([bridge, id](Optional<Gfx::ShareableBitmap> snapshot) {
+        auto it = std::find_if(bridge->views.begin(), bridge->views.end(),
+                               [id](auto const* view) { return view->id == id; });
+        if (it == bridge->views.end())
+            return;
+        auto const* bitmap = snapshot.has_value() && snapshot->is_valid() ? snapshot->bitmap() : nullptr;
+        emit_bitmap(*it, ELARIS_LADYBIRD_SNAPSHOT, bitmap);
+    });
+    return succeed();
 }
 
 extern "C" int32_t elaris_ladybird_gpu_frame(ElarisLadybirdView* handle, ElarisLadybirdGpuFrame* out_frame) {

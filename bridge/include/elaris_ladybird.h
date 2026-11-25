@@ -66,6 +66,12 @@ typedef enum {
     /* Answers elaris_ladybird_discard: value 1 once the tab's state is kept and its view may close, 0 when the tab
      * stays loaded, with Ladybird's DiscardBlockers bits saying why in request_id. */
     ELARIS_LADYBIRD_DISCARD = 38,
+    /* The Compositor shows the view's frames in a CoreAnimation context of its own, whose ID is request_id
+     * (0 when it no longer does). The host shows it with a CALayerHost. macOS only. */
+    ELARIS_LADYBIRD_REMOTE_LAYER = 39,
+    /* A frame snapshot the host asked for (elaris_ladybird_request_snapshot), in the favicon pixel fields;
+     * they are empty when the view had no frame. */
+    ELARIS_LADYBIRD_SNAPSHOT = 40,
 } ElarisLadybirdEventKind;
 
 /* Permission event text is the origin and selection is the permission key.
@@ -116,7 +122,7 @@ typedef struct {
     uint64_t view_id;            /* The id the host gave the view that raised the event. */
     const char* text;            /* Borrowed until the callback returns; empty when unused. */
     int32_t value;               /* Loading state for LOADING, HISTORY_* flags for HISTORY; zero otherwise. */
-    const uint8_t* favicon_rgba; /* Borrowed RGBA8 pixels for FAVICON, null when cleared. */
+    const uint8_t* favicon_rgba; /* Borrowed RGBA8 pixels for FAVICON and SNAPSHOT, null when there are none. */
     int32_t favicon_width;
     int32_t favicon_height;
     int32_t favicon_stride;
@@ -372,6 +378,11 @@ int32_t elaris_ladybird_gpu_frames_supported(void);
 /* Makes elaris_ladybird_gpu_frame() available for the view (macOS and Linux): frames are shared with the host's GPU
  * and sampled in place, with no CPU copy. */
 int32_t elaris_ladybird_set_gpu_frames(ElarisLadybirdView* view, int32_t enabled);
+/* Whether the Compositor shows the view's frames itself, in a remote layer (REMOTE_LAYER events), rather than
+ * handing them to the host. macOS only. */
+int32_t elaris_ladybird_set_remote_layer(ElarisLadybirdView* view, int32_t enabled);
+/* Asks for the frame on display, at its full size, as a SNAPSHOT event. */
+int32_t elaris_ladybird_request_snapshot(ElarisLadybirdView* view);
 /* Copies the frame on display into a GPU surface, or returns ELARIS_LADYBIRD_NO_FRAME or ELARIS_LADYBIRD_BUSY. */
 int32_t elaris_ladybird_gpu_frame(ElarisLadybirdView* view, ElarisLadybirdGpuFrame* out_frame);
 /* Reports the newest frame serial the host's GPU has finished with (macOS: drawn; Linux: read), freeing the surfaces
