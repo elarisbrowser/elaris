@@ -17,6 +17,8 @@ jobs:
     # system build dependencies for the pinned Ladybird revision.
     container:
       image: ghcr.io/ladybirdbrowser/ladybird-ci:2026.11.12
+      # Reap exited helper children in the test container; keep detecting live helpers.
+      options: --init
     timeout-minutes: 240
     steps:
       - name: Check out Elaris and pinned Ladybird
@@ -156,7 +158,7 @@ jobs:
         timeout-minutes: 2
         run: |
           sleep 1
-          if ps -eo comm= | grep -E '^(WebContent|RequestServer|Hub|ImageDecoder|Compositor|SystemProbe|AudioServer|MediaServer|VideoDecoderS|WebRTCClient|ProcessReaper)$'; then
+          if ps -eo pid=,ppid=,stat=,comm= | grep -E '[[:space:]](WebContent|RequestServer|Hub|ImageDecoder|Compositor|SystemProbe|AudioServer|MediaServer|VideoDecoderS|WebRTCClient|ProcessReaper)$'; then
             echo "Ladybird helper process remained after C++ smoke test" >&2
             exit 1
           fi
@@ -192,7 +194,7 @@ jobs:
         timeout-minutes: 2
         run: |
           sleep 1
-          if ps -eo comm= | grep -E '^(WebContent|RequestServer|Hub|ImageDecoder|Compositor|SystemProbe|AudioServer|MediaServer|VideoDecoderS|WebRTCClient|ProcessReaper)$'; then
+          if ps -eo pid=,ppid=,stat=,comm= | grep -E '[[:space:]](WebContent|RequestServer|Hub|ImageDecoder|Compositor|SystemProbe|AudioServer|MediaServer|VideoDecoderS|WebRTCClient|ProcessReaper)$'; then
             echo "Ladybird helper process remained after Rust smoke test" >&2
             exit 1
           fi
