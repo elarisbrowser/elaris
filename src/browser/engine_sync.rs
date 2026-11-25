@@ -266,6 +266,10 @@ impl Browser {
         polled
     }
 
+    pub(crate) fn set_rounded_pages(&mut self, rounded_pages: bool) {
+        self.rounded_pages = rounded_pages;
+    }
+
     /// Asks the engine to describe its processes for the Task Manager in `tab`. Returns false
     /// without an engine, which has no processes to describe.
     pub(crate) fn request_processes(&self, tab: TabId) -> bool {
@@ -305,6 +309,7 @@ impl Browser {
         let split_ratio = self.displayed_split().map(|split| split.ratio);
         let input_page = self.input_page();
         let peek_id = self.peek.as_ref().map(|peek| peek.page.id());
+        let rounded_pages = self.rounded_pages;
         // Release the old focus before granting it to a different view.
         for tab in self
             .tabs
@@ -331,7 +336,9 @@ impl Browser {
             let id = tab.id();
             // A Peek card scales its page, which a layer of its own can't follow; once promoted
             // to a tab, the page moves to one.
-            let hosted = peek_id != Some(id) && tab.surface.hosts_layer();
+            // A hosted CoreAnimation layer or Wayland subsurface bypasses Rune's rounded clip.
+            // Keep rounded pages in Rune's compositing path so their corners remain clipped.
+            let hosted = peek_id != Some(id) && !rounded_pages && tab.surface.hosts_layer();
             let active = input_page == Some(id);
             let side = panes.iter().position(|pane| *pane == Some(id));
             let is_peek = peek_id == Some(id);

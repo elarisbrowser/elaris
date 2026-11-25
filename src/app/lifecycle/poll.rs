@@ -50,6 +50,8 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         tx.animated();
     }
     let previous_peek = state.browser.peek.as_ref().map(|peek| peek.page.id());
+    let rounded_pages = state.browser.fullscreen_tab().is_none() && state.page_radius() > 0.0;
+    state.browser.set_rounded_pages(rounded_pages);
     let mut polled = state.browser.poll();
     let mini_changed = super::super::mini::poll(state, tx);
     open_popups(state, &mut polled);
