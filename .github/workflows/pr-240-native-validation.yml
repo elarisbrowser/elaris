@@ -95,7 +95,10 @@ jobs:
 
       - name: Install Ladybird vcpkg
         timeout-minutes: 15
-        run: ./Meta/ladybird.py vcpkg --preset Release
+        # The restored checkout is owned by the unprivileged build user; trust only this repo for bootstrap.
+        run: |
+          GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="$VCPKG_ROOT" \
+            ./Meta/ladybird.py vcpkg --preset Release
         working-directory: vendor/ladybird
 
       - name: Install Ladybird Rust toolchain
