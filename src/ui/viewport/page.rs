@@ -262,24 +262,21 @@ pub(in crate::ui) fn page_surface(pane: El, surface: &crate::engine::Surface) ->
     #[cfg(any(elaris_ui = "macos", elaris_ui = "linux"))]
     let page_surface = surface.gpu.as_ref().map(|gpu| {
         el().key("page-native-surface")
-            .w_full()
-            .h_full()
+            .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
             .inert()
             .native_surface(gpu.native(), rune::SurfaceFit::Fill)
     });
     #[cfg(any(elaris_ui = "macos", elaris_ui = "linux"))]
     let page_surface = page_surface.unwrap_or_else(|| {
         el().key("page-pixels-surface")
-            .w_full()
-            .h_full()
+            .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
             .inert()
             .pixels(&surface.pixels)
     });
     #[cfg(not(any(elaris_ui = "macos", elaris_ui = "linux")))]
     let page_surface = el()
         .key("page-pixels-surface")
-        .w_full()
-        .h_full()
+        .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
         .inert()
         .pixels(&surface.pixels);
 
