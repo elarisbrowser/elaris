@@ -2,6 +2,9 @@ name: Ladybird bridge (Linux)
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - test/private-site-permission-native
 
 concurrency:
   group: ladybird-bridge-linux-${{ github.head_ref || github.ref }}
