@@ -16,8 +16,8 @@ Requirements: macOS 14.4 or newer, on an Apple Silicon Mac. Intel Macs are not s
 
 ## Linux (x86_64)
 
-Requirements: a 64-bit x86 Linux desktop with glibc 2.43 or newer and a Vulkan driver (the system's GPU driver or Mesa).
-Ubuntu 24.04 does not meet the glibc requirement. Other architectures are not built.
+Requirements: a 64-bit x86 Linux desktop with glibc 2.39 or newer and a Vulkan driver (the system's GPU driver or Mesa).
+Other architectures are not built.
 
 ### AppImage
 
@@ -29,7 +29,7 @@ chmod +x Elaris-<version>-linux-x86_64.AppImage
 ```
 
 The AppImage includes Elaris, Ladybird's helper processes and resources, and the bundled libraries. It still requires
-glibc 2.43 or newer and a Vulkan driver. Some distributions may also need FUSE 2; set `APPIMAGE_EXTRACT_AND_RUN=1`
+glibc 2.39 or newer and a Vulkan driver. Some distributions may also need FUSE 2; set `APPIMAGE_EXTRACT_AND_RUN=1`
 to run it without FUSE.
 
 ### Tarball

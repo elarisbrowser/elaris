@@ -213,17 +213,14 @@ jobs:
     name: Linux bundle (x86_64)
     needs: verify
     runs-on: ubuntu-24.04
-    # Ladybird's CI image supplies its documented compiler, Qt, CMake and system build dependencies.
-    container:
-      image: ghcr.io/ladybirdbrowser/ladybird-ci:2026.11.12
     timeout-minutes: 300
     env:
       ELARIS_BASELINE_CPU: "1"
-      ELARIS_RELEASE_IMAGE: ghcr.io/ladybirdbrowser/ladybird-ci:2026.11.12
       CCACHE_COMPILERCHECK: content
       # Hash preprocessed inputs: new or removed headers must invalidate previous results too.
       CCACHE_NODIRECT: "true"
       CCACHE_MAXSIZE: 2G
+      CCACHE_DIR: ${{ github.workspace }}/.release-ccache
     steps:
       - uses: actions/checkout@v4
         with:
@@ -231,8 +228,8 @@ jobs:
 
       - name: Install bundling and headless test tools
         run: |
-          apt-get update -o APT::Update::Error-Mode=any
-          apt-get install -y --no-install-recommends patchelf xvfb mesa-vulkan-drivers libvulkan1 ca-certificates clang-tidy ccache
+          sudo apt-get update -o APT::Update::Error-Mode=any
+          sudo apt-get install -y --no-install-recommends xvfb mesa-vulkan-drivers libvulkan1 ccache
 
       - name: Identify the native cache toolchain
         id: native-cache-key
@@ -268,19 +265,12 @@ jobs:
           fi
 
       - name: Set up Elaris and Ladybird
-        run: |
-          # Ladybird refuses to build as root, so build as an unprivileged user as the bridge workflow does.
-          if ! id elaris-builder >/dev/null 2>&1; then
-            useradd --create-home --shell /bin/bash elaris-builder
-          fi
-          chown -R elaris-builder:elaris-builder "$GITHUB_WORKSPACE" /opt/rustup /opt/cargo
-          runuser -u elaris-builder -- git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          runuser -u elaris-builder -- ./elaris setup --skip-system-deps
+        run: ./elaris setup
 
       - name: Identify exact Ladybird build inputs
         id: engine-key
         run: |
-          key="$(runuser -u elaris-builder -- python3 -m tools.elaris_cli.release_engine prepare)"
+          key="$(python3 -m tools.elaris_cli.release_engine prepare)"
           echo "key=$key" >> "$GITHUB_OUTPUT"
 
       - name: Restore exact Ladybird release outputs
@@ -299,21 +289,20 @@ jobs:
           ENGINE_KEY: ${{ steps.engine-key.outputs.key }}
           ENGINE_CACHE_HIT: ${{ steps.engine-cache.outputs.cache-hit }}
         run: |
-          runuser -u elaris-builder -- env CCACHE_DIR="$CCACHE_DIR" ccache --zero-stats
+          ccache --zero-stats
           cache_args=()
           if [ -n "$ENGINE_KEY" ]; then
             cache_args+=(--release-engine-cache-key "$ENGINE_KEY")
           fi
           if [ "$ENGINE_CACHE_HIT" = true ] && [ -d build/release-engine-cache ]; then
-            chown -R elaris-builder:elaris-builder build/release-engine-cache
             cache_args+=(--release-engine-cache-hit)
           fi
-          runuser -u elaris-builder -- env CCACHE_DIR="$CCACHE_DIR" ELARIS_JOBS=4 ./elaris bundle "${cache_args[@]}" ${{ inputs.channel == 'canary' && '--canary' || '' }}
+          ELARIS_JOBS=4 ./elaris bundle "${cache_args[@]}" ${{ inputs.channel == 'canary' && '--canary' || '' }}
 
       - name: Report compiler cache hits
         if: ${{ always() && (steps.bundle.outcome == 'success' || steps.bundle.outcome == 'failure') }}
         continue-on-error: true
-        run: runuser -u elaris-builder -- env CCACHE_DIR="$CCACHE_DIR" ccache --show-stats
+        run: ccache --show-stats
 
       - name: Save Ladybird compiler and vcpkg archives
         # These caches validate content, so completed entries from an otherwise failed build are useful.
@@ -335,6 +324,9 @@ jobs:
           xvfb-run --auto-servernum "$relocated/Elaris/bin/elaris" "file://$GITHUB_WORKSPACE/bridge/tests/smoke.html" -- --snap "$RUNNER_TEMP/smoke.png"
           test -s "$RUNNER_TEMP/smoke.png"
 
+      - name: Check the Linux glibc baseline
+        run: python3 packaging/linux/check-glibc-baseline.py build/linux/Elaris 2.39
+
       - name: Save verified Ladybird release outputs
         if: ${{ steps.engine-key.outputs.key != '' && steps.engine-cache.outputs.cache-hit != 'true' && hashFiles('build/release-engine-cache/manifest.json') != '' }}
         uses: actions/cache/save@v4
@@ -349,8 +341,8 @@ jobs:
           archive="dist/Elaris-${version}-linux-x86_64.tar.gz"
           image="dist/Elaris-${version}-linux-x86_64.AppImage"
           # Fixed owners, names and times, and no gzip name or time, so the same build always gives the same archive.
-          epoch="$(runuser -u elaris-builder -- git log -1 --format=%ct)"
-          ladybird_revision="$(runuser -u elaris-builder -- git rev-parse HEAD:vendor/ladybird)"
+          epoch="$(git log -1 --format=%ct)"
+          ladybird_revision="$(git rev-parse HEAD:vendor/ladybird)"
           tar -C build/linux --sort=name --owner=0 --group=0 --numeric-owner --mtime="@${epoch}" -cf - Elaris | gzip -n > "$archive"
           cat > dist/BUILD-INFO.txt <<EOF
           Elaris ${version} (Linux x86_64)
