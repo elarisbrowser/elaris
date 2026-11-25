@@ -126,10 +126,14 @@ pub(super) fn view(
     }
 
     if !tab_bar_visible(state) {
+        if !compact {
+            trailing.extend(super::bookmarks::expand_button(state, theme));
+            trailing.push(downloads::trigger(state, theme, overlays));
+        }
         let mut top_row = row()
             .key("horizontal-navigation")
             .w_full()
-            .h(theme::HORIZONTAL_NAV_HEIGHT)
+            .h(theme::HORIZONTAL_STRIP_HEIGHT)
             .pr(theme::SIDEBAR_PADDING)
             .gap(theme::NAV_GAP)
             .center_y()
@@ -152,9 +156,20 @@ pub(super) fn view(
         if compact {
             top_row = top_row.children(toolbar);
         } else {
-            top_row = top_row.children(navigation_contents(state, cx, theme, overlays, reduced));
+            top_row = top_row.children(navigation_contents(
+                state, cx, theme, overlays, reduced, true,
+            ));
         }
-        top_row = top_row.child(new_tab_button(theme)).children(trailing);
+        top_row = top_row
+            .child(new_tab_button(theme))
+            .child(
+                el().key("horizontal-empty-drag-space")
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .h_full()
+                    .window_drag(),
+            )
+            .children(trailing);
         #[cfg(elaris_ui = "linux")]
         {
             top_row = top_row.children(window_controls);
@@ -343,7 +358,9 @@ fn navigation(
         .gap(theme::NAV_GAP)
         .center_y()
         .window_drag()
-        .children(navigation_contents(state, cx, theme, overlays, reduced))
+        .children(navigation_contents(
+            state, cx, theme, overlays, reduced, false,
+        ))
 }
 
 fn navigation_contents(
@@ -352,13 +369,22 @@ fn navigation_contents(
     theme: &Theme,
     overlays: &mut Vec<El>,
     reduced: bool,
+    fixed_address: bool,
 ) -> Vec<El> {
     let mut contents: Vec<_> = header::navigation(state, theme).collect();
-    contents.push(super::omnibox::address_bar(
-        state, cx, theme, reduced, overlays,
-    ));
-    contents.extend(super::bookmarks::expand_button(state, theme));
-    contents.push(downloads::trigger(state, theme, overlays));
+    let address = super::omnibox::address_bar(state, cx, theme, reduced, overlays);
+    contents.push(if fixed_address {
+        address
+            .w(theme::COMPACT_ADDRESS_WIDTH)
+            .min_w(theme::COMPACT_ADDRESS_WIDTH)
+            .grow(0.0)
+    } else {
+        address
+    });
+    if !fixed_address {
+        contents.extend(super::bookmarks::expand_button(state, theme));
+        contents.push(downloads::trigger(state, theme, overlays));
+    }
     contents
 }
 

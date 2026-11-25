@@ -85,11 +85,7 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     let horizontal = state.horizontal_tabs();
     #[cfg(elaris_ui = "macos")]
     cx.set_titlebar(theme::native_titlebar(if horizontal {
-        if horizontal_tabs::tab_bar_visible(state) {
-            theme::HORIZONTAL_STRIP_HEIGHT
-        } else {
-            theme::HORIZONTAL_NAV_HEIGHT
-        }
+        theme::HORIZONTAL_STRIP_HEIGHT
     } else {
         theme::HEADER_HEIGHT
     }));

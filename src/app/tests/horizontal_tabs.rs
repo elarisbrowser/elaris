@@ -828,6 +828,27 @@ fn an_empty_horizontal_window_keeps_only_the_toolbar_until_a_tab_arrives() {
     assert!(runtime.presented("horizontal-tab-strip").is_none());
     assert!(runtime.presented("horizontal-navigation").is_some());
     assert!(runtime.presented("horizontal-address-bar").is_some());
+    assert_eq!(
+        rect(&runtime, "horizontal-address-bar")[2],
+        theme::COMPACT_ADDRESS_WIDTH
+    );
+    assert_eq!(
+        rect(&runtime, "horizontal-navigation")[3],
+        theme::HORIZONTAL_STRIP_HEIGHT
+    );
+    assert_eq!(
+        crate::ui::viewport::page_origin(&runtime.state)[1],
+        theme::HORIZONTAL_STRIP_HEIGHT
+    );
+    assert!(rect(&runtime, "new-tab")[0] < rect(&runtime, "horizontal-empty-drag-space")[0]);
+    assert!(
+        rect(&runtime, "horizontal-empty-drag-space")[0]
+            + rect(&runtime, "horizontal-empty-drag-space")[2]
+            <= rect(&runtime, "downloads-button")[0],
+        "spacer={:?}, downloads={:?}",
+        rect(&runtime, "horizontal-empty-drag-space"),
+        rect(&runtime, "downloads-button")
+    );
     let empty_chrome = rect(&runtime, "horizontal-chrome");
     assert!(empty_chrome[3] < theme::HORIZONTAL_CHROME_HEIGHT);
 
