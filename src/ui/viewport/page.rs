@@ -131,6 +131,11 @@ pub(super) fn page(
             page = page.child(swipe_indicator(swipe, theme));
         }
     }
+    page = page.child_exit(if reduced_motion {
+        rune::Transition::none()
+    } else {
+        rune::Transition::opacity()
+    });
     let mut page = page.w_full().h_full();
     if !internal && let Some(tree) = id.and_then(|id| state.browser.accessibility_tree(id)) {
         page = page.accessibility_graft(tree);

@@ -129,9 +129,9 @@ impl super::AppState {
         }
     }
 
-    /// Horizontal browser chrome owns the top spacing; the page begins directly below it.
+    /// The page sits below horizontal browser chrome by the same inset used at its other edges.
     pub(crate) fn page_top_inset(&self) -> f32 {
-        0.0
+        self.page_inset()
     }
 
     /// The page's corner radius; square when edge to edge.
