@@ -5,6 +5,7 @@
 //! To add a category, write a module whose `sections` returns its sections and list it in
 //! [`CATEGORIES`].
 
+mod about;
 mod appearance;
 mod browsing;
 mod keyboard;
@@ -23,6 +24,7 @@ use super::widgets::{self, NavItem};
 use super::{PageAction, PageContext};
 
 const SCROLL: &str = "settings-scroll";
+const ABOUT_CATEGORY: &str = "settings-about";
 
 pub(super) const ACTIONS: &[PageAction] = &[
     PageAction {
@@ -42,7 +44,7 @@ struct Category {
     sections: fn(&mut PageContext) -> Vec<El>,
 }
 
-static CATEGORIES: [Category; 5] = [
+static CATEGORIES: [Category; 6] = [
     Category {
         nav: NavItem {
             key: "settings-look",
@@ -88,6 +90,15 @@ static CATEGORIES: [Category; 5] = [
         },
         sections: system::sections,
     },
+    Category {
+        nav: NavItem {
+            key: ABOUT_CATEGORY,
+            title: "About",
+            short: "About",
+            icon: &icons::INFO,
+        },
+        sections: about::sections,
+    },
 ];
 
 pub(super) fn view(cx: &mut PageContext) -> PageLayout {
@@ -104,13 +115,17 @@ pub(super) fn view(cx: &mut PageContext) -> PageLayout {
         cx,
     );
     let sections = (current.sections)(cx);
-    PageLayout::new(
+    let page = PageLayout::new(
         SCROLL,
         &icons::SITE_CONTROLS,
         widgets::category(current.nav.key, current.nav.title, sections, cx.theme),
     )
-    .nav(nav)
-    .footnote(versions::summary())
+    .nav(nav);
+    if current.nav.key == ABOUT_CATEGORY {
+        page
+    } else {
+        page.footnote(versions::summary())
+    }
 }
 
 /// A settings section, keyed by its title so tests and focus can find it.
