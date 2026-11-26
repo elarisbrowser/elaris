@@ -823,6 +823,7 @@ fn an_empty_horizontal_window_keeps_only_the_toolbar_until_a_tab_arrives() {
     let mut state = AppState::new(None);
     state.set_tab_layout(TabLayout::Horizontal);
     state.settings.open_tab_on_startup = false;
+    state.settings.horizontal_address_bar_full_width = false;
     let mut window = runtime(state, 1000.0);
 
     assert!(window.presented("horizontal-tab-strip").is_none());

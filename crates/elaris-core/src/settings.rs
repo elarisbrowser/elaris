@@ -347,7 +347,7 @@ impl Default for Settings {
             address_bar: AddressBarPosition::default(),
             compact_tabs: false,
             open_tab_on_startup: true,
-            horizontal_address_bar_full_width: false,
+            horizontal_address_bar_full_width: true,
             sidebar_side: SidebarSide::default(),
             new_tab_position: NewTabPosition::default(),
             page_style: PageStyle::default(),
