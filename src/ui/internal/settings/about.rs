@@ -16,9 +16,9 @@ use super::versions;
 
 const LADYBIRD_URL: &str = "https://ladybird.org";
 const LOGO_SIZE: f32 = 48.0;
-const BUILD_BADGE_HEIGHT: f32 = 18.0;
-const BUILD_BADGE_RIGHT_OVERHANG: f32 = 3.0;
-const BUILD_BADGE_BOTTOM_OVERHANG: f32 = 2.0;
+const BUILD_BADGE_HEIGHT: f32 = 16.0;
+const BUILD_BADGE_RIGHT_OVERHANG: f32 = 8.0;
+const BUILD_BADGE_BOTTOM_OVERHANG: f32 = 8.0;
 
 pub(super) fn sections(cx: &mut PageContext) -> Vec<El> {
     vec![identity(cx.theme), acknowledgements(cx.theme)]
@@ -63,7 +63,7 @@ fn brand_mark(channel: BuildChannel, theme: &Theme) -> El {
         .pixels(elaris_logo(channel.uses_yellow_logo()))
         .role("img")
         .label(description);
-    if let Some(label) = label {
+    if let (Some(label), Some((fill, text_color))) = (label, channel.badge_colors(theme)) {
         mark = mark.child(
             row()
                 .key("about-build-badge")
@@ -74,18 +74,18 @@ fn brand_mark(channel: BuildChannel, theme: &Theme) -> El {
                     Some(-BUILD_BADGE_BOTTOM_OVERHANG),
                 )
                 .h(BUILD_BADGE_HEIGHT)
-                .px(space::S2)
+                .px(space::S1)
                 .center_y()
                 .justify_center()
                 .radius(theme::PAGE_GROUP_RADIUS)
                 .continuous_corners()
-                .fill(theme.build_badge_fill)
+                .fill(fill)
                 .border(1.0, theme.build_badge_edge)
                 .a11y_hidden()
                 .child(
                     text(label)
-                        .font(rune::TextStyle::new(10.0, 700.0).lh(12.0))
-                        .color(theme.build_badge_text)
+                        .font(rune::TextStyle::new(9.0, 700.0).lh(11.0))
+                        .color(text_color)
                         .single_line(),
                 ),
         );
@@ -180,6 +180,14 @@ impl BuildChannel {
         match self {
             Self::Alpha => Some("ALPHA"),
             Self::Dev => Some("DEV"),
+            Self::Stable | Self::Canary => None,
+        }
+    }
+
+    fn badge_colors(self, theme: &Theme) -> Option<(rune::Color, rune::Color)> {
+        match self {
+            Self::Alpha => Some((theme.build_badge_alpha_fill, theme.build_badge_alpha_text)),
+            Self::Dev => Some((theme.build_badge_dev_fill, theme.build_badge_dev_text)),
             Self::Stable | Self::Canary => None,
         }
     }

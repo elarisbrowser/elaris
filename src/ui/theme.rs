@@ -29,9 +29,12 @@ pub(crate) struct Theme {
     pub(crate) icon: Color,
     /// The selected colour for emphasized controls and indicators.
     pub(crate) accent: Color,
-    /// Yellow build channel chip, shared by the About page in both appearance modes.
-    pub(crate) build_badge_fill: Color,
-    pub(crate) build_badge_text: Color,
+    /// Development build chip colours, shared by the About page in both appearance modes.
+    pub(crate) build_badge_dev_fill: Color,
+    pub(crate) build_badge_dev_text: Color,
+    /// Alpha build chip colours, matching the blue brand mark.
+    pub(crate) build_badge_alpha_fill: Color,
+    pub(crate) build_badge_alpha_text: Color,
     pub(crate) build_badge_edge: Color,
     /// The window controls at rest, before the pointer fades the native ones in on macOS.
     #[cfg(not(elaris_ui = "linux"))]
@@ -121,8 +124,10 @@ pub(crate) fn palette(
             text_muted: oklch(0.81, 0.008, HUE),
             icon: oklch(0.82, 0.006, HUE),
             accent,
-            build_badge_fill: oklch(0.85, 0.18, 90.0),
-            build_badge_text: oklch(0.24, 0.012, HUE),
+            build_badge_dev_fill: oklch(0.85, 0.18, 90.0),
+            build_badge_dev_text: oklch(0.24, 0.012, HUE),
+            build_badge_alpha_fill: oklch(0.74, 0.14, 255.0),
+            build_badge_alpha_text: oklch(0.22, 0.06, 255.0),
             build_badge_edge: oklch(1.0, 0.0, 0.0).alpha(0.5),
             #[cfg(not(elaris_ui = "linux"))]
             window_control: oklcha(1.0, 0.0, 0.0, 0.16),
@@ -157,8 +162,10 @@ pub(crate) fn palette(
             text_muted: oklch(0.38, 0.016, HUE),
             icon: oklch(0.32, 0.01, HUE),
             accent,
-            build_badge_fill: oklch(0.85, 0.18, 90.0),
-            build_badge_text: oklch(0.24, 0.012, HUE),
+            build_badge_dev_fill: oklch(0.85, 0.18, 90.0),
+            build_badge_dev_text: oklch(0.24, 0.012, HUE),
+            build_badge_alpha_fill: oklch(0.74, 0.14, 255.0),
+            build_badge_alpha_text: oklch(0.22, 0.06, 255.0),
             build_badge_edge: oklch(1.0, 0.0, 0.0).alpha(0.5),
             #[cfg(not(elaris_ui = "linux"))]
             window_control: oklcha(0.2, 0.02, HUE, 0.16),
