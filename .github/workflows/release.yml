@@ -231,6 +231,21 @@ jobs:
           sudo apt-get update -o APT::Update::Error-Mode=any
           sudo apt-get install -y --no-install-recommends xvfb mesa-vulkan-drivers libvulkan1 ccache
 
+      # Ladybird needs Qt >= 6.10 to configure its Linux helpers; Noble's system Qt is older.
+      - name: Install Qt 6.10.3 for Ladybird
+        id: qt
+        uses: jurplel/install-qt-action@b344308e4483fc892e0d27b3cd1b173ebdd95f06 # v4.5.0
+        with:
+          version: '6.10.3'
+          host: linux
+          arch: linux_gcc_64
+          modules: qtpositioning
+          archives: qtbase icu
+          aqtversion: '==3.3.0'
+          install-deps: 'false'
+          setup-python: 'false'
+          set-env: 'false'
+
       - name: Identify the native cache toolchain
         id: native-cache-key
         shell: bash
@@ -265,7 +280,31 @@ jobs:
           fi
 
       - name: Set up Elaris and Ladybird
-        run: ./elaris setup
+        env:
+          QT_SDK: ${{ steps.qt.outputs.qt-root-dir }}
+        shell: bash
+        run: |
+          export PKG_CONFIG_PATH="$QT_SDK/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+          export CMAKE_PREFIX_PATH="$QT_SDK${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
+          test "$(pkg-config --modversion Qt6Core)" = 6.10.3
+          pcdir="$(pkg-config --variable=pcfiledir Qt6Core)"
+          test "${pcdir//\\ / }" -ef "$QT_SDK/lib/pkgconfig"
+          ./elaris setup
+
+          probe="$(mktemp -d "$RUNNER_TEMP/qt-check.XXXXXX")"
+          cat > "$probe/CMakeLists.txt" <<'EOF'
+          cmake_minimum_required(VERSION 3.16)
+          project(ElarisQtProbe LANGUAGES CXX)
+          find_package(Qt6 6.10.3 EXACT REQUIRED COMPONENTS Core Gui Widgets Positioning)
+          foreach(package Qt6 Qt6Core Qt6Gui Qt6Widgets Qt6Positioning)
+              if(NOT "${${package}_DIR}" STREQUAL "$ENV{QT_SDK}/lib/cmake/${package}")
+                  message(FATAL_ERROR "${package} was not resolved from the installed Qt SDK")
+              endif()
+          endforeach()
+          EOF
+          cmake -S "$probe" -B "$probe/build"
+          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH" >> "$GITHUB_ENV"
 
       - name: Identify exact Ladybird build inputs
         id: engine-key
