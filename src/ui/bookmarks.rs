@@ -4,7 +4,7 @@
 //! bookmarks bar the horizontal layout shows under its toolbar.
 
 use rune::tok::{space, type_};
-use rune::{Align, El, Side, col, el, icon, row, text, text_input};
+use rune::{Align, El, PointerPress, Side, col, el, icon, row, text, text_input};
 use rune_kit::{Button, ButtonVariant};
 
 use crate::app::AppState;
@@ -439,6 +439,49 @@ pub(in crate::ui) fn bar(state: &AppState, theme: &Theme, overlays: &mut Vec<El>
             chip
         });
     }
+    if let Some((id, point)) = state.bookmarks.bar_menu {
+        let is_folder = state.bookmarks().get(id).is_some_and(Bookmark::is_folder);
+        let mut menu =
+            crate::ui::components::menu::context_menu("bookmark-bar-context", el(), Some(point))
+                .on_close(|state: &mut AppState| state.bookmarks.bar_menu = None);
+        if is_folder {
+            menu = menu.item(
+                MenuItem::new("Open All").on_select(move |state: &mut AppState| {
+                    state.bookmarks.bar_menu = None;
+                    state.open_bookmark_folder(id);
+                }),
+            );
+        } else {
+            menu = menu
+                .item(
+                    MenuItem::new("Open").on_select_tx(move |state: &mut AppState, tx| {
+                        state.bookmarks.bar_menu = None;
+                        state.open_bookmark(id, false, tx);
+                    }),
+                )
+                .item(MenuItem::new("Open in New Tab").on_select_tx(
+                    move |state: &mut AppState, tx| {
+                        state.bookmarks.bar_menu = None;
+                        state.open_bookmark(id, true, tx);
+                    },
+                ));
+        }
+        menu = menu
+            .separator()
+            .item(
+                MenuItem::new("Edit").on_select(move |state: &mut AppState| {
+                    state.bookmarks.bar_menu = None;
+                    state.edit_bookmark(id, false);
+                }),
+            )
+            .item(
+                MenuItem::new("Remove").on_select(move |state: &mut AppState| {
+                    state.bookmarks.bar_menu = None;
+                    state.remove_bookmark(id);
+                }),
+            );
+        menu.build(state, theme, overlays);
+    }
     Some(bar.child(el().grow(1.0)).child(bar_toggle(
         "bookmarks-bar-hide",
         "Hide bookmarks bar",
@@ -474,6 +517,11 @@ fn chip(state: &AppState, bookmark: &Bookmark, theme: &Theme) -> El {
                 .truncate()
                 .shrink(),
         );
+    let chip = chip.on_secondary_press(move |state: &mut AppState, point: PointerPress, _| {
+        state.bookmarks.bar_menu = Some((id, point));
+        state.bookmarks.open_folders.clear();
+        state.dismiss_context_menu();
+    });
     if bookmark.is_folder() {
         chip.on_press(move |state: &mut AppState| {
             let open = &mut state.bookmarks.open_folders;
