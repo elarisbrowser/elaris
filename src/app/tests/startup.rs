@@ -38,6 +38,7 @@ fn horizontal_blank_window_startup_opens_the_configured_new_tab() {
     let mut state = AppState::new(None);
     state.settings.set_startup(StartupMode::BlankWindow);
     state.settings.tab_layout = elaris_core::settings::TabLayout::Horizontal;
+    state.settings.open_tab_on_startup = true;
     state.open_start_page(None, None);
 
     assert_eq!(state.browser.tabs().len(), 1);
@@ -50,6 +51,7 @@ fn horizontal_blank_window_startup_opens_the_configured_new_tab() {
 fn horizontal_session_startup_opens_a_new_tab_without_discarding_restored_tabs() {
     let mut state = AppState::new(None);
     state.settings.tab_layout = elaris_core::settings::TabLayout::Horizontal;
+    state.settings.open_tab_on_startup = true;
     let session = Session::new(
         vec![SessionTab {
             url: "https://restored.example/".into(),

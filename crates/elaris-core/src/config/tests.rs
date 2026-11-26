@@ -54,7 +54,7 @@ fn address_bar_and_compact_tabs_default_and_round_trip() {
     let defaults = parse("").unwrap().settings;
     assert_eq!(defaults.address_bar, AddressBarPosition::Sidebar);
     assert!(!defaults.compact_tabs);
-    assert!(defaults.open_tab_on_startup);
+    assert!(!defaults.open_tab_on_startup);
     assert!(defaults.horizontal_address_bar_full_width);
     for position in [AddressBarPosition::Toolbar, AddressBarPosition::Sidebar] {
         write_change(&path, &SettingsChange::AddressBar(position)).unwrap();
