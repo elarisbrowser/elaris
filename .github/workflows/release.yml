@@ -349,7 +349,8 @@ jobs:
           Elaris commit: ${GITHUB_SHA}
           Ladybird commit: ${ladybird_revision}
           Rune revision: $(grep -m1 'rev = ' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
-          Container: ghcr.io/ladybirdbrowser/ladybird-ci:2026.11.12
+          Build host: $(. /etc/os-release; printf '%s' "$PRETTY_NAME")
+          Build libc: $(getconf GNU_LIBC_VERSION)
           EOF
           if [ -f build/release-engine-info.txt ]; then
             cat build/release-engine-info.txt >> dist/BUILD-INFO.txt
