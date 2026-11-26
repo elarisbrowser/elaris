@@ -131,11 +131,7 @@ impl super::AppState {
 
     /// The page sits below horizontal browser chrome by the same inset used at its other edges.
     pub(crate) fn page_top_inset(&self) -> f32 {
-        if self.horizontal_tabs() && self.browser.tabs().is_empty() {
-            0.0
-        } else {
-            self.page_inset()
-        }
+        self.page_inset()
     }
 
     /// The page's corner radius; square when edge to edge.
