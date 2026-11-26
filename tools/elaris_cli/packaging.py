@@ -16,9 +16,10 @@ LINUX_ASSETS = PACKAGING / "linux"
 # Compiled from the brand kit's Icon Composer documents, so the designer's layers and gradient carry over.
 APP_ICONS = ASSETS / "brand-kit" / "apple" / "Icon Exports"
 # Stable releases wear the blue icon; dev runs and canary builds the yellow one, so they are easy to tell apart.
-# The app reads the channel from Info.plist and adds a DEV tag to its Dock icon in dev runs.
+# The app reads the channel from Info.plist and adds a DEV or ALPHA tag to its Dock icon.
 APP_ICON_SOURCES = {
     "stable": APP_ICONS / "Icon.icon",
+    "alpha": APP_ICONS / "Icon.icon",
     "dev": APP_ICONS / "Icon-Dev.icon",
     "canary": APP_ICONS / "Icon-Dev.icon",
 }
@@ -117,6 +118,15 @@ def macos_app_bundle(executable: Path, name: str = "ElarisDev") -> Path:
         # Launch Services also keys its icon cache on the bundle folder's time, so refresh it with the contents.
         contents.parent.touch()
     return bundled_executable
+
+
+def macos_release_channel(canary: bool = False) -> str:
+    """Select the release channel, showing an ALPHA tag for alpha prerelease versions."""
+    manifest = (ROOT / "Cargo.toml").read_text()
+    version = re.search(r'^version\s*=\s*"([^\"]+)"', manifest, re.MULTILINE)
+    if version and re.search(r"-alpha(?:\.|$)", version.group(1)):
+        return "alpha"
+    return "canary" if canary else "stable"
 
 
 def _ladybird_macos_tool():

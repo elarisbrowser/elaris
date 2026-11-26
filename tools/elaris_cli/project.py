@@ -165,7 +165,7 @@ def bundle(args: argparse.Namespace) -> None:
     executable = _executable("release")
     if sys.platform == "darwin":
         bundled = packaging.macos_release_bundle(
-            executable, "canary" if args.canary else "stable", fresh=cache_key is not None,
+            executable, packaging.macos_release_channel(args.canary), fresh=cache_key is not None,
         )
         ui.success(f"Bundled {bundled.parents[2]}")
     elif sys.platform.startswith("linux"):
