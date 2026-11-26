@@ -31,12 +31,17 @@ def _profile(args: argparse.Namespace) -> str:
     return "release" if getattr(args, "release", False) else "debug"
 
 
+def _default_channel(profile: str) -> str:
+    """Development runs use the dev brand; release builds follow the package version."""
+    return "dev" if profile == "debug" else packaging.macos_release_channel()
+
+
 def _executable(profile: str) -> Path:
     return ROOT / "target" / profile / ("elaris.exe" if os.name == "nt" else "elaris")
 
 
 def _build_stamp(ui_only: bool, profile: str) -> Path:
-    """Touched after a successful build. Outputs keep their mtime when nothing needed relinking, so they cannot mark it."""
+    """Marks the inputs and brand channel of a successful build."""
     return ROOT / "target" / profile / f"elaris-{'ui' if ui_only else 'bridge'}-build.stamp"
 
 
@@ -44,6 +49,8 @@ def _run_artifacts_are_current(ui_only: bool, profile: str = "debug") -> bool:
     """Return whether a previous build's executable and (when enabled) bridge are current."""
     stamp = _build_stamp(ui_only, profile)
     if not (_executable(profile).is_file() and stamp.is_file()):
+        return False
+    if stamp.read_text() != os.environ.get("ELARIS_CHANNEL", ""):
         return False
 
     # Only what the build compiles in. The Python CLI under tools/ is not, and since a CLI-only change never
@@ -82,6 +89,7 @@ def setup(args: argparse.Namespace) -> None:
 
 
 def build(args: argparse.Namespace) -> None:
+    os.environ.setdefault("ELARIS_CHANNEL", _default_channel(_profile(args)))
     release = ["--release"] if _profile(args) == "release" else []
     # With neither flag, build both. --ui is the older spelling of --rust without the bridge.
     rust_requested = args.rust or args.ui
@@ -96,7 +104,7 @@ def build(args: argparse.Namespace) -> None:
         run_step("Elaris browser", "cargo", "+stable", "build", "--locked", *release, "--features", "ladybird-bridge")
     else:
         run_step("Elaris interface", "cargo", "+stable", "build", "--locked", *release)
-    _build_stamp(not build_ladybird, _profile(args)).touch()
+    _build_stamp(not build_ladybird, _profile(args)).write_text(os.environ["ELARIS_CHANNEL"])
 
 
 def format_sources(_args: argparse.Namespace) -> None:
@@ -134,6 +142,8 @@ def _configure_bridge_environment(bridge_dir: str) -> None:
 
 def bundle(args: argparse.Namespace) -> None:
     """Build an optimised Elaris and package it with Ladybird's engine and the brand icon for this platform."""
+    channel = "canary" if args.canary else packaging.macos_release_channel()
+    os.environ["ELARIS_CHANNEL"] = channel
     cache_key = getattr(args, "release_engine_cache_key", None)
     cache_hit = getattr(args, "release_engine_cache_hit", False)
     manifest = None
@@ -163,6 +173,9 @@ def bundle(args: argparse.Namespace) -> None:
     else:
         build(argparse.Namespace(ui=False, rust=False, ladybird=False, release=True, jobs=None))
     executable = _executable("release")
+    stamp = _build_stamp(False, "release")
+    stamp.parent.mkdir(parents=True, exist_ok=True)
+    stamp.write_text(channel)
     if sys.platform == "darwin":
         bundled = packaging.macos_release_bundle(
             executable, packaging.macos_release_channel(args.canary), fresh=cache_key is not None,
@@ -194,6 +207,7 @@ def bundle(args: argparse.Namespace) -> None:
 
 def launch(args: argparse.Namespace) -> None:
     profile = _profile(args)
+    os.environ.setdefault("ELARIS_CHANNEL", _default_channel(profile))
     release = ["--release"] if profile == "release" else []
     ui_only = args.ui or args.linux_ui
     if sys.platform == "darwin" and not ui_only:
@@ -201,7 +215,9 @@ def launch(args: argparse.Namespace) -> None:
             build(argparse.Namespace(ui=False, rust=False, ladybird=False, release=args.release, jobs=args.jobs))
         _configure_bridge_environment(bridge_lib_dir())
         if release:
-            executable = packaging.macos_release_bundle(_executable(profile))
+            executable = packaging.macos_release_bundle(
+                _executable(profile), packaging.macos_release_channel()
+            )
         else:
             executable = packaging.macos_app_bundle(_executable(profile), "ElarisDev")
         # Launch Services starts the bundle and brings it forward, and -W waits until it quits, as a direct run does.

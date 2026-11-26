@@ -121,12 +121,14 @@ def macos_app_bundle(executable: Path, name: str = "ElarisDev") -> Path:
 
 
 def macos_release_channel(canary: bool = False) -> str:
-    """Select the release channel, showing an ALPHA tag for alpha prerelease versions."""
+    """Prefer Canary when requested; otherwise label alpha prerelease versions."""
+    if canary:
+        return "canary"
     manifest = (ROOT / "Cargo.toml").read_text()
     version = re.search(r'^version\s*=\s*"([^\"]+)"', manifest, re.MULTILINE)
     if version and re.search(r"-alpha(?:\.|$)", version.group(1)):
         return "alpha"
-    return "canary" if canary else "stable"
+    return "stable"
 
 
 def _ladybird_macos_tool():

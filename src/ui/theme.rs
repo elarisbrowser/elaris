@@ -29,6 +29,10 @@ pub(crate) struct Theme {
     pub(crate) icon: Color,
     /// The selected colour for emphasized controls and indicators.
     pub(crate) accent: Color,
+    /// Yellow build channel chip, shared by the About page in both appearance modes.
+    pub(crate) build_badge_fill: Color,
+    pub(crate) build_badge_text: Color,
+    pub(crate) build_badge_edge: Color,
     /// The window controls at rest, before the pointer fades the native ones in on macOS.
     #[cfg(not(elaris_ui = "linux"))]
     pub(crate) window_control: Color,
@@ -117,6 +121,9 @@ pub(crate) fn palette(
             text_muted: oklch(0.81, 0.008, HUE),
             icon: oklch(0.82, 0.006, HUE),
             accent,
+            build_badge_fill: oklch(0.85, 0.18, 90.0),
+            build_badge_text: oklch(0.24, 0.012, HUE),
+            build_badge_edge: oklch(1.0, 0.0, 0.0).alpha(0.5),
             #[cfg(not(elaris_ui = "linux"))]
             window_control: oklcha(1.0, 0.0, 0.0, 0.16),
             address_field: oklch(0.24, 0.006, HUE).alpha(chrome_alpha),
@@ -150,6 +157,9 @@ pub(crate) fn palette(
             text_muted: oklch(0.38, 0.016, HUE),
             icon: oklch(0.32, 0.01, HUE),
             accent,
+            build_badge_fill: oklch(0.85, 0.18, 90.0),
+            build_badge_text: oklch(0.24, 0.012, HUE),
+            build_badge_edge: oklch(1.0, 0.0, 0.0).alpha(0.5),
             #[cfg(not(elaris_ui = "linux"))]
             window_control: oklcha(0.2, 0.02, HUE, 0.16),
             address_field: oklch(0.985, 0.004, HUE).alpha(chrome_alpha),

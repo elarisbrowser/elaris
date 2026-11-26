@@ -26,18 +26,32 @@ const TAG_PADDING: f64 = 0.07;
 /// `NSFontWeightHeavy`.
 const TAG_WEIGHT: f64 = 0.56;
 
-/// The channel's Dock label, or `None` for channels without a tag and runs outside a bundle.
-fn channel_tag() -> Option<&'static str> {
+/// The channel from the app bundle, or `None` for unbundled runs.
+pub(crate) fn channel() -> Option<&'static str> {
     let key = NSString::from_str(CHANNEL_KEY);
     let value = unsafe { NSBundle::mainBundle().objectForInfoDictionaryKey(&key) }?;
-    [("dev", "DEV"), ("alpha", "ALPHA")]
-        .into_iter()
-        .find_map(|(channel, label)| {
-            let channel = NSString::from_str(channel);
-            // SAFETY: `isEqual:` takes any object and returns a BOOL.
-            let matches: bool = unsafe { msg_send![&*value, isEqual: &*channel] };
-            matches.then_some(label)
-        })
+    [
+        ("stable", "stable"),
+        ("alpha", "alpha"),
+        ("dev", "dev"),
+        ("canary", "canary"),
+    ]
+    .into_iter()
+    .find_map(|(name, channel)| {
+        let name = NSString::from_str(name);
+        // SAFETY: `isEqual:` takes any object and returns a BOOL.
+        let matches: bool = unsafe { msg_send![&*value, isEqual: &*name] };
+        matches.then_some(channel)
+    })
+}
+
+/// The channel's Dock label, or `None` for channels without a tag and unbundled runs.
+fn channel_tag() -> Option<&'static str> {
+    match channel()? {
+        "dev" => Some("DEV"),
+        "alpha" => Some("ALPHA"),
+        _ => None,
+    }
 }
 
 /// Draws the app icon with the channel's tag into the Dock tile. Call once the app has finished launching.

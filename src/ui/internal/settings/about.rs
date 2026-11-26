@@ -16,23 +16,22 @@ use super::versions;
 
 const LADYBIRD_URL: &str = "https://ladybird.org";
 const LOGO_SIZE: f32 = 48.0;
+const BUILD_BADGE_HEIGHT: f32 = 18.0;
+const BUILD_BADGE_RIGHT_OVERHANG: f32 = 3.0;
+const BUILD_BADGE_BOTTOM_OVERHANG: f32 = 2.0;
 
 pub(super) fn sections(cx: &mut PageContext) -> Vec<El> {
     vec![identity(cx.theme), acknowledgements(cx.theme)]
 }
 
 fn identity(theme: &Theme) -> El {
+    let channel = BuildChannel::current();
     let brand = row()
         .key("about-brand")
         .w_full()
         .gap(space::S3)
         .center_y()
-        .child(
-            el().size(LOGO_SIZE, LOGO_SIZE)
-                .center()
-                .pixels(elaris_logo())
-                .a11y_hidden(),
-        )
+        .child(brand_mark(channel, theme))
         .child(
             col().grow(1.0).min_w(0.0).child(
                 text("Elaris")
@@ -49,6 +48,49 @@ fn identity(theme: &Theme) -> El {
         .wrap();
 
     widgets::rows(theme, [brand, version])
+}
+
+fn brand_mark(channel: BuildChannel, theme: &Theme) -> El {
+    let label = channel.badge_label();
+    let description = label.map_or_else(
+        || "Elaris logo".to_owned(),
+        |label| format!("Elaris {label} build logo"),
+    );
+    let mut mark = el()
+        .key("about-logo")
+        .size(LOGO_SIZE, LOGO_SIZE)
+        .center()
+        .pixels(elaris_logo(channel.uses_yellow_logo()))
+        .role("img")
+        .label(description);
+    if let Some(label) = label {
+        mark = mark.child(
+            row()
+                .key("about-build-badge")
+                .pin(
+                    None,
+                    None,
+                    Some(-BUILD_BADGE_RIGHT_OVERHANG),
+                    Some(-BUILD_BADGE_BOTTOM_OVERHANG),
+                )
+                .h(BUILD_BADGE_HEIGHT)
+                .px(space::S2)
+                .center_y()
+                .justify_center()
+                .radius(theme::PAGE_GROUP_RADIUS)
+                .continuous_corners()
+                .fill(theme.build_badge_fill)
+                .border(1.0, theme.build_badge_edge)
+                .a11y_hidden()
+                .child(
+                    text(label)
+                        .font(rune::TextStyle::new(10.0, 700.0).lh(12.0))
+                        .color(theme.build_badge_text)
+                        .single_line(),
+                ),
+        );
+    }
+    mark
 }
 
 fn acknowledgements(theme: &Theme) -> El {
@@ -77,14 +119,68 @@ fn acknowledgements(theme: &Theme) -> El {
     widgets::rows(theme, [credit])
 }
 
-fn elaris_logo() -> &'static rune::Pixels {
-    static LOGO: OnceLock<Image> = OnceLock::new();
-    let image = LOGO.get_or_init(|| {
-        let cache = ImageCache::new(Arc::new(|| {}));
-        let image = cache
-            .load(include_bytes!("../../../../assets/brand-kit/logo/logo-color.svg").as_slice());
-        image.wait().expect("bundled Elaris logo must decode");
-        image
-    });
-    image.pixels()
+fn elaris_logo(yellow: bool) -> &'static rune::Pixels {
+    static BLUE_LOGO: OnceLock<Image> = OnceLock::new();
+    static YELLOW_LOGO: OnceLock<Image> = OnceLock::new();
+    let logo = if yellow {
+        YELLOW_LOGO.get_or_init(|| load_logo(include_bytes!(
+            "../../../../assets/brand-kit/apple/Icon Exports/Icon-Dev.icon/Assets/logo-color.svg"
+        )))
+    } else {
+        BLUE_LOGO.get_or_init(|| {
+            load_logo(include_bytes!(
+                "../../../../assets/brand-kit/logo/logo-color.svg"
+            ))
+        })
+    };
+    logo.pixels()
+}
+
+fn load_logo(bytes: &[u8]) -> Image {
+    let cache = ImageCache::new(Arc::new(|| {}));
+    let image = cache.load(bytes);
+    image.wait().expect("bundled Elaris logo must decode");
+    image
+}
+
+#[derive(Clone, Copy)]
+enum BuildChannel {
+    Stable,
+    Alpha,
+    Dev,
+    Canary,
+}
+
+impl BuildChannel {
+    fn current() -> Self {
+        #[cfg(target_os = "macos")]
+        if let Some(channel) = crate::platform::macos::dock_tag::channel().and_then(Self::from_name)
+        {
+            return channel;
+        }
+
+        Self::from_name(env!("ELARIS_CHANNEL")).unwrap_or(Self::Stable)
+    }
+
+    fn from_name(channel: &str) -> Option<Self> {
+        match channel {
+            "stable" => Some(Self::Stable),
+            "alpha" => Some(Self::Alpha),
+            "dev" => Some(Self::Dev),
+            "canary" => Some(Self::Canary),
+            _ => None,
+        }
+    }
+
+    fn uses_yellow_logo(self) -> bool {
+        matches!(self, Self::Dev | Self::Canary)
+    }
+
+    fn badge_label(self) -> Option<&'static str> {
+        match self {
+            Self::Alpha => Some("ALPHA"),
+            Self::Dev => Some("DEV"),
+            Self::Stable | Self::Canary => None,
+        }
+    }
 }

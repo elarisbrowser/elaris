@@ -14,6 +14,7 @@ fn main() {
         }
     };
     println!("cargo::rustc-cfg=elaris_ui=\"{ui}\"");
+    build_channel();
     versions();
 
     if std::env::var_os("CARGO_FEATURE_LADYBIRD_BRIDGE").is_none() {
@@ -27,6 +28,26 @@ fn main() {
     // Development builds load the bridge from where CMake built it.
     println!("cargo:rustc-link-arg=-Wl,-rpath,{library_dir}");
     println!("cargo:rerun-if-env-changed=ELARIS_LADYBIRD_LIB_DIR");
+}
+
+/// Records which release channel the executable belongs to, for channel-specific branding.
+fn build_channel() {
+    let channel = std::env::var("ELARIS_CHANNEL")
+        .ok()
+        .filter(|channel| matches!(channel.as_str(), "stable" | "alpha" | "dev" | "canary"))
+        .unwrap_or_else(|| {
+            let profile = std::env::var("PROFILE").unwrap_or_default();
+            let version = std::env::var("CARGO_PKG_VERSION").unwrap_or_default();
+            if profile == "debug" {
+                "dev".to_owned()
+            } else if version.contains("-alpha") {
+                "alpha".to_owned()
+            } else {
+                "stable".to_owned()
+            }
+        });
+    println!("cargo::rustc-env=ELARIS_CHANNEL={channel}");
+    println!("cargo:rerun-if-env-changed=ELARIS_CHANNEL");
 }
 
 /// Records the committed Elaris, Ladybird and Rune revisions shown at the foot of Settings.
