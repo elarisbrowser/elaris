@@ -50,14 +50,14 @@ pub(crate) fn install(window: &RuneWindowHandle) {
             native_window.setFrameUsingName(name);
             native_window.setFrameAutosaveName(name);
         }
-        activate_at_launch(window);
+        activate_at_launch(&native_window);
     });
 }
 
 /// Brings Elaris to the front when its first window opens. macOS doesn't activate an app that a
 /// terminal launches, so without this the window opens behind the terminal and looks like it never
 /// appeared. Later windows keep the user's focus where it is.
-fn activate_at_launch(window: &RuneWindowHandle) {
+fn activate_at_launch(window: &objc2_app_kit_02::NSWindow) {
     use objc2_app_kit_02::NSApplication;
     use objc2_foundation_02::MainThreadMarker;
     use std::sync::Once;
@@ -68,9 +68,9 @@ fn activate_at_launch(window: &RuneWindowHandle) {
             #[allow(deprecated)]
             NSApplication::sharedApplication(main).activateIgnoringOtherApps(true);
         }
-        // App activation alone can leave the newly created native window behind the
-        // launching app. Route focus through Rune so it orders the window forward too.
-        window.focus();
+        // App activation alone does not make this window key or order it above the
+        // launching app. Rune's on_window hook runs after the native window is shown.
+        window.makeKeyAndOrderFront(None);
     });
 }
 
