@@ -246,29 +246,6 @@ jobs:
           setup-python: 'false'
           set-env: 'false'
 
-      - name: Identify the native cache toolchain
-        id: native-cache-key
-        shell: bash
-        run: |
-          toolchain="$({
-            set -e
-            cat /etc/os-release
-            clang++ --version
-            ccache --version
-          } | sha256sum | cut -d ' ' -f 1)"
-          echo "prefix=release-native-v1-${RUNNER_OS}-${RUNNER_ARCH}-${ELARIS_BASELINE_CPU}-${toolchain}" >> "$GITHUB_OUTPUT"
-          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.release-ccache" >> "$GITHUB_ENV"
-
-      - name: Restore Ladybird compiler and vcpkg archives
-        id: native-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            .release-ccache
-            .git/modules/Build/caches/vcpkg-binary-cache
-          key: ${{ steps.native-cache-key.outputs.prefix }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: ${{ steps.native-cache-key.outputs.prefix }}-
-
       - name: Name this build
         env:
           CHANNEL: ${{ inputs.channel }}
@@ -291,10 +268,33 @@ jobs:
           test "${pcdir//\\ / }" -ef "$QT_SDK/lib/pkgconfig"
           ./elaris setup
 
+          # Direct bridge CMake otherwise defaults to Noble's GCC 13, even when setup finds LLVM 22.
+          export CC=/usr/bin/clang-22 CXX=/usr/bin/clang++-22
+          for compiler in "$CC" "$CXX"; do
+            test "$("$compiler" -dumpversion | cut -d. -f1)" = 22
+            "$compiler" --version
+          done
+
           probe="$(mktemp -d "$RUNNER_TEMP/qt-check.XXXXXX")"
           cat > "$probe/CMakeLists.txt" <<'EOF'
-          cmake_minimum_required(VERSION 3.16)
-          project(ElarisQtProbe LANGUAGES CXX)
+          cmake_minimum_required(VERSION 3.30)
+          project(ElarisReleaseProbe LANGUAGES C CXX)
+          foreach(language C CXX)
+              if(NOT CMAKE_${language}_COMPILER_ID STREQUAL "Clang" OR NOT CMAKE_${language}_COMPILER_VERSION MATCHES "^22[.]")
+                  message(FATAL_ERROR "Elaris Release did not select Clang 22 for ${language}")
+              endif()
+          endforeach()
+          include(CheckCXXSourceCompiles)
+          set(CMAKE_CXX_STANDARD 23)
+          set(CMAKE_CXX_STANDARD_REQUIRED ON)
+          check_cxx_source_compiles([[
+              struct Probe { constexpr int value(this const Probe&) { return 42; } };
+              static_assert(Probe{}.value() == 42);
+              int main() {}
+          ]] ELARIS_HAS_EXPLICIT_OBJECT_PARAMETER)
+          if(NOT ELARIS_HAS_EXPLICIT_OBJECT_PARAMETER)
+              message(FATAL_ERROR "The Linux compiler does not support C++23 explicit object parameters")
+          endif()
           find_package(Qt6 6.10.3 EXACT REQUIRED COMPONENTS Core Gui Widgets Positioning)
           foreach(package Qt6 Qt6Core Qt6Gui Qt6Widgets Qt6Positioning)
               if(NOT "${${package}_DIR}" STREQUAL "$ENV{QT_SDK}/lib/cmake/${package}")
@@ -305,6 +305,32 @@ jobs:
           cmake -S "$probe" -B "$probe/build"
           echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH" >> "$GITHUB_ENV"
           echo "CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH" >> "$GITHUB_ENV"
+          echo "CC=$CC" >> "$GITHUB_ENV"
+          echo "CXX=$CXX" >> "$GITHUB_ENV"
+
+      - name: Identify the native cache toolchain
+        id: native-cache-key
+        shell: bash
+        run: |
+          toolchain="$({
+            set -e
+            cat /etc/os-release
+            "$CC" --version
+            "$CXX" --version
+            ccache --version
+          } | sha256sum | cut -d ' ' -f 1)"
+          echo "prefix=release-native-v1-${RUNNER_OS}-${RUNNER_ARCH}-${ELARIS_BASELINE_CPU}-${toolchain}" >> "$GITHUB_OUTPUT"
+          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.release-ccache" >> "$GITHUB_ENV"
+
+      - name: Restore Ladybird compiler and vcpkg archives
+        id: native-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .release-ccache
+            .git/modules/Build/caches/vcpkg-binary-cache
+          key: ${{ steps.native-cache-key.outputs.prefix }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ${{ steps.native-cache-key.outputs.prefix }}-
 
       - name: Identify exact Ladybird build inputs
         id: engine-key
