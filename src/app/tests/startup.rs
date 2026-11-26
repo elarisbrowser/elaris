@@ -75,7 +75,15 @@ fn horizontal_startup_can_leave_the_window_without_tabs() {
     let mut state = AppState::new(None);
     state.settings.tab_layout = elaris_core::settings::TabLayout::Horizontal;
     state.settings.open_tab_on_startup = false;
-    state.open_start_page(None, None);
+    let session = Session::new(
+        vec![SessionTab {
+            url: "about:blank".into(),
+            title: "New Tab".into(),
+            favicon: None,
+        }],
+        0,
+    );
+    state.open_start_page(None, Some(&session));
     assert!(state.browser.tabs().is_empty());
     assert!(!state.omnibox.open);
 }

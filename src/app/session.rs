@@ -22,6 +22,13 @@ impl super::AppState {
     pub(super) fn restore_session(&mut self, session: &Session) {
         let mut restored = Vec::with_capacity(session.tabs.len());
         for (index, tab) in session.tabs.iter().enumerate() {
+            if self.horizontal_tabs()
+                && !self.settings.open_tab_on_startup
+                && tab.url == "about:blank"
+            {
+                restored.push(None);
+                continue;
+            }
             let id = self
                 .browser
                 .restore_tab_in_section(
