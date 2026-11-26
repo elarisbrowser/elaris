@@ -336,8 +336,11 @@ impl Browser {
             let id = tab.id();
             // A Peek card scales its page, which a layer of its own can't follow; once promoted
             // to a tab, the page moves to one.
-            // Rounded pages need Rune's compositing path so the pane clip applies to their frames.
-            let hosted = peek_id != Some(id) && !rounded_pages && tab.surface.hosts_layer();
+            // Rune places macOS hosted layers with the surface's rounded clip. Wayland
+            // subsurfaces cannot take that clip, so rounded pages there stay in Rune's path.
+            let hosted = peek_id != Some(id)
+                && (cfg!(target_os = "macos") || !rounded_pages)
+                && tab.surface.hosts_layer();
             let active = input_page == Some(id);
             let side = panes.iter().position(|pane| *pane == Some(id));
             let is_peek = peek_id == Some(id);
