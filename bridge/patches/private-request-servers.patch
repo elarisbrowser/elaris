@@ -12,6 +12,16 @@
  }
  
  Web::CompositorContextId Application::allocate_compositor_context_id()
+@@ -1770,4 +1770,8 @@
+ void Application::launch_spare_web_content_process()
+ {
++    // Elaris avoids keeping an idle renderer resident; set this to 1 to trade memory for faster new tabs.
++    if (Core::Environment::get("ELARIS_PREWARM_WEB_CONTENT"sv) != "1"sv)
++        return;
++
+     // Spare WebContent processes inherit the active WebDriver endpoint, but they are not part of the
+     // session and can race browser shutdown while bootstrapping.
+     if (browser_options().webdriver_browser_endpoint.has_value())
 --- a/Libraries/LibWebView/RequestServerManager.h
 +++ b/Libraries/LibWebView/RequestServerManager.h
 @@ -94,6 +94,7 @@

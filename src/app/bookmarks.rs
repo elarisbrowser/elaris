@@ -33,6 +33,8 @@ pub(crate) struct BookmarksState {
     pub(crate) sidebar_menu: bool,
     /// The bookmark whose More menu is open on the bookmarks page.
     pub(crate) row_menu: Option<BookmarkId>,
+    /// A bookmark bar item's context menu and the point where it was opened.
+    pub(crate) bar_menu: Option<(Option<BookmarkId>, rune::PointerPress)>,
     pub(crate) page: Page,
     /// Why the last change could not be made.
     pub(crate) error: Option<String>,
