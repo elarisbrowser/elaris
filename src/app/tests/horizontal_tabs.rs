@@ -117,9 +117,9 @@ fn layout_switch_preserves_split_tabs_and_window_state() {
         page,
         [
             inset,
-            theme::HORIZONTAL_CHROME_HEIGHT,
+            theme::HORIZONTAL_CHROME_HEIGHT + inset,
             960.0 - 2.0 * inset,
-            640.0 - theme::HORIZONTAL_CHROME_HEIGHT - inset
+            640.0 - theme::HORIZONTAL_CHROME_HEIGHT - 2.0 * inset
         ]
     );
     window.frame(0.0);
@@ -811,10 +811,10 @@ fn compact_tabs_fold_the_toolbar_into_the_tab_strip() {
     // The address bar leads at its full width, and the tabs follow it.
     assert_eq!(address[2], theme::COMPACT_ADDRESS_WIDTH);
     assert!(address[0] + address[2] <= rect(&runtime, "horizontal-tab-sections")[0]);
-    // The page meets the strip, whose own margin spaces it from the tabs.
+    // The page keeps its usual inset below the compact strip.
     assert_eq!(
         crate::ui::viewport::page_origin(&runtime.state)[1],
-        theme::HORIZONTAL_STRIP_HEIGHT
+        theme::HORIZONTAL_STRIP_HEIGHT + theme::VIEWPORT_INSET
     );
 }
 
@@ -845,7 +845,7 @@ fn an_empty_horizontal_window_keeps_only_the_toolbar_until_a_tab_arrives() {
     );
     assert_eq!(
         crate::ui::viewport::page_origin(&window.state)[1],
-        theme::HORIZONTAL_STRIP_HEIGHT
+        theme::HORIZONTAL_STRIP_HEIGHT + theme::VIEWPORT_INSET
     );
     assert!(rect(&window, "horizontal-empty-drag-space")[0] < rect(&window, "new-tab")[0]);
     assert!(
