@@ -308,8 +308,13 @@ jobs:
 
       - name: Identify exact Ladybird build inputs
         id: engine-key
+        shell: bash
         run: |
-          key="$(python3 -m tools.elaris_cli.release_engine prepare)"
+          # Match ./elaris so the cache key and bundle resolve the same toolchain.
+          if [ -n "${HOME:-}" ] && [ -f "$HOME/.cargo/env" ]; then
+            . "$HOME/.cargo/env"
+          fi
+          key="$("${ELARIS_PYTHON:-python3}" -m tools.elaris_cli.release_engine prepare)"
           echo "key=$key" >> "$GITHUB_OUTPUT"
 
       - name: Restore exact Ladybird release outputs
