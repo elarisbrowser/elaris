@@ -845,7 +845,11 @@ fn an_empty_horizontal_window_keeps_only_the_toolbar_until_a_tab_arrives() {
     );
     assert_eq!(
         crate::ui::viewport::page_origin(&window.state)[1],
-        theme::HORIZONTAL_STRIP_HEIGHT + theme::VIEWPORT_INSET
+        theme::HORIZONTAL_STRIP_HEIGHT
+    );
+    assert_eq!(
+        rect(&window, "viewport-container")[1],
+        theme::HORIZONTAL_STRIP_HEIGHT
     );
     assert!(rect(&window, "horizontal-empty-drag-space")[0] < rect(&window, "new-tab")[0]);
     assert!(
