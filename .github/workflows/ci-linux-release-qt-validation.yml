@@ -1,0 +1,223 @@
+name: Linux Release Qt validation
+on:
+  push:
+    branches: [ci-linux-release-qt-610-b9b0255]
+permissions:
+  contents: read
+jobs:
+  linux:
+    name: Linux bundle (x86_64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
+    env:
+      ELARIS_BASELINE_CPU: "1"
+      CCACHE_COMPILERCHECK: content
+      # Hash preprocessed inputs: new or removed headers must invalidate previous results too.
+      CCACHE_NODIRECT: "true"
+      CCACHE_MAXSIZE: 2G
+      CCACHE_DIR: ${{ github.workspace }}/.release-ccache
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install bundling and headless test tools
+        run: |
+          sudo apt-get update -o APT::Update::Error-Mode=any
+          sudo apt-get install -y --no-install-recommends xvfb mesa-vulkan-drivers libvulkan1 ccache
+
+      # Ladybird needs Qt >= 6.10 to configure its Linux helpers; Noble's system Qt is older.
+      - name: Install Qt 6.10.3 for Ladybird
+        id: qt
+        uses: jurplel/install-qt-action@b344308e4483fc892e0d27b3cd1b173ebdd95f06 # v4.5.0
+        with:
+          version: '6.10.3'
+          host: linux
+          arch: linux_gcc_64
+          modules: qtpositioning
+          archives: qtbase icu
+          aqtversion: '==3.3.0'
+          install-deps: 'false'
+          setup-python: 'false'
+          set-env: 'false'
+
+      - name: Identify the native cache toolchain
+        id: native-cache-key
+        shell: bash
+        run: |
+          toolchain="$({
+            set -e
+            cat /etc/os-release
+            clang++ --version
+            ccache --version
+          } | sha256sum | cut -d ' ' -f 1)"
+          echo "prefix=release-native-v1-${RUNNER_OS}-${RUNNER_ARCH}-${ELARIS_BASELINE_CPU}-${toolchain}" >> "$GITHUB_OUTPUT"
+          echo "CCACHE_DIR=$GITHUB_WORKSPACE/.release-ccache" >> "$GITHUB_ENV"
+
+      - name: Restore Ladybird compiler and vcpkg archives
+        id: native-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .release-ccache
+            .git/modules/Build/caches/vcpkg-binary-cache
+          key: ${{ steps.native-cache-key.outputs.prefix }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ${{ steps.native-cache-key.outputs.prefix }}-
+
+      - name: Name this build
+        env:
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          if [ "$CHANNEL" = canary ]; then
+            echo "ELARIS_VERSION=canary-$(date -u +%Y%m%d)-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          else
+            echo "ELARIS_VERSION=${GITHUB_REF_NAME:-dev}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Set up Elaris and Ladybird
+        env:
+          QT_SDK: ${{ steps.qt.outputs.qt-root-dir }}
+        shell: bash
+        run: |
+          export PKG_CONFIG_PATH="$QT_SDK/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+          export CMAKE_PREFIX_PATH="$QT_SDK${CMAKE_PREFIX_PATH:+:$CMAKE_PREFIX_PATH}"
+          test "$(pkg-config --modversion Qt6Core)" = 6.10.3
+          pcdir="$(pkg-config --variable=pcfiledir Qt6Core)"
+          test "${pcdir//\\ / }" -ef "$QT_SDK/lib/pkgconfig"
+          ./elaris setup
+
+          probe="$(mktemp -d "$RUNNER_TEMP/qt-check.XXXXXX")"
+          cat > "$probe/CMakeLists.txt" <<'EOF'
+          cmake_minimum_required(VERSION 3.16)
+          project(ElarisQtProbe LANGUAGES CXX)
+          find_package(Qt6 6.10.3 EXACT REQUIRED COMPONENTS Core Gui Widgets Positioning)
+          foreach(package Qt6 Qt6Core Qt6Gui Qt6Widgets Qt6Positioning)
+              if(NOT "${${package}_DIR}" STREQUAL "$ENV{QT_SDK}/lib/cmake/${package}")
+                  message(FATAL_ERROR "${package} was not resolved from the installed Qt SDK")
+              endif()
+          endforeach()
+          EOF
+          cmake -S "$probe" -B "$probe/build"
+          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH" >> "$GITHUB_ENV"
+
+      - name: Identify exact Ladybird build inputs
+        id: engine-key
+        run: |
+          key="$(python3 -m tools.elaris_cli.release_engine prepare)"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Restore exact Ladybird release outputs
+        id: engine-cache
+        if: ${{ steps.engine-key.outputs.key != '' }}
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: build/release-engine-cache
+          key: ${{ steps.engine-key.outputs.key }}
+
+      - name: Build and bundle Elaris
+        id: bundle
+        shell: bash
+        env:
+          ENGINE_KEY: ${{ steps.engine-key.outputs.key }}
+          ENGINE_CACHE_HIT: ${{ steps.engine-cache.outputs.cache-hit }}
+        run: |
+          ccache --zero-stats
+          cache_args=()
+          if [ -n "$ENGINE_KEY" ]; then
+            cache_args+=(--release-engine-cache-key "$ENGINE_KEY")
+          fi
+          if [ "$ENGINE_CACHE_HIT" = true ] && [ -d build/release-engine-cache ]; then
+            cache_args+=(--release-engine-cache-hit)
+          fi
+          ELARIS_JOBS=4 ./elaris bundle "${cache_args[@]}" ${{ inputs.channel == 'canary' && '--canary' || '' }}
+
+      - name: Report compiler cache hits
+        if: ${{ always() && (steps.bundle.outcome == 'success' || steps.bundle.outcome == 'failure') }}
+        continue-on-error: true
+        run: ccache --show-stats
+
+      - name: Save Ladybird compiler and vcpkg archives
+        # These caches validate content, so completed entries from an otherwise failed build are useful.
+        if: ${{ always() && (steps.bundle.outcome == 'success' || steps.bundle.outcome == 'failure') }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .release-ccache
+            .git/modules/Build/caches/vcpkg-binary-cache
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
+
+      - name: Smoke test the packaged browser
+        run: |
+          prefix=build/linux/Elaris
+          # A copy outside the build tree proves the bundle does not depend on it.
+          relocated="$RUNNER_TEMP/relocated"
+          rm -rf "$relocated" && mkdir -p "$relocated" && cp -a "$prefix" "$relocated/Elaris"
+          export LIBGL_ALWAYS_SOFTWARE=1
+          xvfb-run --auto-servernum "$relocated/Elaris/bin/elaris" "file://$GITHUB_WORKSPACE/bridge/tests/smoke.html" -- --snap "$RUNNER_TEMP/smoke.png"
+          test -s "$RUNNER_TEMP/smoke.png"
+
+      - name: Check the Linux glibc baseline
+        run: python3 packaging/linux/check-glibc-baseline.py build/linux/Elaris 2.39
+
+      - name: Save verified Ladybird release outputs
+        if: ${{ steps.engine-key.outputs.key != '' && steps.engine-cache.outputs.cache-hit != 'true' && hashFiles('build/release-engine-cache/manifest.json') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: build/release-engine-cache
+          key: ${{ steps.engine-key.outputs.key }}
+
+      - name: Package Linux archives and checksums
+        run: |
+          version="$ELARIS_VERSION"
+          mkdir -p dist
+          archive="dist/Elaris-${version}-linux-x86_64.tar.gz"
+          image="dist/Elaris-${version}-linux-x86_64.AppImage"
+          # Fixed owners, names and times, and no gzip name or time, so the same build always gives the same archive.
+          epoch="$(git log -1 --format=%ct)"
+          ladybird_revision="$(git rev-parse HEAD:vendor/ladybird)"
+          tar -C build/linux --sort=name --owner=0 --group=0 --numeric-owner --mtime="@${epoch}" -cf - Elaris | gzip -n > "$archive"
+          cat > dist/BUILD-INFO.txt <<EOF
+          Elaris ${version} (Linux x86_64)
+          Elaris commit: ${GITHUB_SHA}
+          Ladybird commit: ${ladybird_revision}
+          Rune revision: $(grep -m1 'rev = ' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
+          Build host: $(. /etc/os-release; printf '%s' "$PRETTY_NAME")
+          Build libc: $(getconf GNU_LIBC_VERSION)
+          EOF
+          if [ -f build/release-engine-info.txt ]; then
+            cat build/release-engine-info.txt >> dist/BUILD-INFO.txt
+          else
+            echo "Native engine: built natively (exact cache unavailable)" >> dist/BUILD-INFO.txt
+          fi
+          cp dist/BUILD-INFO.txt "dist/Elaris-${version}-linux-x86_64.BUILD-INFO.txt"
+          (cd dist && sha256sum "$(basename "$archive")" > "$(basename "$archive").sha256")
+
+          tool="$RUNNER_TEMP/appimagetool-x86_64.AppImage"
+          curl --fail --location --retry 3 --output "$tool" \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          packaging/linux/make-appimage.sh build/linux/Elaris "$image" "$tool"
+          (cd dist && sha256sum "$(basename "$image")" > "$(basename "$image").sha256")
+
+          APPIMAGE_EXTRACT_AND_RUN=1 "$image" \
+            "file://$GITHUB_WORKSPACE/bridge/tests/smoke.html" -- \
+            --snap "$RUNNER_TEMP/appimage-smoke.png"
+          test -s "$RUNNER_TEMP/appimage-smoke.png"
+
+      - name: Keep the install prefix even if packaging failed
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: elaris-linux-x86_64-build
+          path: build/linux/Elaris
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: elaris-linux-x86_64
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
