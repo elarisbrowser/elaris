@@ -151,10 +151,17 @@ impl Menu {
         let entries = std::mem::take(&mut self.entries);
         let key = self.key.clone();
         let min_width = self.min_width;
+        let side = self.side;
         let header = self.header.take();
         self.anchored().attach(layer, |origin| {
             highlight::track(panel(
-                entries, header, &key, min_width, state, theme, origin,
+                entries,
+                header,
+                &key,
+                min_width,
+                state,
+                theme,
+                (origin, side),
             ))
         })
     }
@@ -180,14 +187,19 @@ pub(crate) fn panel(
     min_width: f32,
     state: &AppState,
     theme: &Theme,
-    origin: Vec2,
+    placement: (Vec2, Side),
 ) -> El {
+    let (origin, side) = placement;
     let reduced = state.settings.reduce_motion;
     let items = entries
         .iter()
         .filter(|entry| matches!(entry, Entry::Item(_)))
         .count();
-    let stagger = Stagger::new(theme::MENU_ROW_STAGGER);
+    let stagger = Stagger::new(theme::MENU_ROW_STAGGER).from(if side == Side::Top {
+        rune::StaggerFrom::Last
+    } else {
+        rune::StaggerFrom::First
+    });
     let highlighted = highlight::sliding_row(state, key);
     let mut rows = Vec::with_capacity(entries.len());
     let mut item_index = 0;
@@ -208,7 +220,7 @@ pub(crate) fn panel(
             Entry::Item(item) => {
                 let delay = stagger.delay(item_index, items);
                 item_index += 1;
-                item.build(key, index, delay, state, theme)
+                item.build(key, index, delay, side, state, theme)
             }
             Entry::Separator => el()
                 .key(format!("{key}-sep{index}"))

@@ -3,7 +3,7 @@
 //! One menu row: its icon slot, label, tick, hover and press.
 
 use rune::tok::type_;
-use rune::{Color, El, Icon, Tx, el, icon, row, text};
+use rune::{Color, El, Icon, Side, Tx, el, icon, row, text};
 
 use super::Apply;
 use super::highlight;
@@ -96,6 +96,7 @@ impl MenuItem {
         key: &str,
         index: usize,
         delay: f32,
+        side: Side,
         state: &AppState,
         theme: &Theme,
     ) -> El {
@@ -128,7 +129,7 @@ impl MenuItem {
             .focus_selected(self.checked == Some(true))
             .disabled(disabled)
             .enter_delay(if reduced { 0.0 } else { delay })
-            .transition(item_transition(reduced));
+            .transition(item_transition(reduced, side));
         if disabled {
             entry = entry.opacity(theme.disabled_opacity);
         }

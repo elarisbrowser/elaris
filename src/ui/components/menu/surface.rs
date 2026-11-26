@@ -10,13 +10,18 @@ use rune::{
 use super::Apply;
 use crate::ui::theme::{self, MENU_SCALE_FROM, Theme};
 
-/// Rows rise and fade in after the panel, one after another; they keep their place under reduced
-/// motion, where the stagger is dropped.
-pub(super) fn item_transition(reduced: bool) -> Transition {
+/// Rows fade in from the trigger edge after the panel; they keep their place under reduced motion.
+pub(super) fn item_transition(reduced: bool, side: Side) -> Transition {
     if reduced {
         Transition::none()
     } else {
-        Transition::offset(0.0, theme::MENU_ROW_OFFSET).combined(Transition::opacity())
+        let (x, y) = match side {
+            Side::Bottom => (0.0, theme::MENU_ROW_OFFSET),
+            Side::Top => (0.0, -theme::MENU_ROW_OFFSET),
+            Side::Left => (theme::MENU_ROW_OFFSET, 0.0),
+            Side::Right => (-theme::MENU_ROW_OFFSET, 0.0),
+        };
+        Transition::offset(x, y).combined(Transition::opacity())
     }
 }
 

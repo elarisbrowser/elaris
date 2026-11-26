@@ -72,6 +72,7 @@ impl Popover {
         let title = self.title.take();
         let body = self.body.take();
         let key = self.key.clone();
+        let side = self.side;
         let anchored = Anchored {
             key: self.key.clone(),
             trigger: self.trigger.take(),
@@ -93,7 +94,12 @@ impl Popover {
                         .h(theme::MENU_ROW_HEIGHT)
                         .px(theme::MENU_ROW_PADDING)
                         .center_y()
-                        .transition(item_transition(reduced))
+                        .enter_delay(if reduced || side != Side::Top {
+                            0.0
+                        } else {
+                            stagger
+                        })
+                        .transition(item_transition(reduced, side))
                         .child(
                             text(title)
                                 .font(type_::BODY)
@@ -108,8 +114,12 @@ impl Popover {
                     col()
                         .key("body")
                         .px(theme::MENU_ROW_PADDING)
-                        .enter_delay(if reduced { 0.0 } else { stagger })
-                        .transition(item_transition(reduced))
+                        .enter_delay(if reduced || side == Side::Top {
+                            0.0
+                        } else {
+                            stagger
+                        })
+                        .transition(item_transition(reduced, side))
                         .child(body),
                 );
             }
