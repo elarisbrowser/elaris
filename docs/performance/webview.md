@@ -62,8 +62,8 @@ Ladybird's own macOS UI. The engine asks for a remote layer (`ViewCommand::HostL
 Compositor commits each frame into a CoreAnimation context of its own. The tab's surface shows
 that context with a `CALayerHost` (private API, looked up and checked at runtime, as Ladybird's
 own macOS UI does), given to Rune with `NativeSurface::set_layer`. Rune places the layer under
-its Metal layer at the surface's place, rounded as the pane is, and punches that place out of its
-own frame, so everything Rune draws over the page stays over it. Each page frame reaches the
+its Metal layer and uses the pane's own bounds and radius for the cutout. Pane overlays keep their
+rounded clip so everything Rune draws over the page stays over it. Each page frame reaches the
 screen on the next refresh with no blit, no push to Rune and no redraw of the window; before, a
 frame that arrived just after Rune drew waited a whole refresh, and the next one replaced it.
 
@@ -100,9 +100,11 @@ queue a thread of Elaris's dispatches. Rune makes it a desynchronized subsurface
 at the page's place, punches that place out of its pixels, and switches the window to
 premultiplied alpha with no opaque region (`NativeSurface::set_wayland_surface`). Each frame is
 attached and committed as it arrives: the desktop's compositor shows it, or scans it out, with no
-copy, no push to Rune and no frame of the window's. Each backing store's `wl_buffer` is made once,
-asynchronously (`zwp_linux_buffer_params_v1.create`), so a dmabuf the compositor refuses fails
-only that tab, which then goes back to Rune. A store stays out of Ladybird's hands until the
+copy, no push to Rune and no frame of the window's. For rounded pages, opaque chrome covers the
+corners of the rectangular subsurface outside Rune's cutout. Rounded pages with translucent
+chrome use Rune's GPU path so page pixels can't show through the chrome. Each backing store's
+`wl_buffer` is made once, asynchronously (`zwp_linux_buffer_params_v1.create`), so a dmabuf the
+compositor refuses fails only that tab, which then goes back to Rune. A store stays out of Ladybird's hands until the
 compositor releases its buffer. Ladybird's Compositor paints on the GPU the compositor presents
 on: its main device from the default dmabuf feedback, matched to a Vulkan device by its DRM node
 (`presentation_gpu_linux.cpp`).

@@ -68,8 +68,8 @@ pub(crate) struct Browser {
     pub(super) promoted_visit: Option<(TabId, String, String)>,
     pub(crate) split: Option<split::Split>,
     pub(crate) split_view_limit: usize,
-    /// Rounded page surfaces must be drawn by Rune rather than a compositor-owned layer.
-    pub(super) rounded_pages: bool,
+    /// The window's current page shape and chrome can cover the edges of a hosted surface.
+    pub(super) hosted_pages_allowed: bool,
     pub(super) default_zoom: u16,
     /// The tab whose zoom changed since the window last polled.
     pub(super) zoom_changed: Option<TabId>,
@@ -117,7 +117,7 @@ impl Default for Browser {
             promoted_visit: None,
             split: None,
             split_view_limit: 2,
-            rounded_pages: true,
+            hosted_pages_allowed: cfg!(target_os = "macos"),
             default_zoom: 100,
             zoom_changed: None,
             recent: Vec::new(),

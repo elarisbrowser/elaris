@@ -79,7 +79,7 @@ pub(crate) fn view(
             state.browser.set_viewport([rect[2], rect[3]]);
         });
     let wrap = |id: Option<TabId>, side: usize, weight: f32, child: El| {
-        let mut pane = el()
+        let pane = el()
             .key(wrapper_key(id, side))
             .w(0.0)
             .grow(weight)
@@ -87,33 +87,29 @@ pub(crate) fn view(
             .h_full()
             .min_h(0.0)
             .fill(theme.page)
-            .radius(radius)
-            // The frame scales with the pane's layout spring; its child surface stays clipped
-            // to these same animated bounds while the engine renders the new viewport size.
-            .continuous_corners()
-            .clip_rounded(radius);
-        if let Some(tab) = id
+            .radius(radius);
+        let surface = id
             .and_then(|id| state.browser.tab(id))
             .filter(|tab| !tab.is_internal())
-        {
-            // The surface stays on the tab's keyed container when the input region changes sides.
-            pane = page_surface(pane, &tab.surface);
-        }
-        pane = pane.child(child);
+            .map(|tab| &tab.surface);
+        let (mut pane, continuous) = pane_content(pane, child, surface, radius);
         if !horizontal
             && ratio.is_some()
             && id.is_some()
             && id == state.browser.active_tab().map(crate::tab::Tab::id)
         {
-            pane = pane.child(
-                el().key("focused-pane-border")
-                    .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
-                    .radius(radius)
-                    .continuous_corners()
-                    .border(1.0, theme.overlay_border)
-                    .inert()
-                    .a11y_hidden(),
-            );
+            let border = el()
+                .key("focused-pane-border")
+                .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
+                .radius(radius)
+                .border(1.0, theme.overlay_border)
+                .inert()
+                .a11y_hidden();
+            pane = pane.child(if continuous {
+                border.continuous_corners()
+            } else {
+                border
+            });
         }
         pane
     };
@@ -229,6 +225,30 @@ pub(crate) fn view(
         layout = layout.child(button);
     }
     viewport.child(layout.children(append_preview))
+}
+
+fn pane_content(
+    pane: El,
+    child: El,
+    surface: Option<&crate::engine::Surface>,
+    radius: f32,
+) -> (El, bool) {
+    #[cfg(any(elaris_ui = "macos", elaris_ui = "linux"))]
+    if let Some(gpu) = surface.and_then(|surface| surface.gpu.as_ref()) {
+        // A native surface already clips to its own radius. An additional rounded
+        // clip multiplies its edge coverage and leaves dark fringes along the cutout.
+        return (
+            pane.native_surface(gpu.native(), rune::SurfaceFit::Fill)
+                .child(child.clip_rounded(radius)),
+            false,
+        );
+    }
+    let pane = pane.continuous_corners().clip_rounded(radius);
+    let content = match surface {
+        Some(surface) => page_surface(pane, surface).child(child),
+        None => pane.child(child),
+    };
+    (content, true)
 }
 
 fn add_split_pane_button(state: &AppState, theme: &Theme) -> Option<El> {

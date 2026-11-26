@@ -50,8 +50,13 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         tx.animated();
     }
     let previous_peek = state.browser.peek.as_ref().map(|peek| peek.page.id());
+    // Wayland subsurfaces are rectangular. Opaque chrome hides their pixels outside Rune's
+    // rounded cutout. With translucent chrome those pixels would show through the corners.
     let rounded_pages = state.browser.fullscreen_tab().is_none() && state.page_radius() > 0.0;
-    state.browser.set_rounded_pages(rounded_pages);
+    let translucent_chrome = state.settings.glass_enabled && state.settings.tint_opacity < 100;
+    state.browser.set_hosted_pages_allowed(
+        cfg!(target_os = "macos") || !rounded_pages || !translucent_chrome,
+    );
     let mut polled = state.browser.poll();
     let mini_changed = super::super::mini::poll(state, tx);
     open_popups(state, &mut polled);
