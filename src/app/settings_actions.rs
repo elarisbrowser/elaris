@@ -67,6 +67,7 @@ impl super::AppState {
 
     pub(crate) fn set_horizontal_address_bar_full_width(&mut self, full_width: bool) {
         if self.settings.horizontal_address_bar_full_width != full_width {
+            self.reset_chrome();
             self.settings.horizontal_address_bar_full_width = full_width;
             self.save_setting(SettingsChange::HorizontalAddressBarFullWidth(full_width));
         }
@@ -157,6 +158,7 @@ impl super::AppState {
                 settings.tab_layout,
                 settings.address_bar,
                 settings.compact_tabs,
+                settings.horizontal_address_bar_full_width,
             )
         };
         if shape(&self.settings) != shape(next) {
