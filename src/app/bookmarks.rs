@@ -144,14 +144,19 @@ impl AppState {
 
     /// Bookmarks the tab in the Bookmarks Bar, or finds its bookmark; and with `edit`, opens the
     /// editor on it.
+    #[cfg(test)]
     pub(crate) fn bookmark_tab(&mut self, tab: TabId, edit: bool) {
+        self.bookmark_tab_change(tab, edit);
+    }
+
+    fn bookmark_tab_change(&mut self, tab: TabId, edit: bool) -> bool {
         let Some((title, url)) = self
             .browser
             .tab(tab)
             .filter(|tab| !tab.is_internal() && !tab.url.is_empty() && tab.url != "about:blank")
             .map(|tab| (tab.title.trim().to_owned(), tab.url.clone()))
         else {
-            return;
+            return false;
         };
         let favicon = self
             .browser
@@ -159,6 +164,7 @@ impl AppState {
             .and_then(|tab| tab.favicon_data.as_ref())
             .and_then(|icon| Favicon::new(icon.width, icon.height, &icon.rgba));
         let existing = self.bookmarks().find_url(&url).map(|bookmark| bookmark.id);
+        let added = existing.is_none();
         let id = existing.or_else(|| {
             self.change_bookmarks(|bookmarks| {
                 let id = bookmarks.add_link(BookmarkId::BAR, &title, &url, now())?;
@@ -166,8 +172,19 @@ impl AppState {
                 Ok(id)
             })
         });
-        if let Some(id) = id.filter(|_| edit) {
+        let Some(id) = id else {
+            return false;
+        };
+        if edit {
             self.edit_bookmark(id, false);
+        }
+        added
+    }
+
+    /// Bookmarks a tab and confirms a new bookmark.
+    pub(crate) fn bookmark_tab_with_toast(&mut self, tab: TabId, edit: bool, tx: &mut Tx) {
+        if self.bookmark_tab_change(tab, edit) {
+            self.toasts.show(tx, "Bookmark added");
         }
     }
 
@@ -295,9 +312,17 @@ impl AppState {
     }
 
     /// The star and Cmd+D: bookmarks the active page, or edits its bookmark.
+    #[cfg(test)]
     pub(crate) fn bookmark_active_tab(&mut self) {
         if let Some(tab) = self.browser.active_tab().map(crate::tab::Tab::id) {
             self.bookmark_tab(tab, true);
+        }
+    }
+
+    /// Bookmarks the active page and confirms a new bookmark.
+    pub(crate) fn bookmark_active_tab_with_toast(&mut self, tx: &mut Tx) {
+        if let Some(tab) = self.browser.active_tab().map(crate::tab::Tab::id) {
+            self.bookmark_tab_with_toast(tab, true, tx);
         }
     }
 
@@ -324,6 +349,13 @@ impl AppState {
         }) else {
             return;
         };
+        let count = pages.len();
+        let message = if count == 1 {
+            "1 tab bookmarked".to_owned()
+        } else {
+            format!("{count} tabs bookmarked")
+        };
+        self.toasts.show(tx, message);
         open_bookmarks(self, tx);
         self.bookmarks.page.folder = BookmarkId::OTHER;
         self.edit_bookmark(folder, true);
@@ -353,8 +385,12 @@ impl AppState {
 
     /// Saves the editor's name, address and folder, and closes it.
     pub(crate) fn save_bookmark_editor(&mut self) {
+        self.save_bookmark_editor_change();
+    }
+
+    fn save_bookmark_editor_change(&mut self) -> bool {
         let Some(editor) = self.bookmarks.editor.take() else {
-            return;
+            return false;
         };
         let url = editor.url.text.trim().to_owned();
         let saved = self.change_bookmarks(|bookmarks| {
@@ -376,13 +412,26 @@ impl AppState {
         if saved.is_none() {
             self.bookmarks.editor = Some(editor);
         }
+        saved.is_some()
+    }
+
+    /// Saves the editor and confirms that the bookmark was saved.
+    pub(crate) fn save_bookmark_editor_with_toast(&mut self, tx: &mut Tx) {
+        if self.save_bookmark_editor_change() {
+            self.toasts.show(tx, "Bookmark saved");
+        }
     }
 
     pub(crate) fn close_bookmark_editor(&mut self) {
         self.bookmarks.editor = None;
     }
 
+    #[cfg(test)]
     pub(crate) fn remove_bookmark(&mut self, id: BookmarkId) {
+        self.remove_bookmark_change(id);
+    }
+
+    fn remove_bookmark_change(&mut self, id: BookmarkId) -> bool {
         if self
             .bookmarks
             .editor
@@ -391,7 +440,15 @@ impl AppState {
         {
             self.bookmarks.editor = None;
         }
-        self.change_bookmarks(|bookmarks| bookmarks.remove(id));
+        self.change_bookmarks(|bookmarks| bookmarks.remove(id))
+            .is_some()
+    }
+
+    /// Removes a bookmark and confirms the change.
+    pub(crate) fn remove_bookmark_with_toast(&mut self, id: BookmarkId, tx: &mut Tx) {
+        if self.remove_bookmark_change(id) {
+            self.toasts.show(tx, "Bookmark removed");
+        }
     }
 
     /// Adds a folder to the end of `parent` and opens the editor to name it.

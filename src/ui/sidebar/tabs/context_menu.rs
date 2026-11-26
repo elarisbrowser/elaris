@@ -66,11 +66,11 @@ pub(crate) fn context_menu(state: &AppState, theme: &Theme, layer: &mut Vec<El>)
                     } else {
                         &icons::STAR
                     })
-                    .on_select(move |state: &mut AppState| {
+                    .on_select_tx(move |state: &mut AppState, tx| {
                         state.dismiss_context_menu();
                         match bookmarked {
-                            Some(id) => state.remove_bookmark(id),
-                            None => state.bookmark_tab(tab, false),
+                            Some(id) => state.remove_bookmark_with_toast(id, tx),
+                            None => state.bookmark_tab_with_toast(tab, false, tx),
                         }
                     }),
                 )

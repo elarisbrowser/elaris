@@ -5,6 +5,7 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use elaris::ladybird::BrowsingData;
+use rune::Tx;
 
 use crate::storage::HistoryMutation;
 
@@ -85,7 +86,7 @@ impl super::AppState {
     }
 
     /// Clears what the dialog selected and closes it.
-    pub(crate) fn confirm_clear_data(&mut self) {
+    pub(crate) fn confirm_clear_data(&mut self, tx: &mut Tx) {
         let Some(dialog) = self.clear_data.take() else {
             return;
         };
@@ -93,22 +94,24 @@ impl super::AppState {
             return;
         }
         let since = dialog.range.since(SystemTime::now());
-        let mut failed = false;
-        if dialog.history {
+        let failed = if dialog.history {
             let mutation = since.map_or(HistoryMutation::Clear, |since| {
                 HistoryMutation::ClearSince(unix_micros(since))
             });
-            failed = self
+            let queued = self
                 .storage
                 .as_ref()
-                .is_some_and(|storage| storage.history().mutate(self.window_id, mutation).is_err());
-        }
-        self.browser.clear_browsing_data(since, dialog.engine);
-        self.clear_data_status = Some(if failed {
-            "Could not clear browsing history.".into()
+                .is_some_and(|storage| storage.history().mutate(self.window_id, mutation).is_ok());
+            self.clear_data_pending = queued;
+            !queued
         } else {
-            "Browsing data cleared.".into()
-        });
+            false
+        };
+        self.browser.clear_browsing_data(since, dialog.engine);
+        self.clear_data_status = failed.then(|| "Could not clear browsing history.".into());
+        if !dialog.history {
+            self.toasts.show(tx, "Browsing data cleared");
+        }
     }
 }
 

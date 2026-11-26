@@ -113,21 +113,21 @@ pub(in crate::ui) fn bar(state: &AppState, theme: &Theme, overlays: &mut Vec<El>
                     }),
                 )
                 .item(
-                    MenuItem::new("Remove").on_select(move |state: &mut AppState| {
+                    MenuItem::new("Remove").on_select_tx(move |state: &mut AppState, tx| {
                         state.bookmarks.bar_menu = None;
-                        state.remove_bookmark(id);
+                        state.remove_bookmark_with_toast(id, tx);
                     }),
                 );
             menu.build(state, theme, overlays);
         } else {
             crate::ui::components::menu::context_menu("bookmark-bar-context", el(), Some(point))
                 .on_close(|state: &mut AppState| state.bookmarks.bar_menu = None)
-                .item(
-                    MenuItem::new("Bookmark This Page").on_select(|state: &mut AppState| {
+                .item(MenuItem::new("Bookmark This Page").on_select_tx(
+                    |state: &mut AppState, tx| {
                         state.bookmarks.bar_menu = None;
-                        state.bookmark_active_tab();
-                    }),
-                )
+                        state.bookmark_active_tab_with_toast(tx);
+                    },
+                ))
                 .item(
                     MenuItem::new("New Folder").on_select(|state: &mut AppState| {
                         state.bookmarks.bar_menu = None;
@@ -388,7 +388,7 @@ pub(in crate::ui) fn sidebar_button(state: &AppState, theme: &Theme, layer: &mut
                 .disabled(!has_page)
                 .on_select_tx(move |state: &mut AppState, tx| {
                     close(state);
-                    state.bookmark_active_tab();
+                    state.bookmark_active_tab_with_toast(tx);
                     tx.focus(EDITOR_TITLE, false);
                 }),
         )

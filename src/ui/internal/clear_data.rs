@@ -53,7 +53,7 @@ pub(super) fn dialog(dialog: ClearDataDialog, theme: &Theme, overlays: &mut Vec<
             Button::new("Clear Data")
                 .variant(ButtonVariant::Danger)
                 .disabled(!dialog.has_selection())
-                .on_press(AppState::confirm_clear_data)
+                .on_press_tx(AppState::confirm_clear_data)
                 .build(&kit),
         );
     Dialog::new("clear-data", "Clear browsing data")

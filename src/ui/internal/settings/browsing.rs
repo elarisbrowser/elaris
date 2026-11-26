@@ -115,7 +115,7 @@ fn custom_engine(cx: &PageContext, index: usize) -> El {
         cx.theme,
     )
     .focusable(true)
-    .on_press(move |state: &mut AppState| state.remove_search_engine(index));
+    .on_press_tx(move |state: &mut AppState, tx| state.remove_search_engine_with_toast(index, tx));
     let address = text(engine.url())
         .font(type_::BODY)
         .color(cx.theme.text_muted)
@@ -148,7 +148,7 @@ fn add_engine(cx: &PageContext) -> El {
     );
     let add = Button::new("Add")
         .disabled(form.name.text.trim().is_empty() || form.url.text.trim().is_empty())
-        .on_press(|state: &mut AppState| state.add_search_engine())
+        .on_press_tx(|state: &mut AppState, tx| state.add_search_engine_with_toast(tx))
         .build(&cx.kit);
     let control = col()
         .w(theme::PAGE_CONTROL_WIDTH)

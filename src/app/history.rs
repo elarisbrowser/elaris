@@ -210,6 +210,12 @@ impl AppState {
                             self.history_page.page = None;
                             self.request_history_page();
                             tx.scroll_to_instant(crate::ui::HISTORY_SCROLL, 0.0, 0.0);
+                            if self.clear_data_pending {
+                                self.clear_data_pending = false;
+                                self.toasts.show(tx, "Browsing data cleared");
+                            } else {
+                                self.toasts.show(tx, "Browsing history cleared");
+                            }
                         }
                         Ok(HistoryMutation::Remove(urls)) => {
                             if let Some(page) = &mut self.history_page.page {
@@ -220,8 +226,22 @@ impl AppState {
                             }
                             self.request_history_page();
                             tx.animated();
+                            let message = if urls.len() == 1 {
+                                "History entry removed"
+                            } else {
+                                "History entries removed"
+                            };
+                            self.toasts.show(tx, message);
                         }
-                        Err(error) => self.history_page.action_error = Some(error),
+                        Err(error) => {
+                            if self.clear_data_pending {
+                                self.clear_data_pending = false;
+                                self.clear_data_status =
+                                    Some("Could not clear browsing history.".into());
+                            } else {
+                                self.history_page.action_error = Some(error);
+                            }
+                        }
                     }
                 }
                 page => changed |= self.history_page.receive(page),

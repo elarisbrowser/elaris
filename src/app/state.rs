@@ -52,6 +52,8 @@ pub(crate) struct AppState {
     pub(crate) clear_data: Option<clear_data::ClearDataDialog>,
     /// The result of the last Clear Browsing Data request.
     pub(crate) clear_data_status: Option<String>,
+    /// Whether the history store still needs to confirm a Clear Browsing Data request.
+    pub(crate) clear_data_pending: bool,
     /// Clock guards for website permission prompts and fullscreen.
     pub(crate) page_guards: crate::ui::permission_prompt::Guards,
     /// Whether the floating Find in Page bar is mounted.

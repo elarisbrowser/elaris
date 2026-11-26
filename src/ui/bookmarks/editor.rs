@@ -62,7 +62,7 @@ pub(in crate::ui) fn star(state: &AppState, theme: &Theme, overlays: &mut Vec<El
         {
             state.close_bookmark_editor();
         } else {
-            state.bookmark_active_tab();
+            state.bookmark_active_tab_with_toast(tx);
             tx.focus(EDITOR_TITLE, false);
         }
     });
@@ -150,13 +150,17 @@ pub(in crate::ui) fn editor(state: &AppState, theme: &Theme, overlays: &mut Vec<
             .child(
                 Button::new("Remove")
                     .variant(ButtonVariant::Ghost)
-                    .on_press(move |state: &mut AppState| state.remove_bookmark(id))
+                    .on_press_tx(move |state: &mut AppState, tx| {
+                        state.remove_bookmark_with_toast(id, tx)
+                    })
                     .build(&kit),
             )
             .child(
                 Button::new("Done")
                     .variant(ButtonVariant::Submit)
-                    .on_press(|state: &mut AppState| state.save_bookmark_editor())
+                    .on_press_tx(|state: &mut AppState, tx| {
+                        state.save_bookmark_editor_with_toast(tx)
+                    })
                     .build(&kit),
             ),
     )
@@ -202,9 +206,9 @@ fn field(
                 .no_focus_ring()
                 .label(label)
                 .on_edit(edit)
-                .on_input_key(|state: &mut AppState, event, _| {
+                .on_input_key(|state: &mut AppState, event, tx| {
                     if event.key == rune::Key::Enter {
-                        state.save_bookmark_editor();
+                        state.save_bookmark_editor_with_toast(tx);
                         true
                     } else {
                         false

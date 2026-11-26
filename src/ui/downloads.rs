@@ -258,13 +258,18 @@ fn action_button(
 
 /// Forgets a finished download from the list; the file stays where it is.
 fn remove_button(id: DownloadId, theme: &Theme) -> El {
-    action_button(
-        id,
+    controls::icon_button(
+        &format!("download-action-{}-Remove from list", id.get()),
         "Remove from list",
         &super::icons::CLOSE,
+        24.0,
         theme,
-        |browser, id| browser.remove_download(id),
     )
+    .on_press_tx(move |state: &mut AppState, tx| {
+        if state.browser.remove_download(id).is_ok() {
+            state.toasts.show(tx, "Download removed from list");
+        }
+    })
 }
 
 fn status_text(download: &Download) -> String {

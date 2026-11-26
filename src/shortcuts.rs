@@ -529,7 +529,7 @@ pub(crate) fn dispatch(state: &mut AppState, shortcut: Shortcut, tx: &mut Tx) {
         Shortcut::ToggleSidebar => {}
         Shortcut::OpenSettings => app::open_settings(state, tx),
         Shortcut::OpenHistory => app::open_history(state, tx),
-        Shortcut::BookmarkPage => state.bookmark_active_tab(),
+        Shortcut::BookmarkPage => state.bookmark_active_tab_with_toast(tx),
         Shortcut::BookmarkAllTabs => state.bookmark_all_tabs(tx),
         Shortcut::OpenBookmarks => app::open_bookmarks(state, tx),
         Shortcut::SearchBookmarks => app::search_bookmarks(state, tx),

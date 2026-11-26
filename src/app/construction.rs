@@ -139,6 +139,7 @@ impl AppState {
             page_guards: Default::default(),
             clear_data: None,
             clear_data_status: None,
+            clear_data_pending: false,
             find_open: false,
             tab_switcher: None,
             find_input: TextEdit::default(),

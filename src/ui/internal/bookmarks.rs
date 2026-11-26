@@ -392,9 +392,9 @@ fn row_menu(
         .item(
             MenuItem::new("Delete")
                 .animated(&crate::ui::components::animated_icon::CLOSE)
-                .on_select(move |state: &mut AppState| {
+                .on_select_tx(move |state: &mut AppState, tx| {
                     close(state);
-                    state.remove_bookmark(id);
+                    state.remove_bookmark_with_toast(id, tx);
                 }),
         );
     menu.build(state, theme, overlays)
