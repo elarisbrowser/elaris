@@ -209,6 +209,12 @@ fn appearance(cx: &mut PageContext) -> El {
             "Choose whether the address bar sits in the sidebar or in a toolbar above the page.",
             address_bar,
         ));
+        rows.push(setting(
+            cx,
+            "New Tab button",
+            "Choose whether New Tab sits above or below the tabs in the vertical sidebar.",
+            new_tab_position,
+        ));
     }
     rows.extend([
         setting(
@@ -216,12 +222,6 @@ fn appearance(cx: &mut PageContext) -> El {
             "Sidebar position",
             "Choose which side of the window the vertical sidebar sits on.",
             sidebar_side,
-        ),
-        setting(
-            cx,
-            "New Tab button",
-            "Choose whether New Tab sits above or below the tabs in the vertical sidebar.",
-            new_tab_position,
         ),
         setting(
             cx,

@@ -173,7 +173,8 @@ impl super::AppState {
             (omnibox::Mode::Current, Some(tab), None) => self.browser.navigate(tab, url)?,
             (_, _, _) => {
                 let tab = self.browser.open_tab(url)?;
-                if self.settings.new_tab_position == NewTabPosition::Top {
+                if !self.horizontal_tabs() && self.settings.new_tab_position == NewTabPosition::Top
+                {
                     self.browser.move_tab_to(tab, TabSection::Regular, 0)?;
                 }
                 self.browser.activate_tab(tab);
