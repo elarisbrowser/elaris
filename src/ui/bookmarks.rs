@@ -9,11 +9,13 @@ use rune_kit::{Button, ButtonVariant};
 
 use crate::app::AppState;
 use crate::shortcuts::Shortcut;
+use crate::ui::components::animated_icon;
 use crate::ui::components::controls;
 use crate::ui::components::menu::{Menu, MenuItem, Popover};
 use crate::ui::icons;
 use crate::ui::theme::{self, Theme};
 use elaris_core::bookmarks::{Bookmark, BookmarkId};
+use elaris_core::settings::TabLayout;
 
 const EDITOR_TITLE: &str = "bookmark-editor-title";
 
@@ -499,6 +501,40 @@ pub(in crate::ui) fn bar(state: &AppState, theme: &Theme, overlays: &mut Vec<El>
                         state.bookmarks.bar_menu = None;
                         state.add_bookmark_folder(BookmarkId::BAR);
                     }),
+                )
+                .separator()
+                .item(
+                    MenuItem::new("New Tab")
+                        .animated(&animated_icon::PLUS)
+                        .on_select_tx(|state: &mut AppState, tx| {
+                            state.bookmarks.bar_menu = None;
+                            crate::app::new_tab(state, tx);
+                        }),
+                )
+                .item(MenuItem::new("Show Tabs Vertically").on_select_tx(
+                    |state: &mut AppState, tx| {
+                        state.bookmarks.bar_menu = None;
+                        state.set_tab_layout(TabLayout::Vertical);
+                        tx.animated();
+                        tx.motion(theme::SIDEBAR_TOGGLE);
+                    },
+                ))
+                .separator()
+                .item(
+                    MenuItem::new("Open File…")
+                        .animated(&animated_icon::FOLDER)
+                        .on_select_tx(|state: &mut AppState, tx| {
+                            state.bookmarks.bar_menu = None;
+                            crate::shortcuts::open_file(tx);
+                        }),
+                )
+                .item(
+                    MenuItem::new("Settings")
+                        .animated(&animated_icon::SETTINGS)
+                        .on_select_tx(|state: &mut AppState, tx| {
+                            state.bookmarks.bar_menu = None;
+                            crate::app::open_settings(state, tx);
+                        }),
                 )
                 .build(state, theme, overlays);
         }
