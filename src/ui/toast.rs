@@ -98,10 +98,6 @@ fn card(shown: &Shown, depth: usize, hovered: bool, theme: &Theme, reduced_motio
                 .truncate(),
         );
     }
-    if let Some(content) = &toast.content {
-        lines = lines.child(content(theme));
-    }
-
     let mut body = row()
         .w_full()
         .h_full()

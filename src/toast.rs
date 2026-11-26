@@ -6,32 +6,26 @@
 //! ```ignore
 //! state.toasts.show(tx, "Saved");
 //! state.toasts.show(tx, Toast::new("Address copied").icon(&icons::COPY).detail(url));
-//! state.toasts.show(tx, Toast::new("Downloaded").content(|theme| my_row(theme)));
 //! ```
 //!
 //! The newest toast shows last, at the bottom. A toast leaves once its time is up or when clicked.
 
 use std::time::Duration;
 
-use rune::{El, Icon, Tx};
+use rune::{Icon, Tx};
 
 use crate::ui::icons;
-use crate::ui::theme::Theme;
 
 /// How long a toast stays up, in seconds on the window clock.
 const LIFETIME: f64 = 2.5;
 /// The most toasts kept at once. A new one past this pushes out the oldest.
 pub(crate) const MAX_VISIBLE: usize = 5;
 
-/// Builds a toast's extra content from the theme, each time the window draws.
-type Content = Box<dyn Fn(&Theme) -> El>;
-
 /// What a toast says. Only the message is required; the rest is optional.
 pub(crate) struct Toast {
     pub(crate) message: String,
     pub(crate) icon: Option<&'static Icon>,
     pub(crate) detail: Option<String>,
-    pub(crate) content: Option<Content>,
 }
 
 impl Toast {
@@ -40,7 +34,6 @@ impl Toast {
             message: message.into(),
             icon: None,
             detail: None,
-            content: None,
         }
     }
 
@@ -53,15 +46,6 @@ impl Toast {
     /// A quieter line under the message, truncated to fit.
     pub(crate) fn detail(mut self, detail: impl Into<String>) -> Self {
         self.detail = Some(detail.into());
-        self
-    }
-
-    /// Anything else to show under the message. The closure runs each time the window draws, so
-    /// it takes the current theme.
-    // Public API for callers that need more than a message; none needs it yet.
-    #[allow(dead_code)]
-    pub(crate) fn content(mut self, content: impl Fn(&Theme) -> El + 'static) -> Self {
-        self.content = Some(Box::new(content));
         self
     }
 }
@@ -197,17 +181,5 @@ mod tests {
         assert!(toasts.dismiss(first));
         assert!(!toasts.dismiss(first));
         assert_eq!(messages(&toasts), ["two"]);
-    }
-
-    #[test]
-    fn takes_optional_content() {
-        let plain = Toast::new("Saved");
-        assert!(plain.icon.is_none() && plain.detail.is_none() && plain.content.is_none());
-
-        let toast = Toast::new("Saved")
-            .detail("notes.md")
-            .content(|_| rune::el());
-        assert_eq!(toast.detail.as_deref(), Some("notes.md"));
-        assert!(toast.content.is_some());
     }
 }

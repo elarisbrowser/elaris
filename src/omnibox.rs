@@ -2,6 +2,8 @@
 
 //! Omnibox state, typed actions, and deterministic suggestions from local browser data.
 
+use std::collections::{HashMap, HashSet};
+
 use rune::TextEdit;
 
 use crate::tab::{Tab, TabId};
@@ -164,6 +166,8 @@ pub(crate) fn suggestions(
 ) -> Vec<Suggestion> {
     let query = query.trim();
     let mut suggestions = Vec::new();
+    let open_urls: HashSet<&str> = tabs.iter().map(|tab| tab.url.as_str()).collect();
+    let history_visits = visit_counts(history);
 
     if !query.is_empty()
         && let Ok(destination) = address::destination_for_input(query)
@@ -218,12 +222,12 @@ pub(crate) fn suggestions(
     let mut matching_bookmarks: Vec<_> = bookmarks
         .iter()
         .filter(|_| !query.is_empty())
-        .filter(|bookmark| !tabs.iter().any(|tab| tab.url == bookmark.url))
+        .filter(|bookmark| !open_urls.contains(bookmark.url.as_str()))
         .filter_map(|bookmark| {
-            let visits = history
-                .iter()
-                .find(|entry| entry.url == bookmark.url)
-                .map_or(0, |entry| entry.visit_count);
+            let visits = history_visits
+                .get(bookmark.url.as_str())
+                .copied()
+                .unwrap_or_default();
             bookmark_score(&folded, bookmark).map(|score| (score, visits, bookmark))
         })
         .collect();
@@ -231,9 +235,9 @@ pub(crate) fn suggestions(
         left.cmp(right).then_with(|| right_visits.cmp(left_visits))
     });
     matching_bookmarks.truncate(MAX_BOOKMARK_SUGGESTIONS);
-    let shown_bookmarks: Vec<&String> = matching_bookmarks
+    let shown_bookmarks: HashSet<&str> = matching_bookmarks
         .iter()
-        .map(|(_, _, bookmark)| &bookmark.url)
+        .map(|(_, _, bookmark)| bookmark.url.as_str())
         .collect();
     let suggestion = |bookmark: &BookmarkHint, section| Suggestion {
         section,
@@ -263,8 +267,8 @@ pub(crate) fn suggestions(
 
     let mut matching_history: Vec<_> = history
         .iter()
-        .filter(|entry| !tabs.iter().any(|tab| tab.url == entry.url))
-        .filter(|entry| !shown_bookmarks.contains(&&entry.url))
+        .filter(|entry| !open_urls.contains(entry.url.as_str()))
+        .filter(|entry| !shown_bookmarks.contains(entry.url.as_str()))
         .filter_map(|entry| {
             match_score(&folded, &entry.title, &entry.url).map(|score| (score, entry))
         })
@@ -351,6 +355,11 @@ pub(crate) fn bookmark_suggestions(
     history: &[HistoryEntry],
 ) -> Vec<Suggestion> {
     let folded = query.trim().to_ascii_lowercase();
+    let history_visits = visit_counts(history);
+    let mut open_tabs: HashMap<&str, &Tab> = HashMap::with_capacity(tabs.len());
+    for tab in tabs {
+        open_tabs.entry(tab.url.as_str()).or_insert(tab);
+    }
     let mut matching: Vec<_> = bookmarks
         .iter()
         .filter_map(|bookmark| {
@@ -359,28 +368,30 @@ pub(crate) fn bookmark_suggestions(
             } else {
                 bookmark_score(&folded, bookmark)?
             };
-            let visits = history
-                .iter()
-                .find(|entry| entry.url == bookmark.url)
-                .map_or(0, |entry| entry.visit_count);
-            Some((score, visits, bookmark))
+            let visits = history_visits
+                .get(bookmark.url.as_str())
+                .copied()
+                .unwrap_or_default();
+            Some((score, visits, bookmark.title.to_lowercase(), bookmark))
         })
         .collect();
-    matching.sort_by(|(left, left_visits, a), (right, right_visits, b)| {
-        left.cmp(right)
-            .then_with(|| right_visits.cmp(left_visits))
-            .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
-    });
+    matching.sort_by(
+        |(left, left_visits, left_title, _), (right, right_visits, right_title, _)| {
+            left.cmp(right)
+                .then_with(|| right_visits.cmp(left_visits))
+                .then_with(|| left_title.cmp(right_title))
+        },
+    );
     matching
         .into_iter()
         .take(MAX_BOOKMARK_SCOPE_RESULTS)
-        .map(|(_, _, bookmark)| {
+        .map(|(_, _, _, bookmark)| {
             let host = address::host_for_address(&bookmark.url);
             let detail = match bookmark.folders.as_str() {
                 "" => host.to_owned(),
                 folders => format!("{folders} · {host}"),
             };
-            let action = tabs.iter().find(|tab| tab.url == bookmark.url).map_or_else(
+            let action = open_tabs.get(bookmark.url.as_str()).map_or_else(
                 || Action::VisitRecent(bookmark.url.clone()),
                 |tab| Action::SwitchTab(tab.id()),
             );
@@ -397,6 +408,16 @@ pub(crate) fn bookmark_suggestions(
             }
         })
         .collect()
+}
+
+fn visit_counts(history: &[HistoryEntry]) -> HashMap<&str, u64> {
+    let mut visits = HashMap::with_capacity(history.len());
+    for entry in history {
+        visits
+            .entry(entry.url.as_str())
+            .or_insert(entry.visit_count);
+    }
+    visits
 }
 
 fn site_detail(title: &str, url: &str) -> String {
