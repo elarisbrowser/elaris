@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 from . import dependencies, engine, packaging, ui
@@ -15,6 +16,7 @@ from .common import (
     ROOT,
     VCPKG_INSTALLED,
     bridge_files,
+    command_path,
     prepare_ladybird_paths,
     require,
     run,
@@ -34,6 +36,38 @@ def _profile(args: argparse.Namespace) -> str:
 def _default_channel(profile: str) -> str:
     """Development runs use the dev brand; release builds follow the package version."""
     return "dev" if profile == "debug" else packaging.macos_release_channel()
+
+
+def _run_with_live_log(*command: str, log_path: Path) -> None:
+    """Run a command while streaming a log file it writes to stdout and stderr."""
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text("", encoding="utf-8")
+    executable = command_path(command[0]) or command[0]
+    try:
+        process = subprocess.Popen((executable, *command[1:]))
+    except FileNotFoundError:
+        raise SystemExit(f"elaris: required command '{command[0]}' was not found") from None
+
+    try:
+        with log_path.open(encoding="utf-8", errors="replace") as log:
+            while process.poll() is None:
+                line = log.readline()
+                if line:
+                    sys.stdout.write(line)
+                    sys.stdout.flush()
+                else:
+                    time.sleep(0.05)
+            for line in log:
+                sys.stdout.write(line)
+                sys.stdout.flush()
+    except KeyboardInterrupt:
+        if process.poll() is None:
+            process.terminate()
+            process.wait()
+        raise
+
+    if process.returncode:
+        raise SystemExit(process.returncode)
 
 
 def _executable(profile: str) -> Path:
@@ -224,14 +258,18 @@ def launch(args: argparse.Namespace) -> None:
         app = executable.parents[2]
         extra = [*([args.url] if args.url else []), *args.rune_args]
         # Launch Services detaches the app's output, so keep it in a log beside the build.
-        log = str(ROOT / "build" / "elaris-run.log")
+        log = ROOT / "build" / "elaris-run.log"
         # Launch Services does not pass this shell's environment on, so forward the Elaris variables explicitly.
         environment = [item for name, value in sorted(os.environ.items()) if name.startswith("ELARIS_") for item in ("--env", f"{name}={value}")]
-        run(
+        command = (
             "open", "-W", "-a", str(app), *environment,
-            "--stdout", log, "--stderr", log,
+            "--stdout", str(log), "--stderr", str(log),
             *(["--args", *extra] if extra else []),
         )
+        if args.verbose:
+            _run_with_live_log(*command, log_path=log)
+        else:
+            run(*command)
         return
     if not args.linux_ui:
         if not _run_artifacts_are_current(ui_only, profile):
@@ -454,6 +492,13 @@ def register_commands(commands) -> None:
             subcommand.add_argument("--release", action="store_true", help="Build Elaris optimised (cargo --release)")
             subcommand.add_argument("--jobs", help="Parallel build jobs (default: ELARIS_JOBS or 4)")
         if handler is launch:
+            subcommand.add_argument(
+                "-v",
+                "--verbose",
+                action="store_true",
+                default=argparse.SUPPRESS,
+                help="Stream build output and application logs",
+            )
             subcommand.add_argument(
                 "--ui", action="store_true", help="Run the interface alone, without the Ladybird engine"
             )

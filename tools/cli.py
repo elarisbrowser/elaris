@@ -14,11 +14,13 @@ EXAMPLES = """\
 examples:
   ./elaris setup               install prerequisites and initialise Ladybird
   ./elaris run example.com     build if needed, then open a page
+  ./elaris run --verbose       stream build and application logs
   ./elaris check               format, lint, and test
   ./elaris clean               remove build and target folders
 
 Run './elaris <command> --help' for a command's options.
-Global options go before the command, for example './elaris --verbose build'.
+Global options go before the command, for example './elaris --verbose build'. The run command
+also accepts --verbose after the command.
 Set NO_COLOR=1 to turn off colour. Build logs are kept in build/logs/.
 """
 
@@ -35,7 +37,7 @@ def parser() -> argparse.ArgumentParser:
         "-v",
         "--verbose",
         action="store_true",
-        help="Stream every build line instead of showing a progress display",
+        help="Stream build output and, with run, application logs",
     )
     commands = cli.add_subparsers(dest="command", required=True)
     project.register_commands(commands)
