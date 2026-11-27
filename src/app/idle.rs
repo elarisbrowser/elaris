@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! An inactive window rests after a while and stays there until the user asks to resume it.
+//! An inactive window rests after a while and stays there until the user returns to it.
 
 use std::time::{Duration, Instant};
 
@@ -56,6 +56,7 @@ impl WindowIdle {
                 self.phase = Phase::Awake;
                 true
             }
+            (true, Phase::Idling) => self.begin_wake(now),
             (false, Phase::Waking { .. }) => {
                 self.phase = Phase::Idling;
                 true
@@ -82,6 +83,10 @@ impl WindowIdle {
         if !matches!(self.phase, Phase::Idling) {
             return false;
         }
+        self.begin_wake(now)
+    }
+
+    fn begin_wake(&mut self, now: Instant) -> bool {
         self.phase = Phase::Waking {
             until: now + RESUME_DELAY,
         };
@@ -112,7 +117,7 @@ impl AppState {
     }
 
     /// Pauses pages as soon as the window is off-screen or unfocused, then enters the idle view
-    /// after a grace period. An idling window stays there when it becomes active again.
+    /// after a grace period. Returning to an idling window starts a delayed resume.
     pub(crate) fn poll_idle(&mut self, tx: &mut Tx) -> bool {
         if self.is_mini() {
             return false;
@@ -124,6 +129,8 @@ impl AppState {
         if activity_changed && !active {
             tx.wake_after(INACTIVE_IDLE_AFTER);
             self.browser.suspend_window();
+        } else if activity_changed && active && self.idle.waking() {
+            tx.wake_after(RESUME_DELAY);
         } else if activity_changed && active && !self.idle.showing() {
             self.browser.resume_window();
         }
@@ -184,7 +191,7 @@ mod tests {
     }
 
     #[test]
-    fn activity_alone_does_not_wake_an_idling_window() {
+    fn returning_to_an_idling_window_starts_a_delayed_wake() {
         let now = Instant::now();
         let mut idle = WindowIdle::default();
 
@@ -192,7 +199,16 @@ mod tests {
         idle.advance(now + INACTIVE_IDLE_AFTER);
         idle.observe_activity(true, now + INACTIVE_IDLE_AFTER);
         assert!(idle.holds_browser());
-        assert!(!idle.waking());
+        assert!(idle.waking());
+        assert_eq!(
+            idle.advance(now + INACTIVE_IDLE_AFTER + RESUME_DELAY - Duration::from_millis(1)),
+            Transition::None
+        );
+        assert_eq!(
+            idle.advance(now + INACTIVE_IDLE_AFTER + RESUME_DELAY),
+            Transition::Resumed
+        );
+        assert!(!idle.holds_browser());
     }
 
     #[test]
