@@ -115,3 +115,7 @@ If you find Elaris useful, you can support its development through [GitHub Spons
 ## License
 
 Elaris is licensed under [GPL-3.0-only](LICENSE). Contributions are welcome under the same license. See [TRADEMARKS.md](TRADEMARKS.md) for branding guidance.
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=elarisbrowser/elaris&type=Date)](https://star-history.com/#elarisbrowser/elaris&Date)
