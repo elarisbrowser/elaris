@@ -116,8 +116,9 @@ impl AppState {
         self.idle.waking()
     }
 
-    /// Pauses pages as soon as the window is off-screen or unfocused, then enters the idle view
-    /// after a grace period. Returning to an idling window starts a delayed resume.
+    /// Pauses pages when the window is hidden or the app becomes inactive, then enters the idle
+    /// view after a grace period. On macOS, native UI can temporarily take key status while the
+    /// app remains active, so visible pages keep painting until the app itself deactivates.
     pub(crate) fn poll_idle(&mut self, tx: &mut Tx) -> bool {
         if self.is_mini() {
             return false;
