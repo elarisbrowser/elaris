@@ -311,6 +311,8 @@ pub struct Settings {
     /// The horizontal layout shows its bookmarks bar, when it holds bookmarks.
     pub bookmarks_bar: bool,
     pub window_decorations: WindowDecorations,
+    /// Whether development and alpha builds show their channel tag on the macOS Dock icon.
+    pub show_dock_tag: bool,
     pub split_view_limit: usize,
     pub appearance: Appearance,
     pub accent_color: AccentColor,
@@ -353,6 +355,7 @@ impl Default for Settings {
             page_style: PageStyle::default(),
             bookmarks_bar: true,
             window_decorations: WindowDecorations::default(),
+            show_dock_tag: true,
             split_view_limit: 2,
             appearance: Appearance::System,
             accent_color: AccentColor::Blue,
@@ -503,6 +506,10 @@ impl Settings {
     pub fn set_reduce_motion(&mut self, enabled: bool) {
         self.reduce_motion = enabled;
     }
+
+    pub fn set_show_dock_tag(&mut self, enabled: bool) {
+        self.show_dock_tag = enabled;
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -519,6 +526,7 @@ pub enum SettingsChange {
     PageStyle(PageStyle),
     BookmarksBar(bool),
     WindowDecorations(WindowDecorations),
+    ShowDockTag(bool),
     Appearance(Appearance),
     AccentColor(AccentColor),
     /// The provider's `[search].engine` key.

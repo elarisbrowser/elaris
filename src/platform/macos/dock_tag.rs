@@ -54,8 +54,17 @@ fn channel_tag() -> Option<&'static str> {
     }
 }
 
-/// Draws the app icon with the channel's tag into the Dock tile. Call once the app has finished launching.
-pub(crate) fn install() {
+/// Shows or removes the build channel tag on the Dock icon.
+pub(crate) fn set_enabled(enabled: bool) {
+    if enabled {
+        install();
+    } else {
+        remove();
+    }
+}
+
+/// Draws the app icon with the channel's tag into the Dock tile.
+fn install() {
     let Some(label) = channel_tag() else {
         return;
     };
@@ -82,6 +91,24 @@ pub(crate) fn install() {
         let Some(view) = view.as_ref() else { return };
         let _: () = msg_send![view, setFrame: NSRect::new(NSPoint::new(0.0, 0.0), size)];
         let _: () = msg_send![tile, setContentView: view];
+        let _: () = msg_send![tile, display];
+    }
+}
+
+/// Restores the Dock tile's default app icon after removing our custom content view.
+fn remove() {
+    let Some(app_class) = AnyClass::get("NSApplication") else {
+        return;
+    };
+    // SAFETY: documented AppKit methods, called on the main thread; the singleton and tile are
+    // checked before use. Passing nil to `setContentView:` restores the tile's default content.
+    unsafe {
+        let app: *mut AnyObject = msg_send![app_class, sharedApplication];
+        let Some(app) = app.as_ref() else { return };
+        let tile: *mut AnyObject = msg_send![app, dockTile];
+        let Some(tile) = tile.as_ref() else { return };
+        let nil: *mut AnyObject = std::ptr::null_mut();
+        let _: () = msg_send![tile, setContentView: nil];
         let _: () = msg_send![tile, display];
     }
 }

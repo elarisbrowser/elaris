@@ -8,7 +8,7 @@ use rune_kit::{Button, ButtonVariant};
 
 use crate::app::AppState;
 use crate::ui::components::menu::Dropdown;
-use crate::ui::components::widgets::{actions, row_title, setting};
+use crate::ui::components::widgets::{actions, row_title, setting, switch_kit};
 use crate::ui::internal::PageContext;
 use crate::ui::theme;
 use elaris_core::settings::StartupMode;
@@ -19,8 +19,30 @@ pub(super) fn sections(cx: &mut PageContext) -> Vec<El> {
     let mut sections = vec![startup(cx)];
     #[cfg(elaris_ui = "linux")]
     sections.push(window_frame(cx));
+    #[cfg(elaris_ui = "macos")]
+    sections.push(dock_icon(cx));
     sections.extend([default_browser(cx), configuration(cx)]);
     sections
+}
+
+#[cfg(elaris_ui = "macos")]
+fn dock_icon(cx: &mut PageContext) -> El {
+    let show_tag = rune_kit::Switch::new(cx.state.settings.show_dock_tag)
+        .standard()
+        .label("Show build tag")
+        .hide_label()
+        .on_toggle(|state: &mut AppState| state.set_show_dock_tag(!state.settings.show_dock_tag))
+        .build(&switch_kit(&cx.kit));
+    section(
+        "Dock Icon",
+        cx.theme,
+        [setting(
+            cx,
+            "Show build tag",
+            "Show the DEV or ALPHA label on the Elaris icon in the Dock.",
+            show_tag,
+        )],
+    )
 }
 
 #[cfg(elaris_ui = "linux")]

@@ -141,6 +141,9 @@ pub fn parse(contents: &str) -> Result<ConfigLoad, String> {
             ));
         }
     }
+    if let Some(value) = bool_value(&document, "macos", "show_dock_tag", &mut issues) {
+        settings.show_dock_tag = value;
+    }
     if let Some(value) = integer_value(&document, "split_view", "max_panes", &mut issues) {
         if (2..=64).contains(&value) {
             settings.split_view_limit = value as usize;

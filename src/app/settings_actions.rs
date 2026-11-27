@@ -259,6 +259,17 @@ impl super::AppState {
         self.save_setting(SettingsChange::Startup(startup));
     }
 
+    #[cfg(elaris_ui = "macos")]
+    pub(crate) fn set_show_dock_tag(&mut self, enabled: bool) {
+        if self.settings.show_dock_tag == enabled {
+            return;
+        }
+        self.settings.set_show_dock_tag(enabled);
+        #[cfg(target_os = "macos")]
+        crate::platform::macos::dock_tag::set_enabled(enabled);
+        self.save_setting(SettingsChange::ShowDockTag(enabled));
+    }
+
     pub(crate) fn set_glass_enabled(&mut self, enabled: bool) {
         if self.settings.glass_enabled == enabled {
             return;
@@ -481,8 +492,14 @@ impl super::AppState {
 
     pub(super) fn apply_config_load(&mut self, load: ConfigLoad) {
         let previous_download_directory = self.engine_download_directory();
+        #[cfg(target_os = "macos")]
+        let dock_tag_changed = self.settings.show_dock_tag != load.settings.show_dock_tag;
         self.prepare_chrome(&load.settings);
         self.settings = load.settings;
+        #[cfg(target_os = "macos")]
+        if dock_tag_changed {
+            crate::platform::macos::dock_tag::set_enabled(self.settings.show_dock_tag);
+        }
         self.browser.set_default_zoom(self.settings.page_zoom);
         self.browser.split_view_limit = self.settings.split_view_limit;
         super::publish_settings(&self.settings);

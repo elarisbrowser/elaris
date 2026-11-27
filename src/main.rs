@@ -40,7 +40,9 @@ fn main() {
         #[cfg(target_os = "macos")]
         {
             menu::install(app_handle.clone());
-            platform::macos::dock_tag::install();
+            app_handle.update(|state, _| {
+                platform::macos::dock_tag::set_enabled(state.settings.show_dock_tag);
+            });
         }
         start_window_workers(app_handle.clone());
         let wake_handle = app_handle.clone();

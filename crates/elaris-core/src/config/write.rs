@@ -153,6 +153,7 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
         SettingsChange::WindowDecorations(value) => {
             ("linux", "decorations", value.config_key().to_owned())
         }
+        SettingsChange::ShowDockTag(value) => ("macos", "show_dock_tag", value.to_string()),
         SettingsChange::SplitViewLimit(value) => {
             ("split_view", "max_panes", (*value).clamp(2, 64).to_string())
         }
@@ -216,6 +217,7 @@ pub fn write_change(path: &Path, change: &SettingsChange) -> Result<(), String> 
         || key == "compact_tabs"
         || key == "open_tab_on_startup"
         || key == "horizontal_address_bar_full_width"
+        || key == "show_dock_tag"
     {
         Value::from(value == "true")
     } else if matches!(key, "tint_opacity" | "grain" | "max_panes" | "zoom") {

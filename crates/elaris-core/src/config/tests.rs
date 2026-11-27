@@ -140,6 +140,31 @@ fn window_decorations_default_to_auto_and_round_trip() {
 }
 
 #[test]
+fn dock_tag_defaults_to_visible_and_round_trips() {
+    let directory = std::env::temp_dir().join(format!(
+        "elaris-config-dock-tag-{}-{}",
+        std::process::id(),
+        NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed)
+    ));
+    let path = directory.join("config.toml");
+    assert!(parse("").unwrap().settings.show_dock_tag);
+    for enabled in [false, true] {
+        write_change(&path, &SettingsChange::ShowDockTag(enabled)).unwrap();
+        assert_eq!(
+            parse(&fs::read_to_string(&path).unwrap())
+                .unwrap()
+                .settings
+                .show_dock_tag,
+            enabled
+        );
+    }
+    let invalid = parse("[macos]\nshow_dock_tag = \"yes\"").unwrap();
+    assert!(invalid.settings.show_dock_tag);
+    assert_eq!(invalid.issues.len(), 1);
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn page_style_defaults_to_card_and_round_trips() {
     let directory = std::env::temp_dir().join(format!(
         "elaris-config-page-style-{}-{}",
