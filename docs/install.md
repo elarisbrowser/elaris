@@ -11,8 +11,9 @@ Requirements: macOS 14.4 or newer, on an Apple Silicon Mac. Intel Macs are not s
 
 1. Open `Elaris-<version>-macos-arm64.dmg`.
 2. Drag **Elaris** into **Applications**.
-3. Open Elaris from Applications. The alpha build is not notarized, so macOS will refuse the first launch. Open
-   **System Settings → Privacy & Security**, find the message about Elaris, and choose **Open Anyway**.
+3. Open Elaris from Applications. The published `0.1.0-alpha.1` build is not notarized, so macOS may block the first
+   launch. Open **System Settings → Privacy & Security**, find the message about Elaris, and choose **Open Anyway**.
+   Future official releases use the signed and notarized workflow described in [the macOS signing guide](macos-signing.md).
 
 ## Linux (x86_64)
 

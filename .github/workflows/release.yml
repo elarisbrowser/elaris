@@ -9,6 +9,15 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      signing_mode:
+        description: "Use credential-free packaging preparation or exercise a signed release on main"
+        type: choice
+        options:
+          - test
+          - release
+        default: test
+        required: true
   workflow_call:
     inputs:
       channel:
@@ -44,12 +53,16 @@ jobs:
           cargo test --locked
       - name: Test release engine cache routing and manifest validation
         run: python3 -m unittest discover -s tools/tests -p test_release_engine.py
+      - name: Test macOS signing and publication safeguards
+        run: python3 -m unittest discover -s tools/tests -p test_macos_signing.py
 
   macos:
     name: macOS bundle (Apple Silicon)
     needs: verify
     runs-on: macos-26
     timeout-minutes: 300
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     env:
       ELARIS_BASELINE_CPU: "1"
       CCACHE_COMPILERCHECK: content
@@ -60,6 +73,35 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Restrict signed builds to trusted release refs
+        if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_call' || (github.event_name == 'workflow_dispatch' && inputs.signing_mode == 'release') }}
+        run: |
+          case "$GITHUB_EVENT_NAME" in
+            workflow_dispatch)
+              test "$GITHUB_REF" = refs/heads/main || {
+                echo "Signed manual builds may only run from trusted main." >&2
+                exit 1
+              }
+              ;;
+            workflow_call)
+              test "$GITHUB_REF" = refs/heads/main || {
+                echo "Reusable signed builds may only run from trusted main." >&2
+                exit 1
+              }
+              ;;
+            push)
+              if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+                git fetch --no-tags --unshallow origin main
+              else
+                git fetch --no-tags origin main
+              fi
+              git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD || {
+                echo "A signed version tag must point to a commit contained in main." >&2
+                exit 1
+              }
+              ;;
+          esac
 
       - name: Require Xcode 26 or newer
         run: |
@@ -98,14 +140,17 @@ jobs:
           restore-keys: ${{ steps.native-cache-key.outputs.prefix }}-
 
       - name: Name this build
+        id: version
         env:
           CHANNEL: ${{ inputs.channel }}
         run: |
           if [ "$CHANNEL" = canary ]; then
-            echo "ELARIS_VERSION=canary-$(date -u +%Y%m%d)-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+            version="canary-$(date -u +%Y%m%d)-${GITHUB_SHA::7}"
           else
-            echo "ELARIS_VERSION=${GITHUB_REF_NAME:-dev}" >> "$GITHUB_ENV"
+            version="${GITHUB_REF_NAME:-dev}"
           fi
+          echo "ELARIS_VERSION=$version" >> "$GITHUB_ENV"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Identify exact Ladybird build inputs
         id: engine-key
@@ -157,12 +202,15 @@ jobs:
       - name: Verify the bundle is self-contained
         run: |
           app=build/Elaris.app
-          codesign --verify --deep --strict "$app"
+          codesign --verify --strict "$app"
           plutil -lint "$app/Contents/Info.plist"
           if otool -l "$app/Contents/MacOS/elaris" | grep -q "$GITHUB_WORKSPACE"; then
             echo "The bundle still points into the build tree" >&2
             exit 1
           fi
+
+      - name: Smoke test Ladybird runtime and helper processes
+        run: ctest --test-dir build/cpp-ladybird --output-on-failure -R 'elaris_ladybird_(smoke|engine_features|download_smoke)'
 
       - name: Save verified Ladybird release outputs
         if: ${{ steps.engine-key.outputs.key != '' && steps.engine-cache.outputs.cache-hit != 'true' && hashFiles('build/release-engine-cache/manifest.json') != '' }}
@@ -171,40 +219,118 @@ jobs:
           path: build/release-engine-cache
           key: ${{ steps.engine-key.outputs.key }}
 
-      - name: Package a disk image and checksums
+      - name: Stage production release entitlements and inspect signing plan
         run: |
-          version="$ELARIS_VERSION"
-          mkdir -p dist
-          brew install create-dmg
-          image="dist/Elaris-${version}-macos-arm64.dmg"
-          packaging/macos/make-dmg.sh build/Elaris.app "$image" Elaris
-          cat > dist/BUILD-INFO.txt <<EOF
-          Elaris ${version} (macOS arm64)
+          mkdir -p build/signing-entitlements
+          count=0
+          for source in build/cpp-ladybird/Services/*/*.release.entitlements; do
+            [ -f "$source" ] || continue
+            name="$(basename "$source" .release.entitlements)"
+            cp "$source" "build/signing-entitlements/$name.entitlements"
+            count=$((count + 1))
+          done
+          test "$count" -gt 0 || {
+            echo "Ladybird did not produce release entitlements" >&2
+            exit 1
+          }
+          python3 packaging/macos/signing.py prepare \
+            --app build/Elaris.app \
+            --entitlements-dir build/signing-entitlements
+          cat > build/BUILD-INFO.txt <<EOF
+          Elaris ${ELARIS_VERSION} (macOS arm64)
           Elaris commit: ${GITHUB_SHA}
           Ladybird commit: $(git rev-parse HEAD:vendor/ladybird)
           Rune revision: $(grep -m1 'rev = ' Cargo.toml | sed 's/.*"\(.*\)".*/\1/')
           Xcode: $(xcodebuild -version | tr '\n' ' ')
           EOF
           if [ -f build/release-engine-info.txt ]; then
-            cat build/release-engine-info.txt >> dist/BUILD-INFO.txt
+            cat build/release-engine-info.txt >> build/BUILD-INFO.txt
           else
-            echo "Native engine: built natively (exact cache unavailable)" >> dist/BUILD-INFO.txt
+            echo "Native engine: built natively (exact cache unavailable)" >> build/BUILD-INFO.txt
           fi
-          (cd dist && shasum -a 256 "$(basename "$image")" > "$(basename "$image").sha256")
-          cp dist/BUILD-INFO.txt dist/Elaris-${version}-macos-arm64.BUILD-INFO.txt
 
-      - name: Keep the app bundle even if packaging failed
-        if: always()
+      - name: Package an unsigned test image
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.signing_mode == 'test' }}
+        run: |
+          mkdir -p dist
+          brew install create-dmg
+          image="dist/Elaris-${ELARIS_VERSION}-macos-arm64-unsigned-test.dmg"
+          packaging/macos/make-dmg.sh build/Elaris.app "$image" Elaris
+          echo "Package status: unsigned development test image; not for distribution" > dist/BUILD-INFO.txt
+          cat build/BUILD-INFO.txt >> dist/BUILD-INFO.txt
+          cp dist/BUILD-INFO.txt "dist/Elaris-${ELARIS_VERSION}-macos-arm64-unsigned-test.BUILD-INFO.txt"
+
+      - name: Upload the credential-free test package
+        if: ${{ success() && github.event_name == 'workflow_dispatch' && inputs.signing_mode == 'test' }}
         uses: actions/upload-artifact@v4
         with:
-          name: elaris-macos-arm64-build
-          path: build/Elaris.app
-          if-no-files-found: ignore
-          retention-days: 7
+          name: elaris-macos-arm64-test
+          path: dist/
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Archive the app and its release entitlements for the signing job
+        if: ${{ success() && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_call' || (github.event_name == 'workflow_dispatch' && inputs.signing_mode == 'release')) }}
+        run: tar -cf "$RUNNER_TEMP/elaris-macos-signing-input.tar" -C build Elaris.app signing-entitlements BUILD-INFO.txt
+
+      - name: Upload the short-lived signing input
+        if: ${{ success() && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_call' || (github.event_name == 'workflow_dispatch' && inputs.signing_mode == 'release')) }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: elaris-macos-signing-input
+          path: ${{ runner.temp }}/elaris-macos-signing-input.tar
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+  macos-sign:
+    name: Sign and notarize macOS release
+    needs: macos
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_call' || (github.event_name == 'workflow_dispatch' && inputs.signing_mode == 'release') }}
+    runs-on: macos-26
+    timeout-minutes: 90
+    environment: apple-signing
+    env:
+      ELARIS_VERSION: ${{ needs.macos.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: elaris-macos-signing-input
+          path: ${{ runner.temp }}/signing-input
+
+      - name: Restore the assembled app and release entitlements
+        run: |
+          mkdir -p build
+          tar -xf "$RUNNER_TEMP/signing-input/elaris-macos-signing-input.tar" -C build
+
+      - name: Prepare release metadata
+        run: mkdir -p dist && cp build/BUILD-INFO.txt dist/BUILD-INFO.txt
+
+      - name: Install DMG packaging tool
+        run: brew install create-dmg
+
+      - name: Sign, package, notarize, staple and verify
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          python3 packaging/macos/signing.py release \
+            --app build/Elaris.app \
+            --entitlements-dir build/signing-entitlements \
+            --dmg "dist/Elaris-${ELARIS_VERSION}-macos-arm64.dmg" \
+            --volume-name Elaris
+
+      - name: Verify release files before upload
+        run: python3 packaging/macos/verify_release_artifacts.py --directory dist
 
       - uses: actions/upload-artifact@v4
         with:
-          name: elaris-macos-arm64
+          name: elaris-macos-arm64-signed
           path: dist/
           if-no-files-found: error
           retention-days: 14
@@ -459,20 +585,25 @@ jobs:
 
   publish:
     name: Publish draft pre-release
-    needs: [macos, linux]
+    needs: [macos-sign, linux]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
-          name: elaris-macos-arm64
+          name: elaris-macos-arm64-signed
           path: dist/macos
       - uses: actions/download-artifact@v4
         with:
           name: elaris-linux-x86_64
           path: dist/linux
+
+      - name: Require a notarized macOS release package
+        run: python3 packaging/macos/verify_release_artifacts.py --directory dist/macos
 
       - name: Create a draft pre-release with the artifacts
         env:
@@ -508,20 +639,25 @@ jobs:
 
   publish-canary:
     name: Publish rolling canary pre-release
-    needs: [macos, linux]
+    needs: [macos-sign, linux]
     if: inputs.channel == 'canary'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
-          name: elaris-macos-arm64
+          name: elaris-macos-arm64-signed
           path: dist/macos
       - uses: actions/download-artifact@v4
         with:
           name: elaris-linux-x86_64
           path: dist/linux
+
+      - name: Require a notarized macOS canary package
+        run: python3 packaging/macos/verify_release_artifacts.py --directory dist/macos
 
       - name: Replace the canary pre-release with tonight's builds
         env:
