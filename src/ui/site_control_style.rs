@@ -6,19 +6,18 @@
 use rune::Color;
 
 pub(crate) const WIDTH: f32 = 280.0;
-pub(crate) const OUTER_RADIUS: f32 = 20.0;
-pub(crate) const PADDING: f32 = 8.0;
-pub(crate) const ACTION_HEIGHT: f32 = 34.0;
-pub(crate) const ACTION_GAP: f32 = 6.0;
-pub(crate) const ACTION_RADIUS: f32 = 12.0;
-pub(crate) const ROW_HEIGHT: f32 = 40.0;
-pub(crate) const ICON_CIRCLE: f32 = 28.0;
-pub(crate) const GLYPH: f32 = 16.0;
-pub(crate) const ROW_GLYPH: f32 = 11.0;
+pub(crate) const OUTER_RADIUS: f32 = 16.0;
+pub(crate) const PADDING: f32 = 10.0;
+pub(crate) const ACTION_HEIGHT: f32 = 32.0;
+pub(crate) const ACTION_GAP: f32 = 5.0;
+pub(crate) const ACTION_RADIUS: f32 = 9.0;
+pub(crate) const ROW_HEIGHT: f32 = 36.0;
+pub(crate) const GLYPH: f32 = 15.0;
+pub(crate) const ROW_GLYPH: f32 = 14.0;
 pub(crate) const ROW_RADIUS: f32 = 8.0;
-pub(crate) const ROW_GAP: f32 = 2.0;
+pub(crate) const ROW_GAP: f32 = 3.0;
 pub(crate) const SECTION_GAP: f32 = 12.0;
-pub(crate) const FOOTER_HEIGHT: f32 = 28.0;
+pub(crate) const FOOTER_HEIGHT: f32 = 32.0;
 
 #[cfg(test)]
 mod tests {

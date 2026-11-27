@@ -32,7 +32,7 @@ pub(super) fn popover(
         .continuous_corners()
         .fill(theme.overlay_panel)
         .border(1.0, theme.overlay_border)
-        .shadow(9.0, 22.0, theme.overlay_shadow)
+        .shadow(8.0, 18.0, theme.overlay_shadow)
         .transition(theme::overlay_reveal(reduced_motion))
         .token_motion(if reduced_motion {
             Spring::NONE
@@ -64,11 +64,12 @@ pub(super) fn popover(
         .child(
             text("This site")
                 .key("site-controls-heading")
-                .font(rune::TextStyle::new(12.0, 600.0))
+                .font(rune::TextStyle::new(14.0, 600.0).lh(18.0))
                 .color(theme.text)
                 .px(6.0)
                 .mt(design::SECTION_GAP)
-                .mb(4.0),
+                .mb(6.0)
+                .role("heading"),
         );
 
     if presentation.origin.is_some() {
@@ -254,16 +255,18 @@ fn action_tiles(
             .h(design::ACTION_HEIGHT)
             .center()
             .radius(design::ACTION_RADIUS)
-            .fill(theme.overlay_selected)
-            .hover(theme.hover)
+            .fill(theme.overlay_control)
+            .hover(theme.overlay_control_hover)
             .press(theme.press)
             .press_scale(theme::PRESS_SCALE)
+            .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
             .label(action.label())
             .help(if confirmed {
                 action.confirmation().unwrap_or(action.label())
             } else {
                 action.label()
             })
+            .help_side(rune::Side::Right)
             .help_open(confirmed)
             .role("button")
             .focusable(true)
@@ -326,6 +329,7 @@ fn permission_row(theme: &Theme, kind: PermissionKind, permission: PermissionSta
         permission == PermissionState::Allow,
     )
     .help("Choose Ask, Allow or Block")
+    .help_side(rune::Side::Right)
     .on_press(move |state: &mut AppState| state.permission_menu = Some(kind))
     .on_layout_tx(move |state: &mut AppState, rect, tx| {
         state.permission_row_anchors[kind.index()] = Some(rect);
@@ -350,6 +354,7 @@ fn autoplay_row(theme: &Theme, presentation: &SiteControlPresentation) -> El {
         policy == AutoplayPolicy::Allow,
     )
     .help("Choose whether this site may start media on its own")
+    .help_side(rune::Side::Right)
     .on_press(|state: &mut AppState| state.autoplay_menu_open = true)
     .on_layout_tx(|state: &mut AppState, rect, tx| {
         state.autoplay_row_anchor = Some(rect);
@@ -357,7 +362,7 @@ fn autoplay_row(theme: &Theme, presentation: &SiteControlPresentation) -> El {
     })
 }
 
-/// A site setting row: a glyph that fills when the site is allowed, its name and current value.
+/// A site setting row: an icon, its name and current value, and a cue that it can be changed.
 fn setting_row(
     theme: &Theme,
     key: String,
@@ -366,48 +371,36 @@ fn setting_row(
     label: &str,
     active: bool,
 ) -> El {
-    let circle = if active {
-        theme.text
-    } else {
-        theme.overlay_selected
-    };
-    let glyph_color = if active {
-        theme.overlay_panel
-    } else {
-        theme.text_muted
-    };
+    let glyph_color = if active { theme.accent } else { theme.icon };
     row()
         .key(key)
         .w_full()
         .h(design::ROW_HEIGHT)
-        .px(6.0)
+        .pl(8.0)
+        .pr(6.0)
         .gap(10.0)
         .center_y()
         .radius(design::ROW_RADIUS)
         .hover(theme.hover)
         .press(theme.press)
-        .child(
-            el().size(design::ICON_CIRCLE, design::ICON_CIRCLE)
-                .center()
-                .radius(design::ICON_CIRCLE / 2.0)
-                .fill(circle)
-                .child(icon(glyph, design::ROW_GLYPH).color(glyph_color)),
-        )
+        .focus_ring(theme::FOCUS_WIDTH, 1.0, theme.focus)
+        .child(icon(glyph, design::ROW_GLYPH).color(glyph_color))
         .child(
             rune::col()
                 .grow(1.0)
-                .gap(1.0)
+                .gap(0.0)
                 .child(
                     text(title.to_owned())
-                        .font(rune::TextStyle::new(12.5, 500.0))
+                        .font(rune::TextStyle::new(13.0, 550.0).lh(16.0))
                         .color(theme.text),
                 )
                 .child(
                     text(label.to_owned())
-                        .font(rune::TextStyle::new(11.5, 400.0))
+                        .font(rune::TextStyle::new(11.5, 400.0).lh(14.0))
                         .color(theme.text_muted),
                 ),
         )
+        .child(icon(&icons::CHEVRON_RIGHT, 11.0).color(theme.text_muted))
         .role("button")
         .label(format!("{title}, {label}"))
         .focusable(true)
