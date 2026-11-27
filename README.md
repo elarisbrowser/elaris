@@ -118,4 +118,10 @@ Elaris is licensed under [GPL-3.0-only](LICENSE). Contributions are welcome unde
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=elarisbrowser/elaris&type=Date)](https://star-history.com/#elarisbrowser/elaris&Date)
+<a href="https://www.star-history.com/?repos=elarisbrowser%2Felaris&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=elarisbrowser/elaris&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=elarisbrowser/elaris&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=elarisbrowser/elaris&type=date&legend=top-left" />
+ </picture>
+</a>
