@@ -124,7 +124,13 @@ impl AppState {
         }
 
         let now = Instant::now();
-        let active = tx.window_visible() && self.browser.window_focused();
+        let window_focused = self.browser.window_focused();
+        #[cfg(target_os = "macos")]
+        let application_active =
+            !window_focused && crate::platform::macos::window::application_active();
+        #[cfg(not(target_os = "macos"))]
+        let application_active = false;
+        let active = browser_window_active(tx.window_visible(), window_focused, application_active);
         let activity_changed = self.idle.observe_activity(active, now);
         if activity_changed && !active {
             tx.wake_after(INACTIVE_IDLE_AFTER);
@@ -155,6 +161,10 @@ impl AppState {
             tx.wake_after(RESUME_DELAY);
         }
     }
+}
+
+fn browser_window_active(visible: bool, focused: bool, application_active: bool) -> bool {
+    visible && (focused || (cfg!(target_os = "macos") && application_active))
 }
 
 #[cfg(test)]
@@ -226,5 +236,15 @@ mod tests {
             Transition::Resumed
         );
         assert!(!idle.holds_browser());
+    }
+
+    #[test]
+    fn native_ui_keeps_pages_visible_while_the_mac_app_is_active() {
+        assert_eq!(
+            browser_window_active(true, false, true),
+            cfg!(target_os = "macos")
+        );
+        assert!(!browser_window_active(false, false, true));
+        assert!(!browser_window_active(true, false, false));
     }
 }
