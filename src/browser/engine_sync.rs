@@ -336,10 +336,12 @@ impl Browser {
             let id = tab.id();
             // A Peek card scales its page, which a layer of its own can't follow; once promoted
             // to a tab, the page moves to one.
-            let hosted = !window.suspended
-                && hosted_pages_allowed
-                && peek_id != Some(id)
-                && tab.surface.hosts_layer();
+            let hosted = should_host_layer(
+                hosted_pages_allowed,
+                peek_id == Some(id),
+                tab.surface.hosts_layer(),
+                window.suspended,
+            );
             let active = input_page == Some(id);
             let side = panes.iter().position(|pane| *pane == Some(id));
             let is_peek = peek_id == Some(id);
@@ -424,6 +426,20 @@ impl Browser {
     }
 }
 
+fn should_host_layer(
+    hosted_pages_allowed: bool,
+    is_peek: bool,
+    surface_can_host: bool,
+    window_suspended: bool,
+) -> bool {
+    hosted_pages_allowed
+        && !is_peek
+        && surface_can_host
+        // A macOS CALayerHost holds the page's only visible frame. Keep it attached while a
+        // native popup temporarily makes the window resign key; visibility still pauses painting.
+        && (cfg!(target_os = "macos") || !window_suspended)
+}
+
 /// Opens a sleeping tab's view again, as it was set up before it slept. Its page loads once the
 /// view has a viewport, as a first page does.
 fn wake(
@@ -444,4 +460,24 @@ fn wake(
         engine.send(Command::View(id, ViewCommand::SetAccessibility(true)));
     }
     tab.engine.deferred_load = false;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_host_layer;
+
+    #[test]
+    fn suspension_keeps_a_mac_page_layer_attached() {
+        assert_eq!(
+            should_host_layer(true, false, true, true),
+            cfg!(target_os = "macos")
+        );
+    }
+
+    #[test]
+    fn page_layer_requirements_still_apply_while_suspended() {
+        assert!(!should_host_layer(false, false, true, true));
+        assert!(!should_host_layer(true, true, true, true));
+        assert!(!should_host_layer(true, false, false, true));
+    }
 }
