@@ -41,7 +41,7 @@ jobs:
   canary:
     name: Build canary
     needs: changed
-    if: needs.changed.outputs.changed == 'true'
+    if: needs.changed.outputs.changed == 'true' && github.ref == 'refs/heads/main'
     uses: ./.github/workflows/release.yml
     with:
       channel: canary

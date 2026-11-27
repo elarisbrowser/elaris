@@ -1,19 +1,23 @@
 # Release procedure
 
 The `Release` workflow (`.github/workflows/release.yml`) builds the macOS and Linux bundles, each with Ladybird's
-engine, and attaches them to a **draft pre-release**. Nothing is public until someone checks the artifacts and
-publishes the draft by hand.
+engine, and attaches them to a **draft pre-release**. The macOS artifact is Developer ID signed, notarized, stapled,
+and verified before upload. Nothing is public until someone checks the artifacts and publishes the draft by hand.
 
 ## Cut a release
 
 1. Set the version in `Cargo.toml`, then merge it to `main` with CI green.
 2. Tag the commit with a version such as `v0.1.0-alpha.1` and push the tag.
 3. Wait for the `Release` workflow. `verify` runs formatting, Clippy and tests, then the `macos` and `linux` jobs
-   build, smoke-test and package each platform.
-4. Download each artifact's `.sha256` file and check it, then run the browser from its archive on a clean machine.
+   build, smoke-test and package each platform. The macOS signing job needs the protected `apple-signing` environment
+   and fails if any Apple credential is missing or invalid.
+4. Download each artifact's `.sha256` file and check it. Also validate the macOS DMG's stapled ticket, then run the
+   browser from its archive on a clean machine; see [macOS code signing and notarization](macos-signing.md).
 5. Publish the draft on GitHub, with the release notes listing the known limitations below.
 
-`workflow_dispatch` runs the same jobs for a chosen branch and uploads the artifacts without creating a release.
+`workflow_dispatch` defaults to `test`: it runs the macOS smoke tests and signing-plan inspection, then uploads an
+explicitly named unsigned test DMG without Apple credentials. Selecting `release` runs the signed macOS path from
+trusted `main` but still does not create a GitHub release.
 
 ## Fast rebuilds
 
@@ -25,7 +29,8 @@ checks and smoke tests still run.
 
 - The engine key covers the Ladybird pin, bridge and native build inputs, portable CPU flags, runner toolchain
   and ABI, and the Chromium HSTS preload data CMake embeds. A normal Rust-only edit does not invalidate it,
-  but changing the Cargo package version does because LibWebView embeds that version.
+  but changing the Cargo package version does because LibWebView embeds that version. Signing scripts and credential
+  changes do not invalidate the Ladybird build cache.
 - If the engine key is missing, the existing build runs with the usual compiler and vcpkg caches. If a restored
   engine is incomplete or corrupt, the workflow logs why and builds native code instead. Use **Actions →
   Caches** to remove a bad exact key before warming it again; GitHub cannot overwrite an existing key.
@@ -61,7 +66,7 @@ bundle version fields accept only numbers and dots.
 
 | Platform | File | Contents |
 | --- | --- | --- |
-| macOS, Apple Silicon | `Elaris-<version>-macos-arm64.dmg` | `Elaris.app`: the browser, Ladybird's helper processes, its resources, and the libraries it links, ad-hoc signed |
+| macOS, Apple Silicon | `Elaris-<version>-macos-arm64.dmg` | `Elaris.app`: browser, Ladybird helpers, resources, and linked libraries, Developer ID signed and notarized; the DMG ticket is stapled |
 | Linux, x86_64 | `Elaris-<version>-linux-x86_64.tar.gz` | A prefix tree: `bin/elaris`, `libexec/` helpers, `lib/` libraries, `share/` resources, desktop entry and icons |
 | Linux, x86_64 | `Elaris-<version>-linux-x86_64.AppImage` | Portable AppImage built from the same tested prefix tree, with Ladybird resources and bundled libraries |
 
@@ -70,8 +75,11 @@ commit, the Rune revision, and the toolchain used.
 
 ## Limitations of this release process
 
-- Apple builds are ad-hoc signed. They are not notarized, so Gatekeeper will ask for approval on first launch.
-- macOS builds target Apple Silicon only. Intel Macs are not supported for the alpha, and Linux ARM64 is not built.
+- macOS releases target Apple Silicon only. Signed distribution requires the Apple Developer membership and protected
+  `apple-signing` secrets described in [the signing guide](macos-signing.md); release signing intentionally fails closed
+  until those credentials are configured.
+- Intel Macs are not supported for the alpha, and Linux ARM64 is not built. The signing script discovers Mach-O
+  architectures at runtime and does not assume arm64.
 - The minimum macOS version is 14.4, the lowest version Ladybird supports.
 - Linux needs a Vulkan driver at run time, which the system's GPU driver or Mesa provides.
 - The Linux x86_64 release is built on Ubuntu 24.04 and checks that bundled ELF files require no newer than glibc 2.39.
