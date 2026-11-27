@@ -10,6 +10,7 @@
 
 //! Elaris-owned data paths, history worker, and versioned session files.
 
+mod browsing_data;
 mod history;
 mod history_cache;
 mod queue;

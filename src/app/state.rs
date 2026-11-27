@@ -66,6 +66,10 @@ pub(crate) struct AppState {
     /// Identifies asynchronous selected-text reads so previous tabs cannot seed this query.
     pub(super) find_selection_request: u64,
     pub(crate) settings: Settings,
+    /// The last measured size of the persistent web profile and browsing history.
+    pub(crate) browsing_data_size_bytes: Option<u64>,
+    /// When the active privacy settings page should request another size measurement.
+    pub(super) browsing_data_refresh_at: f64,
     /// Why the last submitted query could not be opened, until the next is.
     pub(crate) address_error: Option<String>,
     pub(crate) browser: Browser,

@@ -5,6 +5,7 @@ use rune::Tx;
 use super::super::{APP_NAME, AppState};
 use crate::storage;
 use crate::tab::{Tab, TabId};
+use elaris_core::internal::{InternalPage, InternalRoute};
 
 /// Rune's per-frame hook: forwards UI changes to the browser and shows what it reported.
 pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
@@ -76,6 +77,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     update_find_selection(state, &polled);
     let tab_drag_changed = update_tab_drag(state, clock, tx);
     let configuration_changed = update_configuration(state, &polled);
+    let browsing_data_changed = update_browsing_data_size(state, clock, tx);
     let shared_settings_changed = state.sync_shared_settings();
     let shared_permissions_changed = state.sync_shared_permissions();
     for (origin, kind, permission) in std::mem::take(&mut polled.permission_choices) {
@@ -132,12 +134,38 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         || toast_settled
         || focus_changed
         || configuration_changed
+        || browsing_data_changed
         || shared_settings_changed
         || shared_permissions_changed
         || context_menu_changed
         || switcher_changed
         || tab_drag_changed;
     idle_changed || (changed && !state.idling())
+}
+
+fn update_browsing_data_size(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
+    let showing_privacy_settings = state.page_category == Some("settings-privacy")
+        && state.browser.active_tab().is_some_and(|tab| {
+            tab.internal.as_ref() == Some(&InternalRoute::Page(InternalPage::Settings))
+        });
+    if showing_privacy_settings && clock >= state.browsing_data_refresh_at {
+        const REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+        state.browsing_data_refresh_at = clock + REFRESH_INTERVAL.as_secs_f64();
+        tx.wake_after(REFRESH_INTERVAL);
+        if let Some(storage) = &state.storage {
+            storage.request_browsing_data_size();
+        }
+    }
+
+    let size = state
+        .storage
+        .as_ref()
+        .and_then(|storage| storage.browsing_data_size());
+    if state.browsing_data_size_bytes == size {
+        return false;
+    }
+    state.browsing_data_size_bytes = size;
+    true
 }
 
 /// Gives each popup a mini window. Headless tooling opens no windows, so a popup is a tab there.

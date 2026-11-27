@@ -3,6 +3,7 @@
 //! The `Storage` handle the app uses to read launch state and queue asynchronous saves.
 
 use std::io;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -33,6 +34,9 @@ pub(crate) struct Storage {
     metrics: Arc<QueueMetrics>,
     history: HistoryHandle,
     config_events: Arc<Mutex<Vec<ConfigEvent>>>,
+    browsing_data_size: Arc<Mutex<Option<u64>>>,
+    browsing_data_requested_at: Mutex<Option<std::time::Instant>>,
+    browsing_data_measurement_pending: Arc<AtomicBool>,
 }
 
 pub(crate) enum ConfigEvent {
@@ -73,6 +77,11 @@ impl Storage {
         let worker_shared = Arc::clone(&shared);
         let config_events = Arc::new(Mutex::new(Vec::new()));
         let worker_config_events = Arc::clone(&config_events);
+        let browsing_data_size = Arc::new(Mutex::new(None));
+        let worker_browsing_data_size = Arc::clone(&browsing_data_size);
+        let browsing_data_measurement_pending = Arc::new(AtomicBool::new(false));
+        let worker_browsing_data_measurement_pending =
+            Arc::clone(&browsing_data_measurement_pending);
         let worker_metrics = Arc::clone(&metrics);
         let worker_paths = paths.clone();
         let download_history = elaris_core::download_history::load(&paths.download_history_file)
@@ -93,6 +102,8 @@ impl Storage {
                     worker_paths,
                     worker_config_events,
                     worker_metrics,
+                    worker_browsing_data_size,
+                    worker_browsing_data_measurement_pending,
                 );
             })?;
         register_worker(commands.clone(), Arc::clone(&metrics), worker);
@@ -109,6 +120,9 @@ impl Storage {
                 shared,
             },
             config_events,
+            browsing_data_size,
+            browsing_data_requested_at: Mutex::new(None),
+            browsing_data_measurement_pending,
         })
     }
 
@@ -195,6 +209,43 @@ impl Storage {
                 .lock()
                 .expect("configuration event lock poisoned"),
         )
+    }
+
+    /// Requests an asynchronous size measurement of the web profile and browsing history.
+    pub(crate) fn request_browsing_data_size(&self) {
+        const REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+        let now = std::time::Instant::now();
+        let mut requested_at = self
+            .browsing_data_requested_at
+            .lock()
+            .expect("browsing data request lock poisoned");
+        if requested_at.is_some_and(|previous| now.duration_since(previous) < REFRESH_INTERVAL) {
+            return;
+        }
+        if self
+            .browsing_data_measurement_pending
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            return;
+        }
+        *requested_at = Some(now);
+        if self
+            .metrics
+            .enqueue(&self.commands, Command::MeasureBrowsingData)
+            .is_err()
+        {
+            self.browsing_data_measurement_pending
+                .store(false, Ordering::Release);
+            *requested_at = None;
+        }
+    }
+
+    pub(crate) fn browsing_data_size(&self) -> Option<u64> {
+        *self
+            .browsing_data_size
+            .lock()
+            .expect("browsing data size lock poisoned")
     }
 
     pub(crate) fn save_sessions_for_launch(

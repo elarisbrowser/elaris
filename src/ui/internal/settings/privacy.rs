@@ -2,7 +2,8 @@
 
 //! Browsing data and content blocking preferences.
 
-use rune::El;
+use rune::tok::type_;
+use rune::{El, text};
 use rune_kit::{Button, ButtonVariant};
 
 use crate::app::{self, AppState};
@@ -49,11 +50,37 @@ fn browsing_data(cx: &mut PageContext) -> El {
         .clear_data_status
         .as_deref()
         .unwrap_or("Remove history, cookies and site data, cached files and download history.");
+    let usage = cx
+        .state
+        .browsing_data_size_bytes
+        .map_or_else(|| "Calculating…".to_owned(), format_data_size);
+    let usage = text(format!(
+        "Your browsing data is currently using {usage} of disk space"
+    ))
+    .font(type_::BODY)
+    .color(cx.theme.text)
+    .wrap()
+    .key("settings-browsing-data-size");
     section(
         "Browsing data",
         cx.theme,
-        [setting(cx, "Clear browsing data", description, open)],
+        [usage, setting(cx, "Clear browsing data", description, open)],
     )
+}
+
+fn format_data_size(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+    let mut amount = bytes as f64;
+    let mut unit = 0;
+    while amount >= 1024.0 && unit < UNITS.len() - 1 {
+        amount /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} B")
+    } else {
+        format!("{amount:.1} {}", UNITS[unit])
+    }
 }
 
 fn content_blocking(cx: &mut PageContext) -> El {

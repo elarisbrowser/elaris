@@ -146,6 +146,8 @@ impl AppState {
             find_tab: None,
             find_selection_request: 0,
             settings,
+            browsing_data_size_bytes: None,
+            browsing_data_refresh_at: 0.0,
             address_error: None,
             browser: Browser::default(),
             downloads_open: false,

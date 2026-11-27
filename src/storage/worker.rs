@@ -2,6 +2,7 @@
 
 //! The storage worker thread: its command protocol, registry, and command loop.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex, Once};
 use std::thread::JoinHandle;
@@ -12,6 +13,7 @@ use elaris_core::paths::{Paths, display_path};
 use elaris_core::permissions::{PermissionKind, PermissionState};
 use elaris_core::settings::SettingsChange;
 
+use super::browsing_data;
 use super::history::{HistoryEvent, HistoryMutation};
 use super::history_cache::{
     SharedHistory, notify, publish_history, refresh_history, update_search_cache,
@@ -42,6 +44,7 @@ pub(super) enum Command {
     SaveDownloads(String),
     /// The bookmarks as `Bookmarks::encode` wrote them.
     SaveBookmarks(String),
+    MeasureBrowsingData,
     ReloadConfig,
     Flush(Sender<()>),
     Shutdown,
@@ -98,9 +101,12 @@ pub(super) fn run_worker(
     paths: Paths,
     config_events: Arc<Mutex<Vec<ConfigEvent>>>,
     metrics: Arc<QueueMetrics>,
+    browsing_data_size: Arc<Mutex<Option<u64>>>,
+    browsing_data_measurement_pending: Arc<AtomicBool>,
 ) {
     let Paths {
         history_file,
+        profile_dir,
         session_file,
         config_file,
         download_history_file,
@@ -269,6 +275,32 @@ pub(super) fn run_worker(
                     "downloads",
                 ) {
                     eprintln!("Elaris: could not save download history: {error}");
+                }
+            }
+            Command::MeasureBrowsingData => {
+                let profile_dir = profile_dir.clone();
+                let history_file = history_file.clone();
+                let download_history_file = download_history_file.clone();
+                let browsing_data_size = Arc::clone(&browsing_data_size);
+                let measurement_pending = Arc::clone(&browsing_data_measurement_pending);
+                let measurement_shared = Arc::clone(&shared);
+                if let Err(error) = std::thread::Builder::new()
+                    .name("elaris-data-size".to_owned())
+                    .spawn(move || {
+                        let size = browsing_data::measure(
+                            &profile_dir,
+                            &history_file,
+                            &download_history_file,
+                        );
+                        *browsing_data_size
+                            .lock()
+                            .expect("browsing data size lock poisoned") = Some(size);
+                        measurement_pending.store(false, Ordering::Release);
+                        notify(&measurement_shared);
+                    })
+                {
+                    browsing_data_measurement_pending.store(false, Ordering::Release);
+                    eprintln!("Elaris: cannot start browsing data size measurement: {error}");
                 }
             }
             Command::SaveAutoplay(origin, policy) => {
