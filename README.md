@@ -48,7 +48,7 @@ For UI work without building the engine, use `./elaris run --ui`. Add `--release
 
 On Linux, the toolbar slides in when the pointer reaches the top of the window. Set `ELARIS_LINUX_TITLEBAR=always` to keep it visible.
 
-Elaris draws its own window controls on Linux. On tiling window managers (Sway, Hyprland, i3, niri, river and others) it uses system decorations instead: no custom controls, and the toolbar stays visible. Choose either way under Settings → Browser setup → Window frame (applies after a restart), or with `ELARIS_LINUX_DECORATIONS=system` / `elaris`, which overrides the setting.
+Elaris draws its own window controls on Linux. On tiling window managers (Sway, Hyprland, i3, niri, river and others) it uses system decorations instead: hover reveal is disabled and custom window controls are hidden, while Back, Forward and Reload remain available. Choose either way under Settings → Browser setup → Window frame (applies after a restart), or with `ELARIS_LINUX_DECORATIONS=system` / `elaris`, which overrides the setting.
 
 ## Development
 

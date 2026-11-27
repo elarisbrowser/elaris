@@ -39,15 +39,8 @@ pub(crate) fn view(
 ) -> El {
     #[cfg(elaris_ui = "linux")]
     {
-        // The toggle and navigation always show; revealing the row only adds the window
-        // controls and pushes the page down beneath them.
-        // A system frame draws its own bar, so Elaris's toolbar is left out unless it holds the
-        // address bar.
-        if crate::app::LinuxDecorations::current() == crate::app::LinuxDecorations::System
-            && !state.toolbar_address_bar()
-        {
-            return el();
-        }
+        // The toggle and navigation stay available when the system frame disables hover reveal.
+        // Revealing the row only adds Elaris's window controls.
         let visible = header_revealed(state);
         let header = header_content(state, theme, cx, visible, overlays, reduced);
         if visible {
