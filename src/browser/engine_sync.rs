@@ -336,11 +336,14 @@ impl Browser {
             let id = tab.id();
             // A Peek card scales its page, which a layer of its own can't follow; once promoted
             // to a tab, the page moves to one.
-            let hosted = hosted_pages_allowed && peek_id != Some(id) && tab.surface.hosts_layer();
+            let hosted = !window.suspended
+                && hosted_pages_allowed
+                && peek_id != Some(id)
+                && tab.surface.hosts_layer();
             let active = input_page == Some(id);
             let side = panes.iter().position(|pane| *pane == Some(id));
             let is_peek = peek_id == Some(id);
-            let visible = is_peek || side.is_some();
+            let visible = !window.suspended && (is_peek || side.is_some());
             if visible {
                 tab.last_seen = now;
                 tab.kept_awake.clear();
@@ -412,7 +415,7 @@ impl Browser {
                     ViewCommand::Load(url)
                 });
             }
-            let focused = active && window.focused && window.viewport_focused;
+            let focused = !window.suspended && active && window.focused && window.viewport_focused;
             if applied.focused != focused {
                 applied.focused = focused;
                 send(ViewCommand::Focus(focused));

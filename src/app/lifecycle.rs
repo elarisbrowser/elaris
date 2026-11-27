@@ -200,6 +200,7 @@ pub(crate) fn on_window_focus(state: &mut AppState, focused: bool, tx: &mut Tx) 
     #[cfg(target_os = "macos")]
     crate::platform::macos::menu::set_active_window(state.window_id, focused);
     state.browser.set_window_focus(focused);
+    state.poll_idle(tx);
     if !focused {
         crate::ui::dismiss_tab_preview(state);
         crate::ui::tab_switcher::finish(state, None, tx);

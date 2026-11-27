@@ -119,6 +119,34 @@ fn closing_a_window_suspends_pages_without_stopping_the_engine() {
 }
 
 #[test]
+fn an_idling_window_keeps_pages_hidden_until_the_user_resumes_it() {
+    let (mut browser, fake) = ready();
+    let tab = browser.open_tab("example.com").unwrap();
+    browser.poll();
+    sent(&fake);
+
+    browser.suspend_window();
+    assert_eq!(sent(&fake), [view(tab, ViewCommand::Visible(false))]);
+    browser.set_window_focus(true);
+    browser.set_viewport_focus(true);
+    browser.poll();
+    assert!(
+        sent(&fake).is_empty(),
+        "focus alone must not show an idling page"
+    );
+
+    browser.resume_window();
+    browser.poll();
+    assert_eq!(
+        sent(&fake),
+        [
+            view(tab, ViewCommand::Visible(true)),
+            view(tab, ViewCommand::Focus(true)),
+        ]
+    );
+}
+
+#[test]
 fn closing_a_window_releases_its_views_without_stopping_the_shared_engine() {
     let (mut browser, fake) = ready();
     let tab = browser.open_tab("example.com").unwrap();

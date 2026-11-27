@@ -12,6 +12,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         // A SIGTERM quits as the Quit command does, so the session is saved first.
         tx.quit();
     }
+    let idle_changed = state.poll_idle(tx);
     #[cfg(target_os = "macos")]
     let deactivated_drag = super::super::transfer::in_progress()
         && !crate::platform::macos::window::application_active()
@@ -110,7 +111,7 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
     let preview_changed = crate::ui::poll_tab_preview(state, clock, tx)
         || crate::ui::displayed_tab_preview(state)
             .is_some_and(|id| polled.thumbnails_ready.contains(&id));
-    deactivated_drag
+    let changed = deactivated_drag
         || mini_changed
         || native_preview_changed
         || incoming_drag
@@ -135,7 +136,8 @@ pub(crate) fn poll(state: &mut AppState, clock: f64, tx: &mut Tx) -> bool {
         || shared_permissions_changed
         || context_menu_changed
         || switcher_changed
-        || tab_drag_changed
+        || tab_drag_changed;
+    idle_changed || (changed && !state.idling())
 }
 
 /// Gives each popup a mini window. Headless tooling opens no windows, so a popup is a tab there.

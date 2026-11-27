@@ -82,6 +82,7 @@ impl Browser {
     /// Suspends every live page while the Rune window is closed but the app remains running.
     pub(crate) fn suspend_window(&mut self) {
         self.set_window_focus(false);
+        self.window.suspended = true;
         self.dismiss_peek();
         let Some(engine) = &self.engine else {
             return;
@@ -99,6 +100,11 @@ impl Browser {
                 engine.send(Command::View(tab.id(), ViewCommand::Visible(false)));
             }
         }
+    }
+
+    /// Lets the next engine sync show the pages that are visible in this window again.
+    pub(crate) fn resume_window(&mut self) {
+        self.window.suspended = false;
     }
 
     pub(crate) fn set_viewport_focus(&mut self, focused: bool) -> bool {

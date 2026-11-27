@@ -102,6 +102,8 @@ pub(super) struct Window {
     /// Whether the window, and the viewport within it, have focus.
     pub(super) focused: bool,
     pub(super) viewport_focused: bool,
+    /// The native window is off-screen or the app has explicitly put it to rest.
+    pub(super) suspended: bool,
 }
 
 impl Default for Browser {
@@ -133,6 +135,7 @@ impl Default for Browser {
                 viewport: [0.0; 2],
                 focused: true,
                 viewport_focused: false,
+                suspended: false,
             },
             last_poll: None,
             fetches: Vec::new(),

@@ -5,6 +5,7 @@
 
 mod construction;
 mod history;
+mod idle;
 mod linux_frame;
 mod registry;
 mod shared;

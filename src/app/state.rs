@@ -148,6 +148,8 @@ pub(crate) struct AppState {
     pub(crate) history_page: HistoryPage,
     pub(crate) task_manager: TaskManagerPage,
     pub(crate) memory_saver: super::memory_saver::MemorySaverState,
+    /// Whether this window is inactive, idling, or waiting to resume after an explicit click.
+    pub(super) idle: super::idle::WindowIdle,
     pub(crate) search_engine_form: super::search_engines::SearchEngineForm,
     pub(crate) shortcut_recorder: super::keyboard::ShortcutRecorder,
     /// The page title the window shows.

@@ -10,6 +10,7 @@ mod find;
 pub(crate) mod form_picker;
 pub(crate) mod horizontal_tabs;
 pub(crate) mod icons;
+mod idle;
 pub(crate) mod internal;
 mod mini;
 mod omnibox;
@@ -74,6 +75,9 @@ pub(crate) fn view(state: &AppState, cx: &mut Cx<AppState>) -> El {
     );
     if state.settings.reduce_motion {
         cx.reduced_motion(true);
+    }
+    if state.idling() {
+        return idle::view(state, &theme);
     }
     let reduced_motion = cx.is_reduced_motion();
     state.sidebar.hover.reduced.set(reduced_motion);
