@@ -119,7 +119,7 @@ Replace `VERSION` below with the version in the downloaded file name.
 shasum -a 256 -c Elaris-VERSION-macos-arm64.dmg.sha256
 xcrun stapler validate -v Elaris-VERSION-macos-arm64.dmg
 codesign --verify --strict --verbose=2 Elaris-VERSION-macos-arm64.dmg
-spctl --assess --type open --verbose=4 Elaris-VERSION-macos-arm64.dmg
+spctl --assess --type open --context context:primary-signature --verbose=4 Elaris-VERSION-macos-arm64.dmg
 ```
 
 After mounting the DMG, verify the app before opening it:
