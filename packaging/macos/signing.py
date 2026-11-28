@@ -696,7 +696,8 @@ def release(app: Path, entitlements_dir: Path, dmg: Path, volume_name: str) -> N
         _run(["xcrun", "stapler", "staple", "-v", dmg])
         _run(["xcrun", "stapler", "validate", "-v", dmg])
         _verify_dmg_signature(dmg, credentials.team_id)
-        _run(["spctl", "--assess", "--type", "open", "--verbose=4", dmg])
+        # Disk images require the primary signature context for an open assessment.
+        _run(["spctl", "--assess", "--type", "open", "--context", "context:primary-signature", "--verbose=4", dmg])
         _verify_mounted_image(dmg, app.name, credentials.team_id)
         _write_release_metadata(dmg.parent, dmg, credentials.team_id, submission_id)
 

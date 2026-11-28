@@ -327,6 +327,29 @@ class CredentialAndSigningTests(unittest.TestCase):
             run.assert_not_called()
         self.assertTrue(keychain.cleaned)
 
+    def test_release_assesses_the_stapled_dmg_with_disk_image_context(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.object(signing, "load_credentials", return_value=self.credentials()), \
+             patch.object(signing, "signing_plan", return_value=[]), \
+             patch.object(signing, "TemporaryKeychain"), \
+             patch.object(signing, "_identity_for_team", return_value="identity"), \
+             patch.object(signing, "verify_application"), \
+             patch.object(signing, "smoke_test_application"), \
+             patch.object(signing, "_verify_dmg_signature"), \
+             patch.object(signing, "_notarize", return_value="submission-id"), \
+             patch.object(signing, "_verify_mounted_image"), \
+             patch.object(signing, "_write_release_metadata"), \
+             patch.object(signing, "_run") as run:
+            dmg = Path(directory) / "Elaris.dmg"
+            signing.release(Path("Elaris.app"), Path("entitlements"), dmg, "Elaris")
+
+        commands = [call.args[0] for call in run.call_args_list]
+        validation = ["xcrun", "stapler", "validate", "-v", dmg]
+        assessment = [
+            "spctl", "--assess", "--type", "open", "--context", "context:primary-signature", "--verbose=4", dmg,
+        ]
+        self.assertEqual(commands[commands.index(validation) + 1], assessment)
+
     def test_notarization_rejection_retrieves_apple_diagnostics(self):
         credentials = self.credentials()
         submit = subprocess.CompletedProcess(
