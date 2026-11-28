@@ -271,7 +271,7 @@ jobs:
         run: |
           relocated="$RUNNER_TEMP/Elaris.app"
           ditto build/Elaris.app "$relocated"
-          python3 packaging/macos/signing.py smoke --app "$relocated"
+          python3 packaging/macos/smoke_release.py --app "$relocated"
 
       - name: Save verified Ladybird release outputs
         if: ${{ steps.engine-key.outputs.key != '' && steps.engine-cache.outputs.cache-hit != 'true' && hashFiles('build/release-engine-cache/manifest.json') != '' }}
