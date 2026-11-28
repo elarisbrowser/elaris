@@ -36,7 +36,14 @@ ENV_INPUTS = (
     "CMAKE_PREFIX_PATH", "CMAKE_OSX_SYSROOT", "CMAKE_OSX_ARCHITECTURES",
     "CMAKE_OSX_DEPLOYMENT_TARGET", "MACOSX_DEPLOYMENT_TARGET", "SDKROOT", "DEVELOPER_DIR",
     "LAGOM_USE_LINKER", "LADYBIRD_BUILD_DIR", "RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS",
+    "PKG_CONFIG_PATH", "PKG_CONFIG_LIBDIR",
     "ELARIS_RELEASE_IMAGE",
+)
+# Build configuration, patching and dependency setup only. App bundling, signing,
+# CLI dispatch, and documentation are not native compilation inputs.
+NATIVE_TOOL_FILES = (
+    "tools/elaris_cli/common.py", "tools/elaris_cli/cpp.py", "tools/elaris_cli/dependencies.py",
+    "tools/elaris_cli/engine.py", "tools/elaris_cli/patches.py",
 )
 TOOLS = ("cc", "c++", "clang", "clang++", "clang-22", "clang++-22", "cmake", "ninja", "rustc", "pkg-config", "ld", "ld.lld")
 HELPERS = frozenset({
@@ -142,16 +149,16 @@ def key() -> str:
         raise RuntimeError("cannot identify Ladybird's pinned Rust toolchain")
 
     # LibWebView gets this exact value as a CMake compile definition. Other Cargo changes
-    # are handled by the always-fresh browser build, not by the native engine cache.
+    # are handled by the Elaris executable build, not by the native engine cache.
     cargo_version = next(
         line for line in (ROOT / "Cargo.toml").read_text().splitlines() if line.startswith("version = ")
     )
     native_files = _output(
-        "git", "ls-files", "-z", "--", ".gitmodules", "elaris", "bridge", "tools/cli.py", "tools/elaris_cli"
+        "git", "ls-files", "-z", "--", ".gitmodules", "bridge", *NATIVE_TOOL_FILES,
     ).split("\0")
     sources = {
         name: [stat.S_IMODE((ROOT / name).stat().st_mode), _hash(ROOT / name)]
-        for name in native_files if name
+        for name in native_files if name and not name.endswith(".md")
     }
     # The helper is itself an input, including before it has been staged.
     inputs_file = Path(__file__)

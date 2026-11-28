@@ -576,12 +576,12 @@ def _verify_mounted_image(dmg: Path, app_name: str, team_id: str) -> None:
             shutil.rmtree(mountpoint, ignore_errors=True)
 
 
-def _smoke_test_signed_application(app: Path) -> None:
-    """Run the browser against the checked-in smoke page after Hardened Runtime signing."""
+def smoke_test_application(app: Path) -> None:
+    """Require the packaged browser to render the checked-in smoke page."""
     info = _plist(app / "Contents" / "Info.plist")
     executable = info.get("CFBundleExecutable")
     if not isinstance(executable, str) or not executable:
-        raise SigningError("The signed app has no main executable for its runtime smoke test.")
+        raise SigningError("The app has no main executable for its runtime smoke test.")
     smoke_page = ROOT / "bridge" / "tests" / "smoke.html"
     if not smoke_page.is_file():
         raise SigningError(f"The browser smoke page is missing: {smoke_page}")
@@ -592,7 +592,7 @@ def _smoke_test_signed_application(app: Path) -> None:
     child_environment = os.environ.copy()
     for name in REQUIRED_CREDENTIALS:
         child_environment.pop(name, None)
-    with tempfile.TemporaryDirectory(prefix="elaris-signed-smoke-") as directory:
+    with tempfile.TemporaryDirectory(prefix="elaris-macos-smoke-") as directory:
         screenshot = Path(directory) / "smoke.png"
         command.append(screenshot)
         log_path = Path(directory) / "browser.log"
@@ -611,10 +611,10 @@ def _smoke_test_signed_application(app: Path) -> None:
                     break
                 status = process.poll()
                 if status is not None:
-                    failure = f"Signed browser smoke test exited before rendering (status {status})."
+                    failure = f"Browser smoke test exited before rendering (status {status})."
                     break
                 if time.monotonic() >= deadline:
-                    failure = "Signed browser smoke test did not render within 120 seconds."
+                    failure = "Browser smoke test did not render within 120 seconds."
                     break
                 time.sleep(0.1)
 
@@ -686,7 +686,7 @@ def release(app: Path, entitlements_dir: Path, dmg: Path, volume_name: str) -> N
         for target in plan:
             _sign_target(target, identity, keychain)
         verify_application(app, credentials.team_id)
-        _smoke_test_signed_application(app)
+        smoke_test_application(app)
 
         _run([ROOT / "packaging" / "macos" / "make-dmg.sh", app, dmg, volume_name])
         _run(["codesign", "--force", "--sign", identity, "--keychain", keychain, "--timestamp", dmg])
@@ -707,6 +707,8 @@ def main() -> int:
     prepare_parser = commands.add_parser("prepare", help="inspect the bundle and print a credential-free signing plan")
     prepare_parser.add_argument("--app", type=Path, required=True)
     prepare_parser.add_argument("--entitlements-dir", type=Path, required=True)
+    smoke_parser = commands.add_parser("smoke", help="smoke-test a packaged application without Apple credentials")
+    smoke_parser.add_argument("--app", type=Path, required=True)
     release_parser = commands.add_parser("release", help="sign, notarize, staple, and verify a release DMG")
     release_parser.add_argument("--app", type=Path, required=True)
     release_parser.add_argument("--entitlements-dir", type=Path, required=True)
@@ -716,10 +718,12 @@ def main() -> int:
     try:
         if args.command == "prepare":
             prepare(args.app, args.entitlements_dir)
+        elif args.command == "smoke":
+            smoke_test_application(args.app.resolve())
         else:
             release(args.app, args.entitlements_dir, args.dmg, args.volume_name)
     except (OSError, SigningError, subprocess.TimeoutExpired) as error:
-        print(f"macOS release signing failed: {error}", file=sys.stderr)
+        print(f"macOS release {args.command} failed: {error}", file=sys.stderr)
         return 1
     return 0
 

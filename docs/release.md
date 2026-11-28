@@ -25,29 +25,28 @@ there is no published release. Use a private delivery path for invited testers o
 
 ## Fast rebuilds
 
-The macOS arm64 and Linux x86_64 Release jobs look for an **exact** cache of the compiled, patched Ladybird
-engine. A hit skips the native build and keeps only its helpers, shared libraries, resources and macOS signing
-entitlements; it never restores CMake, Ninja, Cargo, a previous .app, or a previous Linux install prefix.
-Elaris is built from the current Rust sources and bundled fresh on every release. Existing signing, relocation
-checks and smoke tests still run.
+The macOS arm64 and Linux x86_64 Release jobs use two separate exact caches:
 
-- The engine key covers the Ladybird pin, bridge and native build inputs, portable CPU flags, runner toolchain
-  and ABI, and the Chromium HSTS preload data CMake embeds. A normal Rust-only edit does not invalidate it,
-  but changing the Cargo package version does because LibWebView embeds that version. Signing scripts and credential
-  changes do not invalidate the Ladybird build cache.
-- If the engine key is missing, the existing build runs with the usual compiler and vcpkg caches. If a restored
-  engine is incomplete or corrupt, the workflow logs why and builds native code instead. Use **Actions →
-  Caches** to remove a bad exact key before warming it again; GitHub cannot overwrite an existing key.
-- When changing the Ladybird pin, re-audit upstream mutable build inputs and update the audited pin in
-  `tools/elaris_cli/release_engine.py`. Until then, or when the HSTS fetch is unavailable, Release runs normally
-  without exact engine reuse.
-- To prime the cache for future tags, manually run Release on trusted `main` without publishing. Separate
-  tags cannot share each other's GitHub Actions caches. The first run is cold; runner/SDK and preload updates
-  may also cause later misses.
+- **Patched Ladybird engine.** A hit skips native compilation and restores only runtime helpers, shared
+  libraries, resources and macOS signing entitlements, never CMake or Ninja state. The key covers the Ladybird pin,
+  bridge and patches, native build tooling, app version embedded in LibWebView, portable CPU flags, runner ABI and
+  the Chromium HSTS preload data. Edits limited to Rust, signing, or documentation do not invalidate this cache.
+- **Elaris executable.** An exact hit skips the release Cargo build. The key covers the Elaris commit and channel,
+  Rust toolchain and build settings, and exact native engine key. The cached binary is checked against the bridge
+  bytes, executable mode, architecture and checksum. The commit is embedded in the binary, so even a docs-only commit
+  needs a new Elaris executable, but should still reuse Ladybird when its inputs match.
 
-`BUILD-INFO.txt` reports whether the engine was compiled or reused, its input key and preload hash, and the
-producer commit and Actions run where available. A changed checksum or fresh bundle name alone does not prove
-the engine was rebuilt.
+Release jobs still create fresh bundles, smoke-test the packaged browser and run the usual signing, notarization
+and packaging checks. They never cache a signed DMG, credentials, or a final bundle. Release-source checks still run.
+
+A missing, disabled or rejected exact cache falls back to building, using the usual compiler and vcpkg archives
+when available. Use **Actions → Caches** to remove a bad exact key before warming it again; GitHub cannot overwrite
+an existing key. After a Ladybird pin change, re-audit upstream mutable inputs and update the audited pin in
+`tools/elaris_cli/release_engine.py` to reenable exact caching. If the HSTS fetch is unavailable, Release still builds.
+
+Prime shared caches with a manual Release on trusted `main` without publishing. Independent tags cannot share one
+another's caches. The first run for new keys is cold, and runner/SDK or preload changes can invalidate prior caches.
+`BUILD-INFO.txt` records whether each component was built or reused and its producer run when available.
 
 ## Before tagging: third-party notices
 
