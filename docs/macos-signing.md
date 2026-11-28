@@ -2,18 +2,6 @@
 
 Official macOS releases use a Developer ID Application certificate and Apple's notarization service. The signing job runs in the protected GitHub Actions `apple-signing` environment after Elaris and Ladybird have been built, bundled, and smoke-tested. Pull requests and the default manual test workflow do not receive Apple credentials.
 
-## Bundle audit and signing policy
-
-The fresh release bundle contains 94 Mach-O files: the `elaris` executable, 11 Ladybird helper executables, and 82 dynamic libraries. The helpers are `AudioServer`, `Compositor`, `Hub`, `ImageDecoder`, `MediaServer`, `ProcessReaper`, `RequestServer`, `SystemProbe`, `VideoDecoderServer`, `WebContent`, and `WebRTCClient`. The inspected release layout has no embedded frameworks, XPC bundles, or plug-ins; the signing tool discovers Mach-O code and nested code bundles from the bundle on each run, so it does not assume a fixed CPU architecture or fixed library count.
-
-This inventory was verified by running the existing library-copy and verification steps on a temporary app copy, using the already-built Ladybird outputs. The native engine was not rebuilt.
-
-The signing order is dynamic libraries and standalone executables first, nested code bundles from deepest to shallowest, and `Elaris.app` last. The tool verifies each discovered Mach-O and code bundle individually, then checks linked libraries with `otool`. It does not use `codesign --deep` to sign code.
-
-Release entitlements come from Ladybird's generated `*.release.entitlements` files. For the inspected pinned build, `WebContent` alone has `com.apple.security.cs.allow-jit`; this is required for Ladybird's JavaScript JIT under Hardened Runtime. The other release helper entitlement files are empty. Production signing rejects `get-task-allow`, disabled library validation, unsigned executable memory, DYLD environment access, executable page protection exceptions, and unreviewed entitlement keys. Library validation stays enabled because Elaris and its bundled libraries are signed by the same Developer ID team. The debug entitlement files are not used for release signing.
-
-Apple documents the [Hardened Runtime and notarization requirements](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution), the [JIT entitlement for Apple silicon](https://developer.apple.com/documentation/apple-silicon/porting-just-in-time-compilers-to-apple-silicon), and [common notarization failures](https://developer.apple.com/documentation/security/resolving-common-notarization-issues).
-
 ## Prepare credentials
 
 An active Apple Developer Program membership is required.
@@ -50,7 +38,11 @@ The reusable release workflow obtains these secrets from the `apple-signing` env
 
 ## Run and inspect the pipeline
 
-The macOS release sequence restores the existing compiler and Ladybird caches, builds and bundles Elaris, runs Ladybird smoke tests, stages the generated release entitlements, and prints a credential-free signing plan. The assembled app and entitlement files are transferred to a separate, one-day signing job. That job signs nested code, signs the app bundle last, verifies signatures and dependencies, runs the signed browser against the existing HTML smoke page and confirms that it renders, packages the existing DMG, signs and submits the DMG with `notarytool`, waits for Apple's result, retrieves the notary log on rejection, staples and validates the accepted ticket, then runs Gatekeeper and mounted-app checks. It generates the checksum only after stapling and verification.
+A manual signed test does not publish a GitHub release, but signed-in readers of the public
+repository can download its Actions artifact until it expires. Use private local staging if the
+signed candidate or signing identity should only be seen by the selected cohort.
+
+The macOS release sequence restores the existing compiler and Ladybird caches, builds and bundles Elaris, runs Ladybird smoke tests, stages the generated release entitlements, and prints a credential-free signing plan. The assembled app and entitlement files are uploaded as a one-day input artifact for a separate signing job with a 90-minute limit. That job signs nested code, signs the app bundle last, verifies signatures and dependencies, runs the signed browser against the existing HTML smoke page and confirms that it renders, packages the existing DMG, signs and submits the DMG with `notarytool`, waits for Apple's result, retrieves the notary log on rejection, staples and validates the accepted ticket, then runs Gatekeeper and mounted-app checks. It generates the checksum only after stapling and verification.
 
 To inspect a locally built bundle without credentials:
 
@@ -68,6 +60,18 @@ python3 packaging/macos/signing.py prepare \
 
 The plan reports the code paths and entitlement files that would be used. It does not read credentials or alter the app. The workflow's unit tests mock signing and notarization to cover failures without a Developer account. They cannot prove Apple's service will accept Elaris; the first credentialed release run after membership activation is the required end-to-end check.
 
+## Bundle audit and signing policy
+
+The fresh release bundle contains 94 Mach-O files: the `elaris` executable, 11 Ladybird helper executables, and 82 dynamic libraries. The helpers are `AudioServer`, `Compositor`, `Hub`, `ImageDecoder`, `MediaServer`, `ProcessReaper`, `RequestServer`, `SystemProbe`, `VideoDecoderServer`, `WebContent`, and `WebRTCClient`. The inspected release layout has no embedded frameworks, XPC bundles, or plug-ins; the signing tool discovers Mach-O code and nested code bundles from the bundle on each run, so it does not assume a fixed CPU architecture or fixed library count.
+
+This inventory was verified by running the existing library-copy and verification steps on a temporary app copy, using the already-built Ladybird outputs. The native engine was not rebuilt.
+
+The signing order is dynamic libraries and standalone executables first, nested code bundles from deepest to shallowest, and `Elaris.app` last. The tool verifies each discovered Mach-O and code bundle individually, then checks linked libraries with `otool`. It does not use `codesign --deep` to sign code.
+
+Release entitlements come from Ladybird's generated `*.release.entitlements` files. For the inspected pinned build, `WebContent` alone has `com.apple.security.cs.allow-jit`; this is required for Ladybird's JavaScript JIT under Hardened Runtime. The other release helper entitlement files are empty. Production signing rejects `get-task-allow`, disabled library validation, unsigned executable memory, DYLD environment access, executable page protection exceptions, and unreviewed entitlement keys. Library validation stays enabled because Elaris and its bundled libraries are signed by the same Developer ID team. The debug entitlement files are not used for release signing.
+
+Apple documents the [Hardened Runtime and notarization requirements](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution), the [JIT entitlement for Apple silicon](https://developer.apple.com/documentation/apple-silicon/porting-just-in-time-compilers-to-apple-silicon), and [common notarization failures](https://developer.apple.com/documentation/security/resolving-common-notarization-issues).
+
 ## Rotate or revoke credentials
 
 To rotate a certificate, create a replacement Developer ID Application identity, export a new `.p12`, update the certificate and password secrets together, and run a signed release from trusted `main` before revoking the old identity. Revoke a compromised certificate promptly in the Apple Developer account; Apple notes that apps signed with a revoked Developer ID certificate can no longer be installed or launched. Revoke the Apple app-specific password at account.apple.com and replace `APPLE_APP_PASSWORD`. If the primary Apple Account password is changed or reset, Apple revokes its app-specific passwords automatically.
@@ -77,6 +81,10 @@ To rotate a certificate, create a replacement Developer ID Application identity,
 - The workflow fails before signing if a required secret is missing, the `.p12` cannot be imported, the identity is not a Developer ID Application certificate for `APPLE_TEAM_ID`, or multiple matching identities are found.
 - A missing WebContent JIT entitlement, debug entitlement, invalid nested signature, missing timestamp, or external library reference fails local verification before notarization.
 - If Apple rejects a submission, the signing tool fetches and prints the `notarytool log` diagnostics before failing. Fix every reported signature, entitlement, or binary issue, then rerun from trusted `main` or push a corrected release tag. Apple recommends reviewing the log even for accepted submissions; retain the Actions run log alongside release review.
+- If waiting for Apple times out, check the signing team's `notarytool history` and query the
+  matching submission ID with `notarytool info` before retrying. A timeout is not a rejection.
+  Keep the exact submitted DMG in controlled local staging if you may need to staple it later.
+  A local release rerun replaces an existing DMG at the same output path.
 - If stapling or Gatekeeper validation fails, the job fails and the signed release artifact is not uploaded. Check the Xcode selection and runner network access to Apple's timestamp and notarization services before retrying.
 
 Apple's [notarytool workflow guide](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow) covers submissions and log retrieval. [Resolving common notarization issues](https://developer.apple.com/documentation/security/resolving-common-notarization-issues) explains common signature and entitlement errors.
@@ -102,3 +110,8 @@ spctl --assess --type execute --verbose=4 /Volumes/Elaris/Elaris.app
 ```
 
 The release signer separately enumerates and verifies each Mach-O and nested code bundle; it never relies on recursive signing.
+
+For release acceptance, test the exact final DMG on a clean supported Mac: download it through the
+intended delivery path, verify its checksum, drag the app into Applications, and open it from
+there. Record the tested macOS version and whether launch showed an ordinary confirmation or
+was blocked. The signing runner's local smoke does not replace this check.

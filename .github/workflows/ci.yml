@@ -23,7 +23,7 @@ jobs:
           echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
       - name: Install C++ tooling (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y clang-format clang-tidy clangd libxkbcommon-dev
+        run: sudo apt-get update && sudo apt-get install -y clang-format clang-tidy clangd libwayland-dev libxkbcommon-dev pkg-config
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -36,9 +36,11 @@ jobs:
         run: ./elaris patches check
       - name: Check package
         run: cargo check --locked
-      - name: Link the UI-only application
-        run: ./elaris build --ui
+      - name: Set up and link the UI-only application
+        run: ./elaris setup --ui --skip-system-deps --build
       - name: Run Clippy
         run: cargo clippy --all-targets --locked -- -D warnings
       - name: Run tests
         run: cargo test --locked
+      - name: Test contributor commands
+        run: python3 -m unittest discover -s tools/tests -t tools

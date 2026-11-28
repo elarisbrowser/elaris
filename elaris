@@ -1,6 +1,10 @@
 #!/bin/sh
-if [ -n "${HOME:-}" ] && [ -f "$HOME/.cargo/env" ]; then
-    . "$HOME/.cargo/env"
+cargo_home=${CARGO_HOME:-${HOME:+$HOME/.cargo}}
+if [ -n "$cargo_home" ] && [ -d "$cargo_home/bin" ]; then
+    case ":$PATH:" in
+        *":$cargo_home/bin:"*) ;;
+        *) export PATH="$cargo_home/bin:$PATH" ;;
+    esac
 fi
 
 ELARIS_PYTHON=${ELARIS_PYTHON:-python3}

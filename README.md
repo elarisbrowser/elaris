@@ -16,95 +16,33 @@
 
 > **Pre-alpha.** Elaris is under active development. Expect rough edges and breaking changes.
 
-## Features
+## What Elaris does
 
-- **Ladybird engine.** Web content runs in Ladybird's multiprocess engine, with Rune for the browser UI.
-- **Native on macOS and Linux.** Both platforms are first-class targets.
-- **Tabs and windows.** Each window keeps its own tabs, and session state is restored.
-- **Downloads.** Track progress, pause, resume, and retry. Downloads survive restarts.
-- **History.** Search past visits, or remove one address or everything.
+Elaris pairs the Ladybird web engine with a Rust interface built on Rune. The browser is inspired by Arc, with vertical and horizontal tabs, live link previews (Peek), and Split View. It also has private windows, downloads, history, and session restore. macOS and Linux are the current development targets.
 
-See [Multi-window state](docs/multi-window.md) and [Downloads](docs/downloads.md) for details.
+## Quick start from source
 
-## Quick start
-
-You need Python 3.9+ and Git. macOS also needs [Homebrew](https://brew.sh/) and Xcode 26+.
+Install Git and Python 3.9 or newer, then clone the repository:
 
 ```sh
-./elaris setup             # install prerequisites and initialize Ladybird
-./elaris build             # build the engine and browser (first build is slow)
-./elaris run https://example.com
+git clone https://github.com/elarisbrowser/elaris.git
+cd elaris
 ```
 
-`setup` installs system packages and Rust toolchains. On Linux it supports apt, dnf, pacman, and zypper, and may ask for your password through `sudo`.
+**Work on the interface:** run `./elaris setup --ui --run`. This builds and opens the browser shell without Ladybird, so it cannot load websites. On macOS, install the Xcode Command Line Tools first. Homebrew and full Xcode are not needed for this route.
 
-For UI work without building the engine, use `./elaris run --ui`. Add `--release` to `build` or `run` for an optimised build (`./elaris run --release`), which launches from `build/Elaris.app` on macOS (debug runs use `build/ElarisDev.app`).
+**Run the full browser:** run `./elaris setup --run`. This builds Ladybird on the first run. On macOS, install Homebrew and select Xcode 26 or newer first. On Linux, setup uses your system package manager and may need sudo. If your distro does not provide a recent Qt development kit, see the Docker option in [Development setup](SETUP.md#linux-in-docker).
 
-### Shortcuts
+After the first run, use `./elaris run --ui` for the shell or `./elaris run https://example.com` for the full browser.
 
-| Action | macOS | Linux |
-| --- | --- | --- |
-| Open history | <kbd>Command</kbd> + <kbd>Y</kbd> | <kbd>Control</kbd> + <kbd>H</kbd> |
+## Find your guide
 
-On Linux, the toolbar slides in when the pointer reaches the top of the window. Set `ELARIS_LINUX_TITLEBAR=always` to keep it visible.
+- **Test an alpha build:** [Install Elaris](docs/install.md) for supported hardware and package instructions.
+- **Work on the code:** [Development setup](SETUP.md) for native and Docker paths, and [Contributing](CONTRIBUTING.md) for checks and PRs.
+- **Understand the browser:** [Architecture](docs/architecture.md), [UI design](docs/ui-design.md), and the [documentation index](docs/README.md).
+- **Package a build:** [Release procedure](docs/release.md).
 
-Elaris draws its own window controls on Linux. On tiling window managers (Sway, Hyprland, i3, niri, river and others) it uses system decorations instead: hover reveal is disabled and custom window controls are hidden, while Back, Forward and Reload remain available. Choose either way under Settings → Browser setup → Window frame (applies after a restart), or with `ELARIS_LINUX_DECORATIONS=system` / `elaris`, which overrides the setting.
-
-## Development
-
-```sh
-./elaris check             # fmt, clippy, and tests
-./elaris format            # format Rust and bridge C++
-./elaris linux-build       # build for Linux in Docker (--arch amd64 for x86_64)
-./elaris linux-test        # run the whole Linux suite in Docker, logs in linux-test-results/
-./elaris linux-ui [URL]    # run Elaris in Docker, viewable at http://127.0.0.1:6080/vnc.html
-./elaris bundle            # release build with Ladybird and the icon: build/Elaris.app (macOS) or build/linux/Elaris (Linux)
-```
-
-The Linux bundle is a prefix tree. Copy it into `~/.local` (or `/usr`) to install the launcher entry and icon, and install `patchelf` before bundling. Elaris needs a Vulkan driver at run time, such as the system's GPU driver or Mesa.
-
-Run `./elaris check` before opening a pull request. See [CONTRIBUTING.md](CONTRIBUTING.md) for workflow and [SETUP.md](SETUP.md) for full environment details.
-
-## Documentation
-
-| Topic | Read |
-| --- | --- |
-| Architecture | [docs/architecture.md](docs/architecture.md) |
-| Ladybird integration | [docs/ladybird-embedding.md](docs/ladybird-embedding.md) |
-| Release procedure | [docs/release.md](docs/release.md) |
-| Development setup | [SETUP.md](SETUP.md) |
-| C++ bridge | [bridge/README.md](bridge/README.md) |
-| Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
-
-## FAQ
-
-### What is Elaris?
-
-Elaris is a cross-platform browser inspired by Arc, built with Rust and Rune. Its browser interface is written in Rune, and web content is powered by Ladybird.
-
-### What browser engine does Elaris use?
-
-Elaris uses LibWeb, the web engine developed by the Ladybird Browser team. Ladybird is pinned to an upstream revision; Elaris keeps its integration code in this repository.
-
-### Who counts as a contributor?
-
-Anyone who helps improve Elaris can contribute. This includes reporting issues with a clear description and steps or examples to reproduce them, improving documentation, fixing bugs, and adding features.
-
-### Is Elaris ready for everyday use?
-
-Elaris is in pre-alpha and under active development. Expect incomplete features, rough edges, and breaking changes.
-
-### Which platforms does Elaris support?
-
-macOS and Linux are first-class development targets. See [Development setup](SETUP.md) for platform requirements and build instructions.
-
-### How can I contribute?
-
-Start with [CONTRIBUTING.md](CONTRIBUTING.md) and [Development setup](SETUP.md). Issues and pull requests are welcome; please run `./elaris check` before opening a pull request.
-
-### Where can I report a bug or request a feature?
-
-Open an issue in the [Elaris GitHub repository](https://github.com/elarisbrowser/elaris/issues). Include clear steps to reproduce a bug and relevant platform details when possible.
+[Report a bug or suggest a feature](https://github.com/elarisbrowser/elaris/issues). For a bug, include your OS, Elaris build, and steps to reproduce it.
 
 ## Support
 

@@ -1,10 +1,16 @@
 # Release procedure
 
-The `Release` workflow (`.github/workflows/release.yml`) builds the macOS and Linux bundles, each with Ladybird's
-engine, and attaches them to a **draft pre-release**. The macOS artifact is Developer ID signed, notarized, stapled,
-and verified before upload. A draft is not listed on GitHub Releases until it is published manually.
-Signed-in readers of this public repository can still download workflow artifacts before they expire.
-Use a private delivery path if the test build is only for invited testers.
+The [Release workflow](../.github/workflows/release.yml) builds macOS and Linux with Ladybird.
+
+| Trigger | macOS signing | Result |
+| --- | --- | --- |
+| Manual `test` (default) | No credentials; verifies the signing plan | Unsigned test artifact; no release |
+| Manual `release` on `main` | Developer ID, notarization and stapling | Signed test artifact; no release |
+| Version tag from `main` | Developer ID, notarization and stapling | Draft pre-release; publish after review |
+| Trusted canary on `main` | Developer ID, notarization and stapling | Rolling canary pre-release |
+
+Signed-in readers of this public repo can download Actions artifacts until expiration, even if
+there is no published release. Use a private delivery path for invited testers only.
 
 ## Cut a release
 
@@ -15,11 +21,7 @@ Use a private delivery path if the test build is only for invited testers.
    and fails if any Apple credential is missing or invalid.
 4. Download each artifact's `.sha256` file and check it. Also validate the macOS DMG's stapled ticket, then run the
    browser from its archive on a clean machine; see [macOS code signing and notarization](macos-signing.md).
-5. Publish the draft on GitHub, with the release notes listing the known limitations below.
-
-`workflow_dispatch` defaults to `test`: it runs the macOS smoke tests and signing-plan inspection, then uploads an
-explicitly named unsigned test DMG without Apple credentials. Selecting `release` runs the signed macOS path from
-trusted `main` but still does not create a GitHub release.
+5. Publish the draft on GitHub, with release notes listing the limitations of the tested builds.
 
 ## Fast rebuilds
 

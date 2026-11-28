@@ -1,10 +1,13 @@
 # Installing Elaris
 
-Elaris is experimental alpha software. Expect rough edges and breaking changes. Each release is a draft pre-release on
-GitHub until it has been checked. Download from a published release or from the private link
-provided for your testing cohort.
+Elaris is experimental alpha software. Download from a published release or the private link
+provided for your testing cohort. If you want to build from source, see [development setup](../SETUP.md).
 
-Check each download against its `.sha256` file before you run it.
+Before opening the package, verify it against the matching `.sha256` file. Replace `your-package.sha256`
+with the checksum filename and run the command in the directory containing both files:
+
+- macOS: `shasum -a 256 -c your-package.sha256`
+- Linux: `sha256sum -c your-package.sha256`
 
 ## macOS (Apple Silicon)
 
@@ -30,9 +33,8 @@ chmod +x Elaris-<version>-linux-x86_64.AppImage
 ./Elaris-<version>-linux-x86_64.AppImage
 ```
 
-The AppImage includes Elaris, Ladybird's helper processes and resources, and the bundled libraries. It still requires
-glibc 2.39 or newer and a Vulkan driver. Some distributions may also need FUSE 2; set `APPIMAGE_EXTRACT_AND_RUN=1`
-to run it without FUSE.
+The AppImage includes the browser, engine, and bundled libraries. If FUSE 2 is missing, launch
+the same file with `APPIMAGE_EXTRACT_AND_RUN=1` set, or use the tarball below.
 
 ### Tarball
 
@@ -65,6 +67,6 @@ to run it without FUSE.
    The desktop entry runs `elaris` from your desktop session's `PATH`. Make sure that `$HOME/.local/bin` is
    on that path before launching from the application menu. If it isn't, use the direct command in step 2.
 
-The archive bundles Elaris's own libraries and Ladybird's engine. It uses the system's C library, C++ runtime, and
-graphics stack. Your profile stays in `${XDG_DATA_HOME:-$HOME/.local/share}/Elaris`, separate from the install.
-If you used the previous instructions, leave that data directory in place when installing to the new location.
+The archive still uses the system's C library, C++ runtime and graphics stack. Your profile stays in
+`${XDG_DATA_HOME:-$HOME/.local/share}/Elaris`, separate from the install. Leave that directory in
+place when upgrading or moving the browser.

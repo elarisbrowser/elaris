@@ -21,7 +21,7 @@ session or window count, and closes with its last page.
 
 - **Links from other apps.** Every window installs Rune's `on_open_url` hook. A plain `http` or
   `https` link opens a mini window; anything else is dropped. Rune delivers the link on macOS
-  (the get-URL Apple event) and Windows. On Linux a link launches a new process, which opens its
+  (the get-URL Apple event). On Linux a link launches a new process, which opens its
   page in a full window as before.
 - **Popups.** `window.open` popups no longer become tabs. The opener's browser reports the pending
   popup, the app opens a mini window, and that window adopts the popup's view once its engine

@@ -1,60 +1,30 @@
 # Contributing to Elaris
 
-Thanks for helping improve Elaris. Keep changes focused, preserve the project's cross-platform behavior, and keep browser state separate from Rune rendering.
+## Get running
 
-## Start here
+From the repository root, run `./elaris setup --ui --run` for interface work, or `./elaris setup --run` to run with Ladybird. See [Development setup](SETUP.md) for prerequisites and Docker alternatives.
 
-Read [Development setup](SETUP.md), then use the root command wrapper:
-
-```sh
-./elaris setup
-./elaris build
-./elaris run
-```
-
-To work in a consistent Linux environment, open the repository in the optional [Linux devcontainer](.devcontainer/devcontainer.json) or run `./elaris linux-build` from the host terminal. The CLI command streams the container build output and keeps Linux artifacts separate from host builds.
-
-`setup` installs supported system packages, Rust toolchains, and the repository-pinned Ladybird submodule. Linux package installation uses `sudo` and may ask for your password. The first `build` compiles Ladybird's dependencies and can take a while. `./elaris run --ui` and `./elaris build --ui` let you work on the Rune shell without building the engine.
-
-## Before opening a pull request
-
-Run the project's standard Rust checks:
+## Check your change
 
 ```sh
 ./elaris check
 ```
 
-This runs `cargo fmt --check`, `cargo check --locked`, `cargo clippy --locked -- -D warnings`, `cargo test --locked`, and the developer CLI's unit tests. Each step shows its progress and the check stops at the first failure. If you changed bridge C++, also run:
+This runs Rust formatting checks, type checking, Clippy, Rust tests, and the developer CLI unit tests. For C++ bridge changes, run `./elaris cpp-format` and `./elaris cpp-tidy` after configuring the bridge, then follow the [bridge test guide](bridge/README.md).
 
-```sh
-./elaris cpp-format
-./elaris cpp-tidy
-```
+Explain what changed and how you checked it in your pull request. Mention which platforms you ran on and any limitations. Include screenshots for visible UI changes if useful.
 
-`cpp-tidy` uses the compilation database from the Ladybird bridge build. Bridge integration and FFI checks are documented in [bridge/README.md](bridge/README.md); the full Linux bridge workflow is available as a manual GitHub Actions workflow.
+## Work in the right place
 
-Commands show live progress in an interactive terminal. In CI, or when output is piped, they print plain lines as they run. Pass `--verbose` before the command (`./elaris --verbose build`) to see every build line, and set `NO_COLOR=1` or pass `--no-color` to turn off colour. A build step's full output is kept in `build/logs/`.
+- `src/`: Rust application, UI, browser state, and engine-thread integration.
+- `crates/`: shared Rust libraries.
+- `bridge/`: Elaris's C ABI bridge to Ladybird.
+- `tools/elaris_cli/`: the `./elaris` developer commands.
 
-In the pull request description, summarize the user-visible or internal change and list the checks you ran. Include screenshots for visible UI changes when useful. Call out platform-specific behavior or limitations.
+Keep browser state separate from Rune rendering, and isolate platform-specific code. Reuse existing Rune APIs and avoid unrelated refactors. Keep ordinary `cargo run` working without Ladybird.
 
-## Code and repository boundaries
+Ladybird follows the revision pinned by the repository. Don't edit `vendor/ladybird` directly; keep Elaris's integration and any documented compatibility patches in this repository. See [Architecture](docs/architecture.md) and [Ladybird integration](docs/ladybird-embedding.md).
 
-- Follow the surrounding Rust, Python, and C++ style. Prefer small modules and existing Rune APIs over new abstractions or dependencies.
-- Keep shared browser behavior platform-neutral. Isolate unavoidable operating-system integration behind narrow boundaries.
-- Keep Ladybird pinned to the revision recorded by the submodule pointer. Do not maintain a fork or edit `vendor/ladybird`; keep Elaris integration and any documented compatibility code in this repository.
-- Keep ordinary `cargo run` working without Ladybird. The bridge is opt-in at the Cargo feature boundary; `./elaris run --ui` is the supported shell-only path.
-- Avoid unrelated formatting or refactors in a focused change.
+## License
 
-Useful entry points:
-
-| Path | Purpose |
-| --- | --- |
-| `src/` | Rust application, Rune UI, browser state, and engine-thread integration |
-| `bridge/` | Elaris-owned C ABI bridge to Ladybird |
-| `tools/elaris_cli/` | `./elaris` setup, build, check, and development commands |
-| `docs/architecture.md` | Module map and UI-to-engine data flow |
-| `docs/ladybird-embedding.md` | Ladybird integration notes and constraints |
-
-## Licensing
-
-Elaris is licensed under [GPL-3.0-only](LICENSE). Contributions are accepted under the same license; no CLA or copyright assignment is required. Third-party components keep their own licenses. See [TRADEMARKS.md](TRADEMARKS.md) for branding guidance.
+Elaris accepts contributions under [GPL-3.0-only](LICENSE), without a CLA or copyright assignment. Third-party components keep their own licenses. See [Trademarks](TRADEMARKS.md) for branding guidance.

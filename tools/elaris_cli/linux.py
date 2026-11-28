@@ -25,7 +25,7 @@ def linux_build(args: argparse.Namespace) -> None:
     """Set up Ladybird and build Elaris and its bridge, without running any tests."""
     _run_in_container(
         args,
-        ["/bin/sh", "-c", './elaris setup --skip-system-deps && ./elaris build --jobs "$ELARIS_JOBS"'],
+        ["/bin/sh", "-c", './elaris setup --skip-system-deps --build --jobs "$ELARIS_JOBS"'],
     )
 
 

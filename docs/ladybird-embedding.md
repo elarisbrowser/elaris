@@ -1,5 +1,9 @@
 # Ladybird embedding research
 
+This is the original investigation for issue #230, kept as a design record. It describes the
+repository before the bridge existed. For what ships now, see [architecture](architecture.md),
+[the bridge guide](../bridge/README.md), and [webview performance](performance/webview.md).
+
 ## Recommendation
 
 Use Ladybird's existing browser application and `WebView::ViewImplementation` stack behind a small Elaris-owned C ABI bridge. Keep Rune as the application shell. First render from CPU-visible shared backing stores and copy/import frames into Rune; consider GPU interop only after a working prototype. This uses Ladybird's multiprocess browser rather than embedding `LibWeb` as an in-process renderer.
