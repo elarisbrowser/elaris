@@ -18,6 +18,26 @@ An active Apple Developer Program membership is required.
    Keep the temporary files private and remove them after configuring the secret. Do not paste the encoded value into a terminal command, commit it, or attach it to an issue.
 5. At [account.apple.com](https://account.apple.com/), create an app-specific password under **Sign-In and Security → App-Specific Passwords**. Use this password for notarization; do not use the primary Apple Account password. Apple requires two-factor authentication for app-specific passwords. See [Apple's app-specific password guide](https://support.apple.com/en-us/102654).
 
+## Make a signed DMG on your Mac
+
+For invited testers, run this from a trusted, up-to-date Elaris checkout on an Apple Silicon Mac.
+Install and select full Xcode, run `./elaris setup` if needed, then install the packaging tool with
+`brew install create-dmg`.
+
+```sh
+./elaris sign-macos --certificate "$HOME/Downloads/DeveloperID.p12"
+```
+
+Use the actual path to your exported `.p12`. The command builds the optimized app, prompts for
+your Team ID, Apple Account email, export password and app-specific password, then signs a copy
+of the app, submits the DMG to Apple, staples the ticket and writes a SHA-256 checksum.
+The passwords are hidden as you type. No GitHub credentials, release, or upload are involved.
+
+The command prints a new output folder in Downloads. Use `--output-dir` to choose a different
+parent folder. Use `--skip-build` only if the existing app and Ladybird release entitlements
+are from the same intended, up-to-date build. Keep the DMG if notarization times out so you can
+check its status instead of resubmitting. Before sharing it, test the exact DMG on a clean Mac.
+
 ## Configure GitHub Actions
 
 Create a repository environment named `apple-signing`. Restrict deployments to the `main` branch and `v*` tags, and configure required reviewers if the repository plan supports that policy. The signing job is the only job that uses this environment. GitHub withholds environment secrets until configured protection rules pass; see [GitHub environment protection](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments).

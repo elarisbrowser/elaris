@@ -4,7 +4,7 @@
 import argparse
 import sys
 
-from elaris_cli import clean, cpp, desktop, engine, linux, patches, project, rune, ui
+from elaris_cli import clean, cpp, desktop, engine, linux, macos_sign, patches, project, rune, ui
 
 
 if sys.version_info < (3, 9):
@@ -46,6 +46,7 @@ def parser() -> argparse.ArgumentParser:
     engine.register_commands(commands)
     patches.register_commands(commands)
     linux.register_commands(commands)
+    macos_sign.register_commands(commands)
     desktop.register_commands(commands)
     rune.register_commands(commands)
     clean.register_commands(commands)
