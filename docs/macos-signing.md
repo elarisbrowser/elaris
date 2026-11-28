@@ -54,15 +54,23 @@ Add these **environment secrets**:
 
 On a tag release or trusted canary run, the workflow requires all five values and fails before producing the signed artifact if any value is missing or invalid. It creates a temporary runner keychain, imports the identity with access limited to Apple's signing tools, and removes the keychain and temporary certificate file even when a signing or notarization step fails. Credentials are passed only to the signing step, removed from child-process environments, and never printed or written into the repository or release artifacts.
 
-The reusable release workflow obtains these secrets from the `apple-signing` environment. The nightly caller is restricted to `main`; the reusable workflow checks that its ref is `main`, and version tags must point to commits contained in `main`. The `workflow_dispatch` default is `test`: it runs smoke tests and signing-plan validation, then produces a clearly named unsigned test DMG without secrets. Selecting `release` manually is allowed only from `main` and uses the protected environment; it does not publish a GitHub release. Only version tags and the trusted canary workflow publish release assets.
+The reusable release workflow obtains these secrets from the `apple-signing` environment. The nightly caller is restricted to `main`; the reusable workflow checks that its ref is `main`, and version tags must point to commits contained in `main`. The `workflow_dispatch` default is `test`: it runs smoke tests and signing-plan validation, then produces a clearly named unsigned test DMG without secrets. Selecting `release` manually is allowed only from `main`, requires `allow_public_signed_artifact`, and uses the protected environment. It does not publish a GitHub release. Only version tags and the trusted canary workflow publish release assets.
 
 ## Run and inspect the pipeline
 
 A manual signed test does not publish a GitHub release, but signed-in readers of the public
-repository can download its Actions artifact until it expires. Use private local staging if the
-signed candidate or signing identity should only be seen by the selected cohort.
+repository can download both its unsigned signing input and its signed Actions artifact until
+they expire. Use private local staging for invited testers only. A public signed DMG always
+exposes its Developer ID certificate (signer name and Team ID), not the private key. The Actions
+upload includes only the DMG, checksum, build info, and a status receipt. Raw notary diagnostics
+and submission IDs are not published; check them privately via `notarytool history` and `log`.
+For an invite-only local build, share only the DMG and checksum, not the local signing receipt.
 
-The macOS release sequence restores the existing compiler and Ladybird caches, builds and bundles Elaris, runs Ladybird smoke tests, stages the generated release entitlements, and prints a credential-free signing plan. The assembled app and entitlement files are uploaded as a one-day input artifact for a separate signing job with a 90-minute limit. That job signs nested code, signs the app bundle last, verifies signatures and dependencies, runs the signed browser against the existing HTML smoke page and confirms that it renders, packages the existing DMG, signs and submits the DMG with `notarytool`, waits for Apple's result, retrieves the notary log on rejection, staples and validates the accepted ticket, then runs Gatekeeper and mounted-app checks. It generates the checksum only after stapling and verification.
+The macOS build restores caches, assembles the app, runs smoke tests, and stages the release
+entitlements. It uploads the unsigned bundle to a one-day handoff artifact for the separate
+signing job. That job signs and verifies the application and DMG, closes the temporary keychain,
+then smoke-tests the signed browser. It submits the DMG to Apple, staples and validates the ticket,
+runs Gatekeeper and mounted-app checks, and only then writes the release checksum.
 
 To inspect a locally built bundle without credentials:
 
@@ -100,7 +108,7 @@ To rotate a certificate, create a replacement Developer ID Application identity,
 
 - The workflow fails before signing if a required secret is missing, the `.p12` cannot be imported, the identity is not a Developer ID Application certificate for `APPLE_TEAM_ID`, or multiple matching identities are found.
 - A missing WebContent JIT entitlement, debug entitlement, invalid nested signature, missing timestamp, or external library reference fails local verification before notarization.
-- If Apple rejects a submission, the signing tool fetches and prints the `notarytool log` diagnostics before failing. Fix every reported signature, entitlement, or binary issue, then rerun from trusted `main` or push a corrected release tag. Apple recommends reviewing the log even for accepted submissions; retain the Actions run log alongside release review.
+- If Apple rejects a local submission, the signer prints redacted `notarytool log` diagnostics. The public runner reports only the status; fetch the logs privately. Fix every reported signature, entitlement, or binary issue, then rerun from trusted `main` or push a corrected release tag. Apple recommends reviewing the log even for accepted submissions; retain the Actions run log alongside release review.
 - If waiting for Apple times out, check the signing team's `notarytool history` and query the
   matching submission ID with `notarytool info` before retrying. A timeout is not a rejection.
   Keep the exact submitted DMG in controlled local staging if you may need to staple it later.

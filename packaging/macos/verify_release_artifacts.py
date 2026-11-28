@@ -25,9 +25,9 @@ def verify_release_artifacts(directory: Path) -> Path:
         directory / "SIGNING-INFO.txt",
         directory / f"{dmg.stem}.BUILD-INFO.txt",
     )
-    for path in required_files:
-        if not path.is_file() or path.stat().st_size == 0:
-            raise ArtifactError(f"Missing or empty release metadata: {path.name}")
+    for path in (dmg, *required_files):
+        if path.is_symlink() or not path.is_file() or path.stat().st_size == 0:
+            raise ArtifactError(f"Missing, empty, or invalid release file: {path.name}")
 
     signing_info = (directory / "SIGNING-INFO.txt").read_text()
     expected = {
@@ -45,11 +45,8 @@ def verify_release_artifacts(directory: Path) -> Path:
     for key, value in expected.items():
         if fields.get(key) != value:
             raise ArtifactError(f"Signing metadata does not confirm {key.lower()}.")
-    team_id = fields.get("Team ID", "")
-    if not re.fullmatch(r"[A-Z0-9]{10}", team_id):
-        raise ArtifactError("Signing metadata has no valid Apple Developer team ID.")
-    if not fields.get("Submission ID"):
-        raise ArtifactError("Signing metadata has no Apple notarization submission ID.")
+    if len(signing_info.splitlines()) != len(expected) or fields.keys() != expected.keys():
+        raise ArtifactError("Signing metadata contains unexpected fields; do not upload it.")
 
     checksum_line = required_files[0].read_text().strip()
     checksum, separator, filename = checksum_line.partition("  ")
