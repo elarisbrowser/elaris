@@ -22,6 +22,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
+from xml.parsers.expat import ExpatError
 
 ROOT = Path(__file__).resolve().parents[2]
 CODE_BUNDLE_SUFFIXES = {".app", ".appex", ".bundle", ".framework", ".plugin", ".xpc"}
@@ -375,18 +376,18 @@ def _signature_details(path: Path, team_id: str, *, require_runtime: bool = True
 
 
 def _signed_entitlements(path: Path) -> dict:
-    result = _run(["codesign", "--display", "--entitlements", ":-", path], check=False)
-    payload = result.stdout + result.stderr
-    start = payload.find("<?xml")
-    if start < 0:
-        start = payload.find("<plist")
-    if start < 0:
-        return {}
+    # Ask for XML explicitly: modern codesign otherwise renders DER as human-readable text.
+    # The plist goes to stdout; signature diagnostics on stderr are not part of it.
+    result = _run(["codesign", "--display", "--entitlements", "-", "--xml", path], check=False)
     try:
-        parsed = plistlib.loads(payload[start:].encode())
-    except (plistlib.InvalidFileException, ValueError) as error:
+        if result.returncode:
+            raise ValueError("codesign failed")
+        parsed = plistlib.loads(result.stdout.encode())
+        if not isinstance(parsed, dict):
+            raise ValueError("expected an entitlement dictionary")
+    except (ExpatError, plistlib.InvalidFileException, ValueError) as error:
         raise SigningError(f"Could not read signed entitlements from {path}.") from error
-    return parsed if isinstance(parsed, dict) else {}
+    return parsed
 
 
 def _verify_dependencies(app: Path, macho_files: Sequence[Path]) -> None:

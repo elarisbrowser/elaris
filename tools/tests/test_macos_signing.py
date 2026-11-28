@@ -33,6 +33,46 @@ artifact_guard = _load(
 )
 
 
+class SignedEntitlementTests(unittest.TestCase):
+    def test_codesign_xml_stdout_is_separate_from_diagnostics(self):
+        helper = Path("WebContent")
+        expected = {"com.apple.security.cs.allow-jit": True}
+        result = subprocess.CompletedProcess([], 0, plistlib.dumps(expected).decode(), 'Executable=/tmp/<WebContent>')
+        with patch.object(signing, "_run", return_value=result) as run:
+            self.assertEqual(signing._signed_entitlements(helper), expected)
+        run.assert_called_once_with(
+            ["codesign", "--display", "--entitlements", "-", "--xml", helper], check=False,
+        )
+
+    def test_bad_output_fails_closed_with_a_signing_error(self):
+        valid = plistlib.dumps({"com.apple.security.cs.allow-jit": True}).decode()
+        for code, output in ((1, valid), (0, ""), (0, '<?xml version="1.0"?>\n<plist><&>'),
+                             (0, plistlib.dumps(["not a dictionary"]).decode())):
+            with self.subTest(code=code, output=output):
+                with patch.object(signing, "_run", return_value=subprocess.CompletedProcess([], code, output, "")):
+                    with self.assertRaisesRegex(signing.SigningError, "Could not read signed entitlements"):
+                        signing._signed_entitlements(Path("WebContent"))
+
+    @unittest.skipUnless(sys.platform == "darwin", "requires macOS codesign")
+    def test_reads_entitlements_from_a_real_ad_hoc_signature(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            helper = root / "WebContent"
+            entitlements = root / "WebContent.entitlements"
+            expected = {"com.apple.security.cs.allow-jit": True}
+            entitlements.write_bytes(plistlib.dumps(expected))
+            subprocess.run(
+                ["xcrun", "clang", "-x", "c", "-", "-o", helper],
+                input="int main(void) { return 0; }", text=True, check=True,
+            )
+            subprocess.run(
+                ["codesign", "--force", "--sign", "-", "--options", "runtime",
+                 "--entitlements", entitlements, helper],
+                check=True, capture_output=True,
+            )
+            self.assertEqual(signing._signed_entitlements(helper), expected)
+
+
 class SigningPlanTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
