@@ -315,7 +315,7 @@ class CredentialAndSigningTests(unittest.TestCase):
              patch.object(signing, "_verify_mounted_image"), \
              patch.object(signing, "_write_release_metadata"), \
              patch.object(signing, "_run") as run:
-            dmg = Path(directory) / "Elaris.dmg"
+            dmg = Path(directory).resolve() / "Elaris.dmg"
             signing.release(Path("Elaris.app"), Path("entitlements"), dmg, "Elaris")
 
         commands = [call.args[0] for call in run.call_args_list]
