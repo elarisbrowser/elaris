@@ -4,3 +4,9 @@ __pycache__/
 compile_commands.json
 .DS_Store
 /linux-test-results/
+
+# Local Developer ID exports and encoding scratch files.
+*.p12
+*.pfx
+*.p12.base64
+*.pfx.base64

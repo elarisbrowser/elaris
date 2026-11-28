@@ -5,7 +5,7 @@ The [Release workflow](../.github/workflows/release.yml) builds macOS and Linux 
 | Trigger | macOS signing | Result |
 | --- | --- | --- |
 | Manual `test` (default) | No credentials; verifies the signing plan | Unsigned test artifact; no release |
-| Manual `release` on `main` | Developer ID, notarization and stapling | Signed test artifact; no release |
+| Manual `release` on `main` with `allow_public_signed_artifact` | Developer ID, notarization and stapling | Signed test artifact; no release |
 | Version tag from `main` | Developer ID, notarization and stapling | Draft pre-release; publish after review |
 | Trusted canary on `main` | Developer ID, notarization and stapling | Rolling canary pre-release |
 

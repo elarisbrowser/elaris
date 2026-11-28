@@ -517,7 +517,7 @@ def _verify_dmg_signature(dmg: Path, team_id: str) -> None:
         raise SigningError("The disk image signature does not contain a secure timestamp.")
 
 
-def _notarize(dmg: Path, credentials: Credentials) -> str:
+def _notarize(dmg: Path, credentials: Credentials, *, public_output: bool = False) -> str:
     result = _run(
         [
             "xcrun", "notarytool", "submit", dmg,
@@ -530,15 +530,22 @@ def _notarize(dmg: Path, credentials: Credentials) -> str:
         quiet_failure=True,
         timeout=3600,
     )
-    output = _safe_output(result.stdout, credentials)
     try:
-        response = json.loads(output)
+        response = json.loads(result.stdout)
     except json.JSONDecodeError:
         response = {}
     submission_id = response.get("id") if isinstance(response, dict) else None
     status = response.get("status") if isinstance(response, dict) else None
-    if result.returncode == 0 and status == "Accepted" and submission_id:
-        return str(submission_id)
+    if result.returncode == 0 and status == "Accepted" and isinstance(submission_id, str) and submission_id:
+        return submission_id
+
+    if status not in ("Invalid", "Rejected", "In Progress"):
+        status = "submission failed"
+    if public_output:
+        raise SigningError(
+            f"Apple notarization was not accepted (status: {status}, exit: {result.returncode}). "
+            "Inspect the submission privately with notarytool history and log."
+        )
 
     diagnostic = ""
     if submission_id:
@@ -556,7 +563,7 @@ def _notarize(dmg: Path, credentials: Credentials) -> str:
     if diagnostic:
         print("Apple notarization diagnostics:", file=sys.stderr)
         print(diagnostic, file=sys.stderr)
-    raise SigningError(f"Apple notarization was not accepted (status: {status or 'submission failed'}).")
+    raise SigningError(f"Apple notarization was not accepted (status: {status}).")
 
 
 def _verify_mounted_image(dmg: Path, app_name: str, team_id: str) -> None:
@@ -639,7 +646,9 @@ def _smoke_test_signed_application(app: Path) -> None:
                 raise SigningError(failure)
 
 
-def _write_release_metadata(directory: Path, dmg: Path, team_id: str, submission_id: str) -> None:
+def _write_release_metadata(
+    directory: Path, dmg: Path, team_id: str, submission_id: str, *, public_output: bool = False,
+) -> None:
     hasher = hashlib.sha256()
     with dmg.open("rb") as artifact:
         for block in iter(lambda: artifact.read(1024 * 1024), b""):
@@ -648,12 +657,11 @@ def _write_release_metadata(directory: Path, dmg: Path, team_id: str, submission
     (directory / f"{dmg.name}.sha256").write_text(f"{digest}  {dmg.name}\n")
     (directory / "SIGNING-INFO.txt").write_text(
         "Status: notarized\n"
-        f"Team ID: {team_id}\n"
         "Identity type: Developer ID Application\n"
         "Hardened Runtime: enabled for all Mach-O code\n"
         "Notarization: accepted\n"
-        f"Submission ID: {submission_id}\n"
         "Stapling: validated\n"
+        + ("" if public_output else f"Team ID: {team_id}\nSubmission ID: {submission_id}\n")
     )
     build_info = directory / "BUILD-INFO.txt"
     if build_info.is_file():
@@ -672,8 +680,12 @@ def prepare(app: Path, entitlements_dir: Path) -> list[SigningTarget]:
     return plan
 
 
-def release(app: Path, entitlements_dir: Path, dmg: Path, volume_name: str) -> None:
+def release(
+    app: Path, entitlements_dir: Path, dmg: Path, volume_name: str, *, public_output: bool = False,
+) -> None:
     credentials = load_credentials()
+    for name in REQUIRED_CREDENTIALS:
+        os.environ.pop(name, None)
     app = app.resolve()
     entitlements_dir = entitlements_dir.resolve()
     dmg = dmg.resolve()
@@ -682,24 +694,27 @@ def release(app: Path, entitlements_dir: Path, dmg: Path, volume_name: str) -> N
     dmg.unlink(missing_ok=True)
     with TemporaryKeychain(credentials) as keychain:
         identity = _identity_for_team(keychain, credentials.team_id)
-        print(f"Signing {len(plan)} targets with Developer ID Application for team {credentials.team_id}.")
+        print(f"Signing {len(plan)} targets with Developer ID Application.")
         for target in plan:
             _sign_target(target, identity, keychain)
         verify_application(app, credentials.team_id)
-        _smoke_test_signed_application(app)
 
         _run([ROOT / "packaging" / "macos" / "make-dmg.sh", app, dmg, volume_name])
         _run(["codesign", "--force", "--sign", identity, "--keychain", keychain, "--timestamp", dmg])
         _verify_dmg_signature(dmg, credentials.team_id)
-        submission_id = _notarize(dmg, credentials)
+    # Do not launch the browser while the temporary signing keychain is unlocked.
+    _smoke_test_signed_application(app)
+    submission_id = _notarize(dmg, credentials, public_output=public_output)
 
-        _run(["xcrun", "stapler", "staple", "-v", dmg])
-        _run(["xcrun", "stapler", "validate", "-v", dmg])
-        _verify_dmg_signature(dmg, credentials.team_id)
-        # Disk images require the primary signature context for an open assessment.
-        _run(["spctl", "--assess", "--type", "open", "--context", "context:primary-signature", "--verbose=4", dmg])
-        _verify_mounted_image(dmg, app.name, credentials.team_id)
-        _write_release_metadata(dmg.parent, dmg, credentials.team_id, submission_id)
+    _run(["xcrun", "stapler", "staple", "-v", dmg])
+    _run(["xcrun", "stapler", "validate", "-v", dmg])
+    _verify_dmg_signature(dmg, credentials.team_id)
+    # Disk images require the primary signature context for an open assessment.
+    _run(["spctl", "--assess", "--type", "open", "--context", "context:primary-signature", "--verbose=4", dmg])
+    _verify_mounted_image(dmg, app.name, credentials.team_id)
+    _write_release_metadata(
+        dmg.parent, dmg, credentials.team_id, submission_id, public_output=public_output,
+    )
 
 
 def main() -> int:
@@ -713,12 +728,13 @@ def main() -> int:
     release_parser.add_argument("--entitlements-dir", type=Path, required=True)
     release_parser.add_argument("--dmg", type=Path, required=True)
     release_parser.add_argument("--volume-name", default="Elaris")
+    release_parser.add_argument("--public-output", action="store_true", help="Omit private notary metadata and diagnostics")
     args = parser.parse_args()
     try:
         if args.command == "prepare":
             prepare(args.app, args.entitlements_dir)
         else:
-            release(args.app, args.entitlements_dir, args.dmg, args.volume_name)
+            release(args.app, args.entitlements_dir, args.dmg, args.volume_name, public_output=args.public_output)
     except (OSError, SigningError, subprocess.TimeoutExpired) as error:
         print(f"macOS release signing failed: {error}", file=sys.stderr)
         return 1

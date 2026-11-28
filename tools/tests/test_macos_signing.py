@@ -5,11 +5,15 @@ from __future__ import annotations
 import base64
 import hashlib
 import importlib.util
+import io
+import os
 import plistlib
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
 
@@ -325,6 +329,39 @@ class CredentialAndSigningTests(unittest.TestCase):
         ]
         self.assertEqual(commands[commands.index(validation) + 1], assessment)
 
+    def test_public_notarization_failure_does_not_log_private_response(self):
+        submission = subprocess.CompletedProcess(
+            ["xcrun"], 65, '{"id":"private-submission","status":"Rejected"}', "private-detail",
+        )
+        stderr = io.StringIO()
+        with patch.object(signing, "_run", return_value=submission) as run, redirect_stderr(stderr):
+            with self.assertRaisesRegex(signing.SigningError, r"status: Rejected, exit: 65") as error:
+                signing._notarize(Path("Elaris.dmg"), self.credentials(), public_output=True)
+        run.assert_called_once()
+        self.assertEqual(stderr.getvalue(), "")
+        self.assertNotIn("private-", str(error.exception))
+
+    def test_browser_starts_after_keychain_cleanup_and_without_credentials(self):
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.dict(os.environ, {name: "private" for name in signing.REQUIRED_CREDENTIALS}), \
+             patch.object(signing, "load_credentials", return_value=self.credentials()), \
+             patch.object(signing, "signing_plan", return_value=[]), \
+             patch.object(signing, "TemporaryKeychain") as keychain, \
+             patch.object(signing, "_identity_for_team", return_value="identity"), \
+             patch.object(signing, "verify_application"), \
+             patch.object(signing, "_verify_dmg_signature"), \
+             patch.object(signing, "_notarize", return_value="submission-id"), \
+             patch.object(signing, "_verify_mounted_image"), \
+             patch.object(signing, "_write_release_metadata"), \
+             patch.object(signing, "_run"):
+            def smoke(_app):
+                keychain.return_value.__exit__.assert_called_once()
+                self.assertFalse(set(signing.REQUIRED_CREDENTIALS) & os.environ.keys())
+
+            with patch.object(signing, "_smoke_test_signed_application", side_effect=smoke) as run:
+                signing.release(Path("Elaris.app"), Path("entitlements"), Path(directory) / "Elaris.dmg", "Elaris")
+            run.assert_called_once()
+
     def test_notarization_rejection_retrieves_apple_diagnostics(self):
         credentials = self.credentials()
         submit = subprocess.CompletedProcess(
@@ -349,11 +386,9 @@ class ArtifactPublicationTests(unittest.TestCase):
         (self.directory / f"{self.dmg.stem}.BUILD-INFO.txt").write_text("Elaris 0.1.0\n")
         (self.directory / "SIGNING-INFO.txt").write_text(
             "Status: notarized\n"
-            "Team ID: A1B2C3D4E5\n"
             "Identity type: Developer ID Application\n"
             "Hardened Runtime: enabled for all Mach-O code\n"
             "Notarization: accepted\n"
-            "Submission ID: submission-123\n"
             "Stapling: validated\n"
         )
 
@@ -368,10 +403,50 @@ class ArtifactPublicationTests(unittest.TestCase):
         with self.assertRaisesRegex(artifact_guard.ArtifactError, "SIGNING-INFO"):
             artifact_guard.verify_release_artifacts(self.directory)
 
+    def test_public_receipt_excludes_notarization_identifiers(self):
+        signing._write_release_metadata(self.directory, self.dmg, "ABC123DEF4", "private-id", public_output=True)
+        receipt = (self.directory / "SIGNING-INFO.txt").read_text()
+        self.assertNotIn("ABC123DEF4", receipt)
+        self.assertNotIn("private-id", receipt)
+        self.assertEqual(artifact_guard.verify_release_artifacts(self.directory), self.dmg)
+
+    def test_private_receipt_cannot_be_uploaded(self):
+        signing._write_release_metadata(self.directory, self.dmg, "ABC123DEF4", "private-id")
+        with self.assertRaisesRegex(artifact_guard.ArtifactError, "unexpected fields"):
+            artifact_guard.verify_release_artifacts(self.directory)
+
     def test_modified_package_blocks_publication(self):
         self.dmg.write_bytes(b"modified after checksum")
         with self.assertRaisesRegex(artifact_guard.ArtifactError, "checksum does not match"):
             artifact_guard.verify_release_artifacts(self.directory)
+
+
+class ReleaseRouteTests(unittest.TestCase):
+    def test_only_opted_in_main_manual_runs_can_sign(self):
+        workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text()
+        route_step = workflow.split("id: route", 1)[1].split("- uses:", 1)[0]
+        script = textwrap.dedent(route_step.split("run: |\n", 1)[1])
+        combinations = (
+            ("workflow_dispatch", "refs/heads/main", "", "release", "false", None),
+            ("workflow_dispatch", "refs/heads/main", "", "release", "true", "signed-test"),
+            ("workflow_dispatch", "refs/heads/feature", "", "release", "true", None),
+            ("workflow_dispatch", "refs/heads/main", "", "test", "false", "unsigned-test"),
+            ("push", "refs/tags/v1.0.0", "", "", "", "tag"),
+            ("workflow_dispatch", "refs/heads/main", "canary", "", "", "canary"),
+        )
+        for event, ref, channel, mode, allow, expected in combinations:
+            with self.subTest(event=event, ref=ref, channel=channel, mode=mode, allow=allow):
+                with tempfile.TemporaryDirectory() as directory:
+                    output = Path(directory) / "github-output"
+                    env = dict(os.environ, GITHUB_EVENT_NAME=event, GITHUB_REF=ref, RELEASE_CHANNEL=channel,
+                               SIGNING_MODE=mode, ALLOW_PUBLIC_SIGNED_ARTIFACT=allow, GITHUB_OUTPUT=str(output))
+                    result = subprocess.run(["bash", "-e", "-c", script], env=env, capture_output=True)
+                    if expected is None:
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertFalse(output.exists())
+                    else:
+                        self.assertEqual(result.returncode, 0, result.stderr)
+                        self.assertEqual(output.read_text(), f"release_route={expected}\n")
 
 
 if __name__ == "__main__":
