@@ -46,19 +46,24 @@ fn task_manager_lists_engine_processes_and_ends_the_selected_one() {
     runtime.frame(0.016);
     assert_eq!(asked(&fake), 0);
 
+    let mut private_content = process(3, "WebContent", "private.example");
+    private_content.private = true;
     fake.updates
         .send(Update::Processes(
             tab,
             Ok(vec![
                 process(1, "Browser", ""),
                 process(2, "WebContent", "example.com"),
+                private_content,
             ]),
         ))
         .unwrap();
     runtime.frame(0.032);
     let overview = runtime.state.task_manager.overview.as_ref().unwrap();
     assert_eq!(overview.browser.len(), 1);
+    assert_eq!(overview.sites.len(), 1);
     assert_eq!(overview.sites[0].name, "example.com");
+    assert!(overview.process(3).is_none());
 
     // The browser's own process cannot be ended.
     runtime.update(|state, _| {

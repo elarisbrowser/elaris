@@ -272,6 +272,10 @@ impl AppState {
     }
 
     fn persist_transfer(&mut self, source: u64, source_session: &Session) -> Result<(), String> {
+        // Both windows belong to the same browsing mode. Private handoffs are memory-only.
+        if self.browser.private {
+            return Ok(());
+        }
         let Some(storage) = &self.storage else {
             return Ok(());
         };
@@ -479,6 +483,54 @@ mod tests {
         drop(source);
         drop(destination);
         drop(storage);
+        std::fs::remove_dir_all(data).unwrap();
+    }
+
+    #[test]
+    fn private_tab_handoff_keeps_both_windows_out_of_the_session_registry() {
+        let mut source = AppState::new(Some("https://example.com/"));
+        let mut destination = AppState::new(Some("https://example.org/"));
+        source.browser.private = true;
+        destination.browser.private = true;
+        destination.workers_started = true;
+        let data = std::env::temp_dir().join(format!(
+            "elaris-private-transfer-{}-{}",
+            std::process::id(),
+            destination.window_id
+        ));
+        let storage = crate::storage::Storage::open(crate::storage::Paths {
+            application_dir: data.clone(),
+            profile_dir: data.join("profile"),
+            history_file: data.join("history.sqlite"),
+            session_file: data.join("session.json"),
+            download_history_file: data.join("downloads.json"),
+            bookmarks_file: data.join("bookmarks.json"),
+            config_file: data.join("config.toml"),
+        })
+        .unwrap();
+        destination.storage = Some(std::sync::Arc::new(storage));
+        let tab = source.browser.active_tab().unwrap().id();
+        request(&source, &destination, tab, 1);
+        let tx = &mut Tx::default();
+        assert!(destination.advance_tab_transfer(tx));
+        assert!(source.advance_tab_transfer(tx));
+        assert!(destination.advance_tab_transfer(tx));
+        assert!(source.advance_tab_transfer(tx));
+        assert_eq!(destination.browser.active_tab().unwrap().id(), tab);
+
+        destination
+            .storage
+            .as_ref()
+            .unwrap()
+            .flush_on_close()
+            .unwrap();
+        assert!(!data.join("session.json").exists());
+        if let Some(registry) = SESSION_REGISTRY.get() {
+            let registry = registry.lock().unwrap();
+            assert!(!registry.contains_key(&source.window_id));
+            assert!(!registry.contains_key(&destination.window_id));
+        }
+        drop(destination);
         std::fs::remove_dir_all(data).unwrap();
     }
 

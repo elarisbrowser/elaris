@@ -21,6 +21,37 @@ impl Browser {
             .collect()
     }
 
+    /// Compares this window's downloads without cloning rows on an unchanged poll.
+    pub(super) fn sync_download_snapshot(&mut self) -> bool {
+        let downloads = self
+            .downloads
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let visible = downloads
+            .iter()
+            .filter(|download| download.private == self.private);
+        if visible.clone().eq(&self.last_download_snapshot) {
+            return false;
+        }
+        self.last_download_snapshot = visible.cloned().collect();
+        true
+    }
+
+    pub(crate) fn active_download_count(&self) -> usize {
+        self.downloads
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .iter()
+            .filter(|download| {
+                download.private == self.private
+                    && matches!(
+                        download.status,
+                        DownloadStatus::Pending | DownloadStatus::Downloading
+                    )
+            })
+            .count()
+    }
+
     /// Every download in the process, private ones too, for the history to filter.
     pub(crate) fn all_downloads(&self) -> Vec<Download> {
         self.downloads
@@ -70,6 +101,10 @@ impl Browser {
         &mut self,
         mut request: DownloadRequest,
     ) -> Result<DownloadId, Error> {
+        // The browser-level start command currently targets the ordinary engine session.
+        if self.private {
+            return Err(Error::Download(downloads::Error::InvalidState));
+        }
         let Some(engine) = &self.engine else {
             return Err(Error::Download(downloads::Error::EngineUnavailable));
         };
@@ -177,7 +212,7 @@ impl Browser {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .iter()
-            .find(|download| download.id == id)
+            .find(|download| download.id == id && download.private == self.private)
             .cloned()
             .ok_or(Error::Download(downloads::Error::NoSuchDownload))
     }

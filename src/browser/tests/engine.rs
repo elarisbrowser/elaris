@@ -227,6 +227,24 @@ fn transferring_a_tab_retains_its_view_and_routes_pending_updates_to_its_new_own
 }
 
 #[test]
+fn transfer_keeps_tabs_in_their_browsing_mode() {
+    let mut source = Browser {
+        private: true,
+        ..Browser::default()
+    };
+    let mut destination = Browser::default();
+    let tab = source.open_tab("https://example.com/").unwrap();
+
+    assert!(
+        source
+            .transfer_tab(&mut destination, tab, crate::tab::TabSection::Regular, 0)
+            .is_err()
+    );
+    assert!(source.tab(tab).is_some());
+    assert!(destination.tab(tab).is_none());
+}
+
+#[test]
 fn invalid_transfer_leaves_both_browsers_unchanged() {
     use crate::tab::TabSection;
 

@@ -147,6 +147,7 @@ impl Browser {
     pub(crate) fn transfer_buffer(&self) -> Self {
         Self {
             engine: self.engine.clone(),
+            private: self.private,
             ..Self::default()
         }
     }

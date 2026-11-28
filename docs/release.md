@@ -2,7 +2,9 @@
 
 The `Release` workflow (`.github/workflows/release.yml`) builds the macOS and Linux bundles, each with Ladybird's
 engine, and attaches them to a **draft pre-release**. The macOS artifact is Developer ID signed, notarized, stapled,
-and verified before upload. Nothing is public until someone checks the artifacts and publishes the draft by hand.
+and verified before upload. A draft is not listed on GitHub Releases until it is published manually.
+Signed-in readers of this public repository can still download workflow artifacts before they expire.
+Use a private delivery path if the test build is only for invited testers.
 
 ## Cut a release
 

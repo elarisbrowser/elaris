@@ -16,6 +16,7 @@ use crate::tab::TabId;
 
 /// How often the page asks the engine for new numbers, as Ladybird's Task Manager does.
 const REFRESH: Duration = Duration::from_secs(1);
+const REQUEST_TIMEOUT: Duration = REFRESH.saturating_mul(5);
 
 #[derive(Default)]
 pub(crate) struct TaskManagerPage {
@@ -33,6 +34,17 @@ pub(crate) struct TaskManagerPage {
     /// When the engine was last asked, while its answer is still due.
     requested: Option<Instant>,
     last_request: Option<Instant>,
+}
+
+impl TaskManagerPage {
+    fn next_refresh_in(&self, now: Instant) -> Duration {
+        if let Some(requested) = self.requested {
+            return REQUEST_TIMEOUT.saturating_sub(now.saturating_duration_since(requested));
+        }
+        self.last_request.map_or(REFRESH, |last| {
+            REFRESH.saturating_sub(now.saturating_duration_since(last))
+        })
+    }
 }
 
 impl AppState {
@@ -58,7 +70,10 @@ impl AppState {
             page.requested = None;
             changed = true;
             match result {
-                Ok(processes) => {
+                Ok(mut processes) => {
+                    if !self.browser.private {
+                        processes.retain(|process| !process.private);
+                    }
                     let overview = Overview::new(processes);
                     page.selected = page.selected.filter(|id| overview.process(*id).is_some());
                     page.overview = Some(overview);
@@ -80,21 +95,17 @@ impl AppState {
         // An answer that never came, such as from an engine that stopped, is asked for again.
         let waiting = page
             .requested
-            .is_some_and(|requested| now - requested < REFRESH * 5);
+            .is_some_and(|requested| now - requested < REQUEST_TIMEOUT);
         let due = page.last_request.is_none_or(|last| now - last >= REFRESH);
         if !waiting && due {
-            if self.browser.request_processes(tab) {
-                page.requested = Some(now);
-            } else {
+            page.requested = self.browser.request_processes(tab).then_some(now);
+            if page.requested.is_none() {
                 page.load_error = Some("This build has no web engine.".into());
                 changed = true;
             }
             page.last_request = Some(now);
         }
-        let next = page
-            .last_request
-            .map_or(REFRESH, |last| REFRESH.saturating_sub(now - last));
-        tx.wake_after(next);
+        tx.wake_after(page.next_refresh_in(now));
         changed
     }
 
@@ -159,4 +170,28 @@ pub(crate) fn open_task_manager(state: &mut AppState, tx: &mut Tx) {
         });
     state.activate(tab);
     tx.focus(crate::ui::TASK_MANAGER_SEARCH, false);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn waits_for_an_outstanding_reply_without_scheduling_an_immediate_refresh() {
+        let started = Instant::now();
+        let mut page = TaskManagerPage {
+            requested: Some(started),
+            last_request: Some(started),
+            ..Default::default()
+        };
+        assert_eq!(
+            page.next_refresh_in(started + Duration::from_secs(2)),
+            Duration::from_secs(3)
+        );
+        page.requested = None;
+        assert_eq!(
+            page.next_refresh_in(started + Duration::from_millis(500)),
+            Duration::from_millis(500)
+        );
+    }
 }

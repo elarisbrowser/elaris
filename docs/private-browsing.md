@@ -34,6 +34,7 @@ and the engine resets the private session when the last private view closes, so 
 window starts empty.
 
 Private downloads appear only in private windows' download lists and are forgotten with the
-session, whose reset cancels any still running. Worker and content-client
+session, whose reset cancels any still running. Retry and the image context menu's Save Image As
+are not available in private windows for now. Worker and content-client
 isolation across successive private generations, permission prompts in private windows, disk cache
 behavior and TLS cleanup remain unverified.

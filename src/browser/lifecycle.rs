@@ -213,6 +213,11 @@ impl Browser {
         source: &Self,
         internal: bool,
     ) -> Result<(), Error> {
+        if self.private != source.private {
+            return Err(Error::Address(
+                "Tabs cannot move between private and ordinary windows",
+            ));
+        }
         if index > self.section_tabs(section).count() {
             return Err(Error::InvalidSectionIndex(index));
         }

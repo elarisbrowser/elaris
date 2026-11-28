@@ -16,12 +16,7 @@ use elaris_core::downloads::{Download, DownloadId, Status};
 /// Adds the Downloads trigger and its anchored panel to the sidebar.
 pub(crate) fn trigger(state: &AppState, theme: &Theme, layer: &mut Vec<El>) -> El {
     let open = state.downloads_open;
-    let active = state
-        .browser
-        .downloads()
-        .iter()
-        .filter(|download| matches!(download.status, Status::Pending | Status::Downloading))
-        .count();
+    let active = state.browser.active_download_count();
     let reduced = state.sidebar.hover.reduced.get();
     let frame =
         controls::icon_button_frame("downloads-button", "Downloads", theme::ICON_BUTTON, theme);
@@ -59,7 +54,7 @@ pub(crate) fn trigger(state: &AppState, theme: &Theme, layer: &mut Vec<El>) -> E
                 .child(text(count).font(type_::LABEL).color(theme.page)),
         );
     }
-    Popover::new("downloads-popover")
+    let mut popover = Popover::new("downloads-popover")
         .trigger(button)
         .title("Downloads")
         .placement(
@@ -75,9 +70,11 @@ pub(crate) fn trigger(state: &AppState, theme: &Theme, layer: &mut Vec<El>) -> E
             },
         )
         .open(open)
-        .on_close(|state: &mut AppState| state.downloads_open = false)
-        .child(panel(state, theme))
-        .build(state, theme, layer)
+        .on_close(|state: &mut AppState| state.downloads_open = false);
+    if open {
+        popover = popover.child(panel(state, theme));
+    }
+    popover.build(state, theme, layer)
 }
 
 fn panel(state: &AppState, theme: &Theme) -> El {
@@ -99,12 +96,12 @@ fn panel(state: &AppState, theme: &Theme) -> El {
             stick_bottom: false,
         });
     for download in downloads.iter().rev() {
-        list = list.child(download_row(download, theme));
+        list = list.child(download_row(download, theme, state.settings.reduce_motion));
     }
     list
 }
 
-fn download_row(download: &Download, theme: &Theme) -> El {
+fn download_row(download: &Download, theme: &Theme, reduce_motion: bool) -> El {
     let extension = download
         .filename
         .rsplit_once('.')
@@ -141,12 +138,17 @@ fn download_row(download: &Download, theme: &Theme) -> El {
         let fill = if let Some(progress) = progress(download) {
             el().h_full().w_frac(progress).radius(2.0).fill(theme.icon)
         } else {
-            el().key(format!("download-indeterminate-{}", download.id.get()))
+            let fill = el()
+                .key(format!("download-indeterminate-{}", download.id.get()))
                 .h_full()
                 .w_frac(0.25)
                 .radius(2.0)
-                .fill(theme.icon)
-                .looping(LoopSpec::slide(1.2, [-1.0, 0.0], [4.0, 0.0]))
+                .fill(theme.icon);
+            if reduce_motion || download.status == Status::Paused {
+                fill
+            } else {
+                fill.looping(LoopSpec::slide(1.2, [-1.0, 0.0], [4.0, 0.0]))
+            }
         };
         details.child(
             el().key(format!("download-progress-{}", download.id.get()))
@@ -210,15 +212,16 @@ fn download_row(download: &Download, theme: &Theme) -> El {
                 .child(remove_button(download.id, theme));
         }
         Status::Failed | Status::Cancelled => {
-            actions = actions
-                .child(action_button(
+            if !download.private {
+                actions = actions.child(action_button(
                     download.id,
                     "Retry download",
                     &super::icons::RELOAD,
                     theme,
                     |browser, id| browser.retry_download(id).map(drop),
-                ))
-                .child(remove_button(download.id, theme));
+                ));
+            }
+            actions = actions.child(remove_button(download.id, theme));
         }
         _ => {}
     }

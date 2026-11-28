@@ -192,6 +192,9 @@ impl AppState {
     /// showing bookmarked pages, and by fetching the pages of bookmarks on show that still lack
     /// them. Reports whether any changed.
     pub(super) fn poll_bookmark_details(&mut self, polled: &Polled, tx: &mut Tx) -> bool {
+        if self.browser.private {
+            return false;
+        }
         let mut found: Vec<(String, Option<String>, Option<Favicon>)> = polled
             .fetched
             .iter()

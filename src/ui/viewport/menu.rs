@@ -297,7 +297,7 @@ pub(crate) fn view(state: &AppState, theme: &Theme, layer: &mut Vec<El>) {
             .icon(&icons::OPEN_TAB),
         );
         let url = info.url.clone();
-        if info.image {
+        if info.image && !state.browser.private {
             let save_url = url.clone();
             menu = menu.item(
                 item(id, "Save Image As…", move |_, tx| {

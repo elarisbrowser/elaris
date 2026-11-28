@@ -23,6 +23,7 @@ const SECTIONS: &[(&str, &[&str])] = &[
         "Data sent to websites and providers",
         &[
             "When you visit a website, Elaris and Ladybird make network requests to that site and its embedded resources. The site receives the request data needed to provide its content, such as your IP address and browser request details.",
+            "When you show bookmarks in an ordinary window, Elaris may load bookmarked pages in the background to fill in missing titles or icons. Private windows do not do this.",
             "Search terms entered in the address bar are sent to your selected search provider when you choose a search suggestion or submit the search. Elaris does not send typed queries for remote autocomplete.",
             "When content blocking is enabled, Elaris downloads filter lists and refreshes them daily. Your browsing history is not sent to Elaris.",
         ],

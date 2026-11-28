@@ -89,8 +89,14 @@ fn private_and_ordinary_windows_each_list_only_their_own_downloads() {
         .unwrap()
         .extend([download(false), download(true)]);
     assert!(browser.downloads().iter().all(|d| !d.private) && browser.downloads().len() == 1);
+    assert_eq!(browser.active_download_count(), 1);
+    assert!(browser.sync_download_snapshot());
+    assert!(!browser.sync_download_snapshot());
     browser.private = true;
     assert!(browser.downloads().iter().all(|d| d.private) && browser.downloads().len() == 1);
+    assert_eq!(browser.active_download_count(), 1);
+    assert!(browser.sync_download_snapshot());
+    assert!(!browser.sync_download_snapshot());
     browser.forget_private_downloads();
     assert!(browser.downloads().is_empty());
     browser.private = false;
@@ -178,6 +184,26 @@ fn retry_starts_the_address_again_in_place_of_the_failed_record() {
     ));
     let done = record(&browser, DownloadStatus::Completed, false);
     assert!(browser.retry_download(done).is_err());
+}
+
+#[test]
+fn private_windows_do_not_issue_ordinary_download_requests() {
+    let (mut browser, fake) = connected();
+    browser.private = true;
+    let id = record(&browser, DownloadStatus::Failed, false);
+    browser.downloads.lock().unwrap()[0].private = true;
+
+    assert_eq!(
+        browser.start_download(DownloadRequest::new("https://example.com/file.zip")),
+        Err(Error::Download(downloads::Error::InvalidState))
+    );
+    assert_eq!(
+        browser.retry_download(id),
+        Err(Error::Download(downloads::Error::InvalidState))
+    );
+    assert!(sent(&fake).is_empty());
+    assert_eq!(browser.downloads().len(), 1);
+    assert!(browser.remove_download(id).is_ok());
 }
 
 #[test]

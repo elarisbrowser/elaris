@@ -1,7 +1,8 @@
 # Installing Elaris
 
 Elaris is experimental alpha software. Expect rough edges and breaking changes. Each release is a draft pre-release on
-GitHub until it has been checked, so download only from a published release.
+GitHub until it has been checked. Download from a published release or from the private link
+provided for your testing cohort.
 
 Check each download against its `.sha256` file before you run it.
 
@@ -11,9 +12,9 @@ Requirements: macOS 14.4 or newer, on an Apple Silicon Mac. Intel Macs are not s
 
 1. Open `Elaris-<version>-macos-arm64.dmg`.
 2. Drag **Elaris** into **Applications**.
-3. Open Elaris from Applications. The published `0.1.0-alpha.1` build is not notarized, so macOS may block the first
-   launch. Open **System Settings → Privacy & Security**, find the message about Elaris, and choose **Open Anyway**.
-   Future official releases use the signed and notarized workflow described in [the macOS signing guide](macos-signing.md).
+3. Open Elaris from Applications. On a signed and notarized build, macOS may ask you to confirm the first launch.
+   If macOS blocks a build that was distributed as signed, stop and report the warning and package filename.
+   Older unsigned test builds do not use [the macOS signing workflow](macos-signing.md).
 
 ## Linux (x86_64)
 

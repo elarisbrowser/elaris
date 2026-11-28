@@ -142,6 +142,10 @@ impl AppState {
     /// Asks to put the tabs Memory Saver chooses to sleep when a check is due.
     pub(super) fn poll_memory_saver(&mut self, tx: &mut Tx) {
         let mode = self.settings.memory_saver;
+        if mode == MemorySaver::Off {
+            self.memory_saver.check_now();
+            return;
+        }
         let now = Instant::now();
         if self.memory_saver.check.is_some_and(|due| now < due) {
             return;

@@ -198,6 +198,25 @@ fn fetched_pages_and_open_tabs_fill_in_what_bookmarks_lack() {
 }
 
 #[test]
+fn private_windows_do_not_enrich_shared_bookmarks() {
+    let mut state = AppState::new(Some("https://example.com/"));
+    state.browser.private = true;
+    let id = state
+        .bookmarks()
+        .add_link(BookmarkId::BAR, "", "https://example.com/", 0)
+        .unwrap();
+    let tab = state.browser.active_tab().unwrap().id();
+    state.browser.restore_favicon(tab, 1, 1, vec![9; 4]);
+    let polled = crate::browser::Polled {
+        changed: true,
+        ..Default::default()
+    };
+
+    assert!(!state.poll_bookmark_details(&polled, &mut Tx::default()));
+    assert!(state.bookmarks().get(id).unwrap().favicon.is_none());
+}
+
+#[test]
 fn the_tab_menu_removes_a_bookmark_it_made() {
     let mut state = AppState::new(Some("https://example.com/"));
     let tab = state.browser.active_tab().unwrap().id();

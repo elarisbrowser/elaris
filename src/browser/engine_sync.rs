@@ -257,9 +257,7 @@ impl Browser {
             let frames = peek.page.surface.frames();
             polled.animating |= std::mem::replace(&mut peek.page.engine.frames, frames) != frames;
         }
-        let downloads = self.downloads();
-        if self.last_download_snapshot != downloads {
-            self.last_download_snapshot = downloads;
+        if self.sync_download_snapshot() {
             polled.changed = true;
             polled.downloads_changed = true;
         }
