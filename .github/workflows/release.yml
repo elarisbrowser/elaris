@@ -92,7 +92,7 @@ jobs:
           cargo clippy --all-targets --locked -- -D warnings
           cargo test --locked
       - name: Test release engine cache routing and manifest validation
-        run: python3 -m unittest discover -s tools/tests -p test_release_engine.py
+        run: python3 -m unittest tools.tests.test_release_engine tools.tests.test_release_app
       - name: Test macOS signing and publication safeguards
         run: python3 -m unittest discover -s tools/tests -p test_macos_signing.py
 
@@ -191,12 +191,41 @@ jobs:
           path: build/release-engine-cache
           key: ${{ steps.engine-key.outputs.key }}
 
+      - name: Identify exact Elaris executable inputs
+        id: app-key
+        if: ${{ steps.engine-key.outputs.key != '' }}
+        shell: bash
+        env:
+          ENGINE_KEY: ${{ steps.engine-key.outputs.key }}
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          if [ -n "${HOME:-}" ] && [ -f "$HOME/.cargo/env" ]; then
+            . "$HOME/.cargo/env"
+          fi
+          channel_args=()
+          if [ "$CHANNEL" = canary ]; then
+            channel_args+=(--canary)
+          fi
+          key="$("${ELARIS_PYTHON:-python3}" -m tools.elaris_cli.release_app "$ENGINE_KEY" "${channel_args[@]}")"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Restore exact Elaris executable
+        id: app-cache
+        if: ${{ steps.app-key.outputs.key != '' && steps.engine-cache.outputs.cache-hit == 'true' }}
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: build/release-app-cache
+          key: ${{ steps.app-key.outputs.key }}
+
       - name: Build and bundle Elaris
         id: bundle
         shell: bash
         env:
           ENGINE_KEY: ${{ steps.engine-key.outputs.key }}
           ENGINE_CACHE_HIT: ${{ steps.engine-cache.outputs.cache-hit }}
+          APP_KEY: ${{ steps.app-key.outputs.key }}
+          APP_CACHE_HIT: ${{ steps.app-cache.outputs.cache-hit }}
         run: |
           ccache --zero-stats
           cache_args=()
@@ -206,6 +235,12 @@ jobs:
           if [ "$ENGINE_CACHE_HIT" = true ]; then
             cache_args+=(--release-engine-cache-hit)
           fi
+          if [ -n "$APP_KEY" ]; then
+            cache_args+=(--release-app-cache-key "$APP_KEY")
+          fi
+          if [ "$APP_CACHE_HIT" = true ]; then
+            cache_args+=(--release-app-cache-hit)
+          fi
           ./elaris bundle "${cache_args[@]}" ${{ inputs.channel == 'canary' && '--canary' || '' }}
 
       - name: Report compiler cache hits
@@ -214,8 +249,8 @@ jobs:
         run: ccache --show-stats
 
       - name: Save Ladybird compiler and vcpkg archives
-        # These caches validate content, so completed entries from an otherwise failed build are useful.
-        if: ${{ always() && (steps.bundle.outcome == 'success' || steps.bundle.outcome == 'failure') }}
+        # Avoid uploading another large compiler cache when no native build was needed.
+        if: ${{ always() && steps.engine-cache.outputs.cache-hit != 'true' && (steps.bundle.outcome == 'success' || steps.bundle.outcome == 'failure') }}
         uses: actions/cache/save@v4
         with:
           path: |
@@ -233,15 +268,35 @@ jobs:
             exit 1
           fi
 
-      - name: Smoke test Ladybird runtime and helper processes
-        run: ctest --test-dir build/cpp-ladybird --output-on-failure -R 'elaris_ladybird_(smoke|engine_features|download_smoke)'
+      - name: Smoke test Ladybird runtime and helper processes on a native build
+        run: |
+          # Exact engine archives contain runtime outputs, not CMake or CTest state.
+          if ! grep -qx 'Native engine: reused exact output' build/release-engine-info.txt 2>/dev/null; then
+            ctest --test-dir build/cpp-ladybird --output-on-failure --no-tests=error -R '^elaris_ladybird_(smoke|engine_features|download_smoke)$'
+          fi
+
+      - name: Smoke test the packaged browser
+        timeout-minutes: 5
+        run: |
+          relocated="$RUNNER_TEMP/Elaris.app"
+          ditto build/Elaris.app "$relocated"
+          python3 packaging/macos/smoke_release.py --app "$relocated"
 
       - name: Save verified Ladybird release outputs
         if: ${{ steps.engine-key.outputs.key != '' && steps.engine-cache.outputs.cache-hit != 'true' && hashFiles('build/release-engine-cache/manifest.json') != '' }}
+        continue-on-error: true
         uses: actions/cache/save@v4
         with:
           path: build/release-engine-cache
           key: ${{ steps.engine-key.outputs.key }}
+
+      - name: Save verified Elaris executable
+        if: ${{ steps.app-key.outputs.key != '' && steps.app-cache.outputs.cache-hit != 'true' && hashFiles('build/release-app-cache/manifest.json') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: build/release-app-cache
+          key: ${{ steps.app-key.outputs.key }}
 
       - name: Stage production release entitlements and inspect signing plan
         run: |
@@ -271,6 +326,11 @@ jobs:
             cat build/release-engine-info.txt >> build/BUILD-INFO.txt
           else
             echo "Native engine: built natively (exact cache unavailable)" >> build/BUILD-INFO.txt
+          fi
+          if [ -f build/release-app-info.txt ]; then
+            cat build/release-app-info.txt >> build/BUILD-INFO.txt
+          else
+            echo "Elaris executable: built with Cargo (exact cache unavailable)" >> build/BUILD-INFO.txt
           fi
 
       - name: Package an unsigned test image
@@ -509,12 +569,41 @@ jobs:
           path: build/release-engine-cache
           key: ${{ steps.engine-key.outputs.key }}
 
+      - name: Identify exact Elaris executable inputs
+        id: app-key
+        if: ${{ steps.engine-key.outputs.key != '' }}
+        shell: bash
+        env:
+          ENGINE_KEY: ${{ steps.engine-key.outputs.key }}
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          if [ -n "${HOME:-}" ] && [ -f "$HOME/.cargo/env" ]; then
+            . "$HOME/.cargo/env"
+          fi
+          channel_args=()
+          if [ "$CHANNEL" = canary ]; then
+            channel_args+=(--canary)
+          fi
+          key="$("${ELARIS_PYTHON:-python3}" -m tools.elaris_cli.release_app "$ENGINE_KEY" "${channel_args[@]}")"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Restore exact Elaris executable
+        id: app-cache
+        if: ${{ steps.app-key.outputs.key != '' && steps.engine-cache.outputs.cache-hit == 'true' }}
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: build/release-app-cache
+          key: ${{ steps.app-key.outputs.key }}
+
       - name: Build and bundle Elaris
         id: bundle
         shell: bash
         env:
           ENGINE_KEY: ${{ steps.engine-key.outputs.key }}
           ENGINE_CACHE_HIT: ${{ steps.engine-cache.outputs.cache-hit }}
+          APP_KEY: ${{ steps.app-key.outputs.key }}
+          APP_CACHE_HIT: ${{ steps.app-cache.outputs.cache-hit }}
         run: |
           ccache --zero-stats
           cache_args=()
@@ -524,6 +613,12 @@ jobs:
           if [ "$ENGINE_CACHE_HIT" = true ] && [ -d build/release-engine-cache ]; then
             cache_args+=(--release-engine-cache-hit)
           fi
+          if [ -n "$APP_KEY" ]; then
+            cache_args+=(--release-app-cache-key "$APP_KEY")
+          fi
+          if [ "$APP_CACHE_HIT" = true ]; then
+            cache_args+=(--release-app-cache-hit)
+          fi
           ELARIS_JOBS=4 ./elaris bundle "${cache_args[@]}" ${{ inputs.channel == 'canary' && '--canary' || '' }}
 
       - name: Report compiler cache hits
@@ -532,8 +627,8 @@ jobs:
         run: ccache --show-stats
 
       - name: Save Ladybird compiler and vcpkg archives
-        # These caches validate content, so completed entries from an otherwise failed build are useful.
-        if: ${{ always() && (steps.bundle.outcome == 'success' || steps.bundle.outcome == 'failure') }}
+        # Avoid uploading another large compiler cache when no native build was needed.
+        if: ${{ always() && steps.engine-cache.outputs.cache-hit != 'true' && (steps.bundle.outcome == 'success' || steps.bundle.outcome == 'failure') }}
         uses: actions/cache/save@v4
         with:
           path: |
@@ -556,10 +651,19 @@ jobs:
 
       - name: Save verified Ladybird release outputs
         if: ${{ steps.engine-key.outputs.key != '' && steps.engine-cache.outputs.cache-hit != 'true' && hashFiles('build/release-engine-cache/manifest.json') != '' }}
+        continue-on-error: true
         uses: actions/cache/save@v4
         with:
           path: build/release-engine-cache
           key: ${{ steps.engine-key.outputs.key }}
+
+      - name: Save verified Elaris executable
+        if: ${{ steps.app-key.outputs.key != '' && steps.app-cache.outputs.cache-hit != 'true' && hashFiles('build/release-app-cache/manifest.json') != '' }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: build/release-app-cache
+          key: ${{ steps.app-key.outputs.key }}
 
       - name: Package Linux archives and checksums
         run: |
@@ -583,6 +687,11 @@ jobs:
             cat build/release-engine-info.txt >> dist/BUILD-INFO.txt
           else
             echo "Native engine: built natively (exact cache unavailable)" >> dist/BUILD-INFO.txt
+          fi
+          if [ -f build/release-app-info.txt ]; then
+            cat build/release-app-info.txt >> dist/BUILD-INFO.txt
+          else
+            echo "Elaris executable: built with Cargo (exact cache unavailable)" >> dist/BUILD-INFO.txt
           fi
           cp dist/BUILD-INFO.txt "dist/Elaris-${version}-linux-x86_64.BUILD-INFO.txt"
           (cd dist && sha256sum "$(basename "$archive")" > "$(basename "$archive").sha256")

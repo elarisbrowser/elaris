@@ -1,5 +1,7 @@
 """Rust application and general development commands."""
 
+from __future__ import annotations
+
 import argparse
 import json
 import os
@@ -197,13 +199,55 @@ def _configure_bridge_environment(bridge_dir: str) -> None:
     os.environ[loader_variable] = os.pathsep.join(directories)
 
 
+def _release_executable(
+    engine_key: str, engine_reused: bool, channel: str, app_key: str | None, app_hit: bool,
+) -> Path:
+    from . import release_app
+
+    if app_key:
+        try:
+            if app_key != release_app.key(engine_key, channel):
+                raise ValueError("build inputs changed after identifying the executable")
+        except (OSError, ValueError, subprocess.CalledProcessError) as error:
+            ui.muted(f"Exact Elaris executable cache disabled; using Cargo: {error}")
+            app_key = None
+    if app_key and app_hit and engine_reused:
+        try:
+            executable, manifest = release_app.restore(app_key)
+        except (OSError, ValueError) as error:
+            ui.muted(f"Invalid Elaris executable cache; using Cargo: {error}")
+        else:
+            release_app.write_build_info(app_key, "reused exact output", manifest)
+            ui.muted("Reusing the exact Elaris release executable.")
+            return executable
+
+    _configure_bridge_environment(bridge_lib_dir())
+    run_step("Elaris browser", "cargo", "+stable", "build", "--locked", "--release", "--features", "ladybird-bridge")
+    executable = _executable("release")
+    if app_key:
+        try:
+            manifest = release_app.export(executable, app_key)
+        except (OSError, ValueError) as error:
+            ui.muted(f"Not saving Elaris executable: {error}")
+            release_app.write_build_info(app_key, "built with Cargo; not cached", {})
+        else:
+            release_app.write_build_info(app_key, "built with Cargo", manifest)
+    return executable
+
+
 def bundle(args: argparse.Namespace) -> None:
     """Build an optimised Elaris and package it with Ladybird's engine and the brand icon for this platform."""
     channel = "canary" if args.canary else packaging.macos_release_channel()
     os.environ["ELARIS_CHANNEL"] = channel
     cache_key = getattr(args, "release_engine_cache_key", None)
     cache_hit = getattr(args, "release_engine_cache_hit", False)
+    app_key = getattr(args, "release_app_cache_key", None)
+    app_hit = getattr(args, "release_app_cache_hit", False)
     manifest = None
+    if app_hit and not app_key:
+        raise SystemExit("elaris: a release executable cache hit requires a key")
+    if app_key and not cache_key:
+        raise SystemExit("elaris: an exact release executable cache requires a native engine key")
     if cache_hit and not cache_key:
         raise SystemExit("elaris: a release engine cache hit requires a key")
     if cache_key is not None:
@@ -225,14 +269,15 @@ def bundle(args: argparse.Namespace) -> None:
                 os.environ.pop("ELARIS_RELEASE_HSTS_DIR", None)
         else:
             ui.muted(f"Reusing release engine built at {manifest['producer']}.")
-        _configure_bridge_environment(bridge_lib_dir())
-        run_step("Elaris browser", "cargo", "+stable", "build", "--locked", "--release", "--features", "ladybird-bridge")
+        executable = _release_executable(cache_key, manifest is not None, channel, app_key, app_hit)
     else:
         build(argparse.Namespace(ui=False, rust=False, ladybird=False, release=True, jobs=None))
-    executable = _executable("release")
-    stamp = _build_stamp(False, "release")
-    stamp.parent.mkdir(parents=True, exist_ok=True)
-    stamp.write_text(channel)
+        executable = _executable("release")
+    # A restored executable is staged directly into the bundle, not installed into Cargo's target tree.
+    if executable == _executable("release"):
+        stamp = _build_stamp(False, "release")
+        stamp.parent.mkdir(parents=True, exist_ok=True)
+        stamp.write_text(channel)
     if sys.platform == "darwin":
         bundled = packaging.macos_release_bundle(
             executable, packaging.macos_release_channel(args.canary), fresh=cache_key is not None,
@@ -510,6 +555,8 @@ def register_commands(commands) -> None:
         elif handler is bundle:
             subcommand.add_argument("--release-engine-cache-key", help=argparse.SUPPRESS)
             subcommand.add_argument("--release-engine-cache-hit", action="store_true", help=argparse.SUPPRESS)
+            subcommand.add_argument("--release-app-cache-key", help=argparse.SUPPRESS)
+            subcommand.add_argument("--release-app-cache-hit", action="store_true", help=argparse.SUPPRESS)
             subcommand.add_argument(
                 "--canary", action="store_true", help="Name the build as canary, with the yellow icon (macOS)"
             )

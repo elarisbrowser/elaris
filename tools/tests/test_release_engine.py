@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tools.elaris_cli import project, release_engine as native
+from tools.elaris_cli import project, release_app, release_engine as native
 
 KEY = "release-engine-v1-" + "b" * 64
 PRODUCER = "c" * 40
@@ -147,6 +147,61 @@ class ExactReleaseEngine(unittest.TestCase):
             self.assertEqual(trace, ["native", "cargo", "package"])
             self.assertNotIn("reused", native.BUILD_INFO.read_text())
 
+    def test_both_exact_hits_still_package_and_invalid_app_only_rebuilds_rust(self):
+        trace = []
+        executable = self.root / "target/release/elaris"
+        app_key = "release-app-v1-" + "a" * 64
+        args = argparse.Namespace(
+            release_engine_cache_key=KEY, release_engine_cache_hit=False,
+            release_app_cache_key=app_key, release_app_cache_hit=False, canary=False,
+        )
+
+        def build_engine():
+            trace.append("native")
+            self.populate_native_outputs()
+
+        def cargo(*_args):
+            trace.append("cargo")
+            executable.parent.mkdir(parents=True, exist_ok=True)
+            executable.write_bytes(ELF[:16] + b"\x03\x00" + ELF[18:] + b"elaris")
+            executable.chmod(0o755)
+
+        def package(binary, _prefix, *, fresh):
+            trace.append(("package", binary, fresh))
+            self.assertTrue((native.CPP_BUILD_DIR / "lib/libelaris_ladybird.so").is_file())
+
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(patch.object(native.sys, "platform", "linux"))
+            stack.enter_context(patch.object(native, "key", return_value=KEY))
+            stack.enter_context(patch.object(release_app, "key", return_value=app_key))
+            stack.enter_context(patch.multiple(
+                release_app, CACHE=self.root / "app-cache", CPP_BUILD_DIR=native.CPP_BUILD_DIR,
+                BUILD_INFO=self.root / "app-info.txt",
+            ))
+            stack.enter_context(patch.object(project.engine, "build_for_elaris", side_effect=build_engine))
+            stack.enter_context(patch.object(project, "_executable", return_value=executable))
+            stack.enter_context(patch.object(project, "_build_stamp", return_value=self.root / "build/stamp"))
+            stack.enter_context(patch.object(project, "run_step", side_effect=cargo))
+            stack.enter_context(patch.object(project, "bridge_lib_dir", return_value="native/lib"))
+            stack.enter_context(patch.object(project, "_configure_bridge_environment"))
+            stack.enter_context(patch.object(project.packaging, "linux_prefix_bundle", side_effect=package))
+
+            project.bundle(args)
+            self.assertEqual(trace, ["native", "cargo", ("package", executable, True)])
+            self.remove_native_outputs()
+
+            trace.clear()
+            args.release_engine_cache_hit = args.release_app_cache_hit = True
+            project.bundle(args)
+            self.assertEqual(trace, [("package", release_app.CACHE / "elaris", True)])
+            self.remove_native_outputs()
+
+            trace.clear()
+            (release_app.CACHE / "elaris").write_bytes(b"corrupt")
+            project.bundle(args)
+            self.assertEqual(trace, ["cargo", ("package", executable, True)])
+            self.assertIn("reused exact output", native.BUILD_INFO.read_text())
+
     def test_key_changes_for_native_input_not_rust_only_change(self):
         cargo = native.ROOT / "Cargo.toml"
         cargo.write_text('version = "0.1.0"\n')
@@ -156,6 +211,11 @@ class ExactReleaseEngine(unittest.TestCase):
         bridge.write_text("native source")
         browser = native.ROOT / "browser.rs"
         browser.write_text("Rust source")
+        readme = native.ROOT / "bridge/README.md"
+        readme.parent.mkdir()
+        readme.write_text("Bridge documentation")
+        signer = native.ROOT / "macos_sign.py"
+        signer.write_text("Local signing")
 
         def output(*command, cwd=None):
             if command[:2] == ("git", "rev-parse"):
@@ -163,7 +223,12 @@ class ExactReleaseEngine(unittest.TestCase):
             if command[:2] == ("git", "status"):
                 return ""
             if command[:2] == ("git", "ls-files"):
-                return "bridge.cpp\0"
+                paths = command[4:]
+                self.assertIn("tools/elaris_cli/engine.py", paths)
+                self.assertNotIn("tools/elaris_cli", paths)
+                self.assertNotIn("tools/elaris_cli/macos_sign.py", paths)
+                self.assertNotIn("tools/cli.py", paths)
+                return "bridge.cpp\0bridge/README.md\0"
             return "toolchain identity"
 
         with patch.object(native.sys, "platform", "linux"), \
@@ -174,6 +239,8 @@ class ExactReleaseEngine(unittest.TestCase):
              patch.dict(os.environ, {"ELARIS_BASELINE_CPU": "1"}, clear=True):
             original = native.key()
             browser.write_text("changed Rust source")
+            readme.write_text("Updated bridge documentation")
+            signer.write_text("Updated signing command")
             self.assertEqual(native.key(), original)
             bridge.write_text("changed native source")
             new_bridge = native.key()
