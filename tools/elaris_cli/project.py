@@ -70,13 +70,17 @@ def _run_with_live_log(*command: str, log_path: Path) -> None:
         raise SystemExit(process.returncode)
 
 
+def _target_dir() -> Path:
+    return ROOT / (os.environ.get("CARGO_TARGET_DIR") or "target")
+
+
 def _executable(profile: str) -> Path:
-    return ROOT / "target" / profile / ("elaris.exe" if os.name == "nt" else "elaris")
+    return _target_dir() / profile / ("elaris.exe" if os.name == "nt" else "elaris")
 
 
 def _build_stamp(ui_only: bool, profile: str) -> Path:
     """Marks the inputs and brand channel of a successful build."""
-    return ROOT / "target" / profile / f"elaris-{'ui' if ui_only else 'bridge'}-build.stamp"
+    return _target_dir() / profile / f"elaris-{'ui' if ui_only else 'bridge'}-build.stamp"
 
 
 def _run_artifacts_are_current(ui_only: bool, profile: str = "debug") -> bool:
@@ -106,25 +110,44 @@ def _run_artifacts_are_current(ui_only: bool, profile: str = "debug") -> bool:
 
 
 def setup(args: argparse.Namespace) -> None:
-    if not args.skip_system_deps:
-        dependencies.install_system_dependencies()
-    dependencies.verify_system_dependencies()
+    if args.ui:
+        if not args.skip_system_deps:
+            dependencies.install_ui_system_dependencies()
+        dependencies.verify_ui_system_dependencies()
+    else:
+        if not args.skip_system_deps:
+            dependencies.install_system_dependencies()
+        dependencies.verify_system_dependencies()
     dependencies.install_rust_toolchain()
-    run("git", "submodule", "update", "--init", "--recursive")
-    prepare_ladybird_paths()
-    dependencies.verify_ladybird_compiler()
-    dependencies.install_ladybird_toolchain()
-    ui.success("Setup is complete")
-    ui.next_steps([
-        ("./elaris build", "Build Ladybird and Elaris"),
-        ("./elaris run", "Build if needed, then launch"),
-    ])
-    ui.muted("\nThe first engine build can take a while. See CONTRIBUTING.md for the full workflow.")
+    if not args.ui:
+        run("git", "submodule", "update", "--init", "--recursive")
+        prepare_ladybird_paths()
+        dependencies.verify_ladybird_compiler()
+        dependencies.install_ladybird_toolchain()
+
+    ui.success("UI setup is complete" if args.ui else "Browser setup is complete")
+    if args.ui:
+        ui.muted("The UI-only build does not load web pages.")
+    else:
+        ui.muted("The first engine build can take a while. See SETUP.md.")
+    if args.run:
+        launch(argparse.Namespace(
+            ui=args.ui, linux_ui=False, release=False, jobs=args.jobs,
+            url=None, rune_args=[], verbose=args.verbose,
+        ))
+    elif args.build:
+        build(argparse.Namespace(ui=args.ui, rust=False, ladybird=False, release=False, jobs=args.jobs))
+    else:
+        ui.next_steps([
+            ("./elaris run --ui" if args.ui else "./elaris run", "Build if needed, then launch"),
+            ("./elaris check", "Run contributor checks"),
+        ])
 
 
 def build(args: argparse.Namespace) -> None:
     os.environ.setdefault("ELARIS_CHANNEL", _default_channel(_profile(args)))
     release = ["--release"] if _profile(args) == "release" else []
+    cargo_jobs = ["--jobs", args.jobs] if args.jobs else []
     # With neither flag, build both. --ui is the older spelling of --rust without the bridge.
     rust_requested = args.rust or args.ui
     build_rust = rust_requested or not args.ladybird
@@ -135,9 +158,9 @@ def build(args: argparse.Namespace) -> None:
         return
     if build_ladybird:
         _configure_bridge_environment(bridge_lib_dir())
-        run_step("Elaris browser", "cargo", "+stable", "build", "--locked", *release, "--features", "ladybird-bridge")
+        run_step("Elaris browser", "cargo", "+stable", "build", "--locked", *release, *cargo_jobs, "--features", "ladybird-bridge")
     else:
-        run_step("Elaris interface", "cargo", "+stable", "build", "--locked", *release)
+        run_step("Elaris interface", "cargo", "+stable", "build", "--locked", *release, *cargo_jobs)
     _build_stamp(not build_ladybird, _profile(args)).write_text(os.environ["ELARIS_CHANNEL"])
 
 
@@ -449,7 +472,7 @@ def check(_args: argparse.Namespace) -> None:
     steps = (
         ("Formatting", "cargo", "+stable", "fmt", "--check"),
         ("Type checking", "cargo", "+stable", "check", "--locked"),
-        ("Clippy lints", "cargo", "+stable", "clippy", "--locked", "--", "-D", "warnings"),
+        ("Clippy lints", "cargo", "+stable", "clippy", "--all-targets", "--locked", "--", "-D", "warnings"),
         ("Rust tests", "cargo", "+stable", "test", "--locked"),
         (
             "Developer CLI tests",
@@ -463,7 +486,7 @@ def check(_args: argparse.Namespace) -> None:
 
 def register_commands(commands) -> None:
     for name, handler, help_text in (
-        ("setup", setup, "Install prerequisites and initialise Ladybird"),
+        ("setup", setup, "Prepare the UI or full browser; optionally build and launch it"),
         ("format", format_sources, "Format Elaris Rust and C++ source files"),
         ("build", build, "Build Ladybird, its Elaris bridge, and the browser"),
         ("run", launch, "Build if needed and launch Elaris with Ladybird"),
@@ -474,6 +497,11 @@ def register_commands(commands) -> None:
         subcommand = commands.add_parser(name, help=help_text)
         subcommand.set_defaults(handler=handler)
         if handler is setup:
+            subcommand.add_argument("--ui", action="store_true", help="Prepare only the interface, without Ladybird")
+            next_action = subcommand.add_mutually_exclusive_group()
+            next_action.add_argument("--build", action="store_true", help="Build after setup without opening a window")
+            next_action.add_argument("--run", action="store_true", help="Build and launch after setup")
+            subcommand.add_argument("--jobs", help="Parallel jobs with --build or --run")
             subcommand.add_argument(
                 "--skip-system-deps",
                 action="store_true",

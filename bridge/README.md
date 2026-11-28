@@ -1,8 +1,21 @@
 # Ladybird bridge
 
-For the normal local workflow, run `./elaris setup` once and then `./elaris build`; the wrapper installs prerequisites, prepares the pinned checkout, builds Ladybird's dependencies, and compiles the bridge and helper processes described below. The bridge is an opt-in C ABI over `vendor/ladybird`. The vendored checkout stays pristine. Elaris disables Ladybird’s spare WebContent process by default to reduce idle memory; set `ELARIS_PREWARM_WEB_CONTENT=1` to keep one ready for faster new tabs. For Peek, CMake applies [a small patch](patches/peek.patch) to copies of two source files in the build directory using `patch`. The patch adds Shift-only pointer activation for HTTP, HTTPS and file links through Ladybird’s existing verified link callback. Normal links, downloads and other modifier combinations keep their upstream activation paths. Ladybird must remain the top-level CMake project because its Rust rules use `CMAKE_SOURCE_DIR`; Elaris injects its target after Ladybird declares its libraries. Direct `cargo run` remains a UI-only build and does not link Ladybird.
+Start with [development setup](../SETUP.md):
 
-## Configure, build and test
+| Goal | Command |
+| --- | --- |
+| Prepare and open the full browser | `./elaris setup --run` |
+| Prepare and open the UI without Ladybird | `./elaris setup --ui --run` |
+| Build the native engine and bridge | `./elaris build --ladybird` |
+| Run the full Linux fixture suite in Docker | `./elaris linux-test` |
+
+The bridge is Elaris's C ABI over the pinned `vendor/ladybird` checkout. Ladybird stays the top-level
+CMake project because its Rust rules use `CMAKE_SOURCE_DIR`; Elaris adds its bridge target after
+Ladybird's libraries are declared. Patches are applied in the build tree, not to the source checkout.
+Elaris leaves the spare WebContent process off to reduce idle memory. Set
+`ELARIS_PREWARM_WEB_CONTENT=1` to keep one ready for faster new tabs in development.
+
+## Focused local C++ checks
 
 On macOS, after Ladybird's vcpkg dependencies have been installed and built for the host architecture:
 
@@ -47,20 +60,24 @@ DYLD_LIBRARY_PATH="$PWD/build/cpp-ladybird/lib:$prefix/lib" \
   callback_panics_are_contained_at_the_ffi_boundary
 ```
 
-## Linux GitHub Actions verification
+## Linux verification in GitHub Actions
 
-`.github/workflows/ladybird-bridge-linux.yml` is manual-only. It checks out the pinned Ladybird submodule and uses Ladybird's `ladybird-ci:2026.11.12` Linux build image, which supplies its documented compiler, Qt and system build dependencies. If clang-tidy 22 is absent, the workflow downloads and extracts its packages under the runner's temporary directory without requiring root. It verifies Xvfb, Mesa software rendering and ccache, builds Ladybird's vcpkg dependencies and the bridge/helper executables, then runs the C++ and Rust smoke tests under Xvfb. It also runs clang-tidy on the Elaris bridge, feature-enabled Rust Clippy and FFI boundary tests, and checks that helper processes have exited after each runtime test. Everyday Rust formatting/check/Clippy/tests and C++ formatting remain in fast CI. Each costly build/test stage has its own timeout; CMake and vcpkg logs are uploaded when a run fails.
+Run **Actions → Ladybird bridge (Linux) → Run workflow** and select the branch.
+The [manual workflow](../.github/workflows/ladybird-bridge-linux.yml) uses the pinned Ladybird
+submodule and Ladybird's Linux CI image. It checks the bridge, helpers, C++ and Rust smoke tests,
+feature-enabled Clippy, and FFI cleanup under Xvfb with Mesa software rendering. It runs
+clang-tidy on Elaris-owned C++ and uploads available diagnostics on failure. It is not a native
+Linux desktop or GPU test.
 
-To run full Linux verification, open **Actions → Ladybird bridge (Linux) → Run workflow**, select the branch to test, and start the workflow. Dependency setup, C++ compilation, formatting/static analysis, C++ runtime, Rust checks and Rust runtime are separate named steps so the first failing step identifies the failure class. A failed run uploads available vcpkg, CMake, CTest and Xvfb logs.
+[Normal CI](../.github/workflows/ci.yml) formats Elaris-owned C++, and runs Rust formatting, check,
+Clippy and tests without building Ladybird. The manual workflow separately caches vcpkg, ccache
+(up to 3 GiB), and build directories keyed to the image and dependency manifests. It
+can save incremental progress even after a failed smoke test.
 
-Everyday push and pull request checks remain in `.github/workflows/ci.yml`; they run Rust formatting, check, Clippy and tests plus Elaris C++ formatting without configuring or building Ladybird. The manual workflow caches Ladybird's vcpkg checkout and binary packages, ccache (capped at 3 GiB), Cargo downloads, and the Ladybird, bridge and Rust build directories. It restores the latest cache and explicitly saves progress even when a later build or smoke test fails, so retries can reuse completed dependency work and continue incremental builds. Cache keys are scoped to the Ladybird CI image and dependency manifests, with unique run IDs so each attempt can publish an updated snapshot. Bridge-specific Rust Clippy and callback boundary tests run in the manual workflow because they require the compiled FFI library; the everyday checks do not. Ladybird's helper resolves shared build paths through the parent repository's `.git/modules` for this nested submodule, so the workflow sets and caches those paths explicitly.
-
-Automatic runs can be added later by defining `push` and `pull_request` path filters beside `workflow_dispatch`. Include changes to `.github/workflows/ladybird-bridge-linux.yml`, `bridge/**`, the `vendor/ladybird` submodule pointer, `Cargo.toml`, `Cargo.lock`, `build.rs`, `src/lib.rs`, the Rust bridge module, the smoke example, and `tools/elaris_cli/**`.
-
-## Verified behavior and limitations
+## Runtime layout and previous checks
 
 - macOS Apple Silicon: configured and compiled against Ladybird `76bef6eee7bffd40c1895a2ee7332405fa1ef83d`; the C++ CTest smoke passed, including helper-process cleanup, and the Rust example linked and ran successfully. The Rust callback-panic boundary regression test also passed.
-- Linux (arm64, `./elaris linux-build` in the devcontainer on Apple Silicon): configure, compile, and all four `elaris_ladybird_*` CTest executables pass, as do feature-enabled Clippy, the Rust FFI tests and the Rust smoke example. The GitHub Actions workflow has not yet had a passing remote run, and x86_64 has not been built locally.
+- Linux (arm64, `./elaris linux-build` in the devcontainer on Apple Silicon): configure, compile, and all four `elaris_ladybird_*` CTest executables pass, as do feature-enabled Clippy, the Rust FFI tests and the Rust smoke example. That local check did not cover x86_64, a native desktop, or its GPU.
 - Packaged runtime: the bridge picks Ladybird's helper directory at run time (beside the executable on macOS, or `libexec` under the prefix on Linux) and falls back to the build tree. Resources come from Ladybird's own layout unless `ELARIS_LADYBIRD_RESOURCE_DIR` or `resource_dir` overrides them.
 - `cargo fmt --check`, `cargo check --locked`, `cargo clippy --locked -- -D warnings`, and `cargo test --locked` passed. Feature-enabled Rust check, Clippy and the callback-panic test passed. `clang-format` and the bridge's compiler warning-as-error build passed. `clang-tidy` is not installed in this environment, so static analysis with it remains unrun.
 - Ladybird loads `WebCompat.json` and its pdf.js viewer while the application is created, from the `Ladybird.app` resources next to `WebContent`. `platform_init()` replaces the resource root the host passes in during `create()`, so the bridge's resource directory does not supply either of them. Both work from a build tree; a packaged build must keep that bundle layout, or change Ladybird's initialization.
@@ -68,7 +85,7 @@ Automatic runs can be added later by defining `push` and `pull_request` path fil
 
 ## Patch conflicts
 
-`./elaris patches check` dry-runs every patch in `patches/` against the checkout and reports each as clean, fuzzy (applies with an offset; refresh it) or conflict. `./elaris engine build` runs it before configuring CMake, and CI runs it on every push. Before bumping the `vendor/ladybird` pin, check the target first:
+`./elaris patches check` dry-runs every patch in `patches/` against the checkout and reports each as clean, fuzzy (applies with an offset; refresh it) or conflict. `./elaris engine build` runs it before configuring CMake, and the patch workflow also checks it. Before bumping the `vendor/ladybird` pin, check the target first:
 
 ```sh
 ./elaris patches check --upstream     # fetch and check upstream master
@@ -83,7 +100,13 @@ Elaris also applies [disable-reporting.patch](patches/disable-reporting.patch) t
 
 If reporting is enabled later, only engine crashes can be reported. `ElarisApplication` overrides `captures_browser_crashes()` to `false`, so the Elaris host process never installs Ladybird's browser crash handler. Engine processes (WebContent, RequestServer, ImageDecoder, Compositor, and the other helpers) still capture crashes. Hub, which is part of the engine, still captures its own. Every report names `application` (`elaris`), `application_version` (from `Cargo.toml`) and `engine` (`ladybird`), next to the Ladybird build information. A future reporting backend can change the two switches and set `ReportSubmission::set_post_function` to its own transport.
 
-The bridge copies frames out as RGBA and leaves showing them to the host. On macOS a host can instead let the Compositor show a view's frames itself (`elaris_ladybird_set_remote_layer`): it reports a CoreAnimation context ID in a `REMOTE_LAYER` event for the host to show with a `CALayerHost`, and `elaris_ladybird_request_snapshot` returns a scaled copy of the frame on display. A host can give Ladybird a thread of its own: `elaris_ladybird_wait` blocks that thread until Ladybird has work, and `elaris_ladybird_wake` interrupts it from any other thread. Elaris does this so the UI thread never waits on Ladybird; see `docs/performance/webview.md`.
+The [Peek patch](patches/peek.patch) uses Ladybird's verified link callback for Shift-only clicks
+on HTTP, HTTPS and file links. Normal links, downloads and other modifier combinations keep
+their upstream activation paths.
+
+## Frames and threads
+
+The CPU fallback copies frames as RGBA for the host to display. On macOS a host can instead let the Compositor show a view's frames itself (`elaris_ladybird_set_remote_layer`): it reports a CoreAnimation context ID in a `REMOTE_LAYER` event for the host to show with a `CALayerHost`, and `elaris_ladybird_request_snapshot` returns a scaled copy of the frame on display. A host can give Ladybird a thread of its own: `elaris_ladybird_wait` blocks that thread until Ladybird has work, and `elaris_ladybird_wake` interrupts it from any other thread. Elaris does this so the UI thread never waits on Ladybird; see [webview performance](../docs/performance/webview.md).
 
 ## Website permission verification
 

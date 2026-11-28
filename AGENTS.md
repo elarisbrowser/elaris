@@ -1,6 +1,6 @@
 # Elaris — Agent Guidelines
 
-Elaris is a cross-platform browser written in Rust. It uses Rune for its desktop UI and will embed upstream Ladybird as its web engine. macOS and Linux are both first-class targets.
+Elaris is a cross-platform browser written in Rust. It uses Rune for its desktop UI and a pinned upstream Ladybird revision for its web engine. macOS and Linux are both first-class targets.
 
 ## Principles
 
@@ -19,6 +19,8 @@ Elaris is a cross-platform browser written in Rust. It uses Rune for its desktop
 - Do not modify vendored dependencies directly.
 
 ## Workflow
+
+- See [SETUP.md](SETUP.md) for UI-only, native engine, and Docker setup.
 
 - Check the existing code and relevant documentation before changing anything.
 - Keep `cargo run` working without requiring Ladybird until integration is explicitly enabled.

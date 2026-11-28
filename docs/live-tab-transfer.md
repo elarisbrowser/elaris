@@ -4,7 +4,7 @@ The engine thread owns Ladybird views in a map keyed by global tab ID. The nativ
 
 The browser transfer validates both owners and the destination section index before removing the tab. It retains the tab ID and surface, releases source page focus, and activates the moved tab in the destination. Source replacement selection uses the same logic as closing a tab. A failed validation leaves both browsers unchanged.
 
-## Window integration still needed
+## Original Rune integration constraints
 
 Rune revision `9553c9a` exposes drag positions in the originating window and provides window placement in physical pixels on macOS and X11. Its placement API explicitly returns no coordinates on Wayland. Placement alone also cannot identify the topmost eligible window when windows overlap. A complete gesture needs platform-aware hit testing and a preview that can follow the pointer outside the source surface. Wayland needs compositor-mediated drag handling or a reduced feature set.
 
@@ -17,10 +17,11 @@ destination revalidates before claiming it. Escape or window closure cancels a
 pending handoff. If extraction already happened, the source restores the tab
 before its next normal session save or window teardown.
 
-Once extracted, both participants suspend their routine session saves. The
-registry retains the previous complete layout until the destination claims the
-tab. At commit, the coordinator replaces both window records and sends a single
-snapshot to the existing atomic session writer. The source acknowledges that
+Once extracted, both participants suspend their routine session saves. For
+ordinary windows, the registry retains the previous complete layout until the
+destination claims the tab. At commit, the coordinator replaces both window
+records and sends a single snapshot to the existing atomic session writer.
+Transfers within private windows stay in memory. The source acknowledges that
 snapshot in its next poll before routine saving resumes. A crash before the
 snapshot is written can restore the previous layout.
 
@@ -35,7 +36,7 @@ After the normal tab drag threshold, the source tracks the window under the
 pointer. The destination converts the pointer to its sidebar coordinates and
 uses the existing section and insertion geometry. Its preview takes a slot in
 the normal animated list or adaptive Favourites grid. Release resolves the
-target again before B1 validates and commits it. Escape, pointer cancellation,
+target again before the coordinator validates and commits it. Escape, pointer cancellation,
 and window closure clear the preview. The blank tab list below New Tab accepts
 a drop into an empty window. A stalled handoff or lost macOS mouse-up clears
 the preview and unwinds the drag.
@@ -73,8 +74,8 @@ live transfer can commit. The tab keeps its original section.
 
 A pending window is excluded from session saves. Escape, close, native creation
 failure, or a readiness timeout cancels the handoff and discards the tentative
-window. A successful transfer saves the destination and updates or removes the source
-record in one snapshot.
+window. A successful transfer between ordinary windows saves the destination
+and updates or removes the source record in one snapshot.
 
 X11 desktop detachment accepts exposed root space and desktop windows that
 advertise their EWMH desktop type on the hit window. Placement uses the RandR

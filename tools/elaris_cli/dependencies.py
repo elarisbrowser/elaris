@@ -160,6 +160,44 @@ OPENSUSE_PACKAGES = (
 )
 
 
+# The Rust UI links against desktop libraries on Linux but needs no Qt or LLVM repository.
+UI_LINUX_PACKAGES = {
+    "apt-get": ("build-essential", "ca-certificates", "curl", "libwayland-dev", "libxkbcommon-dev", "pkg-config"),
+    "dnf": ("ca-certificates", "curl", "gcc-c++", "libxkbcommon-devel", "pkgconf-pkg-config", "wayland-devel"),
+    "pacman": ("base-devel", "ca-certificates", "curl", "libxkbcommon", "wayland"),
+    "zypper": ("ca-certificates", "curl", "gcc-c++", "libxkbcommon-devel", "pkg-config", "wayland-devel"),
+}
+
+
+def install_ui_system_dependencies() -> None:
+    """Install only what a UI-only build needs, leaving Ladybird and its package sources alone."""
+    if platform.system() == "Darwin":
+        return  # Git and the Apple command-line tools are bootstrapping prerequisites.
+    if platform.system() != "Linux":
+        raise SystemExit("elaris: UI setup is supported on macOS and Linux; see SETUP.md")
+    manager = _linux_package_manager()
+    if manager is None:
+        raise SystemExit(
+            "elaris: no supported Linux package manager found; see SETUP.md or use ./elaris desktop"
+        )
+    _install_linux_packages(_privileged_prefix(), manager, UI_LINUX_PACKAGES[manager])
+
+
+def verify_ui_system_dependencies() -> None:
+    """Check the local compiler and libraries without installing anything."""
+    system = platform.system()
+    if system == "Darwin":
+        require("git", "xcrun", "cc")
+        sdk = subprocess.run(["xcrun", "--show-sdk-path"], capture_output=True, text=True, check=False)
+        if sdk.returncode or not sdk.stdout.strip():
+            raise SystemExit("elaris: install/select the Apple command-line tools with xcode-select --install")
+    elif system == "Linux":
+        require("git", "cc", "pkg-config")
+        run("pkg-config", "--exists", "--print-errors", "xkbcommon", "wayland-client")
+    else:
+        raise SystemExit("elaris: UI setup is supported on macOS and Linux; see SETUP.md")
+
+
 def install_system_dependencies() -> None:
     """Install upstream Ladybird build packages through the host package manager."""
     system = platform.system()
@@ -189,20 +227,30 @@ def install_system_dependencies() -> None:
         "zypper": OPENSUSE_PACKAGES,
     }
     privileged = _privileged_prefix()
+    packages = packages_by_manager[package_manager]
     if package_manager == "apt-get":
-        _install_apt_dependencies(privileged, packages_by_manager[package_manager])
-    elif package_manager == "dnf":
-        run(*privileged, "dnf", "install", "-y", *packages_by_manager[package_manager])
-    elif package_manager == "pacman":
-        run(*privileged, "pacman", "-S", "--needed", "--noconfirm", *packages_by_manager[package_manager])
+        _install_apt_dependencies(privileged, packages)
     else:
+        _install_linux_packages(privileged, package_manager, packages)
+
+
+def _install_linux_packages(privileged: tuple[str, ...], manager: str, packages: tuple[str, ...]) -> None:
+    if manager == "apt-get":
+        run(*privileged, "apt-get", "update")
+        run(*privileged, "apt-get", "install", "-y", *packages)
+    elif manager == "dnf":
+        run(*privileged, "dnf", "install", "-y", *packages)
+    elif manager == "pacman":
+        run(*privileged, "pacman", "-S", "--needed", "--noconfirm", *packages)
+    elif manager == "zypper":
         run(*privileged, "zypper", "refresh")
-        run(*privileged, "zypper", "--non-interactive", "install", *packages_by_manager[package_manager])
+        run(*privileged, "zypper", "--non-interactive", "install", *packages)
+    else:
+        raise ValueError(f"unknown package manager: {manager}")
 
 
 def _install_apt_dependencies(privileged: tuple[str, ...], packages: tuple[str, ...]) -> None:
-    run(*privileged, "apt-get", "update")
-    run(*privileged, "apt-get", "install", "-y", *packages)
+    _install_linux_packages(privileged, "apt-get", packages)
 
     codename = subprocess.run(["lsb_release", "-sc"], capture_output=True, text=True, check=False)
     if codename.returncode:
@@ -350,9 +398,14 @@ def _privileged_prefix() -> tuple[str, ...]:
 
 def install_rust_toolchain() -> None:
     """Ensure rustup and the project's stable Rust toolchain are available to child commands."""
-    cargo_bin = Path.home() / ".cargo" / "bin"
-    if cargo_bin.is_dir() and str(cargo_bin) not in os.environ.get("PATH", "").split(os.pathsep):
-        os.environ["PATH"] = f"{cargo_bin}{os.pathsep}{os.environ.get('PATH', '')}"
+    cargo_bin = (Path(os.environ["CARGO_HOME"]) if os.environ.get("CARGO_HOME") else Path.home() / ".cargo") / "bin"
+
+    def use_cargo_bin() -> None:
+        path = os.environ.get("PATH", "")
+        if cargo_bin.is_dir() and str(cargo_bin) not in path.split(os.pathsep):
+            os.environ["PATH"] = os.pathsep.join(filter(None, (str(cargo_bin), path)))
+
+    use_cargo_bin()
 
     if not command_path("rustup"):
         require("curl", "sh")
@@ -368,9 +421,8 @@ def install_rust_toolchain() -> None:
                 "-o",
                 str(installer),
             )
-            run("sh", str(installer), "-y", "--profile", "minimal", "--component", "clippy", "--component", "rustfmt")
-        if cargo_bin.is_dir():
-            os.environ["PATH"] = f"{cargo_bin}{os.pathsep}{os.environ.get('PATH', '')}"
+            run("sh", str(installer), "-y", "--profile", "minimal", "--no-modify-path", "--default-toolchain", "none")
+        use_cargo_bin()
 
     require("rustup")
     _ensure_rust_toolchain("stable")
@@ -471,15 +523,15 @@ def _verify_qt_version() -> None:
         if not command_path(command[0]):
             continue
         result = subprocess.run(command, capture_output=True, text=True, check=False)
-        if result.returncode == 0:
-            version = result.stdout.strip().splitlines()[0]
+        if result.returncode == 0 and (lines := result.stdout.strip().splitlines()):
+            version = lines[0]
             break
     match = re.match(r"(\d+)\.(\d+)", version or "")
     if not match or tuple(int(part) for part in match.groups()) < (6, 10):
         found = version or "not found"
         raise SystemExit(
             f"elaris: Qt 6.10 or newer is required to build Ladybird (found {found}). "
-            "Install a current Qt 6 development kit, then rerun ./elaris setup."
+            "Install a current Qt 6 development kit (see SETUP.md), or use ./elaris linux-build with Docker."
         )
 
 

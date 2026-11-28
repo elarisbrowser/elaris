@@ -12,7 +12,8 @@ if sys.version_info < (3, 9):
 
 EXAMPLES = """\
 examples:
-  ./elaris setup               install prerequisites and initialise Ladybird
+  ./elaris setup --ui --run    set up and open the interface without Ladybird
+  ./elaris setup --run         set up, build, and launch the full browser
   ./elaris run example.com     build if needed, then open a page
   ./elaris run --verbose       stream build and application logs
   ./elaris check               format, lint, and test

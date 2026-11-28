@@ -1,5 +1,8 @@
 # Architecture
 
+For source builds, start with [development setup](../SETUP.md). For detailed engine build and test
+commands, see the [Ladybird bridge](../bridge/README.md).
+
 Elaris is a Cargo workspace: the `elaris` package, the UI-free `crates/elaris-core` library, and the `crates/elaris-memory-saver` policy. Rune owns the window and interface on the UI thread. Ladybird runs on
 its own thread behind the Elaris-owned C++ bridge. A separate storage worker owns the SQLite
 connection and writes session files, so neither page work nor browser-data writes block Rune.
@@ -242,12 +245,10 @@ Browser, so cycling leaves the page, session, and lazy loads untouched.
 
 ### Site Permissions
 
-The site controls button inside the sidebar address field opens the Site Control Centre. macOS
-uses a transient AppKit `NSPopover` anchored to Rune's current button bounds; Linux renders the
-matching Rune popover in the overlay layer. Both hosts consume the same presentation data and
-permission actions, and use shared measurements with the semantic theme palette. The native host
-converts Rune's flipped logical-point bounds into the AppKit view coordinate space, and updates
-the positioning rectangle after layout changes. Clicking outside or pressing Escape closes it.
+The site controls button opens the same Rune Site Control Centre on macOS and Linux. The overlay
+uses the current button bounds, presentation data and semantic theme; clicking outside or pressing
+Escape closes it. Private permission changes go through the engine's private session, not the
+ordinary configuration store.
 `PermissionStore` keys overrides by normalized HTTP(S) origin; Ask removes an override, while
 Allow and Block are persisted under `[permissions."https://example.com"]` in `config.toml`.
 `AppState::permission_decision` is the request-facing boundary and returns Prompt for Ask. Saved
